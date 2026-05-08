@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-# pre-push: vet + test перед отправкой в remote.
-# -race требует CGO; если CGO выключен (CI без gcc, sandbox) — гонит без race detector,
-# как делает .gitea/workflows/ci.yml. Это компромисс: race-detection остаётся на CI/dev-машинах.
+# pre-push: канонический локальный gate перед отправкой в remote.
+# Без CI это последняя проверка — гонит весь pre-merge.
+#
+# Если хочешь skip ради скорости (например, push WIP-ветки) — push с
+# --no-verify запрещён политикой проекта (pre-bash-no-verify hook у Claude
+# тоже это блокирует). Если действительно нужно — пользователь руками
+# выставляет SKIP_PREPUSH=1 git push.
 set -e
-echo "pre-push: go vet"
-go vet ./...
-if [ "$(go env CGO_ENABLED)" = "1" ]; then
-    echo "pre-push: go test -short -race"
-    go test -short -race ./...
-else
-    echo "pre-push: go test -short (CGO_ENABLED=0, race detector unavailable)"
-    go test -short ./...
+
+if [ "${SKIP_PREPUSH:-}" = "1" ]; then
+    echo "pre-push: SKIP_PREPUSH=1 — пропускаю проверки"
+    exit 0
 fi
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "pre-push: make pre-merge"
+exec make pre-merge

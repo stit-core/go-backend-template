@@ -73,7 +73,7 @@ hooks-install: ## install repo git hooks (commit-msg, pre-commit, pre-push)
 	@chmod +x .git/hooks/commit-msg .git/hooks/pre-push .git/hooks/pre-commit 2>/dev/null || true
 	@echo "git hooks installed"
 
-pre-merge: ## канонический pre-merge gate: fmt + vet + lint + test + build
+pre-merge: ## канонический pre-push/pre-merge gate: fmt + vet + lint + test + build + sqlc-diff + mocks-check
 	@echo "→ make fmt"
 	@$(MAKE) fmt
 	@echo "→ go vet ./..."
@@ -85,4 +85,8 @@ pre-merge: ## канонический pre-merge gate: fmt + vet + lint + test +
 	@echo "→ make build && make build-worker"
 	@$(MAKE) build
 	@$(MAKE) build-worker
+	@echo "→ make sqlc-diff"
+	@$(MAKE) sqlc-diff
+	@echo "→ make mocks-check"
+	@$(MAKE) mocks-check
 	@echo "✓ pre-merge clean"

@@ -4,6 +4,8 @@
 
 Этот файл — постоянный гайд (грузится в контекст всегда). Контекстные правила лежат в `.claude/rules/`. Процедурные воркфлоу — в `.claude/skills/`. Описание дневного флоу — в `.claude/WORKFLOW.md`.
 
+**Точка входа в сессию: `/smartdev`** — даёт сводку о состоянии репо (ветка, drift, активные планы, висящие TODO) и предлагает следующее действие. Если задача нетривиальная — оттуда переключайся в `/plan` для декомпозиции на атомы (план переживает `/clear` через `.claude/plans/<slug>.md`).
+
 ## 1. Команды
 
 Стандартные Make-таргеты (`Makefile`):
@@ -21,7 +23,7 @@
 | `make mocks` / `make mocks-check` | Регенерация / проверка mockery v3 моков |
 | `make migrate-up` / `make migrate-down` | Накатить / откатить одну миграцию (нужен `PG_DSN`) |
 | `make new-domain NAME=order` | Скаффолд скелета нового домена |
-| `make pre-merge` | Полный pre-merge gate: fmt + vet + lint + test + build |
+| `make pre-merge` | Канонический gate: fmt + vet + lint + test + build + sqlc-diff + mocks-check. Гонится pre-push хуком. |
 | `make hooks-install` | Установить git-хуки (commit-msg, pre-commit, pre-push) |
 
 **Agent-friendly обёртки** в `scripts/agent-tools/` дают сжатый вывод (≤25k токенов, сначала фейлы, в конце канонический status-line). В работе агента предпочитай их сырым командам:
@@ -33,6 +35,7 @@
 | `agent-tools/build.sh` | `go build ./...` | Первые 5 ошибок с `file:line:col`, дальше count остальных |
 | `agent-tools/search.sh PATTERN [path]` | `grep -r` | По умолчанию список файлов с матчами; `--lines` — с контекстом строк |
 | `agent-tools/repomap.sh [pkg]` | (нет) | Сводка публичных символов по пакетам, размер ограничен бюджетом |
+| `agent-tools/status.sh [--full]` | (нет) | Сводка состояния репо для `/smartdev`: ветка, working tree, активные планы, домены, миграции, TODO. `--full` добавляет sqlc-diff/mocks/lint. |
 
 Все обёртки принимают `--format=concise|detailed` и заканчиваются одной канонической строкой статуса (`OK` / `FAIL: <reason>`).
 
@@ -74,8 +77,10 @@ scripts/
 .claude/
   settings.json  Конфиг Claude Code (хуки, permissions, model)
   rules/         Path-scoped правила (грузятся когда соотв. файлы в контексте)
-  skills/        Процедурные воркфлоу (грузятся когда description совпадает)
+  skills/        Процедурные воркфлоу: smartdev, plan, add-domain, add-migration,
+                 add-endpoint, add-event, add-port, triage-failure, run-pre-merge
   agents/        Subagent'ы (explorer, reviewer, migration-author)
+  plans/         roadmap.md (индекс) + <slug>.md (per-task) — committable, ревьюются в PR
   WORKFLOW.md    Описание дневного флоу для людей
   research/      synthesis.md + raw-briefings.md (кросс-вендорное исследование)
 ```
@@ -96,7 +101,7 @@ scripts/
 
 - **Conventional Commits** проверяются `scripts/git-hooks/commit-msg`. Допустимые типы: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `meta`. Формат: `<type>(<scope>)?: <subject>`, subject ≤72 символа.
 - **Линейная история**. Squash-merge в `main` через PR.
-- **Хуки** ставятся `make hooks-install` — commit-msg, pre-commit (gofumpt + vet + lint), pre-push (vet + test).
+- **Хуки** ставятся `make hooks-install` — commit-msg, pre-commit (gofumpt + vet + lint), pre-push (`make pre-merge` — полный gate). Skip только через `SKIP_PREPUSH=1`, не `--no-verify`.
 - Примеры:
   - `feat(user): add password reset flow`
   - `fix(auth): block reused refresh tokens by validating jti`

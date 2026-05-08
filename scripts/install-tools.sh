@@ -3,8 +3,8 @@
 # Все версии должны быть pinned. При добавлении CI — синхронизируй.
 set -euo pipefail
 
-GOFUMPT_VERSION="${GOFUMPT_VERSION:-v0.6.0}"
-GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v1.62.2}"
+GOFUMPT_VERSION="${GOFUMPT_VERSION:-v0.10.0}"
+GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.12.2}"
 SQLC_VERSION="${SQLC_VERSION:-v1.31.1}"
 MOCKERY_VERSION="${MOCKERY_VERSION:-v3.7.0}"
 
@@ -27,9 +27,11 @@ install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
 install "github.com/vektra/mockery/v3@${MOCKERY_VERSION}"
 
 # golangci-lint ставится через свой installer (статическая сборка,
-# не через `go install`).
-if command -v golangci-lint >/dev/null 2>&1; then
-  echo "✓ golangci-lint уже установлен ($(golangci-lint --version | head -1))"
+# не через `go install`). Сравниваем версию — апгрейдим если pin изменился.
+GOLANGCI_LINT_PIN="${GOLANGCI_LINT_VERSION#v}"
+if command -v golangci-lint >/dev/null 2>&1 \
+   && golangci-lint --version 2>/dev/null | grep -q "version $GOLANGCI_LINT_PIN "; then
+  echo "✓ golangci-lint ($GOLANGCI_LINT_VERSION) уже установлен"
 else
   echo "→ installing golangci-lint ${GOLANGCI_LINT_VERSION}"
   curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
