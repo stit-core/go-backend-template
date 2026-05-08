@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(make test*)",
+      "Bash(make lint)",
+      "Bash(make fmt)",
+      "Bash(make build*)",
+      "Bash(make sqlc*)",
+      "Bash(make mocks*)",
+      "Bash(make migrate-up)",
+      "Bash(make migrate-down)",
+      "Bash(make new-domain*)",
+      "Bash(make pre-merge)",
+      "Bash(make tools)",
+      "Bash(make hooks-install)",
+      "Bash(make tidy)",
+      "Bash(go test*)",
+      "Bash(go build*)",
+      "Bash(go vet*)",
+      "Bash(go mod tidy)",
+      "Bash(go list*)",
+      "Bash(go doc*)",
+      "Bash(gofumpt*)",
+      "Bash(golangci-lint run*)",
+      "Bash(sqlc*)",
+      "Bash(mockery*)",
+      "Bash(scripts/agent-tools/*)",
+      "Bash(rg *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git blame*)",
+      "Bash(git branch*)",
+      "Bash(git ls-files*)",
+      "Read(*)",
+      "Glob(*)",
+      "Grep(*)"
+    ],
+    "deny": [
+      "Bash(*--no-verify*)",
+      "Bash(*--no-gpg-sign*)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git checkout -- *)",
+      "Bash(git clean -f*)",
+      "Bash(rm -rf *)",
+      "Read(.env*)",
+      "Read(**/credentials*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Edit(.env*)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Edit(**/infra/postgres/db/**)",
+      "Edit(**/mock_*_test.go)",
+      "Edit(go.sum)",
+      "Write(.env*)",
+      "Write(**/infra/postgres/db/**)",
+      "Write(**/mock_*_test.go)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/claude-hooks/pre-bash-no-verify.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/claude-hooks/pre-write-protect.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/claude-hooks/post-go-edit.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/claude-hooks/stop-build-check.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+.idea/
+.vscode/
+.env
+.env.local
+bin/
+*.test
+*.out
+coverage.*
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/worktrees/
+

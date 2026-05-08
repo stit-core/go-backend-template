@@ -1,0 +1,12 @@
+.git
+.gitignore
+.gitea
+.github
+.claude
+.idea
+.vscode
+bin
+docs
+*.md
+**/*_test.go
+**/testdata

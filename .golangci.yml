@@ -1,0 +1,117 @@
+run:
+  timeout: 3m
+  go: "1.26"
+
+linters:
+  disable-all: true
+  enable:
+    # baseline
+    - errcheck
+    - errorlint
+    - gocritic
+    - gofumpt
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - revive
+    - sqlclosecheck
+    - staticcheck
+    - unconvert
+    - unused
+    # tier-1 P1 additions
+    - bodyclose
+    - contextcheck
+    - nilerr
+    - noctx
+    - rowserrcheck
+    - errchkjson
+    - wastedassign
+    - forbidigo
+    - depguard
+    - tagalign
+
+linters-settings:
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+  gofumpt:
+    extra-rules: true
+  revive:
+    rules:
+      - name: var-naming
+      - name: unused-parameter
+        disabled: true
+      - name: exported
+        disabled: true
+  forbidigo:
+    # Запрет fmt.Print* (использовать logkit) и прямого slog (использовать logkit.Logger).
+    forbid:
+      - p: '^fmt\.Print(ln|f)?$'
+        msg: "use logkit.Logger instead of fmt.Print*"
+      - p: '^slog\.'
+        msg: "use logkit.Logger; do not call slog directly"
+    analyze-types: true
+  depguard:
+    rules:
+      user-domain-isolation:
+        list-mode: lax
+        files:
+          - "**/internal/domain/user/**"
+          - "!**/*_test.go"
+          - "!**/internal/domain/user/module/**"
+        deny:
+          - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
+            desc: "user domain must not import auth"
+          - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
+            desc: "user domain must not import verification"
+      auth-domain-isolation:
+        list-mode: lax
+        files:
+          - "**/internal/domain/auth/**"
+          - "!**/*_test.go"
+          - "!**/internal/domain/auth/module/**"
+        deny:
+          - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/user"
+            desc: "auth domain must not import user; use auth.UserReader port + adapter"
+          - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
+            desc: "auth domain must not import verification"
+      verification-domain-isolation:
+        list-mode: lax
+        files:
+          - "**/internal/domain/verification/**"
+          - "!**/*_test.go"
+          - "!**/internal/domain/verification/module/**"
+        deny:
+          - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/user"
+            desc: "verification domain must not import user; use verification.UserReader port + adapter"
+          - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
+            desc: "verification domain must not import auth"
+  tagalign:
+    align: true
+    sort: true
+    order:
+      - json
+      - yaml
+      - toml
+      - mapstructure
+      - validate
+
+severity:
+  default-severity: error
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - forbidigo
+        - depguard
+    # Optimistic-lock version — pgkit конвертит int↔int32; диапазон bounded by PG int4.
+    - path: internal/domain/.+/infra/postgres/repository\.go
+      linters:
+        - gosec
+      text: "G115"

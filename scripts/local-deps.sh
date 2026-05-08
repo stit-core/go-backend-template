@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+POSTGRES_CONTAINER="local-deps-postgres"
+NATS_CONTAINER="local-deps-nats"
+REDIS_CONTAINER="local-deps-redis"
+
+check_docker() {
+  if ! command -v docker &>/dev/null; then
+    echo "ERROR: docker is not installed or not in PATH."
+    exit 1
+  fi
+}
+
+up() {
+  check_docker
+
+  echo "Starting local dependencies..."
+
+  docker run -d \
+    --name "$POSTGRES_CONTAINER" \
+    --restart unless-stopped \
+    -e POSTGRES_DB=app \
+    -e POSTGRES_USER=app \
+    -e POSTGRES_PASSWORD=app \
+    -p 5432:5432 \
+    postgres:17-alpine
+
+  docker run -d \
+    --name "$NATS_CONTAINER" \
+    --restart unless-stopped \
+    -p 4222:4222 \
+    nats:latest
+
+  docker run -d \
+    --name "$REDIS_CONTAINER" \
+    --restart unless-stopped \
+    -p 6379:6379 \
+    redis:7-alpine
+
+  echo ""
+  echo "All containers started. Recommended environment variables:"
+  echo ""
+  echo "  PG_DSN=postgres://app:app@localhost:5432/app?sslmode=disable"
+  echo "  NATS_URL=nats://localhost:4222"
+  echo "  REDIS_URL=redis://localhost:6379"
+  echo ""
+}
+
+down() {
+  check_docker
+
+  echo "Stopping local dependencies..."
+
+  docker rm -f "$POSTGRES_CONTAINER" 2>/dev/null || true
+  docker rm -f "$NATS_CONTAINER" 2>/dev/null || true
+  docker rm -f "$REDIS_CONTAINER" 2>/dev/null || true
+
+  echo "All containers removed."
+}
+
+case "${1:-up}" in
+  up)
+    up
+    ;;
+  down)
+    down
+    ;;
+  *)
+    echo "Usage: $0 [up|down]"
+    exit 1
+    ;;
+esac

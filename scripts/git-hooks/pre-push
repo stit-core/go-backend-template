@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# pre-push: vet + test перед отправкой в remote.
+# -race требует CGO; если CGO выключен (CI без gcc, sandbox) — гонит без race detector,
+# как делает .gitea/workflows/ci.yml. Это компромисс: race-detection остаётся на CI/dev-машинах.
+set -e
+echo "pre-push: go vet"
+go vet ./...
+if [ "$(go env CGO_ENABLED)" = "1" ]; then
+    echo "pre-push: go test -short -race"
+    go test -short -race ./...
+else
+    echo "pre-push: go test -short (CGO_ENABLED=0, race detector unavailable)"
+    go test -short ./...
+fi

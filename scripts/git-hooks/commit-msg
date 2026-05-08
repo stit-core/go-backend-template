@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# SSOT по разрешённым типам — .claude/memory/sys/rules/engineering-culture.md §4.
+# При смене списка править оба места одним коммитом.
+set -e
+COMMIT_MSG_FILE="$1"
+PATTERN='^(feat|fix|refactor|docs|test|chore|meta)(\([a-z0-9_/-]+\))?(!)?: .{1,72}'
+HEAD_LINE="$(head -n 1 "$COMMIT_MSG_FILE" | sed 's/[[:space:]]*$//')"
+if ! [[ "$HEAD_LINE" =~ $PATTERN ]]; then
+  echo "ERROR: первая строка коммита должна быть Conventional Commit"
+  echo "Формат: <type>(<scope>)?: <subject>  (≤72 символа)"
+  echo "Допустимые types: feat, fix, refactor, docs, test, chore, meta"
+  echo "Пример: feat(user): add password reset"
+  echo "       meta(rules): align commit-prefix SSOT"
+  echo "Текущая первая строка: $HEAD_LINE"
+  exit 1
+fi

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Ensure this script is executable
+chmod +x "$0"
+
+echo "pre-commit: checking formatting with gofumpt..."
+unformatted=$(gofumpt -l .)
+if [ -n "$unformatted" ]; then
+  echo "ERROR: the following files are not formatted with gofumpt:"
+  echo "$unformatted"
+  echo "Run: gofumpt -w ."
+  exit 1
+fi
+
+echo "pre-commit: running go vet..."
+go vet ./...
+
+echo "pre-commit: running golangci-lint..."
+if command -v golangci-lint &>/dev/null; then
+  golangci-lint run ./...
+else
+  echo "golangci-lint not found, skipping (install from https://golangci-lint.run/usage/install/)"
+fi
+
+echo "pre-commit: all checks passed."
+# Напоминание: формат сообщения коммита (Conventional Commits) проверяется
+# отдельным commit-msg hook (scripts/git-hooks/commit-msg). Установка — `make hooks-install`.

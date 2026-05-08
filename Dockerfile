@@ -1,0 +1,33 @@
+ARG BUILDPLATFORM=linux/amd64
+ARG TARGETPLATFORM=linux/amd64
+
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+WORKDIR /src
+
+ARG TARGET=api
+ARG TARGETPLATFORM
+
+RUN apk add --no-cache git openssh-client ca-certificates
+ENV GOPRIVATE=git.stit.tech/*
+
+COPY go.mod go.sum ./
+RUN --mount=type=ssh \
+    --mount=type=secret,id=netrc,target=/root/.netrc \
+    go mod download
+
+COPY . ./
+
+RUN set -eux; \
+    case "$TARGETPLATFORM" in \
+      linux/amd64) GOARCH=amd64 ;; \
+      linux/arm64) GOARCH=arm64 ;; \
+      *) GOARCH=amd64 ;; \
+    esac; \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH \
+    go build -trimpath -ldflags="-s -w" -o /app ./cmd/${TARGET}
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates
+COPY --from=build /app /app
+EXPOSE 8080
+ENTRYPOINT ["/app"]
