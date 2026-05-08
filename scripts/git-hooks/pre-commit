@@ -23,6 +23,16 @@ else
   echo "golangci-lint not found, skipping (install from https://golangci-lint.run/usage/install/)"
 fi
 
+echo "pre-commit: validating DDD artifacts in docs/domains/..."
+CHANGED_DOCS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^docs/domains/.*\.md$' || true)
+if [ -n "$CHANGED_DOCS" ]; then
+    if [ -x scripts/agent-tools/validate-domain-doc.sh ]; then
+        scripts/agent-tools/validate-domain-doc.sh docs/domains
+    else
+        echo "WARN: validate-domain-doc.sh not found or not executable, skipping"
+    fi
+fi
+
 echo "pre-commit: all checks passed."
 # Напоминание: формат сообщения коммита (Conventional Commits) проверяется
 # отдельным commit-msg hook (scripts/git-hooks/commit-msg). Установка — `make hooks-install`.

@@ -6,6 +6,8 @@
 
 **Точка входа в сессию: `/smartdev`** — даёт сводку о состоянии репо (ветка, drift, активные планы, висящие TODO) и предлагает следующее действие. Если задача нетривиальная — оттуда переключайся в `/plan` для декомпозиции на атомы (план переживает `/clear` через `.claude/plans/<slug>.md`).
 
+**Проектирование первично, код вторичен.** DDD-артефакты живут в `docs/domains/<context>/` и являются source of truth для бизнес-смысла. Перед скаффолдингом домена → артефакт; `/domain-deepen <ctx>` углубляет драфты до stable. См. `docs/domains/README.md` и `docs/domains/MAPPING.md` (DDD ↔ Go).
+
 ## 1. Команды
 
 Стандартные Make-таргеты (`Makefile`):
@@ -36,6 +38,7 @@
 | `agent-tools/search.sh PATTERN [path]` | `grep -r` | По умолчанию список файлов с матчами; `--lines` — с контекстом строк |
 | `agent-tools/repomap.sh [pkg]` | (нет) | Сводка публичных символов по пакетам, размер ограничен бюджетом |
 | `agent-tools/status.sh [--full]` | (нет) | Сводка состояния репо для `/smartdev`: ветка, working tree, активные планы, домены, миграции, TODO. `--full` добавляет sqlc-diff/mocks/lint. |
+| `agent-tools/validate-domain-doc.sh [path]` | (нет) | Валидатор DDD-артефактов в `docs/domains/`. Проверяет frontmatter, обязательные секции, при `status: stable` — non-empty bodies + ref-целостность. |
 
 Все обёртки принимают `--format=concise|detailed` и заканчиваются одной канонической строкой статуса (`OK` / `FAIL: <reason>`).
 
@@ -107,7 +110,34 @@ scripts/
   - `fix(auth): block reused refresh tokens by validating jti`
   - `meta(claude): rebuild agent skills per agentskills.io spec`
 
-## 6. Границы
+## 6. Domain artifacts (DDD)
+
+Бизнес-смысл живёт в `docs/domains/<context>/`. Это **первичный source of truth**, код вторичен.
+
+```
+docs/domains/
+├── README.md         ← структура, workflow
+├── MAPPING.md        ← DDD ↔ Go (куда что ляжет в коде)
+├── _templates/       ← шаблоны для копирования
+└── <context>/
+    ├── README.md     ← purpose + ubiquitous language (роллап)
+    ├── <Aggregate>.md
+    ├── events/<Event>.md
+    ├── use-cases/<Operation>.md
+    └── policies/<PolicyName>.md
+```
+
+**Kinds:** `aggregate`, `entity`, `event`, `use-case`, `policy`. Каждый имеет обязательный набор H2-секций, проверяемый валидатором.
+
+**Workflow:**
+1. Копируешь шаблоны в `docs/domains/<ctx>/`, заполняешь минимум (frontmatter + Properties + Methods names).
+2. `/domain-deepen <ctx>` — skill ведёт волнами вопросов inside-out, добивая секции.
+3. `scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>` зелёный → промоушн `status: draft → stable`.
+4. `/smartdev` → `/plan <task>` → `add-domain` / `add-endpoint` / `add-event`. Скаффолдинг-скиллы блокируются если есть `status: draft` или валидатор красный.
+
+См. `.claude/rules/domain-artifacts.md` и `.claude/skills/domain-deepen/SKILL.md`.
+
+## 7. Границы
 
 ### Делать всегда
 - Перед claim "готово" гнать `make pre-merge` (или эквивалент через `agent-tools/*`). Без верификации ты единственный feedback-loop.

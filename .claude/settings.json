@@ -82,6 +82,15 @@
             "command": "scripts/claude-hooks/pre-write-protect.sh"
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/claude-hooks/pre-skill-domain-gate.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
