@@ -10,7 +10,7 @@ import (
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
-	"git.stit.tech/akadmin/golibinfra/authnkit"
+	"git.stit.tech/stit/golibinfra/authnkit"
 )
 
 type userReaderAdapter struct {

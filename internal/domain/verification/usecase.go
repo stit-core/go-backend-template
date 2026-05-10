@@ -9,12 +9,12 @@ import (
 	"go.uber.org/fx"
 
 	"git.stit.tech/akadmin/go-backend-template/pkg/tokens"
-	"git.stit.tech/akadmin/golibinfra/authnkit"
-	"git.stit.tech/akadmin/golibinfra/clockkit"
-	"git.stit.tech/akadmin/golibinfra/logkit"
-	"git.stit.tech/akadmin/golibinfra/outboxkit"
-	"git.stit.tech/akadmin/golibinfra/pgkit"
-	"git.stit.tech/akadmin/golibinfra/telemetry"
+	"git.stit.tech/stit/golibinfra/authnkit"
+	"git.stit.tech/stit/golibinfra/clockkit"
+	"git.stit.tech/stit/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/outboxkit"
+	"git.stit.tech/stit/golibinfra/pgkit"
+	"git.stit.tech/stit/golibinfra/telemetry"
 )
 
 const minPasswordLen = 8

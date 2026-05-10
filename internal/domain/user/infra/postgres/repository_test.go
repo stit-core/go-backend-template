@@ -12,7 +12,7 @@ import (
 	userpg "git.stit.tech/akadmin/go-backend-template/internal/domain/user/infra/postgres"
 	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
 	"git.stit.tech/akadmin/go-backend-template/internal/testkit/pgseed"
-	"git.stit.tech/akadmin/golibinfra/testkit"
+	"git.stit.tech/stit/golibinfra/testkit"
 )
 
 func setup(t *testing.T) *userpg.Repository {

@@ -11,7 +11,7 @@ import (
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
 	authhttp "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/delivery/http"
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth/delivery/http/mocks"
-	"git.stit.tech/akadmin/golibinfra/testkit/handlertest"
+	"git.stit.tech/stit/golibinfra/testkit/handlertest"
 )
 
 func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {

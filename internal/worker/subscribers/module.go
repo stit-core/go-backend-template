@@ -6,10 +6,10 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/akadmin/golibinfra/logkit"
-	"git.stit.tech/akadmin/golibinfra/natskit"
+	"git.stit.tech/stit/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/natskit"
 
-	"git.stit.tech/akadmin/golibinfra/auditkit"
+	"git.stit.tech/stit/golibinfra/auditkit"
 )
 
 var Module = fx.Module(

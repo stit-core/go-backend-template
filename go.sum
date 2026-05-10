@@ -1,15 +1,7 @@
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
-git.stit.tech/akadmin/golibinfra v0.12.0 h1:cw7uhp2pY3EK0+Tp1/sTJt5ozBcOPH09NMZ8k2WNmS0=
-git.stit.tech/akadmin/golibinfra v0.12.0/go.mod h1:BVVD5YSz9OtRNsbf1vNhlMdiuJIYVJCK1F5LD7EcThg=
-git.stit.tech/akadmin/golibinfra v0.13.0 h1:xVThaDqWL6N8kq5kQRzv0FO1gJmL82bkTJlTB3yQe+c=
-git.stit.tech/akadmin/golibinfra v0.13.0/go.mod h1:BVVD5YSz9OtRNsbf1vNhlMdiuJIYVJCK1F5LD7EcThg=
-git.stit.tech/akadmin/golibinfra v0.13.1 h1:eDGMc2lAPfjx4doxGt81drC9VSlrOlND7Ti9zoIaUKU=
-git.stit.tech/akadmin/golibinfra v0.13.1/go.mod h1:BVVD5YSz9OtRNsbf1vNhlMdiuJIYVJCK1F5LD7EcThg=
-git.stit.tech/akadmin/golibinfra v0.14.0 h1:ouEel8cFN5c1jfTNykAjMbVafMTamC2BMpRieTYp/fQ=
-git.stit.tech/akadmin/golibinfra v0.14.0/go.mod h1:BVVD5YSz9OtRNsbf1vNhlMdiuJIYVJCK1F5LD7EcThg=
-git.stit.tech/akadmin/golibinfra v0.14.1 h1:51/LBfpBBaS2ZcVn8AZAHlXWA7pzWhnBKpSjmdtv5vA=
-git.stit.tech/akadmin/golibinfra v0.14.1/go.mod h1:BVVD5YSz9OtRNsbf1vNhlMdiuJIYVJCK1F5LD7EcThg=
+git.stit.tech/stit/golibinfra v0.17.0 h1:PgwwN8+uhRATKXk4skP+Y5SUulGBHUHEvckteSvXlWQ=
+git.stit.tech/stit/golibinfra v0.17.0/go.mod h1:9V4sQZWYcA3JQWMMm97mv19zevRYO03DJvm2ztAWL+k=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 h1:He8afgbRMd7mFxO99hRNu+6tazq8nFF9lIwo9JFroBk=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6/go.mod h1:8o94RPi1/7XTJvwPpRSzSUedZrtlirdB3r9Z20bi2f8=
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEKWjV8V+WSxDXJ4NFATAsZjh8iIbsQIg=

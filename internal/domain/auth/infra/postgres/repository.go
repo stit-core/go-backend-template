@@ -9,7 +9,7 @@ import (
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth/infra/postgres/db"
-	"git.stit.tech/akadmin/golibinfra/pgkit"
+	"git.stit.tech/stit/golibinfra/pgkit"
 )
 
 type Repository struct {

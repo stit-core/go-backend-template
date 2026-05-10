@@ -10,11 +10,11 @@ import (
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification/mocks"
-	"git.stit.tech/akadmin/golibinfra/clockkit"
-	"git.stit.tech/akadmin/golibinfra/logkit"
-	"git.stit.tech/akadmin/golibinfra/testkit/authntest"
-	"git.stit.tech/akadmin/golibinfra/testkit/eventbus"
-	"git.stit.tech/akadmin/golibinfra/testkit/txkit"
+	"git.stit.tech/stit/golibinfra/clockkit"
+	"git.stit.tech/stit/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/testkit/authntest"
+	"git.stit.tech/stit/golibinfra/testkit/eventbus"
+	"git.stit.tech/stit/golibinfra/testkit/txkit"
 )
 
 type ucFixture struct {

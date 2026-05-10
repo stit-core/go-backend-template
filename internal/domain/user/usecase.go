@@ -8,14 +8,14 @@ import (
 
 	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
 	"git.stit.tech/akadmin/go-backend-template/pkg/policy"
-	"git.stit.tech/akadmin/golibinfra/auditkit"
-	"git.stit.tech/akadmin/golibinfra/authnkit"
-	"git.stit.tech/akadmin/golibinfra/clockkit"
-	"git.stit.tech/akadmin/golibinfra/httpkit"
-	"git.stit.tech/akadmin/golibinfra/logkit"
-	"git.stit.tech/akadmin/golibinfra/outboxkit"
-	"git.stit.tech/akadmin/golibinfra/pgkit"
-	"git.stit.tech/akadmin/golibinfra/telemetry"
+	"git.stit.tech/stit/golibinfra/auditkit"
+	"git.stit.tech/stit/golibinfra/authnkit"
+	"git.stit.tech/stit/golibinfra/clockkit"
+	"git.stit.tech/stit/golibinfra/httpkit"
+	"git.stit.tech/stit/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/outboxkit"
+	"git.stit.tech/stit/golibinfra/pgkit"
+	"git.stit.tech/stit/golibinfra/telemetry"
 )
 
 const minPasswordLen = 8

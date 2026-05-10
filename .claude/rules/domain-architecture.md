@@ -73,12 +73,42 @@ func (a *userReaderAdapter) GetByID(ctx context.Context, id string) (*auth.User,
 | Authorization | `policy.go` |
 | Outbox-события | `events.go` |
 | HTTP-handler | `delivery/http/handler.go` |
-| HTTP-input/output | `delivery/http/dto.go` (huma-теги) |
+| HTTP-input/output | `delivery/http/dto.go` (huma-теги; см. ниже про naming) |
 | HTTP→domain mapping | `delivery/http/view.go` |
 | sqlc-запросы | `infra/postgres/queries/*.sql` |
 | Repository (имплементит порт) | `infra/postgres/repository.go` |
 | fx-wiring | `module/module.go` |
 | Cross-domain адаптеры | `module/adapters.go` |
+
+## HTTP DTO naming (huma OpenAPI)
+
+huma собирает все DTO-струткуры из всех доменов в **одну** OpenAPI schema
+registry — по имени Go-типа. Если два домена объявят одинаково
+названный output struct (классика — `ListOutput { Body struct { Items
+[]X; Total int64 } }`), huma сгенерирует два разных schema под именем
+`ListOutputBody` и упадёт с panic:
+
+```
+panic: duplicate name: ListOutputBody, new type: ..., existing type: ...
+```
+
+Правило: имена publicly-named DTO struct'ов в `delivery/http/dto.go` —
+domain-specific. Префикс именем сущности, а не «обобщённое» `ListOutput`/
+`CreateInput`/`Output`.
+
+```go
+// плохо — collision с другими доменами:
+type ListOutput struct { Body struct { Items []EventView; Total int64 } }
+
+// хорошо:
+type EventListOutput struct { Body struct { Items []EventView; Total int64 } }
+type NewsListOutput  struct { Body struct { Items []NewsView; Total int64 } }
+```
+
+То же про `XxxInput` / `XxxOutput` — если такое имя плагает в другом
+домене, добавь префикс. Inline anonymous `Body struct {...}` huma
+именует по Outer-типу (`<Outer>Body`), так что уникальность Outer
+автоматически гарантирует уникальность Body.
 
 ## Test-стратегия
 

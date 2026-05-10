@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"git.stit.tech/akadmin/golibinfra/logkit"
-	"git.stit.tech/akadmin/golibinfra/pgkit"
+	"git.stit.tech/stit/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/pgkit"
 )
 
 func main() {

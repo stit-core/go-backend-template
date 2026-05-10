@@ -6,25 +6,44 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/akadmin/golibinfra/cachekit"
-	"git.stit.tech/akadmin/golibinfra/config"
-	"git.stit.tech/akadmin/golibinfra/flagkit"
-	"git.stit.tech/akadmin/golibinfra/logkit"
-	"git.stit.tech/akadmin/golibinfra/natskit"
-	"git.stit.tech/akadmin/golibinfra/outboxkit"
-	"git.stit.tech/akadmin/golibinfra/pgkit"
-	"git.stit.tech/akadmin/golibinfra/telemetry"
-	"git.stit.tech/akadmin/golibinfra/timerkit"
+	"git.stit.tech/stit/golibinfra/cachekit"
+	"git.stit.tech/stit/golibinfra/config"
+	"git.stit.tech/stit/golibinfra/flagkit"
+	"git.stit.tech/stit/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/natskit"
+	"git.stit.tech/stit/golibinfra/outboxkit"
+	"git.stit.tech/stit/golibinfra/pgkit"
+	"git.stit.tech/stit/golibinfra/telemetry"
+	"git.stit.tech/stit/golibinfra/timerkit"
 
 	appconfig "git.stit.tech/akadmin/go-backend-template/internal/platform/config"
 	"git.stit.tech/akadmin/go-backend-template/internal/worker"
 	"git.stit.tech/akadmin/go-backend-template/internal/worker/subscribers"
-	platformaudit "git.stit.tech/akadmin/golibinfra/auditkit"
+	platformaudit "git.stit.tech/stit/golibinfra/auditkit"
+)
+
+// kitConfigs — provider'ы для kit-Config'ов вне App (golibinfra ≥ v0.17).
+// pgkit/telemetry идут через App (httpkit здесь не нужен — worker без HTTP);
+// остальные читаются из ENV через свой NewConfig.
+var kitConfigs = fx.Options(
+	fx.Provide(
+		// appconfig.Load принимает ctx (для vault-source HTTP).
+		context.Background,
+
+		logkit.NewConfig,
+		logkit.NewServiceConfig,
+		flagkit.NewConfig,
+		cachekit.NewConfig,
+		natskit.NewConfig,
+		outboxkit.NewConfig,
+		pgkit.NewReplicaConfig,
+	),
 )
 
 var (
 	infraModules = fx.Options(
 		config.Module,
+		kitConfigs,
 		logkit.Module,
 		telemetry.Module,
 		pgkit.Module,

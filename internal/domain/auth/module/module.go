@@ -13,8 +13,8 @@ import (
 	authhttp "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/delivery/http"
 	authpg "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/infra/postgres"
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
-	"git.stit.tech/akadmin/golibinfra/authnkit"
-	"git.stit.tech/akadmin/golibinfra/bruteforcekit"
+	"git.stit.tech/stit/golibinfra/authnkit"
+	"git.stit.tech/stit/golibinfra/bruteforcekit"
 )
 
 var Module = fx.Module(

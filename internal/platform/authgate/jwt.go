@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
-	"git.stit.tech/akadmin/golibinfra/authnkit"
+	"git.stit.tech/stit/golibinfra/authnkit"
 )
 
 type Extractor struct {

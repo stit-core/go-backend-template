@@ -6,8 +6,8 @@ import (
 	"go.uber.org/fx"
 
 	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
-	"git.stit.tech/akadmin/golibinfra/httpkit"
-	"git.stit.tech/akadmin/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/httpkit"
+	"git.stit.tech/stit/golibinfra/logkit"
 )
 
 func registerIdentityLogAttr() {

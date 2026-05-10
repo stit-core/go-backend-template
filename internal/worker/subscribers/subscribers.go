@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	"git.stit.tech/akadmin/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/logkit"
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
-	"git.stit.tech/akadmin/golibinfra/auditkit"
+	"git.stit.tech/stit/golibinfra/auditkit"
 )
 
 const (

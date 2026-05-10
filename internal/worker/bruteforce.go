@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 
-	"git.stit.tech/akadmin/golibinfra/pgkit"
+	"git.stit.tech/stit/golibinfra/pgkit"
 )
 
 const cleanupBruteforceSQL = `

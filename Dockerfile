@@ -7,17 +7,28 @@ WORKDIR /src
 ARG TARGET=api
 ARG TARGETPLATFORM
 
-RUN apk add --no-cache git openssh-client ca-certificates
+# apk кеш переживает между билдами (≈60s → ≈1s).
+RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
+    apk add --update-cache git openssh-client ca-certificates
+
 ENV GOPRIVATE=git.stit.tech/*
 
+# go-mod cache (/go/pkg/mod) и go-build cache (/root/.cache/go-build) через
+# --mount=type=cache: между билдами api/worker/migrate, между коммитами
+# без изменения go.mod — переиспользуются. Эффект: первый билд тот же,
+# повторные ~5-15s вместо ~60-90s.
 COPY go.mod go.sum ./
-RUN --mount=type=ssh \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=ssh \
     --mount=type=secret,id=netrc,target=/root/.netrc \
     go mod download
 
 COPY . ./
 
-RUN set -eux; \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    set -eux; \
     case "$TARGETPLATFORM" in \
       linux/amd64) GOARCH=amd64 ;; \
       linux/arm64) GOARCH=arm64 ;; \

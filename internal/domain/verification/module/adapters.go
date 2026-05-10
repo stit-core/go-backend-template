@@ -6,8 +6,8 @@ import (
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
-	"git.stit.tech/akadmin/golibinfra/auditkit"
-	"git.stit.tech/akadmin/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/auditkit"
+	"git.stit.tech/stit/golibinfra/logkit"
 )
 
 // userReaderAdapter — реальный адаптер: проецирует *user.User в узкий

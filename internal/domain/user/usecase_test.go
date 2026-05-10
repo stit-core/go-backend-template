@@ -15,12 +15,12 @@ import (
 	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
 	"git.stit.tech/akadmin/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/akadmin/go-backend-template/pkg/policy"
-	"git.stit.tech/akadmin/golibinfra/clockkit"
-	"git.stit.tech/akadmin/golibinfra/logkit"
-	"git.stit.tech/akadmin/golibinfra/testkit/audittest"
-	"git.stit.tech/akadmin/golibinfra/testkit/authntest"
-	"git.stit.tech/akadmin/golibinfra/testkit/eventbus"
-	"git.stit.tech/akadmin/golibinfra/testkit/txkit"
+	"git.stit.tech/stit/golibinfra/clockkit"
+	"git.stit.tech/stit/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/testkit/audittest"
+	"git.stit.tech/stit/golibinfra/testkit/authntest"
+	"git.stit.tech/stit/golibinfra/testkit/eventbus"
+	"git.stit.tech/stit/golibinfra/testkit/txkit"
 )
 
 type stubIssuer struct{ called atomic.Int64 }

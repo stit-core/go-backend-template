@@ -1,23 +1,25 @@
 package main
 
 import (
+	"context"
+
 	"go.uber.org/fx"
 
-	"git.stit.tech/akadmin/golibinfra/auditkit"
-	"git.stit.tech/akadmin/golibinfra/authnkit"
-	"git.stit.tech/akadmin/golibinfra/bruteforcekit"
-	"git.stit.tech/akadmin/golibinfra/cachekit"
-	"git.stit.tech/akadmin/golibinfra/config"
-	"git.stit.tech/akadmin/golibinfra/flagkit"
-	"git.stit.tech/akadmin/golibinfra/httpkit"
-	"git.stit.tech/akadmin/golibinfra/logkit"
-	"git.stit.tech/akadmin/golibinfra/natskit"
-	"git.stit.tech/akadmin/golibinfra/outboxkit"
-	"git.stit.tech/akadmin/golibinfra/pgkit"
-	"git.stit.tech/akadmin/golibinfra/telemetry"
-	"git.stit.tech/akadmin/golibinfra/timerkit"
+	"git.stit.tech/stit/golibinfra/auditkit"
+	"git.stit.tech/stit/golibinfra/authnkit"
+	"git.stit.tech/stit/golibinfra/bruteforcekit"
+	"git.stit.tech/stit/golibinfra/cachekit"
+	"git.stit.tech/stit/golibinfra/config"
+	"git.stit.tech/stit/golibinfra/flagkit"
+	"git.stit.tech/stit/golibinfra/httpkit"
+	"git.stit.tech/stit/golibinfra/logkit"
+	"git.stit.tech/stit/golibinfra/natskit"
+	"git.stit.tech/stit/golibinfra/outboxkit"
+	"git.stit.tech/stit/golibinfra/pgkit"
+	"git.stit.tech/stit/golibinfra/telemetry"
+	"git.stit.tech/stit/golibinfra/timerkit"
 
-	"git.stit.tech/akadmin/golibinfra/clockkit"
+	"git.stit.tech/stit/golibinfra/clockkit"
 
 	authmod "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/module"
 	usermod "git.stit.tech/akadmin/go-backend-template/internal/domain/user/module"
@@ -26,9 +28,33 @@ import (
 	appconfig "git.stit.tech/akadmin/go-backend-template/internal/platform/config"
 )
 
+// kitConfigs — provider'ы для тех kit-Config'ов, которые НЕ в App-структуре
+// (golibinfra ≥ v0.17 ни один kit не provide'ит свой Config внутренне).
+// pgkit/httpkit/telemetry идут через App (см. internal/platform/config),
+// остальные читаются из ENV через свой <kit>.NewConfig.
+var kitConfigs = fx.Options(
+	fx.Provide(
+		// appconfig.Load принимает ctx (для vault-source HTTP); fx сам
+		// его не provide'ит.
+		context.Background,
+
+		logkit.NewConfig,
+		logkit.NewServiceConfig,
+		flagkit.NewConfig,
+		cachekit.NewConfig,
+		natskit.NewConfig,
+		authnkit.NewArgon2idParams,
+		authnkit.NewJWTConfig,
+		bruteforcekit.NewConfig,
+		outboxkit.NewConfig,
+		pgkit.NewReplicaConfig,
+	),
+)
+
 var (
 	infraModules = fx.Options(
 		config.Module,
+		kitConfigs,
 		logkit.Module,
 		telemetry.Module,
 		pgkit.Module,
