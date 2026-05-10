@@ -13,7 +13,7 @@
    ```
 3. Заменить module path:
    ```bash
-   OLD=git.stit.tech/stit/go-backend-template
+   OLD=git.stit.tech/akadmin/go-backend-template
    NEW=git.stit.tech/<org>/<service>
    grep -rl "$OLD" --exclude-dir=.git | xargs sed -i "s|$OLD|$NEW|g"
    go mod edit -module "$NEW" && go mod tidy
