@@ -86,6 +86,24 @@ linters:
               desc: "verification domain must not import user; use verification.UserReader port + adapter"
             - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
               desc: "verification domain must not import auth"
+        mocks-isolation:
+          list-mode: lax
+          files:
+            - "**"
+            - "!**/*_test.go"
+          deny:
+            - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/mocks"
+              desc: "mocks are test-only; import only from *_test.go"
+            - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/delivery/http/mocks"
+              desc: "mocks are test-only; import only from *_test.go"
+            - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/user/mocks"
+              desc: "mocks are test-only; import only from *_test.go"
+            - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/user/delivery/http/mocks"
+              desc: "mocks are test-only; import only from *_test.go"
+            - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/verification/mocks"
+              desc: "mocks are test-only; import only from *_test.go"
+            - pkg: "git.stit.tech/akadmin/go-backend-template/internal/domain/verification/delivery/http/mocks"
+              desc: "mocks are test-only; import only from *_test.go"
     tagalign:
       align: true
       sort: true

@@ -11,10 +11,11 @@ import (
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
 	userhttp "git.stit.tech/akadmin/go-backend-template/internal/domain/user/delivery/http"
+	"git.stit.tech/akadmin/go-backend-template/internal/domain/user/delivery/http/mocks"
 	"git.stit.tech/akadmin/golibinfra/testkit/handlertest"
 )
 
-func setup(t *testing.T, uc *MockUsecase) handlertest.API {
+func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
 		userhttp.Register(api, userhttp.NewHandler(uc))
@@ -23,7 +24,7 @@ func setup(t *testing.T, uc *MockUsecase) handlertest.API {
 
 func TestRegister_Created(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Register(mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, in *user.Create) (*user.User, error) {
 			return &user.User{ID: "u1", Email: in.Email, Name: in.Name, Status: user.StatusActive}, nil
@@ -36,7 +37,7 @@ func TestRegister_Created(t *testing.T) {
 
 func TestRegister_Conflict(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrAlreadyExists)
 	api := setup(t, uc)
 
@@ -46,7 +47,7 @@ func TestRegister_Conflict(t *testing.T) {
 
 func TestRegister_WeakPassword(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrWeakPassword)
 	api := setup(t, uc)
 
@@ -56,7 +57,7 @@ func TestRegister_WeakPassword(t *testing.T) {
 
 func TestGetByID_Forbidden(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().GetByID(mock.Anything, mock.Anything).Return(nil, &user.ForbiddenError{Reason: "not self"})
 	api := setup(t, uc)
 
@@ -66,7 +67,7 @@ func TestGetByID_Forbidden(t *testing.T) {
 
 func TestGetByID_NotFound(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().GetByID(mock.Anything, mock.Anything).Return(nil, user.ErrNotFound)
 	api := setup(t, uc)
 
@@ -76,7 +77,7 @@ func TestGetByID_NotFound(t *testing.T) {
 
 func TestDelete_Forbidden(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Delete(mock.Anything, mock.Anything).Return(&user.ForbiddenError{Reason: "not admin"})
 	api := setup(t, uc)
 
@@ -86,7 +87,7 @@ func TestDelete_Forbidden(t *testing.T) {
 
 func TestDelete_NotFound(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Delete(mock.Anything, mock.Anything).Return(user.ErrNotFound)
 	api := setup(t, uc)
 
@@ -96,7 +97,7 @@ func TestDelete_NotFound(t *testing.T) {
 
 func TestUpdate_ConcurrentUpdate(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Update(mock.Anything, mock.Anything, mock.Anything).Return(nil, user.ErrConcurrentUpdate)
 	api := setup(t, uc)
 
@@ -106,7 +107,7 @@ func TestUpdate_ConcurrentUpdate(t *testing.T) {
 
 func TestUpdate_MissingVersion(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	api := setup(t, uc)
 
 	resp := api.Patch("/api/users/u1", strings.NewReader(`{"name":"new"}`))

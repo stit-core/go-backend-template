@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
+	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification/mocks"
 	"git.stit.tech/akadmin/golibinfra/clockkit"
 	"git.stit.tech/akadmin/golibinfra/logkit"
 	"git.stit.tech/akadmin/golibinfra/testkit/authntest"
@@ -18,32 +19,34 @@ import (
 
 type ucFixture struct {
 	uc       *verification.Usecase
-	repo     *MockRepository
-	users    *MockUserReader
-	pwSet    *MockPasswordSetter
-	emailSet *MockEmailVerificationSetter
-	mailer   *MockMailer
+	repo     *mocks.MockRepository
+	users    *mocks.MockUserReader
+	pwSet    *mocks.MockPasswordSetter
+	emailSet *mocks.MockEmailVerificationSetter
+	mailer   *mocks.MockMailer
 	bus      *eventbus.Recorder
 }
 
 type ucOpts struct {
-	repo     *MockRepository
-	users    *MockUserReader
-	pwSet    *MockPasswordSetter
-	emailSet *MockEmailVerificationSetter
-	mailer   *MockMailer
+	repo     *mocks.MockRepository
+	users    *mocks.MockUserReader
+	pwSet    *mocks.MockPasswordSetter
+	emailSet *mocks.MockEmailVerificationSetter
+	mailer   *mocks.MockMailer
 }
 
 type ucOption func(*ucOpts)
 
-func withRepo(r *MockRepository) ucOption  { return func(o *ucOpts) { o.repo = r } }
-func withUsers(u *MockUserReader) ucOption { return func(o *ucOpts) { o.users = u } }
+func withRepo(r *mocks.MockRepository) ucOption  { return func(o *ucOpts) { o.repo = r } }
+func withUsers(u *mocks.MockUserReader) ucOption { return func(o *ucOpts) { o.users = u } }
 
-func withPwSet(p *MockPasswordSetter) ucOption { return func(o *ucOpts) { o.pwSet = p } }
+func withPwSet(p *mocks.MockPasswordSetter) ucOption { return func(o *ucOpts) { o.pwSet = p } }
 
-func withEmailSet(e *MockEmailVerificationSetter) ucOption { return func(o *ucOpts) { o.emailSet = e } }
+func withEmailSet(e *mocks.MockEmailVerificationSetter) ucOption {
+	return func(o *ucOpts) { o.emailSet = e }
+}
 
-func withMailer(m *MockMailer) ucOption { return func(o *ucOpts) { o.mailer = m } }
+func withMailer(m *mocks.MockMailer) ucOption { return func(o *ucOpts) { o.mailer = m } }
 
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
@@ -52,7 +55,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		fn(o)
 	}
 	if o.repo == nil {
-		r := NewMockRepository(t)
+		r := mocks.NewMockRepository(t)
 		r.EXPECT().InsertPasswordReset(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		r.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(nil, verification.ErrInvalidResetToken).Maybe()
 		r.EXPECT().MarkPasswordResetUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -62,23 +65,23 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		o.repo = r
 	}
 	if o.users == nil {
-		u := NewMockUserReader(t)
+		u := mocks.NewMockUserReader(t)
 		u.EXPECT().GetByID(mock.Anything, mock.Anything).Return(nil, verification.ErrUserNotFound).Maybe()
 		u.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, verification.ErrUserNotFound).Maybe()
 		o.users = u
 	}
 	if o.pwSet == nil {
-		p := NewMockPasswordSetter(t)
+		p := mocks.NewMockPasswordSetter(t)
 		p.EXPECT().UpdatePassword(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		o.pwSet = p
 	}
 	if o.emailSet == nil {
-		e := NewMockEmailVerificationSetter(t)
+		e := mocks.NewMockEmailVerificationSetter(t)
 		e.EXPECT().MarkEmailVerified(mock.Anything, mock.Anything).Return(nil).Maybe()
 		o.emailSet = e
 	}
 	if o.mailer == nil {
-		m := NewMockMailer(t)
+		m := mocks.NewMockMailer(t)
 		m.EXPECT().SendPasswordReset(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		m.EXPECT().SendEmailVerification(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		o.mailer = m
@@ -105,7 +108,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 func TestIssueEmailVerification_HappyPath(t *testing.T) {
 	t.Parallel()
 	var sentEmail, sentToken string
-	mailer := NewMockMailer(t)
+	mailer := mocks.NewMockMailer(t)
 	mailer.EXPECT().SendEmailVerification(mock.Anything, mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, email, token string) error {
 			sentEmail = email
@@ -130,11 +133,11 @@ func TestIssueEmailVerification_HappyPath(t *testing.T) {
 
 func TestRequestPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
-	users := NewMockUserReader(t)
+	users := mocks.NewMockUserReader(t)
 	users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
 		&verification.User{ID: "u1", Email: "a@b.com", Active: true}, nil,
 	)
-	repo := NewMockRepository(t)
+	repo := mocks.NewMockRepository(t)
 	var capturedHash string
 	repo.EXPECT().InsertPasswordReset(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, _, h string, _ time.Time) error {
@@ -142,7 +145,7 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 			return nil
 		})
 	var sentEmail, sentToken string
-	mailer := NewMockMailer(t)
+	mailer := mocks.NewMockMailer(t)
 	mailer.EXPECT().SendPasswordReset(mock.Anything, mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, email, token string) error {
 			sentEmail = email
@@ -172,16 +175,16 @@ func TestRequestPasswordReset_UnknownEmail(t *testing.T) {
 
 func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
-	repo := NewMockRepository(t)
+	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
 		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: time.Now().Add(time.Hour)}, nil,
 	)
 	repo.EXPECT().MarkPasswordResetUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
-	users := NewMockUserReader(t)
+	users := mocks.NewMockUserReader(t)
 	users.EXPECT().GetByID(mock.Anything, mock.Anything).Return(
 		&verification.User{ID: "u1", Email: "a@b.com", Active: true, Version: 3}, nil,
 	)
-	pwSet := NewMockPasswordSetter(t)
+	pwSet := mocks.NewMockPasswordSetter(t)
 	var lastHash string
 	var lastVersion int
 	pwSet.EXPECT().UpdatePassword(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -206,7 +209,7 @@ func TestConfirmPasswordReset_WeakPassword(t *testing.T) {
 
 func TestConfirmPasswordReset_Expired(t *testing.T) {
 	t.Parallel()
-	repo := NewMockRepository(t)
+	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
 		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: time.Now().Add(-time.Hour)}, nil,
 	)
@@ -217,12 +220,12 @@ func TestConfirmPasswordReset_Expired(t *testing.T) {
 
 func TestConfirmEmail_HappyPath(t *testing.T) {
 	t.Parallel()
-	repo := NewMockRepository(t)
+	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(
 		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: time.Now().Add(time.Hour)}, nil,
 	)
 	repo.EXPECT().MarkEmailVerificationUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
-	emailSet := NewMockEmailVerificationSetter(t)
+	emailSet := mocks.NewMockEmailVerificationSetter(t)
 	var markedID string
 	emailSet.EXPECT().MarkEmailVerified(mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, userID string) error {
@@ -237,7 +240,7 @@ func TestConfirmEmail_HappyPath(t *testing.T) {
 
 func TestConfirmEmail_Expired(t *testing.T) {
 	t.Parallel()
-	repo := NewMockRepository(t)
+	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(
 		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: time.Now().Add(-time.Hour)}, nil,
 	)

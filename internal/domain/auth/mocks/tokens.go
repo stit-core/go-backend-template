@@ -2,7 +2,7 @@
 // github.com/vektra/mockery
 // template: testify
 
-package auth_test
+package mocks
 
 import (
 	"time"

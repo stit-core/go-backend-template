@@ -10,10 +10,11 @@ import (
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
 	verifhttp "git.stit.tech/akadmin/go-backend-template/internal/domain/verification/delivery/http"
+	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification/delivery/http/mocks"
 	"git.stit.tech/akadmin/golibinfra/testkit/handlertest"
 )
 
-func setup(t *testing.T, uc *MockUsecase) handlertest.API {
+func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
 		verifhttp.Register(api, verifhttp.NewHandler(uc))
@@ -22,7 +23,7 @@ func setup(t *testing.T, uc *MockUsecase) handlertest.API {
 
 func TestPasswordResetRequest_NoContent(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().RequestPasswordReset(mock.Anything, mock.Anything).Return(nil)
 	api := setup(t, uc)
 
@@ -32,7 +33,7 @@ func TestPasswordResetRequest_NoContent(t *testing.T) {
 
 func TestPasswordResetConfirm_InvalidToken(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().ConfirmPasswordReset(mock.Anything, mock.Anything, mock.Anything).
 		Return(verification.ErrInvalidResetToken)
 	api := setup(t, uc)
@@ -43,7 +44,7 @@ func TestPasswordResetConfirm_InvalidToken(t *testing.T) {
 
 func TestEmailVerify_InvalidToken(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().ConfirmEmail(mock.Anything, mock.Anything).Return(verification.ErrInvalidVerificationToken)
 	api := setup(t, uc)
 

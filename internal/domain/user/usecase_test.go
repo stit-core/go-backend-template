@@ -11,6 +11,7 @@ import (
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
+	"git.stit.tech/akadmin/go-backend-template/internal/domain/user/mocks"
 	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
 	"git.stit.tech/akadmin/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/akadmin/go-backend-template/pkg/policy"
@@ -29,9 +30,9 @@ func (s *stubIssuer) IssueEmailVerification(context.Context, string, string) err
 	return nil
 }
 
-func defaultPolicy(t *testing.T, allow bool) *MockAuthorizer {
+func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 	t.Helper()
-	p := NewMockAuthorizer(t)
+	p := mocks.NewMockAuthorizer(t)
 	dec := func() policy.Decision {
 		if allow {
 			return policy.Allow()
@@ -51,21 +52,21 @@ func defaultPolicy(t *testing.T, allow bool) *MockAuthorizer {
 
 type ucFixture struct {
 	uc     *user.Usecase
-	repo   *MockRepository
+	repo   *mocks.MockRepository
 	bus    *eventbus.Recorder
 	audit  *audittest.Recorder
 	issuer *stubIssuer
 }
 
 type ucOpts struct {
-	repo *MockRepository
+	repo *mocks.MockRepository
 	pol  user.Authorizer
 }
 
 type ucOption func(*ucOpts)
 
-func withRepo(r *MockRepository) ucOption   { return func(o *ucOpts) { o.repo = r } }
-func withPolicy(p user.Authorizer) ucOption { return func(o *ucOpts) { o.pol = p } }
+func withRepo(r *mocks.MockRepository) ucOption { return func(o *ucOpts) { o.repo = r } }
+func withPolicy(p user.Authorizer) ucOption     { return func(o *ucOpts) { o.pol = p } }
 
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
@@ -74,7 +75,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		fn(o)
 	}
 	if o.repo == nil {
-		o.repo = NewMockRepository(t)
+		o.repo = mocks.NewMockRepository(t)
 	}
 	if o.pol == nil {
 		o.pol = defaultPolicy(t, false)
@@ -108,7 +109,7 @@ func TestRegister(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 		var captured *user.User
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().Create(mock.Anything, mock.Anything).
 			RunAndReturn(func(_ context.Context, u *user.User) error {
 				captured = u
@@ -137,7 +138,7 @@ func TestRegister(t *testing.T) {
 
 	t.Run("repo conflict", func(t *testing.T) {
 		t.Parallel()
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().Create(mock.Anything, mock.Anything).Return(user.ErrAlreadyExists)
 		f := newUC(t, withRepo(repo))
 		_, err := f.uc.Register(context.Background(), &user.Create{
@@ -169,7 +170,7 @@ func TestGetByID(t *testing.T) {
 	t.Run("allowed", func(t *testing.T) {
 		t.Parallel()
 		want := &user.User{ID: "u1", Email: "a@b.com"}
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetByID(mock.Anything, mock.Anything).Return(want, nil)
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
 
@@ -193,7 +194,7 @@ func TestMe(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 		want := &user.User{ID: "u1", Email: "a@b.com"}
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetByID(mock.Anything, mock.Anything).Return(want, nil)
 		f := newUC(t, withRepo(repo))
 
@@ -216,7 +217,7 @@ func TestList(t *testing.T) {
 
 	t.Run("admin lists all", func(t *testing.T) {
 		t.Parallel()
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).
 			Return([]*user.User{{ID: "u1"}, {ID: "u2"}}, nil)
 		repo.EXPECT().Count(mock.Anything, mock.Anything).Return(2, nil)
@@ -231,7 +232,7 @@ func TestList(t *testing.T) {
 	t.Run("pagination defaults", func(t *testing.T) {
 		t.Parallel()
 		var seen user.ListPagination
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).
 			RunAndReturn(func(_ context.Context, _ user.ListFilter, pg user.ListPagination) ([]*user.User, error) {
 				seen = pg
@@ -253,7 +254,7 @@ func TestUpdate(t *testing.T) {
 	t.Run("happy path propagates version", func(t *testing.T) {
 		t.Parallel()
 		var seenVersion int
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().UpdateProfile(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			RunAndReturn(func(_ context.Context, id, name string, version int) (*user.User, error) {
 				seenVersion = version
@@ -271,7 +272,7 @@ func TestUpdate(t *testing.T) {
 
 	t.Run("stale version", func(t *testing.T) {
 		t.Parallel()
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().UpdateProfile(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return(nil, user.ErrConcurrentUpdate)
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
@@ -303,7 +304,7 @@ func TestDelete(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 		var seenStatus user.Status
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetByID(mock.Anything, mock.Anything).
 			Return(&user.User{ID: "u1", Status: user.StatusActive, Version: 1}, nil)
 		repo.EXPECT().UpdateStatus(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -320,7 +321,7 @@ func TestDelete(t *testing.T) {
 
 	t.Run("already deleted", func(t *testing.T) {
 		t.Parallel()
-		repo := NewMockRepository(t)
+		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetByID(mock.Anything, mock.Anything).
 			Return(&user.User{ID: "u1", Status: user.StatusDeleted}, nil)
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))

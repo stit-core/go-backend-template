@@ -30,7 +30,7 @@ paths:
 
 ## Моки (mockery v3)
 
-Конфиг — `.mockery.yml`. Файлы: `mock_<interface>_test.go` рядом с интерфейсом, в том же пакете с суффиксом `_test`.
+Конфиг — `.mockery.yml`. Файлы: `<interface_snake>.go` в подпакете `mocks/` рядом с интерфейсом (пакет `mocks`, тип `Mock<Interface>`). Защита от утечки в прод-код — depguard rule `mocks-isolation`: пакеты `*/mocks` импортируются только из `*_test.go`.
 
 ### Добавить моки для нового интерфейса
 
@@ -41,14 +41,18 @@ paths:
      interfaces:
        OrderRepository:
    ```
-3. `make mocks` — генерирует `mock_order_repository_test.go`.
+3. `make mocks` — генерирует `internal/domain/order/mocks/order_repository.go`.
 4. `make mocks-check` в CI проверит что моки не устарели.
 
 ### Использование моков в тестах
 
 ```go
+import (
+    "git.stit.tech/akadmin/go-backend-template/internal/domain/order/mocks"
+)
+
 func TestUsecase_CreateOrder(t *testing.T) {
-    repo := NewMockOrderRepository(t)
+    repo := mocks.NewMockOrderRepository(t)
     repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil).Once()
 
     uc := NewUsecase(repo, ...)

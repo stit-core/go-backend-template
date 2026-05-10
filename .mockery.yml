@@ -1,7 +1,7 @@
 all: false
-dir: '{{.InterfaceDir}}'
-filename: 'mock_{{.InterfaceName | snakecase}}_test.go'
-pkgname: '{{.SrcPackageName}}_test'
+dir: '{{.InterfaceDir}}/mocks'
+filename: '{{.InterfaceName | snakecase}}.go'
+pkgname: 'mocks'
 structname: 'Mock{{.InterfaceName}}'
 formatter: goimports
 force-file-write: true

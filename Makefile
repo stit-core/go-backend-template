@@ -64,7 +64,7 @@ mocks: ## generate mocks via mockery v3
 mocks-check: ## verify generated mocks are up to date
 	@command -v mockery >/dev/null || go install github.com/vektra/mockery/v3@latest
 	mockery
-	@git diff --exit-code -- '**/mock_*_test.go' || (echo "mocks out of date — run make mocks" && exit 1)
+	@git diff --exit-code -- '**/mocks/*.go' || (echo "mocks out of date — run make mocks" && exit 1)
 
 hooks-install: ## install repo git hooks (commit-msg, pre-commit, pre-push)
 	@cp scripts/git-hooks/commit-msg .git/hooks/commit-msg

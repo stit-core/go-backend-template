@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
+	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth/mocks"
 	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
 	"git.stit.tech/akadmin/go-backend-template/pkg/policy"
 	"git.stit.tech/akadmin/golibinfra/clockkit"
@@ -74,9 +75,9 @@ func (s *memSessions) get(jti string) *auth.RefreshSession {
 
 // defaultTokens issues deterministic access/refresh tokens with a per-userID counter so
 // refresh-rotation produces fresh JTIs.
-func defaultTokens(t *testing.T) *MockTokens {
+func defaultTokens(t *testing.T) *mocks.MockTokens {
 	t.Helper()
-	tk := NewMockTokens(t)
+	tk := mocks.NewMockTokens(t)
 	tk.EXPECT().IssueAccess(mock.Anything).
 		RunAndReturn(func(u *auth.User) (string, error) {
 			return "access." + u.ID + "." + string(u.Role), nil
@@ -100,23 +101,23 @@ func defaultTokens(t *testing.T) *MockTokens {
 	return tk
 }
 
-func defaultParser(t *testing.T) *MockTokenParser {
+func defaultParser(t *testing.T) *mocks.MockTokenParser {
 	t.Helper()
-	p := NewMockTokenParser(t)
+	p := mocks.NewMockTokenParser(t)
 	p.EXPECT().ParseRefresh(mock.Anything).Return("u1", "jti-u1", nil).Maybe()
 	return p
 }
 
-func parserReturning(t *testing.T, userID, jti string, err error) *MockTokenParser {
+func parserReturning(t *testing.T, userID, jti string, err error) *mocks.MockTokenParser {
 	t.Helper()
-	p := NewMockTokenParser(t)
+	p := mocks.NewMockTokenParser(t)
 	p.EXPECT().ParseRefresh(mock.Anything).Return(userID, jti, err).Maybe()
 	return p
 }
 
-func defaultPolicy(t *testing.T, allow bool) *MockAuthorizer {
+func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 	t.Helper()
-	p := NewMockAuthorizer(t)
+	p := mocks.NewMockAuthorizer(t)
 	p.EXPECT().CanChangePassword(mock.Anything, mock.Anything, mock.Anything).
 		RunAndReturn(func(context.Context, identity.Identity, string) policy.Decision {
 			if allow {
@@ -127,9 +128,9 @@ func defaultPolicy(t *testing.T, allow bool) *MockAuthorizer {
 	return p
 }
 
-func defaultGuard(t *testing.T) *MockLoginGuard {
+func defaultGuard(t *testing.T) *mocks.MockLoginGuard {
 	t.Helper()
-	g := NewMockLoginGuard(t)
+	g := mocks.NewMockLoginGuard(t)
 	g.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 	g.EXPECT().RecordFailure(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	g.EXPECT().RecordSuccess(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -138,36 +139,38 @@ func defaultGuard(t *testing.T) *MockLoginGuard {
 
 type ucFixture struct {
 	uc       *auth.Usecase
-	users    *MockUserReader
-	verify   *MockPasswordVerifier
-	setpw    *MockPasswordSetter
-	tokens   *MockTokens
-	parser   *MockTokenParser
+	users    *mocks.MockUserReader
+	verify   *mocks.MockPasswordVerifier
+	setpw    *mocks.MockPasswordSetter
+	tokens   *mocks.MockTokens
+	parser   *mocks.MockTokenParser
 	sessions *memSessions
-	guard    *MockLoginGuard
+	guard    *mocks.MockLoginGuard
 	audit    *audittest.Recorder
 }
 
 type ucOpts struct {
-	users    *MockUserReader
-	verify   *MockPasswordVerifier
-	setpw    *MockPasswordSetter
-	tokens   *MockTokens
-	parser   *MockTokenParser
+	users    *mocks.MockUserReader
+	verify   *mocks.MockPasswordVerifier
+	setpw    *mocks.MockPasswordSetter
+	tokens   *mocks.MockTokens
+	parser   *mocks.MockTokenParser
 	sessions *memSessions
-	policy   *MockAuthorizer
-	guard    *MockLoginGuard
+	policy   *mocks.MockAuthorizer
+	guard    *mocks.MockLoginGuard
 }
 
 type ucOption func(*ucOpts)
 
-func withUsers(u *MockUserReader) ucOption          { return func(o *ucOpts) { o.users = u } }
-func withVerifier(v *MockPasswordVerifier) ucOption { return func(o *ucOpts) { o.verify = v } }
-func withSetter(s *MockPasswordSetter) ucOption     { return func(o *ucOpts) { o.setpw = s } }
-func withParser(p *MockTokenParser) ucOption        { return func(o *ucOpts) { o.parser = p } }
-func withSessions(s *memSessions) ucOption          { return func(o *ucOpts) { o.sessions = s } }
-func withPolicy(p *MockAuthorizer) ucOption         { return func(o *ucOpts) { o.policy = p } }
-func withGuard(g *MockLoginGuard) ucOption          { return func(o *ucOpts) { o.guard = g } }
+func withUsers(u *mocks.MockUserReader) ucOption          { return func(o *ucOpts) { o.users = u } }
+func withVerifier(v *mocks.MockPasswordVerifier) ucOption { return func(o *ucOpts) { o.verify = v } }
+func withSetter(s *mocks.MockPasswordSetter) ucOption     { return func(o *ucOpts) { o.setpw = s } }
+func withParser(p *mocks.MockTokenParser) ucOption        { return func(o *ucOpts) { o.parser = p } }
+
+func withSessions(s *memSessions) ucOption { return func(o *ucOpts) { o.sessions = s } }
+
+func withPolicy(p *mocks.MockAuthorizer) ucOption { return func(o *ucOpts) { o.policy = p } }
+func withGuard(g *mocks.MockLoginGuard) ucOption  { return func(o *ucOpts) { o.guard = g } }
 
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
@@ -176,13 +179,13 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		fn(o)
 	}
 	if o.users == nil {
-		o.users = NewMockUserReader(t)
+		o.users = mocks.NewMockUserReader(t)
 	}
 	if o.verify == nil {
-		o.verify = NewMockPasswordVerifier(t)
+		o.verify = mocks.NewMockPasswordVerifier(t)
 	}
 	if o.setpw == nil {
-		o.setpw = NewMockPasswordSetter(t)
+		o.setpw = mocks.NewMockPasswordSetter(t)
 	}
 	if o.tokens == nil {
 		o.tokens = defaultTokens(t)
@@ -227,7 +230,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
-		users := NewMockUserReader(t)
+		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
 			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", Status: "active", Role: identity.RoleClient}, nil,
 		)
@@ -242,7 +245,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("wrong password", func(t *testing.T) {
 		t.Parallel()
-		users := NewMockUserReader(t)
+		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
 			&auth.User{ID: "u1", PasswordHash: "hash:correct", Status: "active"}, nil,
 		)
@@ -255,7 +258,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("blocked status", func(t *testing.T) {
 		t.Parallel()
-		users := NewMockUserReader(t)
+		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
 			&auth.User{ID: "u1", PasswordHash: "hash:pass1234", Status: "blocked"}, nil,
 		)
@@ -270,7 +273,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		t.Parallel()
-		users := NewMockUserReader(t)
+		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
 		f := newUC(t, withUsers(users))
 
@@ -280,7 +283,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("account locked", func(t *testing.T) {
 		t.Parallel()
-		g := NewMockLoginGuard(t)
+		g := mocks.NewMockLoginGuard(t)
 		g.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).
 			Return(&auth.LockState{Until: time.Now().Add(15 * time.Minute)}, nil)
 		f := newUC(t, withGuard(g))
@@ -296,7 +299,7 @@ func TestRefresh(t *testing.T) {
 
 	t.Run("happy path rotates jti", func(t *testing.T) {
 		t.Parallel()
-		users := NewMockUserReader(t)
+		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByID(mock.Anything, mock.Anything).
 			Return(&auth.User{ID: "u1", Email: "a@b.com", Role: identity.RoleClient}, nil)
 		sessions := newMemSessions()
@@ -339,7 +342,7 @@ func TestRefresh(t *testing.T) {
 		t.Parallel()
 		sessions := newMemSessions()
 		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", time.Now().Add(-time.Minute)))
-		users := NewMockUserReader(t)
+		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByID(mock.Anything, mock.Anything).Return(&auth.User{ID: "u1"}, nil).Maybe()
 		f := newUC(t, withUsers(users), withSessions(sessions))
 
@@ -395,9 +398,9 @@ func TestChangePassword(t *testing.T) {
 
 	t.Run("happy path propagates version", func(t *testing.T) {
 		t.Parallel()
-		verify := NewMockPasswordVerifier(t)
+		verify := mocks.NewMockPasswordVerifier(t)
 		verify.EXPECT().VerifyPassword(mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
-		setter := NewMockPasswordSetter(t)
+		setter := mocks.NewMockPasswordSetter(t)
 		var lastHash string
 		var lastVersion int
 		setter.EXPECT().UpdatePassword(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -406,7 +409,7 @@ func TestChangePassword(t *testing.T) {
 				lastVersion = version
 				return nil
 			})
-		users := NewMockUserReader(t)
+		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByID(mock.Anything, mock.Anything).Return(&auth.User{ID: "u1", Version: 7}, nil)
 		f := newUC(t, withUsers(users), withVerifier(verify), withSetter(setter))
 
@@ -419,7 +422,7 @@ func TestChangePassword(t *testing.T) {
 
 	t.Run("wrong old", func(t *testing.T) {
 		t.Parallel()
-		verify := NewMockPasswordVerifier(t)
+		verify := mocks.NewMockPasswordVerifier(t)
 		verify.EXPECT().VerifyPassword(mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
 		f := newUC(t, withVerifier(verify))
 

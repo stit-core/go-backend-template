@@ -10,10 +10,11 @@ import (
 
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
 	authhttp "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/delivery/http"
+	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth/delivery/http/mocks"
 	"git.stit.tech/akadmin/golibinfra/testkit/handlertest"
 )
 
-func setup(t *testing.T, uc *MockUsecase) handlertest.API {
+func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
 		authhttp.Register(api, authhttp.NewHandler(uc))
@@ -22,7 +23,7 @@ func setup(t *testing.T, uc *MockUsecase) handlertest.API {
 
 func TestLogin_HappyPath(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Login(mock.Anything, mock.Anything).
 		Return(&auth.LoginOutput{AccessToken: "a", RefreshToken: "r", User: &auth.User{ID: "u1"}}, nil)
 	api := setup(t, uc)
@@ -33,7 +34,7 @@ func TestLogin_HappyPath(t *testing.T) {
 
 func TestLogin_InvalidCredentials(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Login(mock.Anything, mock.Anything).Return(nil, auth.ErrInvalidCredentials)
 	api := setup(t, uc)
 
@@ -43,7 +44,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 
 func TestLogin_AccountLocked(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Login(mock.Anything, mock.Anything).Return(nil, auth.ErrAccountLocked)
 	api := setup(t, uc)
 
@@ -53,7 +54,7 @@ func TestLogin_AccountLocked(t *testing.T) {
 
 func TestRefresh_Expired(t *testing.T) {
 	t.Parallel()
-	uc := NewMockUsecase(t)
+	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Refresh(mock.Anything, mock.Anything).Return(nil, auth.ErrRefreshExpired)
 	api := setup(t, uc)
 
