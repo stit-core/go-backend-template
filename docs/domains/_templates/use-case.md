@@ -30,7 +30,7 @@ consumes: []
 - **On success:** `<Aggregate>` (или его DTO-проекция)
 - **On failure:** см. Errors
 
-## Dependencies (ports)
+## Dependencies
 
 | port | purpose | adapter |
 |---|---|---|
