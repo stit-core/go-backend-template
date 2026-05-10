@@ -100,6 +100,25 @@ scripts/
 - Комментарии — только когда *зачем* неочевидно. Не пересказывай что делает код.
 - Ошибки оборачивай через `%w`, используй `errors.Is` / `errors.As`. Sentinel-ошибки в `errors.go` корня домена.
 
+## 4a. Telemetry (corp shared observability)
+
+`golibinfra/telemetry` шлёт OTLP в один endpoint с per-tenant изоляцией. Env-контракт для production deploy — в `.env.example`. Минимум:
+
+```
+OTEL_SERVICE_NAME=<svc>           # required
+OTEL_EXPORTER_OTLP_ENDPOINT=otel.stit.tech:443
+OTEL_EXPORTER_OTLP_INSECURE=false
+OTEL_TENANT=<project-name>        # → service.namespace + tenant resource attr
+OTEL_TOKEN=<provisioned-token>    # → Authorization: Bearer на OTLP запросах
+```
+
+`OTEL_TENANT` и `OTEL_TOKEN` выдаёт корп-сторона через `stit/infra` `scripts/onboard-project.sh <project>`. tenant-auth перед otel-collector валидирует токен и проставляет `X-Scope-OrgID`; routing connector раскладывает сигналы в per-tenant пайплайны (Loki/Tempo с tenant header, vminsert по `/insert/<accID>/`). Без `OTEL_TENANT`/`OTEL_TOKEN` (или с `OTEL_STDOUT_ONLY=true`) шаблон работает локально без auth.
+
+Поведение wiring'а:
+- `Tenant != ""` → resource имеет `service.namespace=<tenant>` и `tenant=<tenant>`. Это атрибуты, по которым корп-стек разводит данные.
+- `OTLPBearerToken != ""` → во все 3 OTLP-экспортёра (traces/metrics/logs) добавляется `Authorization: Bearer <token>`.
+- Оба пустые — обратная совместимость, поведение как до коммита `2cc3272` в golibinfra.
+
 ## 5. Git workflow
 
 - **Conventional Commits** проверяются `scripts/git-hooks/commit-msg`. Допустимые типы: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `meta`. Формат: `<type>(<scope>)?: <subject>`, subject ≤72 символа.
