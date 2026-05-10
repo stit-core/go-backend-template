@@ -3,7 +3,7 @@
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-tools: ## install pinned dev tools (gofumpt, golangci-lint, sqlc)
+tools: ## Поставить pinned версии dev-инструментов (gofumpt, golangci-lint, sqlc)
 	@bash scripts/install-tools.sh
 
 test: ## Юнит-тесты (без integration build-tag). -race гонится только при CGO_ENABLED=1.
@@ -57,16 +57,16 @@ migrate-up: ## Накатить миграции (требует PG_DSN; PG_MIGR
 migrate-down: ## Откатить последнюю миграцию (требует PG_DSN)
 	PG_MIGRATIONS_PATH=$${PG_MIGRATIONS_PATH:-./migrations} go run ./cmd/migrate down
 
-mocks: ## generate mocks via mockery v3
+mocks: ## Сгенерировать моки через mockery v3
 	@command -v mockery >/dev/null || go install github.com/vektra/mockery/v3@latest
 	mockery
 
-mocks-check: ## verify generated mocks are up to date
+mocks-check: ## Проверить, что сгенерированные моки актуальны
 	@command -v mockery >/dev/null || go install github.com/vektra/mockery/v3@latest
 	mockery
 	@git diff --exit-code -- '**/mocks/*.go' || (echo "mocks out of date — run make mocks" && exit 1)
 
-hooks-install: ## install repo git hooks (commit-msg, pre-commit, pre-push)
+hooks-install: ## Установить git-хуки репо (commit-msg, pre-commit, pre-push)
 	@cp scripts/git-hooks/commit-msg .git/hooks/commit-msg
 	@cp scripts/git-hooks/pre-push .git/hooks/pre-push
 	@cp scripts/git-hooks/pre-commit .git/hooks/pre-commit 2>/dev/null || true

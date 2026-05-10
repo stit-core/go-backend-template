@@ -22,7 +22,7 @@ import (
 	"git.stit.tech/akadmin/golibinfra/testkit/txkit"
 )
 
-// memSessions is a stateful in-memory SessionRepository used to assert side-effects.
+// memSessions — stateful in-memory SessionRepository для проверки сайд-эффектов.
 type memSessions struct {
 	mu       sync.Mutex
 	sessions map[string]*auth.RefreshSession
@@ -73,8 +73,8 @@ func (s *memSessions) get(jti string) *auth.RefreshSession {
 	return nil
 }
 
-// defaultTokens issues deterministic access/refresh tokens with a per-userID counter so
-// refresh-rotation produces fresh JTIs.
+// defaultTokens выпускает детерминированные access/refresh токены со счётчиком на userID,
+// чтобы refresh-rotation давал свежие JTI.
 func defaultTokens(t *testing.T) *mocks.MockTokens {
 	t.Helper()
 	tk := mocks.NewMockTokens(t)
