@@ -22,12 +22,8 @@ import (
 	platformaudit "git.stit.tech/stit/golibinfra/auditkit"
 )
 
-// kitConfigs — provider'ы для kit-Config'ов вне App (golibinfra ≥ v0.17).
-// pgkit/telemetry идут через App (httpkit здесь не нужен — worker без HTTP);
-// остальные читаются из ENV через свой NewConfig.
 var kitConfigs = fx.Options(
 	fx.Provide(
-		// appconfig.Load принимает ctx (для vault-source HTTP).
 		context.Background,
 
 		logkit.NewConfig,

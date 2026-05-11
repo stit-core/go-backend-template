@@ -10,9 +10,6 @@ import (
 	"git.stit.tech/stit/golibinfra/logkit"
 )
 
-// userReaderAdapter — реальный адаптер: проецирует *user.User в узкий
-// *verification.User (Active вычисляется из Status). Без него домен
-// получил бы лишние поля и тип Status, которые ему не нужны.
 type userReaderAdapter struct {
 	uc *user.Usecase
 }

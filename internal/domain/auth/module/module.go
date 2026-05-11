@@ -1,9 +1,3 @@
-// Package module склеивает реализации auth-домена в fx.Module.
-//
-// Кросс-доменные адаптеры остаются только там, где идёт реальная работа:
-// userReaderAdapter проецирует *user.User в *auth.User. PasswordVerifier и
-// PasswordSetter удовлетворяются *user.Usecase напрямую через structural
-// match (соответствующие методы добавлены в user-домен).
 package module
 
 import (

@@ -1,9 +1,3 @@
-// Package module склеивает реализации verification-домена в fx.Module.
-//
-// Кросс-доменные адаптеры остаются только там, где идёт реальная работа:
-// userReaderAdapter проецирует *user.User в *verification.User. Остальные
-// порты, чьи сигнатуры точно совпадают с методами *user.Usecase /
-// *verification.Usecase, регистрируются прямым structural match'ем.
 package module
 
 import (

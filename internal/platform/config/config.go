@@ -17,13 +17,6 @@ type App struct {
 	Telemetry telemetry.Config
 }
 
-// С golibinfra ≥ v0.17 ни один kit не provide'ит свой Config внутренне —
-// caller обязан зарегистрировать. Здесь главные kit'ы (pgkit/httpkit/
-// telemetry) идут через App-структуру — это даёт единое envconfig-чтение
-// и удобное переопределение per-проект. Если используешь дополнительные
-// kit'ы (logkit/authnkit/bruteforcekit/flagkit/cachekit/etc) — добавь их
-// либо в App ниже, либо `fx.Provide(<kit>.NewConfig)` рядом с <kit>.Module
-// в cmd/api/main.go.
 var Module = fx.Module(
 	"appconfig",
 	fx.Provide(

@@ -13,7 +13,5 @@ type LoginOutput struct {
 	User         *User
 }
 
-// LockState — алиас на bruteforcekit.LockState. Один тип на оба пакета,
-// чтобы bruteforcekit.Guard удовлетворял auth.LoginGuard структурно
-// без adapter-обёртки.
+// Alias (not new type) so bruteforcekit.Guard satisfies auth.LoginGuard structurally.
 type LockState = bruteforcekit.LockState

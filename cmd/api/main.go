@@ -28,14 +28,8 @@ import (
 	appconfig "git.stit.tech/akadmin/go-backend-template/internal/platform/config"
 )
 
-// kitConfigs — provider'ы для тех kit-Config'ов, которые НЕ в App-структуре
-// (golibinfra ≥ v0.17 ни один kit не provide'ит свой Config внутренне).
-// pgkit/httpkit/telemetry идут через App (см. internal/platform/config),
-// остальные читаются из ENV через свой <kit>.NewConfig.
 var kitConfigs = fx.Options(
 	fx.Provide(
-		// appconfig.Load принимает ctx (для vault-source HTTP); fx сам
-		// его не provide'ит.
 		context.Background,
 
 		logkit.NewConfig,

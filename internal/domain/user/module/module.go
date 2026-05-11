@@ -1,10 +1,3 @@
-// Package module склеивает реализации user-домена в fx.Module.
-//
-// Принцип: golibinfra (authnkit, outboxkit, pgkit, ...) — наш собственный
-// port-слой, поэтому usecase зависит от его типов напрямую без адаптеров.
-// Доменные интерфейсы заводим только там, где это даёт реальную пользу
-// сужения широких примитивов (Repository поверх *pgxpool, Authorizer как
-// бизнес-политика). Для outbox-публикации используется outboxkit.Publisher.
 package module
 
 import (
