@@ -175,4 +175,5 @@ docs/domains/
 - Использовать `fmt.Print*` или `slog.*` напрямую. Только `logkit.Logger`.
 - Пушить в `main` напрямую. PR + squash-merge.
 - Image-теги вида `:latest` / `:edge` / lightweight git-tags. `release-preflight` отвергает; infra-template их и не примет.
+- Запускать deploy-команды чужих репо из этого: `make ship`, `bash scripts/deploy.sh`, `ssh <vps>`, `vault kv patch`. Зона ответственности этого репо — код → image в registry. После `make release` — STOP; дальше `<client-org>/infra` + корп-сторона.
 - Принимать архитектурные решения без согласования. Skills задают процедуры; отклонение — это решение и требует явного OK от пользователя.

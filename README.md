@@ -74,9 +74,11 @@ scripts/agent-tools/        обёртки с компактным выводо�
 
 ## Release
 
-Build локальный (никаких gitea-runner'ов), push в `git.stit.tech/<org>/backend{,-migrate,-worker}` под одним lockstep `vX.Y.Z`-тегом. Контракт с инфра-репо: `BACKEND_TAG` ротируется в Vault, deploy.sh на VPS подхватывает.
+**Зона ответственности этого репо: код → image в registry. На этом — STOP.** Деплой, vault-patch и проверка контейнера на проде — другие репо (см. [Handoff](#handoff) ниже).
 
-Шаги:
+Build локальный (никаких gitea-runner'ов), push в `git.stit.tech/<org>/backend{,-migrate,-worker}` под одним lockstep `vX.Y.Z`-тегом.
+
+Шаги **в этом репо**:
 
 1. `make pre-merge` — gate (fmt + lint + test + build + sqlc-diff + mocks-check). Должен быть зелёным.
 2. Аннотированный semver-tag на чистом `main`:
@@ -91,15 +93,28 @@ Build локальный (никаких gitea-runner'ов), push в `git.stit.t
    - `git.stit.tech/<org>/backend-worker:v1.2.3` (skip если `cmd/worker/` удалён)
 
    `<host>` и `<org>` берутся из `git remote get-url origin` (host+первая path-компонента) — image-path следует за тем, где репо реально живёт в Gitea, без правок Makefile при копировании шаблона. Перед запуском убедись что залогинен: `docker login git.stit.tech`.
-4. Корпу: запросить ротацию через `/request-secret` skill (в infra-репо). Корп-админ делает:
-   ```bash
-   vault kv patch kv/projects/<p>/<env>/meta backend_tag=v1.2.3
-   ```
-5. На VPS (или из infra-репо `make ship`) — `scripts/deploy.sh` подхватит новый `BACKEND_TAG` через vault-agent и пересоздаст backend-контейнер.
 
-Откат — тот же путь с предыдущим тегом, image в registry уже лежит.
+После шага 3 image'ы в registry. **Наша зона ответственности закончилась.** `make release` напечатает next-steps как подсказку оператору.
 
-Версия зашивается в бинарник через `-ldflags`. На старте каждый сервис логирует `"starting" service=<name> version=v1.2.3 commit=<short-sha>` через `logkit.Logger` — видно в OTel/journald, на проде сразу понятно какой коммит крутится.
+### Handoff
+
+Дальше работают **другие репо** (этот их не вызывает и не знает их команды):
+
+| Зона | Где | Что делает |
+|---|---|---|
+| Корп-сторона | `stit/infra` (root-токен Vault, только админ) | `vault kv patch kv/projects/<p>/<env>/meta backend_tag=v1.2.3` |
+| Проектная инфра | `<client-org>/infra` (← `stit/project-infra-template-compose`) | `make ship` → ssh-deploy → `vault-agent` рендерит новый `BACKEND_TAG` → `deploy.sh` force-recreate'ит backend-контейнер |
+| Verify | там же | `make ps`, логи `"starting" service=api version=v1.2.3 commit=<sha>` |
+
+В инфра-репо есть skill `/request-secret` который формирует stdout-блок `vault kv patch …` для корп-админа out-of-band. Здесь, в backend-репо, мы лишь печатаем подсказку — кому что передать.
+
+### Откат
+
+Image в registry уже лежит — пересборка не нужна. Полностью **в infra-репо**: корп-патч на предыдущий тег + `make ship`.
+
+### Versioning
+
+Версия зашивается в бинарник через `-ldflags` (`-X main.version=$TAG -X main.commit=$GIT_SHA`). На старте каждый сервис логирует `"starting" service=<name> version=v1.2.3 commit=<short-sha>` через `logkit.Logger` — на проде сразу понятно какой коммит крутится, без захода в Gitea за map'ом tag↔SHA.
 
 ## Контракт со stit-инфрой
 
