@@ -11,7 +11,6 @@ packages:
     interfaces:
       Repository:
       Authorizer:
-      EmailVerificationIssuer:
   git.stit.tech/akadmin/go-backend-template/internal/domain/auth:
     interfaces:
       UserReader:
