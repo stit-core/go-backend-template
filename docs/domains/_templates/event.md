@@ -1,17 +1,17 @@
 ---
-id: <context>.<Name>Event
+id: <context>.<Name>
 kind: event
 context: <context>
-name: <Name>Event
+name: <Name>
 status: draft
 relations: [<context>.<Aggregate>]
 emits: []
 consumes: []
 ---
 
-# <Name>Event
+# <Name>
 
-> Одно предложение: что произошло в бизнесе. В прошедшем времени.
+> Одно предложение: что произошло в бизнесе. В прошедшем времени (`UserRegistered`, `EmailVerified`, `MosqueDeleted`). Суффикс `Event` **не** используется — имя самодостаточно.
 
 ## Trigger
 
@@ -25,7 +25,7 @@ consumes: []
 |---|---|---|
 | `EventID` | UUID v7 | идемпотентность; unique per event instance |
 | `OccurredAt` | timestamp | момент произошедшего изменения |
-| `<Aggregate>ID` | UUID | identity агрегата-источника |
+| `<Aggregate>ID` | UUID v7 | identity агрегата-источника |
 | `<custom field>` | <type> | <зачем нужно консьюмерам> |
 
 ## Consumers
@@ -34,15 +34,18 @@ consumes: []
 |---|---|---|
 | `<HandlerName>` | `<context>` | <что делает в ответ> |
 
-<!-- если на старте нет: consumers: TBD -->
+<!-- Если на старте консьюмеров нет: -->
+<!-- - _нет на старте_ -->
 
 ## Delivery semantics
 
 - **Delivery:** at-least-once
-- **Ordering:** none / per-aggregate
+- **Ordering:** none | per-aggregate (partition key = `<Aggregate>ID`)
 - **Idempotency key:** `EventID` (или `<Aggregate>ID` + дискриминатор)
 - **Retention:** outbox держит до подтверждения всеми консьюмерами
 
 ## Notes
 
 > Дополнительные ограничения, миграционные хвосты, breaking-change policy если уже эволюционировало.
+
+- _нет_

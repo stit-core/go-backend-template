@@ -23,33 +23,23 @@ consumes: []
 
 | name | type | required | brief |
 |---|---|---|---|
-| `Email` | Email (VO) | yes | e-mail пользователя |
-| `Status` | UserStatus (enum) | yes | текущее состояние |
+| `ID` | <Name>ID (UUID v7) | yes | стабильный идентификатор |
+| `Field1` | <Type> | yes | <бизнес-значение> |
+| `Field2` | <Type> (VO) | no | <бизнес-значение> |
 
-### `Email`
+### `Field1`
 
-- **Constraints:** валидный RFC 5322 формат, ≤254 символов
+- **Constraints:** <правила валидации, длины, форматы>
+- **Default:** —
+- **Source:** input | derived | computed | system
+- **Description:** <чем является в бизнесе>
+
+### `Field2`
+
+- **Constraints:** см. VO `<Type>` ниже
 - **Default:** —
 - **Source:** input
-- **Description:** уникальный идентификатор для логина
-
-### `Status`
-
-- **Constraints:** один из enum'а UserStatus
-- **Default:** `Active` при создании
-- **Source:** system (управляется методами)
-- **Description:** состояние жизненного цикла, см. Lifecycle
-
-<!-- enum'ы выносятся отдельной секцией -->
-## Enums
-
-### `UserStatus`
-
-| value | meaning |
-|---|---|
-| `active` | может выполнять операции |
-| `blocked` | временно заблокирован, восстановим |
-| `deleted` | удалён, неоперабелен |
+- **Description:** <чем является в бизнесе>
 
 ## Methods
 
@@ -57,106 +47,108 @@ consumes: []
 
 | name | brief |
 |---|---|
-| `New<Name>` | конструктор с валидацией |
-| `Block` | перевод в `blocked` |
+| `New<Name>` | конструктор с валидацией всех обязательных полей |
+| `<Mutator>` | <что делает> |
 
-### `New<Name>(email Email, ...) (*<Name>, error)`
+### `New<Name>(...) (*<Name>, error)`
 
-- **params:**
-  - `email` — VO Email, обязателен
-- **returns:** `*<Name>`, либо `ErrInvalidEmail`/`ErrInvalidRole`
-- **preconditions:** email валиден; role из допустимых значений
-- **postconditions:** Status=Active; Version=1; CreatedAt=now
-- **events emitted:** `<Context>.<Name>Registered`
+- **params:** обязательные поля + опциональные через struct
+- **returns:** `*<Name>` или sentinel-ошибка из `errors.go`
+- **preconditions:** все Required-поля заданы и проходят валидацию
+- **postconditions:** `ID` сгенерирован; `CreatedAt = UpdatedAt = now` (если применимо)
+- **events emitted:** <`<Context>.<Name>Created` или _нет_>
 
-### `Block(reason string) error`
+### `<Mutator>(args) error`
 
-- **params:** `reason` — нетехническая причина
-- **returns:** `error` — `ErrAlreadyBlocked` если уже blocked
-- **preconditions:** Status ∈ {active}
-- **postconditions:** Status=blocked
-- **events emitted:** `<Context>.<Name>Blocked`
+- **params:** <что приходит>
+- **returns:** sentinel-ошибка при нарушении preconditions
+- **preconditions:** <бизнес-условия>
+- **postconditions:** <что становится истинным>; `UpdatedAt = now`
+- **events emitted:** <event или _нет_>
 
 ## Invariants
 
-1. **<Name>.Email уникален в контексте.** Проверяется в use-case (нужен репо), не в pure методе.
-2. **PasswordHash непустой если Status=active.** Проверяется в `New<Name>` и в методах смены пароля.
-3. **Version монотонно растёт.** Гарантируется репозиторием через optimistic lock.
+> Нумерованный список falsifiable утверждений. Каждый — гарантируется конкретным методом / репозиторием / БД.
+
+1. **<Инвариант 1>.** Гарантируется <конструктором / методом / БД-constraint>.
+2. **<Инвариант 2>.** Гарантируется <…>.
 
 ## Lifecycle
 
+> Если aggregate stateless — пишется явно: `_Lifecycle: N/A (stateless aggregate)._`. Иначе — таблица переходов.
+
 | from | event/method | to | guard | side effects |
 |---|---|---|---|---|
-| ∅ | `New<Name>` | `active` | — | emit `<Name>Registered` |
-| `active` | `Block` | `blocked` | reason ≠ "" | emit `<Name>Blocked` |
-| `blocked` | `Unblock` | `active` | — | emit `<Name>Unblocked` |
-| `active` | `Delete` | `deleted` | — | emit `<Name>Deleted` |
-| `blocked` | `Delete` | `deleted` | — | emit `<Name>Deleted` |
-
-<!-- если stateless: одной строкой:  -->
-<!-- _Lifecycle: N/A (stateless aggregate)._ -->
+| ∅ | `New<Name>` | exists | — | record created (+ event если есть) |
+| exists | `<Mutator>` | exists | <условие> | bumped UpdatedAt (+ event если есть) |
+| exists | `Delete<Name>` (use-case) | ∅ | — | — |
 
 ## Boundary
 
 > Что внутри транзакционной границы агрегата. Что снаружи — только по ID.
 
-- **Внутри:** root entity `<Name>`, VO Email, VO PasswordHash
-- **Снаружи (только по ID):** Session (другой агрегат, другой контекст)
+- **Внутри:** root entity `<Name>`, VO `<VO1>`, slice `<container>`
+- **Снаружи (только по ID):** `<other-context>.<OtherAggregate>` (если есть relation)
 
 ## Contained Entities
 
 - root: `<Name>` (этот файл)
 - _нет child entities — aggregate-of-one_
 
-<!-- если есть child:  -->
-<!-- - child: <ChildName> — см. <ChildName>.md, идентифицируется внутри <Name> -->
+<!-- Если есть child entity сильной сложности — отдельный файл `<Child>.md` (kind: entity); -->
+<!-- остальные child'ы документируем подсекцией здесь.                                  -->
 
 ## Spanning Invariants
 
-> Инварианты, пересекающие несколько entity внутри агрегата. Если aggregate-of-one — совпадают с Invariants выше или пусто.
+> Инварианты, пересекающие несколько entity внутри агрегата. Если aggregate-of-one — `_нет (aggregate-of-one)_`.
 
 - _нет (aggregate-of-one)_
 
 ## Value Objects
 
-### `Email`
+> Внутри-контекстные VO живут здесь inline. Cross-context платформенные VO (`PhotoRef`, etc) — в `_shared/<Name>.md`, ссылка тут одной строкой.
 
-- **Properties:** `value: string`
-- **Invariants:** RFC 5322; lowercase canonical form; len ≤254
+### `<Name>ID`
+
+- **Properties:** `value: string` (UUID v7 как строка)
+- **Invariants:** валидный UUID v7
 - **Equality:** by value
-- **Constructor:** `NewEmail(s string) (Email, error)` — нормализует и валидирует
+- **Constructor:** `New<Name>ID(s string) (<Name>ID, error)`; `Generate<Name>ID() <Name>ID`
 
-### `PasswordHash`
+### `<VO1>`
 
-- **Properties:** `value: string`
-- **Invariants:** непустая строка; формат argon2id-encoded
-- **Equality:** by value
-- **Constructor:** `NewPasswordHash(raw string) (PasswordHash, error)`
+- **Properties:** `<field1>: <type>`, `<field2>: <type>`
+- **Invariants:** <правила>
+- **Equality:** by value | structural
+- **Constructor:** `New<VO1>(...) (<VO1>, error)` — валидирует и нормализует
 
 ## Events
 
 ### Emits
 
-- [`<context>.<Name>Registered`](events/<Name>Registered.md) — после успешной регистрации
-- [`<context>.<Name>Blocked`](events/<Name>Blocked.md) — после блокировки
-- [`<context>.<Name>Unblocked`](events/<Name>Unblocked.md)
-- [`<context>.<Name>Deleted`](events/<Name>Deleted.md)
+- [`<context>.<EventName>`](events/<EventName>.md) — <когда>
+
+<!-- или: -->
+<!-- - _нет на старте_ — мутации не публикуют outbox-события -->
 
 ### Consumes
 
-- [`verification.EmailVerified`](../verification/events/EmailVerified.md) — выставляет EmailVerified=true
+- [`<other-context>.<EventName>`](../<other-context>/events/<EventName>.md) — <как реагируем>
+
+<!-- или: -->
+<!-- - _нет_ -->
 
 ## Relations
 
 | target | cardinality | type | description |
 |---|---|---|---|
-| `auth.Session` | 1..N | reference (by ID) | у пользователя могут быть активные сессии |
-| `verification.Code` | 0..1 | reference (by ID) | в момент регистрации |
+| `<other-context>.<OtherAggregate>` | 0..1 \| 1..N | reference (by ID) \| uses (через port) | <смысл связи> |
+
+<!-- Если связей нет: -->
+<!-- - _нет_ -->
 
 ## Use Cases
 
-> Список бизнес-операций над этим агрегатом. Детали — в use-cases/.
+> Список бизнес-операций над этим агрегатом. Детали — в `use-cases/`.
 
-- [`Register<Name>`](use-cases/Register<Name>.md)
-- [`Block<Name>`](use-cases/Block<Name>.md)
-- [`Change<Name>Email`](use-cases/Change<Name>Email.md)
+- [`<Operation>`](use-cases/<Operation>.md)

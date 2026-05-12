@@ -4,8 +4,8 @@
 
 ## Purpose
 
-- _что делаем_
-- _чего не делаем_
+- _что делаем_: <бизнес-обязательства контекста>
+- _чего не делаем_: <границы — чем занимается другой контекст или платформа>
 
 ## Aggregates
 
@@ -17,7 +17,9 @@
 
 | operation | actor | brief |
 |---|---|---|
-| [`Register<Name>`](use-cases/Register<Name>.md) | anonymous | регистрация нового <Name> |
+| [`<Operation>`](use-cases/<Operation>.md) | <actor> | <что делает> |
+
+Read use-case'ы (`Get<Name>`, `List<Name>s`) — добавим при скаффолдинге HTTP-endpoint'ов, если нужны.
 
 ## Events
 
@@ -25,20 +27,26 @@
 
 | event | trigger | consumers |
 |---|---|---|
-| [`<Name>Registered`](events/<Name>Registered.md) | после `Register<Name>` | verification, audit |
+| [`<Name>`](events/<Name>.md) | после `<UseCase>` | <consumer-context> |
+
+<!-- Если событий нет: -->
+<!-- | _нет на старте_ | — | — | -->
 
 ### Subscribed (incoming)
 
 | event | source | reaction |
 |---|---|---|
-| [`verification.EmailVerified`](../verification/events/EmailVerified.md) | verification | выставляет EmailVerified=true |
+| [`<other-context>.<Name>`](../<other-context>/events/<Name>.md) | `<other-context>` | <что делаем в ответ> |
+
+<!-- Если нет: -->
+<!-- | _нет_ | — | — | -->
 
 ## Cross-context dependencies
 
 | direction | other context | nature |
 |---|---|---|
 | outbound | `<other-context>` | port `<OtherDomain>Reader` для чтения данных кросс-контекстно |
-| inbound | `auth` | читает `<Name>` через port `UserReader` |
+| inbound | `iam` / `platform/authgate` | проверка валидной admin-сессии через HTTP-middleware |
 
 ## Ubiquitous Language
 
@@ -46,19 +54,17 @@
 
 | Бизнес-термин | В коде | Синонимы | Не путать с |
 |---|---|---|---|
-| Пользователь | `user.User` | account, member | `auth.Session` (это сессия, не пользователь) |
-| Заблокирован | `user.StatusBlocked` | banned (избегать) | удалён (`StatusDeleted`) |
-| E-mail | `user.Email` (VO) | login (избегать) | externalEmail (для интеграций) |
-| Регистрация | `user.RegisterUser` (use-case) | sign up | onboarding (это шире) |
+| <термин 1> | `<context>.<Type>` | <синонимы; «избегать» помечать явно> | <ложный друг> |
+| <термин 2> | `<context>.<Type>` | — | — |
 
 ## Glossary notes
 
-> Дополнения, неоднозначности, исторические причины именований. Все вопросы "почему так названо" — сюда.
+> Дополнения, неоднозначности, исторические причины именований. Все вопросы «почему так названо» — сюда.
 
 - _пусто_
 
 ## Architecture notes
 
-> Архитектурные решения специфичные для этого контекста. Например: aggregate-of-one, нет child entities; outbox обязателен для всех мутаций.
+> Архитектурные решения, специфичные для этого контекста. Что нестандартно? Что отличается от других доменов? Где живут cross-aggregate чтения? Семантика PUT/PATCH? Hard- vs soft-delete? Auth — middleware или policy?
 
 - _пусто_

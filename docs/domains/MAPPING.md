@@ -7,6 +7,8 @@
 
 `docs/domains/<context>/` ↔ `internal/domain/<context>/` — один Go-пакет, один FX-модуль (`module/module.go`).
 
+`docs/domains/_shared/<Name>.md` (kind=vo) ↔ `internal/platform/<area>/` — платформенные cross-context VO. Не зависят от бизнес-доменов; бизнес-домены импортят их напрямую.
+
 ## Aggregate / Entity
 
 | Артефакт | Go-код |
@@ -45,6 +47,22 @@
 | VO `Equality: structural`/`custom` | метод `func (a VO) Equal(b VO) bool` |
 
 > **Не обязательно типизировать каждый VO.** Голый `string` для Email допустим если валидация делается в конструкторе агрегата. Типизация — рекомендация для часто употребимых VO.
+
+## Shared Value Objects (`_shared/`, kind: vo)
+
+Для платформенных VO, которые структурно идентичны в ≥2 контекстах и не несут доменной семантики (`PhotoRef`, etc).
+
+| Артефакт | Go-код |
+|---|---|
+| `kind: vo` файл (`_shared/<Name>.md`) | `internal/platform/<area>/<name>.go` (`type <Name> struct{...}`) |
+| Properties → таблица | поля struct'а |
+| Constructor секция | `New<Name>(...) (<Name>, error)` рядом со struct'ом |
+| Invariants | проверки в конструкторе → возврат sentinel-ошибки |
+| Equality | `==` (если все поля comparable) или метод `Equal` |
+| Consumed by | импорты из бизнес-доменов; **не** наоборот — `_shared/` ничего не импортит из `internal/domain/` |
+| Errors секция | sentinel в `internal/platform/<area>/errors.go`; домены оборачивают через `%w` |
+
+`_shared/` — узкий список (большинство VO остаются inline в aggregate-файле своего контекста). Доменные VO (`Phone`, `Email`, `OrderTotal`) — не сюда: их семантика принадлежит контексту, а не платформе.
 
 ## Events
 

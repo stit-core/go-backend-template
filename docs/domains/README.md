@@ -11,13 +11,17 @@ docs/domains/
 ├── _templates/                ← пустые шаблоны для копирования
 │   ├── aggregate.md
 │   ├── entity.md              (опционально, для сложных child entities)
+│   ├── vo-shared.md           (kind: vo — для _shared/, не для inline-VO внутри aggregate)
 │   ├── event.md
 │   ├── use-case.md
 │   ├── policy.md
-│   └── context-readme.md      (VO живут внутри aggregate-файла как H3-секция)
+│   └── context-readme.md
+├── _shared/                   ← cross-context VO и integration events
+│   ├── README.md              ← роллап: какие VO живут здесь и для кого
+│   └── <Name>.md              ← kind: vo, платформенный VO (PhotoRef, MoneyAmount, …)
 └── <bounded-context>/
     ├── README.md              ← purpose, ubiquitous language (роллап на контекст)
-    ├── <Aggregate>.md         ← kind: aggregate, root entity + VO внутри
+    ├── <Aggregate>.md         ← kind: aggregate, root entity + inline-VO внутри
     ├── events/
     │   └── <Event>.md         ← kind: event
     ├── use-cases/
@@ -26,23 +30,24 @@ docs/domains/
         └── <PolicyName>.md    ← kind: policy
 ```
 
-`_shared/` для cross-context VO и integration events — заводим только когда реально нужно.
+`_shared/` — заводим только когда VO реально нужен в ≥2 контекстах и не несёт доменной семантики. Внутри-контекстные VO остаются inline в aggregate-файле.
 
 ## Kinds
 
 | kind | назначение | где живёт |
 |---|---|---|
-| `aggregate` | бизнес-сущность с консистентной границей: root entity + VO внутри | `<ctx>/<Name>.md` |
+| `aggregate` | бизнес-сущность с консистентной границей: root entity + inline-VO внутри | `<ctx>/<Name>.md` |
 | `entity` | child entity сильной сложности (опционально) | `<ctx>/<Name>.md` |
 | `event` | domain event для outbox | `<ctx>/events/<Name>.md` |
 | `use-case` | бизнес-операция (orchestration) | `<ctx>/use-cases/<Name>.md` |
 | `policy` | pure правило / authz / rate-limit | `<ctx>/policies/<Name>.md` |
+| `vo` | cross-context платформенный VO (только для `_shared/`) | `_shared/<Name>.md` |
 
 ## Frontmatter (общий контракт)
 
 ```yaml
 id: user.User                 # <context>.<Name>, стабильный кросс-реф
-kind: aggregate               # aggregate|entity|event|use-case|policy
+kind: aggregate               # aggregate|entity|vo|event|use-case|policy
 context: user
 name: User                    # human-readable
 status: draft                 # draft → stable (через валидатор)
@@ -62,6 +67,7 @@ consumes: [verification.EmailVerified]
 | `event` | Trigger, Payload, Consumers, Delivery semantics |
 | `use-case` | Actor, Inputs, Outputs, Dependencies, Steps, Called aggregate methods, Events emitted, Errors |
 | `policy` | Kind of decision, Inputs, Rules, Outcomes, Used by |
+| `vo` | Properties, Invariants, Constructor, Consumed by |
 
 Контекст-`README.md`: Purpose, Aggregates, Use cases, Events, Cross-context dependencies, Ubiquitous Language.
 
@@ -77,6 +83,8 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
      cp _templates/use-case.md        docs/domains/<ctx>/use-cases/<Op>.md
      cp _templates/policy.md          docs/domains/<ctx>/policies/<Pol>.md
      cp _templates/context-readme.md  docs/domains/<ctx>/README.md
+   # Если обнаружен cross-context платформенный VO:
+     cp _templates/vo-shared.md       docs/domains/_shared/<Name>.md
 
 2. Заполнить вручную минимум: frontmatter + properties (имена, типы)
    + methods/operations (имена). Принести Claude.
@@ -105,8 +113,9 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
 
 ## Anti-patterns
 
-- ❌ Создавать отдельный файл для каждой VO. VO живут внутри aggregate-файла.
+- ❌ Создавать отдельный файл для **внутри-контекстной** VO. Она живёт inline в aggregate-файле. (Исключение: cross-context платформенный VO — `_shared/<Name>.md` с `kind: vo`.)
 - ❌ Описывать I/O-операции как методы агрегата. Если нужен репо/порт — это use-case.
 - ❌ Spanning invariant между двумя aggregate'ами. Запрещено DDD.
 - ❌ Cross-context relation типа `composition`. Только `reference` (по ID).
 - ❌ Промоутить `status: stable` руками без зелёного валидатора.
+- ❌ Класть в `_shared/` доменный VO (например `Phone`, `Email`). `_shared/` — только для платформенных типов без доменной семантики.

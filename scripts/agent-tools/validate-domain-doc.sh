@@ -53,13 +53,16 @@ required_sections() {
         policy)
             echo "'Kind of decision' Inputs Rules Outcomes 'Used by'"
             ;;
+        vo)
+            echo "Properties Invariants Constructor 'Consumed by'"
+            ;;
         *)
             echo ""
             ;;
     esac
 }
 
-VALID_KINDS=(aggregate entity event use-case policy)
+VALID_KINDS=(aggregate entity event use-case policy vo)
 
 is_valid_kind() {
     local k="$1"
@@ -69,7 +72,7 @@ is_valid_kind() {
     return 1
 }
 
-# Extract frontmatter field value: read_field <file> <field>
+# Extract frontmatter scalar field value: read_field <file> <field>
 read_field() {
     awk -v field="$2" '
         /^---$/ { fm = !fm; if (!fm) exit; next }
@@ -80,6 +83,57 @@ read_field() {
             exit
         }
     ' "$1"
+}
+
+# Extract frontmatter list field (relations/emits/consumes).
+# Supports both inline form `field: [a, b, c]` and YAML block form:
+#   field:
+#     - a
+#     - b
+# Prints one value per line.
+read_list_field() {
+    local file="$1" field="$2"
+    awk -v field="$field" '
+        BEGIN { fm = 0; inline_done = 0; in_block = 0 }
+        /^---$/ {
+            fm = !fm
+            if (!fm) exit
+            next
+        }
+        !fm { next }
+        in_block {
+            # Block items: "  - value"
+            if (match($0, /^[ \t]+-[ \t]+/)) {
+                v = substr($0, RLENGTH + 1)
+                gsub(/[ \t]+$/, "", v)
+                if (v != "") print v
+                next
+            }
+            # Any non-indented line ends the block
+            if (match($0, /^[^ \t]/)) {
+                in_block = 0
+            } else {
+                next
+            }
+        }
+        $0 ~ "^"field":[ \t]*\\[" {
+            # Inline form: extract between [ and ]
+            v = $0
+            sub(".*\\[", "", v)
+            sub("\\].*", "", v)
+            n = split(v, a, ",")
+            for (i = 1; i <= n; i++) {
+                gsub(/^[ \t]+|[ \t]+$/, "", a[i])
+                if (a[i] != "") print a[i]
+            }
+            inline_done = 1
+            next
+        }
+        $0 ~ "^"field":[ \t]*$" {
+            in_block = 1
+            next
+        }
+    ' "$file"
 }
 
 # Check section exists and has non-empty body before next H2/EOF.
@@ -111,6 +165,56 @@ has_section() {
     grep -qE "^## ${section}([ \t]*$|[ \t]+)" "$file"
 }
 
+# C1: ensure every aggregate file in <ctx>/ is referenced from <ctx>/README.md
+# and every README link to <ctx>/<X>.md points to an existing file.
+check_readme_aggregates() {
+    local readme="$1"
+    local ctx_dir
+    ctx_dir=$(dirname "$readme")
+
+    # Skip _shared/ and _templates/ READMEs (no aggregates by design).
+    case "$ctx_dir" in
+        */docs/domains/_shared|docs/domains/_shared) return 0 ;;
+        */docs/domains/_templates|docs/domains/_templates) return 0 ;;
+        */docs/domains|docs/domains) return 0 ;;
+    esac
+
+    # Collect aggregate files in ctx_dir (top-level *.md, kind=aggregate).
+    local agg_files=()
+    local f bn k
+    for f in "$ctx_dir"/*.md; do
+        [ -f "$f" ] || continue
+        bn=$(basename "$f" .md)
+        [ "$bn" = "README" ] && continue
+        k=$(read_field "$f" kind)
+        [ "$k" = "aggregate" ] && agg_files+=("$bn")
+    done
+
+    # Collect refs from README body: links of form `[X](X.md)` or `[`X`](X.md)` to local files.
+    local refs
+    refs=$(grep -oE '\]\([A-Za-z][A-Za-z0-9_-]*\.md\)' "$readme" \
+        | sed -E 's/^\]\(([A-Za-z0-9_-]+)\.md\)$/\1/' \
+        | sort -u)
+
+    # Every aggregate file must appear in README links.
+    local a found
+    for a in "${agg_files[@]}"; do
+        found=0
+        while IFS= read -r ref; do
+            [ "$ref" = "$a" ] && { found=1; break; }
+        done <<< "$refs"
+        if [ "$found" -eq 0 ]; then
+            ERRORS+=("$readme: aggregate file '$a.md' exists but is not linked from README")
+        fi
+    done
+
+    # Every README link to a local <X>.md (no subdir) must resolve.
+    while IFS= read -r ref; do
+        [ -z "$ref" ] && continue
+        [ -f "$ctx_dir/$ref.md" ] || ERRORS+=("$readme: link to '$ref.md' is dangling (no such file in $ctx_dir)")
+    done <<< "$refs"
+}
+
 # Validate single file.
 validate_file() {
     local file="$1"
@@ -126,7 +230,7 @@ validate_file() {
         */docs/domains/README.md|*/docs/domains/MAPPING.md|docs/domains/README.md|docs/domains/MAPPING.md) return 0 ;;
     esac
 
-    # README.md of context: just check it exists and has Purpose.
+    # README.md of context: required sections + aggregates ↔ files sync.
     if [[ "$(basename "$file")" == "README.md" ]]; then
         if ! grep -qE "^## Purpose" "$file"; then
             ERRORS+=("$file: missing required section 'Purpose' in context README")
@@ -134,6 +238,7 @@ validate_file() {
         if ! grep -qE "^## Ubiquitous Language" "$file"; then
             ERRORS+=("$file: missing required section 'Ubiquitous Language' in context README")
         fi
+        check_readme_aggregates "$file"
         return 0
     fi
 
@@ -165,10 +270,24 @@ validate_file() {
         ERRORS+=("$file: frontmatter.status must be 'draft' or 'stable' (got '$status')")
     fi
 
-    # id must equal context.<Name> (sanity).
+    # id must equal context.<Name> with exactly one dot (sanity + C4 strict).
     if [ -n "$id" ] && [ -n "$ctx" ]; then
         if [[ "$id" != "$ctx".* ]]; then
             ERRORS+=("$file: id '$id' must start with '$ctx.'")
+        fi
+        # Strict: id has exactly one dot — no sub-namespaces.
+        local dots="${id//[^.]/}"
+        if [ "${#dots}" -ne 1 ]; then
+            ERRORS+=("$file: id '$id' must have exactly one dot (form: <context>.<Name>)")
+        fi
+    fi
+
+    # C2: basename of file must match frontmatter.name.
+    if [ -n "$name" ]; then
+        local bn
+        bn=$(basename "$file" .md)
+        if [ "$bn" != "$name" ]; then
+            ERRORS+=("$file: basename '$bn.md' does not match frontmatter.name '$name'")
         fi
     fi
 
@@ -236,20 +355,13 @@ if [ "${#STABLE_FILES[@]}" -gt 0 ]; then
 
     check_refs() {
         local file="$1" field="$2"
-        local raw refs
-        raw=$(read_field "$file" "$field")
-        # Strip [ and ] and spaces, split by comma.
-        raw="${raw#[}"
-        raw="${raw%]}"
-        [ -z "$raw" ] && return
-        IFS=',' read -ra refs <<< "$raw"
-        for ref in "${refs[@]}"; do
-            ref=$(echo "$ref" | sed 's/^[ \t]*//; s/[ \t]*$//')
+        local ref
+        while IFS= read -r ref; do
             [ -z "$ref" ] && continue
             if [ -z "${ALL_IDS[$ref]:-}" ]; then
                 ERRORS+=("$file: $field references unknown id '$ref'")
             fi
-        done
+        done < <(read_list_field "$file" "$field")
     }
 
     for f in "${STABLE_FILES[@]}"; do

@@ -37,6 +37,8 @@ scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>
 - use-cases (`<ctx>/use-cases/*.md`)
 - policies (`<ctx>/policies/*.md`)
 
+Если по ходу углубления обнаружишь VO, который структурно идентичен в ≥2 контекстах и не несёт доменной семантики (примеры: storage refs, media-метаданные) — предложи вынести его в `docs/domains/_shared/<Name>.md` (kind=vo). Внутри-контекстные VO остаются inline в aggregate-файле.
+
 Для каждого прочитай frontmatter (id/kind/status) и H2-заголовки, вычисли заполненность по обязательному чеклисту (см. `docs/domains/README.md`).
 
 ### 2. Покажи карту состояния
@@ -116,8 +118,10 @@ scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>
 
 ## Что делает валидатор (для справки)
 
-- Frontmatter: id, kind, context, name, status — обязательны; kind ∈ {aggregate, entity, event, use-case, policy}.
+- Frontmatter: id, kind, context, name, status — обязательны; kind ∈ {aggregate, entity, event, use-case, policy, vo}.
+- `id` имеет ровно одну точку (форма `<context>.<Name>`); basename файла совпадает с `name`.
 - Все обязательные H2-секции для kind присутствуют.
 - При status=stable — секции непусты, и relations/emits/consumes указывают на существующие id.
+- Для `<ctx>/README.md` — каждый aggregate-файл в директории должен быть слинкован, и каждая ссылка из README на локальный `*.md` должна резолвиться.
 
 См. `scripts/agent-tools/validate-domain-doc.sh` и `docs/domains/README.md`.
