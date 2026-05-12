@@ -198,10 +198,18 @@ Consumers golibinfra: только этот шаблон + admin-panel-backend. 
   - **template `34cb71c`**: `internal/jobs/bruteforce.go` теперь принимает `bruteforcekit.Guard` и зовёт `g.Cleanup(ctx)`. Pinned golibinfra `3ec743c`.
   - **template `00b58ae`**: `.claude/rules/jobs-and-subscribers.md` — пример переписан с raw SQL на `Guard.Cleanup`, добавлено правило "не лезь сырым SQL в kit-таблицу, зови kit-метод". Иначе rule учил бы будущих авторов на анти-паттерне.
 
+### 2026-05-12 20:24 — audit + outbox добиты до конца
+
+Юзер указал что остаются ещё outbox+audit с тем же паттерном. Добил:
+
+- **golibinfra `556baa9` `refactor(auditkit)!`**: kit-root оставлен с Entry + Logger interface; `auditkit/pgstore.Store` (был `pgLogger`) + `MigrationsFS` + Module провайдит Store as Logger. Тесты переехали в pgstore.
+- **golibinfra `07f25f1` `refactor(outboxkit)!`**: kit-root оставлен с Message + Repository/Publisher + Config + Bus + Worker + orchestration-Module. `outboxkit/pgstore.Store` (был `pgRepository`) + partitions.go (SchemaSQL, PartitionSQL, EnsurePartitions как метод Store) + `MigrationsFS`. Новый `pgstore.PartitionKeeperJob` — daily timerkit.Job создаёт next-month партицию (без него вставки ломались бы при rollover календаря). Тесты переехали в pgstore. Заодно фикс pgx-v5 quirk: `pg_class.relkind::text` (без cast pgx не сканит char OID 18 в *string).
+- **template `32ff4df` `refactor: adopt audit + outbox pgstore split`**: `cmd/migrate` Sources += auditkit/pgstore + outboxkit/pgstore. `cmd/api` `auditkit.Module` → `auditpg.Module`, `outboxpg.Module` рядом с `outboxkit.Module`. Удалены `migrations/0003_audit.{up,down}.sql` и `migrations/0004_outbox.{up,down}.sql`. Побочный эффект: outbox теперь реально партиционирован (template'овая копия была flat-таблицей, разошлась с kit'ом).
+
 ### Финал (push state)
 
-- golibinfra branch `refactor/kit-pluggable-store` @ `3ec743c`: 3 коммита — `feat(pgkit)`, `refactor(bruteforcekit)!`, `feat(bruteforcekit) Cleanup`.
-- template branch `refactor/kit-pluggable-store` @ `00b58ae`: 3 коммита — `refactor` (compose + 0002 cleanup + cmd/api wiring), `refactor(jobs)`, `docs(rules)`.
+- golibinfra branch `refactor/kit-pluggable-store` @ `07f25f1`: 5 коммитов — `feat(pgkit)`, `refactor(bruteforcekit)!`, `feat(bruteforcekit) Cleanup`, `refactor(auditkit)!`, `refactor(outboxkit)!`.
+- template branch `refactor/kit-pluggable-store` @ `32ff4df`: 5 коммитов — `refactor` (bruteforce compose), `refactor(jobs)`, `docs(rules)`, `docs(plans)`, `refactor: adopt audit+outbox`.
 - Фаза 3 (A8-A9, admin-panel-backend) — отложена по запросу юзера.
 - **Перед merge**: golibinfra → tag `v0.19.0` (breaking minor), template `go.mod` repin с pseudo-version на `v0.19.0`.
 
