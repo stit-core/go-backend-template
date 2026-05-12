@@ -26,6 +26,7 @@
 | `make migrate-up` / `make migrate-down` | Накатить / откатить одну миграцию (нужен `PG_DSN`) |
 | `make new-domain NAME=order` | Скаффолд скелета нового домена |
 | `make pre-merge` | Канонический gate: fmt + vet + lint + test + build + sqlc-diff + mocks-check. Гонится pre-push хуком. |
+| `make release-check` / `make release` | Pre-flight (main / clean / annotated `vX.Y.Z` / buildx) + push `<host>/<org>/backend{,-migrate,-worker}:<tag>`. См. README §Release. |
 | `make hooks-install` | Установить git-хуки (commit-msg, pre-commit, pre-push) |
 
 **Agent-friendly обёртки** в `scripts/agent-tools/` дают сжатый вывод (≤25k токенов, сначала фейлы, в конце канонический status-line). В работе агента предпочитай их сырым командам:
@@ -114,6 +115,7 @@ Production-значения **в этот repo не попадают**. Они �
 - **Conventional Commits** проверяются `scripts/git-hooks/commit-msg`. Допустимые типы: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `meta`. Формат: `<type>(<scope>)?: <subject>`, subject ≤72 символа.
 - **Линейная история**. Squash-merge в `main` через PR.
 - **Хуки** ставятся `make hooks-install` — commit-msg, pre-commit (gofumpt + vet + lint), pre-push (`make pre-merge` — полный gate). Skip только через `SKIP_PREPUSH=1`, не `--no-verify`.
+- **Релизы** — annotated semver-tag (`git tag -a vX.Y.Z -m "..."`) на чистом `main` после зелёного `make pre-merge`. Lightweight-теги отвергаются `release-preflight`. Тег = lockstep для api+migrate+worker images.
 - Примеры:
   - `feat(user): add password reset flow`
   - `fix(auth): block reused refresh tokens by validating jti`
@@ -164,6 +166,7 @@ docs/domains/
 - `internal/platform/authgate/` — auth-обвязка задевает все домены.
 - `go.mod` / `go.sum` — изменения зависимостей идут через ревью владельца.
 - Любой `--no-verify` на git-команде.
+- `git tag -a vX.Y.Z` и `make release` — артефакт видимый вне репо (image в registry), сначала explicit OK от пользователя. Используй skill `/release`.
 
 ### Не делать никогда
 - Скипать pre-commit / pre-push через `--no-verify`. PreToolUse-хук это блокирует.
@@ -171,4 +174,5 @@ docs/domains/
 - Править сгенерированные файлы руками (`internal/domain/*/infra/postgres/db/*.go`, `mock_*_test.go`). Регенерируй.
 - Использовать `fmt.Print*` или `slog.*` напрямую. Только `logkit.Logger`.
 - Пушить в `main` напрямую. PR + squash-merge.
+- Image-теги вида `:latest` / `:edge` / lightweight git-tags. `release-preflight` отвергает; infra-template их и не примет.
 - Принимать архитектурные решения без согласования. Skills задают процедуры; отклонение — это решение и требует явного OK от пользователя.

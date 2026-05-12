@@ -53,6 +53,7 @@ curl -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: applicatio
 | `make migrate-up` / `make migrate-down` | Миграции (нужен `PG_DSN`) |
 | `make new-domain NAME=order` | Скаффолд нового домена |
 | `make pre-merge` | Канонический gate перед push |
+| `make release-check` / `make release` | Pre-flight + push api/migrate/worker images в registry под lockstep tag |
 | `make hooks-install` | Поставить git-хуки |
 
 Полный гайд для агентов и человеков — `AGENTS.md`. Дневной флоу — `.claude/WORKFLOW.md`. Точка входа в сессию — `/smartdev`.
@@ -71,9 +72,38 @@ docs/domains/<context>/     DDD-артефакты — source of truth для д
 scripts/agent-tools/        обёртки с компактным выводом для агентов
 ```
 
+## Release
+
+Build локальный (никаких gitea-runner'ов), push в `git.stit.tech/<org>/backend{,-migrate,-worker}` под одним lockstep `vX.Y.Z`-тегом. Контракт с инфра-репо: `BACKEND_TAG` ротируется в Vault, deploy.sh на VPS подхватывает.
+
+Шаги:
+
+1. `make pre-merge` — gate (fmt + lint + test + build + sqlc-diff + mocks-check). Должен быть зелёным.
+2. Аннотированный semver-tag на чистом `main`:
+   ```bash
+   git tag -a v1.2.3 -m "feat(user): password reset"
+   git push origin v1.2.3
+   ```
+   `make release` не примет lightweight-тег и тег не на HEAD — это by design (см. `scripts/release-preflight.sh`).
+3. `make release` — соберёт и запушит три image'а одним тегом:
+   - `git.stit.tech/<org>/backend:v1.2.3`
+   - `git.stit.tech/<org>/backend-migrate:v1.2.3` (с вложенными SQL-файлами)
+   - `git.stit.tech/<org>/backend-worker:v1.2.3` (skip если `cmd/worker/` удалён)
+
+   `<org>` берётся из go.mod module path. Перед запуском убедись что залогинен: `docker login git.stit.tech`.
+4. Корпу: запросить ротацию через `/request-secret` skill (в infra-репо). Корп-админ делает:
+   ```bash
+   vault kv patch kv/projects/<p>/<env>/meta backend_tag=v1.2.3
+   ```
+5. На VPS (или из infra-репо `make ship`) — `scripts/deploy.sh` подхватит новый `BACKEND_TAG` через vault-agent и пересоздаст backend-контейнер.
+
+Откат — тот же путь с предыдущим тегом, image в registry уже лежит.
+
+Версия зашивается в бинарник через `-ldflags`. На старте каждый сервис логирует `"starting" service=<name> version=v1.2.3 commit=<short-sha>` через `logkit.Logger` — видно в OTel/journald, на проде сразу понятно какой коммит крутится.
+
 ## Контракт со stit-инфрой
 
-- `git.stit.tech` — registry для `<org>/<service>` images (build через gitea-runner).
+- `git.stit.tech` — registry для `<org>/backend{,-migrate,-worker}` images (build локальный, см. [Release](#release)).
 - `vault.stit.tech` — secrets backend, AppRole `project-<p>` (см. `stit/infra` → `scripts/onboard-project.sh`).
 - `otel.stit.tech` — OTLP ingest (Bearer-token), tenant routing по `service.namespace`.
 - Деплой через `stit/project-infra-template-compose` (docker-compose стек на проектный VPS).

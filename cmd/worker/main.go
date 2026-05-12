@@ -77,10 +77,18 @@ func newBruteforceCleanupJob(db *pgkit.DB) timerkit.Job {
 	}
 }
 
+var (
+	version = "dev"
+	commit  = "unknown"
+)
+
 func main() {
 	fx.New(
 		infraModules,
 		platformModules,
 		workerModules,
+		fx.Invoke(func(ctx context.Context, log logkit.Logger) {
+			log.Info(ctx, "starting", "service", "worker", "version", version, "commit", commit)
+		}),
 	).Run()
 }

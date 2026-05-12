@@ -1,4 +1,13 @@
-.PHONY: help tools test test-int test-fuzz test-bench test-cover lint fmt build build-worker tidy migrate-up migrate-down new-domain hooks-install sqlc sqlc-diff mocks mocks-check pre-merge
+.PHONY: help tools test test-int test-fuzz test-bench test-cover lint fmt build build-worker tidy migrate-up migrate-down new-domain hooks-install sqlc sqlc-diff mocks mocks-check pre-merge release-check release image-api image-migrate image-worker
+
+# Release-вычисления. Image-path выводится из go.mod module path:
+# `git.stit.tech/<org>/<service>` → `git.stit.tech/<org>/backend`. Имя
+# registry-package всегда `backend` — совпадает с infra-template
+# (compose/backend.yml ожидает `<host>/<org>/backend:<tag>`).
+RELEASE_BASE := $(shell go list -m 2>/dev/null | awk -F/ 'NF>=2 {print $$1"/"$$2}')
+IMAGE_BASE := $(RELEASE_BASE)/backend
+TAG ?= $(shell git describe --tags --exact-match HEAD 2>/dev/null)
+GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null)
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -72,6 +81,35 @@ hooks-install: ## Установить git-хуки репо (commit-msg, pre-co
 	@cp scripts/git-hooks/pre-commit .git/hooks/pre-commit 2>/dev/null || true
 	@chmod +x .git/hooks/commit-msg .git/hooks/pre-push .git/hooks/pre-commit 2>/dev/null || true
 	@echo "git hooks installed"
+
+release-check: ## Pre-flight для release: ветка=main, чистое дерево, annotated tag vX.Y.Z на HEAD, buildx
+	@bash scripts/release-preflight.sh "$(TAG)"
+
+image-api: release-check ## Собрать и запушить api-image (require: annotated tag на HEAD, docker login git.stit.tech)
+	docker buildx build --platform linux/amd64 --push \
+	  --build-arg TARGET=api \
+	  --build-arg VERSION=$(TAG) \
+	  --build-arg GIT_SHA=$(GIT_SHA) \
+	  -t $(IMAGE_BASE):$(TAG) .
+
+image-migrate: release-check ## Собрать и запушить migrate-image (Dockerfile.migrate, в image вложены SQL-файлы)
+	docker buildx build --platform linux/amd64 --push -f Dockerfile.migrate \
+	  --build-arg VERSION=$(TAG) \
+	  --build-arg GIT_SHA=$(GIT_SHA) \
+	  -t $(IMAGE_BASE)-migrate:$(TAG) .
+
+image-worker: release-check ## Собрать и запушить worker-image (silent skip если cmd/worker отсутствует)
+	@if [ ! -d cmd/worker ]; then echo "image-worker: cmd/worker не найден — skip"; exit 0; fi; \
+	docker buildx build --platform linux/amd64 --push \
+	  --build-arg TARGET=worker \
+	  --build-arg VERSION=$(TAG) \
+	  --build-arg GIT_SHA=$(GIT_SHA) \
+	  -t $(IMAGE_BASE)-worker:$(TAG) .
+
+release: release-check image-api image-migrate image-worker ## Полный релиз: pushed lockstep tag для api+migrate+worker
+	@echo "✓ released $(IMAGE_BASE){,-migrate,-worker}:$(TAG)"
+	@echo "→ next: на корп-стороне vault kv patch kv/projects/<p>/<env>/meta backend_tag=$(TAG)"
+	@echo "→ then: на VPS bash scripts/deploy.sh (или make ship в infra-репо)"
 
 pre-merge: ## канонический pre-push/pre-merge gate: fmt + vet + lint + test + build + sqlc-diff + mocks-check
 	@echo "→ make fmt"

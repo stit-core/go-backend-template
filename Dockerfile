@@ -6,6 +6,8 @@ WORKDIR /src
 
 ARG TARGET=api
 ARG TARGETPLATFORM
+ARG VERSION=dev
+ARG GIT_SHA=unknown
 
 # apk кеш переживает между билдами (≈60s → ≈1s).
 RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
@@ -35,7 +37,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       *) GOARCH=amd64 ;; \
     esac; \
     CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH \
-    go build -trimpath -ldflags="-s -w" -o /app ./cmd/${TARGET}
+    go build -trimpath \
+      -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${GIT_SHA}" \
+      -o /app ./cmd/${TARGET}
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates

@@ -81,10 +81,18 @@ var (
 	)
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+)
+
 func main() {
 	fx.New(
 		infraModules,
 		platformModules,
 		domainModules,
+		fx.Invoke(func(ctx context.Context, log logkit.Logger) {
+			log.Info(ctx, "starting", "service", "api", "version", version, "commit", commit)
+		}),
 	).Run()
 }

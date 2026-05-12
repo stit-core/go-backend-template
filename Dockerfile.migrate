@@ -5,6 +5,8 @@ FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 WORKDIR /src
 
 ARG TARGETPLATFORM
+ARG VERSION=dev
+ARG GIT_SHA=unknown
 
 RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
     apk add --update-cache git openssh-client ca-certificates
@@ -29,7 +31,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       *) GOARCH=amd64 ;; \
     esac; \
     CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH \
-    go build -trimpath -ldflags="-s -w" -o /app ./cmd/migrate
+    go build -trimpath \
+      -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${GIT_SHA}" \
+      -o /app ./cmd/migrate
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates

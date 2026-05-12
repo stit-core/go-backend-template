@@ -8,9 +8,15 @@ import (
 	"git.stit.tech/stit/golibinfra/pgkit"
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+)
+
 func main() {
 	log := logkit.New(logkit.Config{Level: "info"})
 	ctx := context.Background()
+	log.Info(ctx, "starting", "service", "migrate", "version", version, "commit", commit)
 
 	if len(os.Args) < 2 {
 		log.Error(ctx, "usage: migrate <up|down|version>")
