@@ -4,7 +4,7 @@
 
 ## Active
 
-—
+- [telemetry-otlp-logs](./telemetry-otlp-logs.md) — app→OTLP logs до Loki, tenant-per-env, prod-like smoke — `in-progress` 2/10 atoms
 
 ## Recently done
 
