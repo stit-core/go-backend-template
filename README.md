@@ -90,7 +90,7 @@ Build локальный (никаких gitea-runner'ов), push в `git.stit.t
    - `git.stit.tech/<org>/backend-migrate:v1.2.3` (с вложенными SQL-файлами)
    - `git.stit.tech/<org>/backend-worker:v1.2.3` (skip если `cmd/worker/` удалён)
 
-   `<org>` берётся из go.mod module path. Перед запуском убедись что залогинен: `docker login git.stit.tech`.
+   `<host>` и `<org>` берутся из `git remote get-url origin` (host+первая path-компонента) — image-path следует за тем, где репо реально живёт в Gitea, без правок Makefile при копировании шаблона. Перед запуском убедись что залогинен: `docker login git.stit.tech`.
 4. Корпу: запросить ротацию через `/request-secret` skill (в infra-репо). Корп-админ делает:
    ```bash
    vault kv patch kv/projects/<p>/<env>/meta backend_tag=v1.2.3

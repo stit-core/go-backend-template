@@ -1,10 +1,11 @@
 .PHONY: help tools test test-int test-fuzz test-bench test-cover lint fmt build build-worker tidy migrate-up migrate-down new-domain hooks-install sqlc sqlc-diff mocks mocks-check pre-merge release-check release image-api image-migrate image-worker
 
-# Release-вычисления. Image-path выводится из go.mod module path:
-# `git.stit.tech/<org>/<service>` → `git.stit.tech/<org>/backend`. Имя
-# registry-package всегда `backend` — совпадает с infra-template
-# (compose/backend.yml ожидает `<host>/<org>/backend:<tag>`).
-RELEASE_BASE := $(shell go list -m 2>/dev/null | awk -F/ 'NF>=2 {print $$1"/"$$2}')
+# Release-вычисления. Image-path выводится из `git remote get-url origin`
+# (host+org), repo-name всегда `backend` — совпадает с infra-template
+# (compose/backend.yml ожидает `<host>/<org>/backend:<tag>`). Берём из
+# remote, а не из go.mod module path, чтобы шаблон работал без правки
+# Makefile при копировании в `<client-org>/<service>`.
+RELEASE_BASE := $(shell git remote get-url origin 2>/dev/null | sed -E 's#^(git@|https?://)([^:/]+)[:/]([^/]+)/.*$$#\2/\3#')
 IMAGE_BASE := $(RELEASE_BASE)/backend
 TAG ?= $(shell git describe --tags --exact-match HEAD 2>/dev/null)
 GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null)
