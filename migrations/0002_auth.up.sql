@@ -1,5 +1,5 @@
--- 0002_auth: refresh-сессии и счётчики bruteforce.
--- Покрывает auth-домен и общую инфраструктуру bruteforcekit (используется auth login flow).
+-- 0002_auth: refresh-сессии auth-домена.
+-- bruteforce_attempts владеет bruteforcekit/pgstore (см. MigrationsFS) — здесь не дублируется.
 
 -- Refresh-токены: jti как PK, replaced_by_jti для chain rotation.
 CREATE TABLE refresh_sessions (
@@ -12,14 +12,3 @@ CREATE TABLE refresh_sessions (
 );
 CREATE INDEX refresh_sessions_user_id_idx    ON refresh_sessions (user_id);
 CREATE INDEX refresh_sessions_expires_at_idx ON refresh_sessions (expires_at);
-
--- Bruteforce-счётчики: PK по (subject, ip), partial index на активные locks.
-CREATE TABLE bruteforce_attempts (
-    subject       TEXT        NOT NULL,
-    ip            TEXT        NOT NULL,
-    failed_count  INT         NOT NULL DEFAULT 0,
-    locked_until  TIMESTAMPTZ,
-    last_attempt  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (subject, ip)
-);
-CREATE INDEX bruteforce_attempts_locked_idx ON bruteforce_attempts (locked_until) WHERE locked_until IS NOT NULL;

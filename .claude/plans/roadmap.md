@@ -4,7 +4,7 @@
 
 ## Active
 
-—
+- [kit-store-port-refactor](./kit-store-port-refactor.md) — `bruteforcekit` → core+port+pgstore split, `pgkit.MigrateUpMulti`, удалить копию DDL из template. Разблокирует `ROC/admin-panel-backend` cleanup-and-iam. — `in-progress` 7/9 atoms (фазы 1+2 закрыты, фаза 3 ждёт запроса)
 
 ## Recently done
 
@@ -14,3 +14,4 @@
 ## Backlog (idea state)
 
 - Smoke `otel-agent` config — переименовать `otlphttp/corp` → `otlp_http/corp` (deprecated alias). Синхронно с тем же в `stit/project-infra-template-compose/configs/otel-agent/config.yaml`.
+- audit/outbox kit refactor по тому же паттерну (core+port+pgstore). На v1 не нужен (admin-panel-backend их выключает), но тех. долг template'а — рано или поздно делать.

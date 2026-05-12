@@ -8,6 +8,7 @@ import (
 	"git.stit.tech/stit/golibinfra/auditkit"
 	"git.stit.tech/stit/golibinfra/authnkit"
 	"git.stit.tech/stit/golibinfra/bruteforcekit"
+	bruteforcepg "git.stit.tech/stit/golibinfra/bruteforcekit/pgstore"
 	"git.stit.tech/stit/golibinfra/cachekit"
 	"git.stit.tech/stit/golibinfra/config"
 	"git.stit.tech/stit/golibinfra/flagkit"
@@ -64,7 +65,7 @@ var (
 		appconfig.Module,
 		authgate.Module,
 		authnkit.Module,
-		bruteforcekit.Module,
+		bruteforcepg.Module,
 		auditkit.Module,
 		clockkit.Module,
 		outboxkit.Module,

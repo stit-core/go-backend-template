@@ -8,6 +8,7 @@ import (
 
 	"github.com/kelseyhightower/envconfig"
 
+	bruteforcepg "git.stit.tech/stit/golibinfra/bruteforcekit/pgstore"
 	"git.stit.tech/stit/golibinfra/logkit"
 	"git.stit.tech/stit/golibinfra/pgkit"
 	"git.stit.tech/stit/golibinfra/telemetry"
@@ -63,25 +64,33 @@ func run(ctx context.Context, log logkit.Logger) int {
 		path = "/migrations"
 	}
 
-	cfg := pgkit.MigrateConfig{DSN: dsn, Path: path}
+	// Порядок Sources append-only — новые kit'ы добавляются в КОНЕЦ после "app",
+	// чтобы не сдвигать существующие version'ы в schema_migrations.
+	cfg := pgkit.MultiSourceConfig{
+		DSN: dsn,
+		Sources: []pgkit.Source{
+			{Name: "bruteforcekit", FS: bruteforcepg.MigrationsFS, Prefix: "migrations"},
+			{Name: "app", FS: os.DirFS(path), Prefix: "."},
+		},
+	}
 
 	switch os.Args[1] {
 	case "up":
-		if err := pgkit.MigrateUp(cfg); err != nil {
+		if err := pgkit.MigrateUpMulti(cfg); err != nil {
 			log.Error(ctx, "migrate up failed", "err", err)
 			return 1
 		}
 		log.Info(ctx, "migrate up: ok")
 
 	case "down":
-		if err := pgkit.MigrateDown(cfg); err != nil {
+		if err := pgkit.MigrateDownMulti(cfg); err != nil {
 			log.Error(ctx, "migrate down failed", "err", err)
 			return 1
 		}
 		log.Info(ctx, "migrate down: ok")
 
 	case "version":
-		v, dirty, err := pgkit.MigrateVersion(cfg)
+		v, dirty, err := pgkit.MigrateVersionMulti(cfg)
 		if err != nil {
 			log.Error(ctx, "migrate version failed", "err", err)
 			return 1
