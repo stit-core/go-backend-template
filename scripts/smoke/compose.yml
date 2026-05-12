@@ -1,0 +1,124 @@
+name: backend-smoke
+
+x-app-env: &app-env
+  HTTP_ADDR: ":8080"
+  HTTP_API_TITLE: backend-smoke
+  HTTP_API_VERSION: 0.0.0-smoke
+
+  PG_DSN: postgres://postgres:postgres@postgres:5432/app?sslmode=disable
+  PG_REPLICA_DSN: postgres://postgres:postgres@postgres:5432/app?sslmode=disable
+  PG_MIGRATIONS_PATH: /migrations
+
+  NATS_URL: nats://nats:4222
+  NATS_JETSTREAM_ENABLED: "true"
+  NATS_JS_STREAM_NAMES: ""
+
+  REDIS_URL: redis://redis:6379/0
+
+  JWT_SECRET: smoke-only-secret-do-not-use-in-prod-min-32chars
+  JWT_ACCESS_TTL: 15m
+  JWT_REFRESH_TTL: 720h
+
+  OTEL_SERVICE_NAME: backend
+  OTEL_SERVICE_VERSION: smoke
+  APP_ENV: smoke
+  OTEL_EXPORTER_OTLP_ENDPOINT: otel.stit.tech:443
+  OTEL_EXPORTER_OTLP_INSECURE: "false"
+  OTEL_STDOUT_ONLY: "false"
+  OTEL_EXPORT_TIMEOUT: 10s
+  OTEL_TRACES_SAMPLER_ARG: "1.0"
+  OTEL_TENANT: ${OTEL_TENANT}
+  OTEL_TOKEN: ${STIT_OBS_TOKEN}
+
+  LOG_LEVEL: debug
+
+  OUTBOX_BATCH_SIZE: "100"
+  OUTBOX_INTERVAL: 1s
+
+  BRUTEFORCE_MAX_FAILURES: "5"
+  BRUTEFORCE_LOCK_DURATION: 15m
+  BRUTEFORCE_WINDOW: 1h
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smoke-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    networks: [smoke]
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: smoke-nats
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - natsdata:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "127.0.0.1:8222:8222"
+    networks: [smoke]
+
+  redis:
+    image: redis:7-alpine
+    container_name: smoke-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    networks: [smoke]
+
+  migrate:
+    image: backend-smoke:local
+    container_name: smoke-migrate
+    build:
+      context: ../..
+      dockerfile: scripts/smoke/Dockerfile.local
+    environment:
+      <<: *app-env
+    entrypoint: ["migrate"]
+    command: ["up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [smoke]
+
+  api:
+    image: backend-smoke:local
+    container_name: smoke-api
+    environment:
+      <<: *app-env
+    entrypoint: ["api"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks: [smoke]
+
+volumes:
+  pgdata:
+  natsdata:
+
+networks:
+  smoke:
+    driver: bridge
