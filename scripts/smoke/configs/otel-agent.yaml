@@ -1,0 +1,60 @@
+# Smoke otel-agent — клон конфига из stit/project-infra-template-compose
+# /configs/otel-agent/config.yaml без prometheus scraper (в smoke нет
+# cadvisor/node-exporter). Приём OTLP от backend, обогащение
+# service.namespace+tenant из env, форвард в corp otel.stit.tech.
+#
+# OTEL_TENANT и OTEL_TOKEN приходят из smoke-up.sh (резолвится из
+# ./credential.md). Endpoint — корп-константа.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 5s
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resource:
+    attributes:
+      - key: service.namespace
+        value: ${env:OTEL_TENANT}
+        action: upsert
+      - key: tenant
+        value: ${env:OTEL_TENANT}
+        action: upsert
+
+exporters:
+  otlphttp/corp:
+    endpoint: https://otel.stit.tech:443
+    headers:
+      Authorization: "Bearer ${env:OTEL_TOKEN}"
+    tls:
+      insecure: false
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp/corp]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp/corp]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp/corp]
