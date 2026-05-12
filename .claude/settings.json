@@ -66,11 +66,11 @@
       "Edit(**/*.pem)",
       "Edit(**/*.key)",
       "Edit(**/infra/postgres/db/**)",
-      "Edit(**/mock_*_test.go)",
+      "Edit(**/mocks/*.go)",
       "Edit(go.sum)",
       "Write(.env*)",
       "Write(**/infra/postgres/db/**)",
-      "Write(**/mock_*_test.go)"
+      "Write(**/mocks/*.go)"
     ]
   },
   "hooks": {

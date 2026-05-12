@@ -319,6 +319,27 @@ echo "  3. Заполни запросы в infra/postgres/queries/$NAME.sql"
 echo "  4. make sqlc — регенерация"
 echo "  5. Заполни usecase, handler, тесты"
 echo "  6. Подключи модуль в cmd/api/main.go (domainModules)"
-echo "  7. Добавь в .mockery.yml интерфейсы домена → make mocks"
-echo "  8. Добавь depguard-правило в .golangci.yml (изоляция домена)"
-echo "  9. make pre-merge"
+echo
+echo "─── snippet для .mockery.yml (вставить под секцию packages:) ───"
+cat <<MOCKERY
+  ${MODULE_PATH}/internal/domain/${NAME}:
+    interfaces:
+      Repository:
+      Authorizer:
+  ${MODULE_PATH}/internal/domain/${NAME}/delivery/http:
+    interfaces:
+      Usecase:
+MOCKERY
+echo
+echo "─── snippet для .golangci.yml (depguard rules, изоляция домена) ───"
+cat <<DEPGUARD
+        $NAME:
+          files:
+            - '**/internal/domain/$NAME/**'
+            - '!**/internal/domain/$NAME/module/**'
+          deny:
+            - pkg: '${MODULE_PATH}/internal/domain'
+              desc: 'Бизнес-домены не импортят друг друга. Используй порты + адаптеры в module/.'
+DEPGUARD
+echo
+echo "После правок: make mocks && make pre-merge"

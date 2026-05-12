@@ -11,11 +11,10 @@ docs/domains/
 ├── _templates/                ← пустые шаблоны для копирования
 │   ├── aggregate.md
 │   ├── entity.md              (опционально, для сложных child entities)
-│   ├── vo-inline.md           (для вставки в aggregate)
 │   ├── event.md
 │   ├── use-case.md
 │   ├── policy.md
-│   └── context-readme.md
+│   └── context-readme.md      (VO живут внутри aggregate-файла как H3-секция)
 └── <bounded-context>/
     ├── README.md              ← purpose, ubiquitous language (роллап на контекст)
     ├── <Aggregate>.md         ← kind: aggregate, root entity + VO внутри
@@ -43,7 +42,7 @@ docs/domains/
 
 ```yaml
 id: user.User                 # <context>.<Name>, стабильный кросс-реф
-kind: aggregate               # aggregate|entity|vo|event|use-case|policy
+kind: aggregate               # aggregate|entity|event|use-case|policy
 context: user
 name: User                    # human-readable
 status: draft                 # draft → stable (через валидатор)

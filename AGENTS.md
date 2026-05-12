@@ -47,7 +47,7 @@
 
 - **Юнит-тесты** лежат рядом с кодом как `<file>_test.go`. В корне домена тесты на `usecase.go`, `policy.go`. В `delivery/http/` — на хендлеры.
 - **Интеграционные тесты** под build-tag `integration`: `//go:build integration`. Запускаются через `make test-int`. Поднимают Postgres + NATS через `internal/testkit/pgseed` и `testcontainers-go`.
-- **Моки** — mockery v3, файлы `mock_<interface>_test.go`, конфиг в `.mockery.yml`. Руками никогда не править — `make mocks` после изменения интерфейсов из `.mockery.yml`.
+- **Моки** — mockery v3, файлы `<interface_snake>.go` в подпакете `mocks/` рядом с интерфейсом (пакет `mocks`, тип `Mock<Interface>`). Конфиг — `.mockery.yml`. Руками никогда не править — `make mocks` после изменения интерфейсов.
 - **Fuzz**-таргеты лежат рядом с тестами; `make test-fuzz` гоняет 10s-смок на каждую цель.
 - **TDD обязателен** для багфиксов: сначала пишешь падающий тест, видишь red, потом фиксишь до green.
 
@@ -86,7 +86,7 @@ scripts/
   agents/        Subagent'ы (explorer, reviewer, migration-author)
   plans/         roadmap.md (индекс) + <slug>.md (per-task) — committable, ревьюются в PR
   WORKFLOW.md    Описание дневного флоу для людей
-  research/      synthesis.md + raw-briefings.md (кросс-вендорное исследование)
+  research/      vendor-briefings/ — кросс-вендорное исследование (по необходимости)
 ```
 
 `internal/domain/auth`, `user`, `verification` — это **референс-примеры**. Для реального сервиса изучи их, потом удали и замени своими доменами.
@@ -171,7 +171,7 @@ docs/domains/
 ### Не делать никогда
 - Скипать pre-commit / pre-push через `--no-verify`. PreToolUse-хук это блокирует.
 - Коммитить `.env` / `.env.local` / креды. Pre-write хук защищает эти пути.
-- Править сгенерированные файлы руками (`internal/domain/*/infra/postgres/db/*.go`, `mock_*_test.go`). Регенерируй.
+- Править сгенерированные файлы руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`). Регенерируй через `make sqlc` / `make mocks`.
 - Использовать `fmt.Print*` или `slog.*` напрямую. Только `logkit.Logger`.
 - Пушить в `main` напрямую. PR + squash-merge.
 - Image-теги вида `:latest` / `:edge` / lightweight git-tags. `release-preflight` отвергает; infra-template их и не примет.

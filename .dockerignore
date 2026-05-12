@@ -10,3 +10,8 @@ docs
 *.md
 **/*_test.go
 **/testdata
+
+# Local credentials (PAT для git.stit.tech, .netrc-rendering).
+# Дублирует .gitignore — на случай non-buildx builds без COPY-фильтрации.
+credential.md
+credentials.md

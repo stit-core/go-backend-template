@@ -39,7 +39,7 @@ case "$REL" in
     */infra/postgres/db/*.go)
         block "файл сгенерирован sqlc. Правь .sql в queries/ и запусти 'make sqlc'."
         ;;
-    */mock_*_test.go)
+    */mocks/*.go)
         block "файл сгенерирован mockery. Правь интерфейс и запусти 'make mocks'."
         ;;
     coverage.out|coverage.*)

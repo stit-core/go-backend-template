@@ -2,7 +2,7 @@
 
 Этот документ — для человека. Описывает как работать с этим репо через Claude Code: что грузится, что когда срабатывает, как действовать в типовых сценариях.
 
-Архитектура и обоснования — в `.claude/research/synthesis.md`. Сырые брифинги по вендорам — в `.claude/research/raw-briefings.md`.
+Вендор-исследования (если набираются по ходу) — в `.claude/research/vendor-briefings/`.
 
 ## 1. Что лежит где
 
@@ -156,18 +156,7 @@ Plan mode запрещает edits до approve.
 | Добавить разовый контекст | drag-and-drop файла или `@path/to/file` |
 | Откатить изменения | `git restore` (snapshots не нужны — у нас git) |
 
-## 6. Eval как regression test
-
-После недели работы:
-1. Берёшь 8-12 реальных задач из своей `git log` за последние 3 месяца
-2. На каждую делаешь fixture-ветку + `assertion.sh` (что считать успешным фиксом)
-3. `make eval` гоняет Claude headless на каждой, сохраняет JSON-отчёт
-4. Раз в неделю / при изменении конфига → прогон. Регрессии — разбираешь
-5. **Не публикуешь номер.** Sourcegraph: "evals are primarily useful as unit tests and regression tests."
-
-Это не "наш агент scores 78% на SWE-bench" — это "если я меняю AGENTS.md, не сломал ли я собственные кейсы".
-
-## 7. Что осознанно не делаем
+## 6. Что осознанно не делаем
 
 - ❌ Multi-agent swarm. Cognition + Anthropic Multi-Agent Research caveat про код.
 - ❌ Hierarchy team-lead → task-lead → workers (предыдущая попытка). Cognition Principle 1 ("share full traces") сложнее в иерархии чем в едином агенте с subagent-изоляцией.
@@ -176,7 +165,7 @@ Plan mode запрещает edits до approve.
 - ❌ Bloated CLAUDE.md. Anthropic: bloat снижает adherence. Лимит 200 строк.
 - ❌ JSON-wrapped edit-формат. Aider измерил ~3× harm. Нативный string-replace через Edit-инструмент.
 
-## 8. Куда смотреть когда что-то не так
+## 7. Куда смотреть когда что-то не так
 
 | Симптом | Куда смотреть |
 |---|---|

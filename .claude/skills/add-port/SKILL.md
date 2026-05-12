@@ -66,7 +66,7 @@ git.stit.tech/akadmin/go-backend-template/internal/domain/<consumer>:
     <Provider>Reader:
 ```
 
-`make mocks` → `mock_<provider>_reader_test.go` появится рядом с usecase_test.go.
+`make mocks` → `internal/domain/<consumer>/mocks/<provider>_reader.go` (пакет `mocks`, тип `Mock<Provider>Reader`).
 
 ### 5. Адаптер в `module/adapters.go` потребителя
 
