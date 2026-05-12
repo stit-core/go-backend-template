@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification/infra/postgres/db"
+	"git.stit.tech/stit/go-backend-template/internal/domain/verification"
+	"git.stit.tech/stit/go-backend-template/internal/domain/verification/infra/postgres/db"
 	"git.stit.tech/stit/golibinfra/pgkit"
 )
 

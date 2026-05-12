@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
-	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
 )
 
 type UserOption func(*user.User)

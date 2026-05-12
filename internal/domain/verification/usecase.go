@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 
-	"git.stit.tech/akadmin/go-backend-template/pkg/tokens"
+	"git.stit.tech/stit/go-backend-template/pkg/tokens"
 	"git.stit.tech/stit/golibinfra/authnkit"
 	"git.stit.tech/stit/golibinfra/clockkit"
 	"git.stit.tech/stit/golibinfra/logkit"

@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit/golibinfra/httpkit"
 	"git.stit.tech/stit/golibinfra/logkit"
 )

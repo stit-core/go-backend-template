@@ -21,12 +21,12 @@ import (
 
 	"git.stit.tech/stit/golibinfra/clockkit"
 
-	authmod "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/module"
-	usermod "git.stit.tech/akadmin/go-backend-template/internal/domain/user/module"
-	verifmod "git.stit.tech/akadmin/go-backend-template/internal/domain/verification/module"
-	"git.stit.tech/akadmin/go-backend-template/internal/jobs"
-	"git.stit.tech/akadmin/go-backend-template/internal/platform/authgate"
-	appconfig "git.stit.tech/akadmin/go-backend-template/internal/platform/config"
+	authmod "git.stit.tech/stit/go-backend-template/internal/domain/auth/module"
+	usermod "git.stit.tech/stit/go-backend-template/internal/domain/user/module"
+	verifmod "git.stit.tech/stit/go-backend-template/internal/domain/verification/module"
+	"git.stit.tech/stit/go-backend-template/internal/jobs"
+	"git.stit.tech/stit/go-backend-template/internal/platform/authgate"
+	appconfig "git.stit.tech/stit/go-backend-template/internal/platform/config"
 )
 
 var kitConfigs = fx.Options(

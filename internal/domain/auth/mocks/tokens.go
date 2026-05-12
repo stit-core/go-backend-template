@@ -7,7 +7,7 @@ package mocks
 import (
 	"time"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
+	"git.stit.tech/stit/go-backend-template/internal/domain/auth"
 	mock "github.com/stretchr/testify/mock"
 )
 

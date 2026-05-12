@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit/golibinfra/authnkit"
 )
 

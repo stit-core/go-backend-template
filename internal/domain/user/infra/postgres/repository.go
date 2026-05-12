@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/user/infra/postgres/db"
+	"git.stit.tech/stit/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit/go-backend-template/internal/domain/user/infra/postgres/db"
 	"git.stit.tech/stit/golibinfra/pgkit"
 )
 

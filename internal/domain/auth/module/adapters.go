@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit/go-backend-template/internal/domain/auth"
+	"git.stit.tech/stit/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit/golibinfra/authnkit"
 )
 

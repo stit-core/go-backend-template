@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification/mocks"
+	"git.stit.tech/stit/go-backend-template/internal/domain/verification"
+	"git.stit.tech/stit/go-backend-template/internal/domain/verification/mocks"
 	"git.stit.tech/stit/golibinfra/clockkit"
 	"git.stit.tech/stit/golibinfra/logkit"
 	"git.stit.tech/stit/golibinfra/testkit/authntest"

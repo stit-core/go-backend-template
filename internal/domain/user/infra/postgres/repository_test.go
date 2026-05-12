@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
-	userpg "git.stit.tech/akadmin/go-backend-template/internal/domain/user/infra/postgres"
-	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
-	"git.stit.tech/akadmin/go-backend-template/internal/testkit/pgseed"
+	"git.stit.tech/stit/go-backend-template/internal/domain/user"
+	userpg "git.stit.tech/stit/go-backend-template/internal/domain/user/infra/postgres"
+	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit/go-backend-template/internal/testkit/pgseed"
 	"git.stit.tech/stit/golibinfra/testkit"
 )
 

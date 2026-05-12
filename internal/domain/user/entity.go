@@ -4,7 +4,7 @@ import (
 	"net/mail"
 	"time"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
 )
 
 type Status string

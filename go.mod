@@ -1,4 +1,4 @@
-module git.stit.tech/akadmin/go-backend-template
+module git.stit.tech/stit/go-backend-template
 
 go 1.26
 

@@ -8,9 +8,9 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/stretchr/testify/mock"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
-	authhttp "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/delivery/http"
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth/delivery/http/mocks"
+	"git.stit.tech/stit/go-backend-template/internal/domain/auth"
+	authhttp "git.stit.tech/stit/go-backend-template/internal/domain/auth/delivery/http"
+	"git.stit.tech/stit/go-backend-template/internal/domain/auth/delivery/http/mocks"
 	"git.stit.tech/stit/golibinfra/testkit/handlertest"
 )
 

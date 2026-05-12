@@ -3,7 +3,7 @@ package identitytest
 import (
 	"context"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
 )
 
 func Anon() context.Context { return context.Background() }

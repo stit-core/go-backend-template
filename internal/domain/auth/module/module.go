@@ -3,10 +3,10 @@ package module
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/auth"
-	authhttp "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/delivery/http"
-	authpg "git.stit.tech/akadmin/go-backend-template/internal/domain/auth/infra/postgres"
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit/go-backend-template/internal/domain/auth"
+	authhttp "git.stit.tech/stit/go-backend-template/internal/domain/auth/delivery/http"
+	authpg "git.stit.tech/stit/go-backend-template/internal/domain/auth/infra/postgres"
+	"git.stit.tech/stit/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit/golibinfra/authnkit"
 	"git.stit.tech/stit/golibinfra/bruteforcekit"
 )
