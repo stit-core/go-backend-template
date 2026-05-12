@@ -128,6 +128,6 @@ type UserRegistered struct {
 }
 ```
 
-Repository пишет событие в outbox-таблицу в той же транзакции что и основное изменение (`outboxkit.Publisher`). Воркер в `internal/worker/subscribers/` подписан на events bus и обрабатывает.
+Repository пишет событие в outbox-таблицу в той же транзакции что и основное изменение (`outboxkit.Publisher`). Outbox-drain живёт внутри того же `cmd/api` бинаря (fx.Lifecycle, без отдельного worker-процесса) и публикует в NATS. Subscriber'ы потребляющего домена лежат **внутри** этого домена в `delivery/nats/handler.go` — рядом с `delivery/http/`, на равных правах. Регистрируются они в `module/module.go` потребляющего домена.
 
-См. `auth.UserRegisteredHandler` в `internal/worker/subscribers/` как референс.
+Реф. пример: `internal/domain/verification/delivery/nats/handler.go` — подписан на `user.registered`, запускает email-verification flow в своём же домене.

@@ -71,8 +71,8 @@ WHERE email = $1;
 - Первичные ключи — `uuid` (через `pgx`-расширение или `uuid_generate_v4()`).
 - Soft-delete — нет. Удалили — удалили.
 - Optimistic lock через `version` колонку: `WHERE id = $1 AND version = $2`. Возврат `:execrows` = 0 → `ErrConflict`.
-- Outbox-таблица — общая, миграция `0003_outbox.up.sql`. Все домены пишут туда.
-- Audit-лог — общая таблица, `0002_audit_log.up.sql`.
+- Outbox-таблица — общая, миграция `0004_outbox.up.sql`. Все домены пишут туда.
+- Audit-лог — общая таблица, миграция `0003_audit.up.sql`.
 - Имена таблиц — множественное число, snake_case (`users`, `refresh_sessions`).
 - Имена колонок — snake_case (`created_at`, `password_hash`).
 

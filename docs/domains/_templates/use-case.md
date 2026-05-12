@@ -36,7 +36,7 @@ consumes: []
 |---|---|---|
 | `<Aggregate>Repository` | persistence корневого агрегата | postgres |
 | `Authorizer` | проверка прав актора | platform/authgate |
-| `EmailVerificationIssuer` | cross-domain port в verification | adapter в `module/adapters.go` |
+| `<OtherDomain>Reader` | cross-domain port в `<other-domain>` | adapter в `module/adapters.go` |
 | `Clock` | детерминируемое время | golibinfra/clock |
 
 ## Steps

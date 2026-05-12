@@ -1,13 +1,13 @@
 ---
 name: add-event
-description: Добавить новый outbox-эвент в домен + subscriber-handler в worker + регистрацию в worker module. Активируй когда юзер просит "добавь событие", "новый outbox-эвент", "новый NATS subscriber", "после X должно произойти Y асинхронно".
+description: Добавить новый outbox-эвент в домен-источник + subscriber-handler in-domain (delivery/nats/) + регистрацию в fx-модуле потребляющего домена. Активируй когда юзер просит "добавь событие", "новый outbox-эвент", "новый NATS subscriber", "после X должно произойти Y асинхронно".
 ---
 
 # Skill: add-event
 
-Эвент-флоу: usecase пишет событие в outbox в той же транзакции, что и основное изменение → worker читает outbox → publish в NATS → subscriber обрабатывает.
+Эвент-флоу: usecase домена-источника пишет событие в outbox в той же транзакции, что и основное изменение → `outboxkit.Publisher` (поднимается fx.Lifecycle того же `cmd/api`) публикует в NATS → subscriber потребляющего домена (`internal/domain/<consumer>/delivery/nats/`) обрабатывает. Отдельного worker-процесса нет — всё в одном бинаре.
 
-См. `.claude/rules/outbox-events.md` и `.claude/rules/worker-subscribers.md` для бэкграунда — они автогрузятся, когда правишь `events.go` или `worker/subscribers/`.
+См. `.claude/rules/outbox-events.md` и `.claude/rules/jobs-and-subscribers.md` для бэкграунда — они автогрузятся, когда правишь `events.go` или `delivery/nats/`.
 
 ## Когда применять
 
@@ -77,61 +77,80 @@ err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
 
 `uc.events` — это `outboxkit.Publisher`, уже инжектится в `UsecaseDeps`. Сериализация в JSON — внутри `outboxkit`.
 
-### 4. Subscriber в `internal/worker/subscribers/`
+### 4. Subscriber in-domain (`internal/domain/<consumer>/delivery/nats/`)
 
-Один файл = один subscriber. Имя: `<event>_handler.go` или `<source>_<event>_handler.go`.
+Subscriber лежит **внутри** потребляющего домена, рядом с `delivery/http/`. depguard не пускает прямой импорт `<source>`-домена из `<consumer>` — поэтому payload-тип события объявляется **локально** в `delivery/nats/dto.go`, даже если он 1:1 совпадает с типом из источника.
 
 ```go
-package subscribers
+// internal/domain/<consumer>/delivery/nats/dto.go
+package nats
+
+type <Event>Payload struct {
+    EventID string `json:"event_id"`
+    // …поля 1:1 с <source>.<Event>, но локальный тип
+}
+```
+
+```go
+// internal/domain/<consumer>/delivery/nats/handler.go
+package nats
 
 import (
     "context"
+    "fmt"
 
-    "git.stit.tech/akadmin/go-backend-template/internal/domain/<source>"
-    "git.stit.tech/akadmin/golibinfra/logkit"
+    "go.uber.org/fx"
+
+    "git.stit.tech/stit/golibinfra/logkit"
+    "git.stit.tech/stit/golibinfra/natskit"
 )
 
-type Notifier interface {
-    SendWelcomeEmail(ctx context.Context, email string) error
+type Usecase interface {
+    DoSomething(ctx context.Context, ...) error
 }
 
-type <Event>Handler struct {
-    log      logkit.Logger
-    notifier Notifier
+type Handler struct {
+    uc  Usecase
+    log logkit.Logger
 }
 
-func New<Event>Handler(log logkit.Logger, n Notifier) *<Event>Handler {
-    return &<Event>Handler{log: log.With("subscriber", "<event>"), notifier: n}
+func NewHandler(uc Usecase, log logkit.Logger) *Handler {
+    return &Handler{uc: uc, log: log.With("delivery", "<consumer>.nats")}
 }
 
-func (h *<Event>Handler) Handle(ctx context.Context, ev <source>.<Event>) error {
-    h.log.Info(ctx, "<event> received", "event_id", ev.EventID)
-    return h.notifier.SendWelcomeEmail(ctx, ev.Email)
+func (h *Handler) on<Event>(ctx context.Context, e <Event>Payload) error {
+    if err := h.uc.DoSomething(ctx, /* mapping из e */); err != nil {
+        h.log.Error(ctx, "handle <event>", "event_id", e.EventID, "err", err)
+        return fmt.Errorf("handle <event>: %w", err)
+    }
+    h.log.Info(ctx, "<event> handled", "event_id", e.EventID)
+    return nil
 }
 
-func (h *<Event>Handler) Subject() string { return <source>.<Event>Subject }
+func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
+    // natskit.Subscribe[<Event>Payload](bus, h.on<Event>) с lifecycle hooks
+}
 ```
 
-### 5. Cross-domain адаптер (если subscriber вызывает другой домен)
-
-Если `Notifier` — это другой домен, **не импортируй его напрямую** из `subscribers/`. Объяви порт в `subscribers/` (как в шаге 4) и реализуй адаптер в `subscribers/adapters.go`.
-
-### 6. Регистрация в `subscribers/module.go`
+### 5. Регистрация в `<consumer>/module/module.go`
 
 ```go
+import (
+    natsdelivery "git.stit.tech/stit/go-backend-template/internal/domain/<consumer>/delivery/nats"
+)
+
 var Module = fx.Module(
-    "subscribers",
+    "<consumer>",
     fx.Provide(
-        New<Event>Handler,
-        // …порты-адаптеры…
+        // …существующие провайдеры…
+        natsdelivery.NewHandler,
+        func(uc *<consumer>.Usecase) natsdelivery.Usecase { return uc },
     ),
-    fx.Invoke(func(js natskit.JetStream, h *<Event>Handler) error {
-        return natskit.Subscribe[<source>.<Event>](js, h)
-    }),
+    fx.Invoke(natsdelivery.Register),
 )
 ```
 
-Один `fx.Invoke` на subscriber. Если хочешь группировать — собери в одну функцию.
+Subscriber фактически — это просто ещё один транспорт в usecase. Никаких отдельных fx-модулей "subscribers" не заводи.
 
 ### 7. Idempotency
 

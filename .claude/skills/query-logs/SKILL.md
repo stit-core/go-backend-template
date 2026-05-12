@@ -26,7 +26,7 @@ description: Прочитать или последить логи задепл�
 
 - [ ] `command -v logcli` — установлен? Если нет → `make tools` (или скажи юзеру).
 - [ ] `./credentials.md` существует и содержит строку `STIT_OBS_TOKEN=...`? Сам файл **не читай** через `Read` (deny в settings). Просто запусти `logs.sh` — он сам прочитает через bash, или вернёт `FAIL: no STIT_OBS_TOKEN` с инструкцией.
-- [ ] Знаешь `service` label? Дефолт в шаблоне — имя бинаря (`api` / `worker` / `migrate`), маппинг — `OTEL_SERVICE_NAME` env при деплое.
+- [ ] Знаешь `service` label? Дефолт в шаблоне — имя бинаря (`api` для runtime, `migrate` для init-контейнера миграций); маппинг — `OTEL_SERVICE_NAME` env при деплое.
 - [ ] Для `watch` — оценил длительность? Не больше 10m по дефолту, юзер может расширить.
 
 ## Режимы

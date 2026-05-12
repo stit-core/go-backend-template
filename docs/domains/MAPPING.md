@@ -54,7 +54,7 @@
 | Payload table | поля struct'а |
 | Trigger `source aggregate` | use-case этого aggregate'а кладёт событие в outbox |
 | Trigger `triggering use-case` | конкретный метод `Usecase` |
-| Consumers | `internal/worker/subscribers/<consumer>.go` — handler с зависимостями через порты |
+| Consumers | `internal/domain/<consumer>/delivery/nats/handler.go` — handler рядом с `delivery/http/`, на равных правах. Регистрируется fx того же `cmd/api`. |
 | Delivery `idempotency key` | поле в payload; subscriber хранит уже обработанные ID |
 | Delivery `at-least-once` | `outboxkit.Publisher` гарантирует, subscriber обязан быть идемпотентен |
 | Delivery `ordering: per-aggregate` | partition key = `<Aggregate>ID` в NATS-конфиге subscriber'а |

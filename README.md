@@ -20,7 +20,7 @@
    (`GOPRIVATE` ставится автоматически в `make tools` ниже.)
 4. Заменить module path:
    ```bash
-   OLD=git.stit.tech/akadmin/go-backend-template
+   OLD=git.stit.tech/stit/go-backend-template
    NEW=git.stit.tech/<org>/<service>
    grep -rl "$OLD" --exclude-dir=.git | xargs sed -i "s|$OLD|$NEW|g"
    go mod edit -module "$NEW" && go mod tidy
@@ -41,7 +41,7 @@ curl -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: applicatio
 
 - **HTTP**: huma/v2 поверх chi, OpenAPI 3.1 авто-генерация, structured errors.
 - **БД**: pgx/v5 + sqlc (typed queries), миграции через golang-migrate.
-- **DI**: uber/fx, lifecycle hooks, граф собирается в `cmd/api/main.go` и `cmd/worker/main.go`.
+- **DI**: uber/fx, lifecycle hooks. Один runtime-бинарь (`cmd/api`) — внутри него HTTP, outbox drain, NATS subscribers и background jobs. Standalone CLI миграций (`cmd/migrate`) собирается отдельным image и крутится init-контейнером.
 - **Платформа**: `golibinfra` — OTLP telemetry, JWT/session authn, outbox-pattern publisher, brute-force guard, cache (Redis/in-mem), NATS pub/sub, audit log, clock.
 - **DDD**: артефакты доменов в `docs/domains/<context>/` — source of truth перед кодом. См. `docs/domains/MAPPING.md` (DDD ↔ Go).
 - **Тесты**: unit (`-short -race`), integration (`//go:build integration` + testcontainers), fuzz, mockery v3.
@@ -54,13 +54,13 @@ curl -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: applicatio
 | `make tools` | Pinned dev-инструменты (gofumpt, golangci-lint, sqlc, mockery) |
 | `make test` / `make test-int` / `make test-cover` | Unit / integration / coverage |
 | `make lint` / `make fmt` | golangci-lint / gofumpt |
-| `make build` / `make build-worker` | Бинарники api / worker |
+| `make build` | Бинарник `bin/api` (единственный runtime) |
 | `make sqlc` / `make sqlc-diff` | Регенерация / проверка pgx-кода |
 | `make mocks` / `make mocks-check` | Регенерация / проверка mockery v3 моков |
 | `make migrate-up` / `make migrate-down` | Миграции (нужен `PG_DSN`) |
 | `make new-domain NAME=order` | Скаффолд нового домена |
 | `make pre-merge` | Канонический gate перед push |
-| `make release-check` / `make release` | Pre-flight + push api/migrate/worker images в registry под lockstep tag |
+| `make release-check` / `make release` | Pre-flight + push api/migrate images в registry под lockstep tag |
 | `make hooks-install` | Поставить git-хуки |
 
 Полный гайд для агентов и человеков — `AGENTS.md`. Дневной флоу — `.claude/WORKFLOW.md`. Точка входа в сессию — `/smartdev`.
@@ -68,22 +68,25 @@ curl -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: applicatio
 ## Структура
 
 ```
-cmd/{api,worker,migrate}/   точки входа
-internal/<domain>/          бизнес-логика по доменам (DDD)
-internal/platform/          shared infra (db, http server, fx-модули)
-internal/testkit/           pgseed, fixtures, helpers
-pkg/                        публичные пакеты (если есть)
-migrations/                 SQL-миграции (golang-migrate)
+cmd/{api,migrate}/          точки входа: api — runtime, migrate — standalone CLI миграций
+internal/<domain>/          бизнес-логика по доменам (DDD); subscribers — in-domain `delivery/nats/`
+internal/platform/          shared infra (authgate, config, identity)
+internal/jobs/              background jobs (поднимаются fx.Lifecycle того же cmd/api)
+internal/testkit/           pgseed, identitytest helpers
+pkg/                        публичные пакеты (policy, tokens)
+migrations/                 SQL-миграции (golang-migrate), парные up/down
 docs/domains/<context>/     DDD-артефакты — source of truth для домена
-.claude/                    skills, rules, plans для Claude Code
+.claude/                    skills, rules, agents, plans для Claude Code
 scripts/agent-tools/        обёртки с компактным выводом для агентов
 ```
+
+См. `AGENTS.md §3` — структура расписана подробнее.
 
 ## Release
 
 **Зона ответственности этого репо: код → image в registry. На этом — STOP.** Деплой, vault-patch и проверка контейнера на проде — другие репо (см. [Handoff](#handoff) ниже).
 
-Build локальный (никаких gitea-runner'ов), push в `git.stit.tech/<org>/backend{,-migrate,-worker}` под одним lockstep `vX.Y.Z`-тегом.
+Build локальный (никаких gitea-runner'ов), push в `git.stit.tech/<org>/backend{,-migrate}` под одним lockstep `vX.Y.Z`-тегом.
 
 Шаги **в этом репо**:
 
@@ -94,10 +97,9 @@ Build локальный (никаких gitea-runner'ов), push в `git.stit.t
    git push origin v1.2.3
    ```
    `make release` не примет lightweight-тег и тег не на HEAD — это by design (см. `scripts/release-preflight.sh`).
-3. `make release` — соберёт и запушит три image'а одним тегом:
-   - `git.stit.tech/<org>/backend:v1.2.3`
-   - `git.stit.tech/<org>/backend-migrate:v1.2.3` (с вложенными SQL-файлами)
-   - `git.stit.tech/<org>/backend-worker:v1.2.3` (skip если `cmd/worker/` удалён)
+3. `make release` — соберёт и запушит два image'а одним тегом:
+   - `git.stit.tech/<org>/backend:v1.2.3` (`cmd/api` — runtime)
+   - `git.stit.tech/<org>/backend-migrate:v1.2.3` (`cmd/migrate` + вложенные SQL-файлы, init-контейнер)
 
    `<host>` и `<org>` берутся из `git remote get-url origin` (host+первая path-компонента) — image-path следует за тем, где репо реально живёт в Gitea, без правок Makefile при копировании шаблона. Перед запуском убедись что залогинен: `docker login git.stit.tech`.
 
@@ -125,7 +127,7 @@ Image в registry уже лежит — пересборка не нужна. П
 
 ## Контракт со stit-инфрой
 
-- `git.stit.tech` — registry для `<org>/backend{,-migrate,-worker}` images (build локальный, см. [Release](#release)).
+- `git.stit.tech` — registry для `<org>/backend{,-migrate}` images (build локальный, см. [Release](#release)).
 - `vault.stit.tech` — secrets backend, AppRole `project-<p>` (см. `stit/infra` → `scripts/onboard-project.sh`).
 - `otel.stit.tech` — OTLP ingest (Bearer-token), tenant routing по `service.namespace`.
 - Деплой через `stit/project-infra-template-compose` (docker-compose стек на проектный VPS).

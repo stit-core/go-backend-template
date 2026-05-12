@@ -1,6 +1,6 @@
 ---
 name: release
-description: Запушить новую версию backend image'ей в registry (api+migrate+worker lockstep) и подсказать оператору шаги в infra-репо. Активируй когда пользователь говорит "релиз", "запушим версию", "сделай release vX.Y.Z", "/release".
+description: Запушить новую версию backend image'ей в registry (api+migrate lockstep) и подсказать оператору шаги в infra-репо. Активируй когда пользователь говорит "релиз", "запушим версию", "сделай release vX.Y.Z", "/release".
 ---
 
 # Skill: release
@@ -8,7 +8,7 @@ description: Запушить новую версию backend image'ей в regi
 Канонический release-флоу для этого шаблона.
 
 **Зона ответственности этого репо: код → image в registry. На этом — STOP.**
-Build локальный (никаких gitea-runner), push в `git.stit.tech/<org>/backend{,-migrate,-worker}` под одним lockstep `vX.Y.Z`-тегом.
+Build локальный (никаких gitea-runner), push в `git.stit.tech/<org>/backend{,-migrate}` под одним lockstep `vX.Y.Z`-тегом. Воркер как отдельный образ не собирается — outbox drain, NATS subscribers и background jobs живут в `cmd/api/`.
 
 Дальше идёт **handoff** в другие репо: корп-сторона делает `vault kv patch`, проектный infra-репо — `make ship`. Эти шаги мы **не выполняем сами** — только формируем подсказку оператору что куда передать.
 
@@ -70,7 +70,9 @@ make release
 
 Делает (за тебя):
 - `release-preflight.sh` (ветка / clean / annotated `vX.Y.Z` на HEAD / `docker buildx`),
-- `docker buildx build --platform linux/amd64 --push` для api / migrate / worker (последний skip'ает если `cmd/worker/` нет),
+- `docker buildx build --platform linux/amd64 --push` для двух image'ей:
+  - `<host>/<org>/backend:<tag>` (`cmd/api`, runtime),
+  - `<host>/<org>/backend-migrate:<tag>` (`cmd/migrate` + вшитые SQL-файлы, init-контейнер),
 - `--build-arg VERSION=$TAG --build-arg GIT_SHA=$(git rev-parse --short HEAD)` — версия зашита в бинарник,
 - финальный echo с next-steps оператору.
 

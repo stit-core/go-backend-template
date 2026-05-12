@@ -67,7 +67,7 @@ make test-int
 scripts/agent-tools/build.sh
 ```
 
-Или `make build && make build-worker`.
+Или `make build`. Воркер как отдельный бинарь не используется — outbox drain, NATS subscribers и background jobs живут в `cmd/api`.
 
 ### 6. Сгенерированный код актуален
 
@@ -83,13 +83,13 @@ make mocks-check
 
 Оба должны выйти с кодом 0.
 
-### 7. Coverage не упал
+### 7. Coverage (опционально, не часть `make pre-merge`)
 
 ```bash
 make test-cover
 ```
 
-CI требует 60% floor. Локально проверь что не уронил.
+`make pre-merge` сам coverage не гонит. Запускай руками если задел доменную логику и хочешь убедиться что покрытие не упало; CI-floor пока не зафиксирован.
 
 ### 8. Краткое summary
 

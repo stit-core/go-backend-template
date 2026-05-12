@@ -1,20 +1,21 @@
 ---
 name: outbox-events
-description: Outbox-паттерн и доменные события. Грузится при работе с events.go или outbox.
+description: Outbox-паттерн и доменные события. Грузится при работе с events.go или delivery/nats/.
 paths:
   - "internal/domain/*/events.go"
-  - "internal/domain/*/events/**"
-  - "internal/worker/subscribers/**"
-  - "migrations/0003_outbox*"
+  - "internal/domain/*/delivery/nats/**"
+  - "migrations/0004_outbox*"
 ---
 
 # Outbox и доменные события
 
 ## Зачем outbox
 
-Транзакционная гарантия: событие пишется в БД в той же транзакции, что и основное изменение. Воркер потом отправляет в шину сообщений (NATS). Если падение — событие в `outbox` таблице, retried.
+Транзакционная гарантия: событие пишется в БД в той же транзакции, что и основное изменение. Outbox-drain (`golibinfra/outboxkit`, поднимается fx.Lifecycle внутри того же `cmd/api`) потом отправляет в шину сообщений (NATS). Если падение между commit'ом и publish'ем — событие остаётся в `outbox`-таблице и ретраится.
 
 Альтернатива (прямая публикация в NATS из usecase) — нет гарантии что данные применились + событие отправлено.
+
+**Отдельного worker-процесса нет.** API, outbox drain, NATS subscribers и background jobs живут в одном бинаре через одну fx-графу.
 
 ## Слой событий
 
@@ -51,25 +52,40 @@ err := pgkit.InTx(ctx, r.pool, func(tx pgx.Tx) error {
 
 `outbox.Publish` — из `golibinfra/outboxkit`, принимает Subject + payload. Сериализует payload в JSON и пишет строку в `outbox` таблицу.
 
-## Подписчики (`internal/worker/subscribers/`)
+## Подписчики (in-domain — `internal/domain/<consumer>/delivery/nats/`)
 
-Worker (`cmd/worker/`) поднимает NATS-консьюмеров. Каждый подписчик — структура с зависимостями + handler:
+Subscriber лежит **внутри** потребляющего домена, в `delivery/nats/` — рядом с `delivery/http/`, на равных правах: оба слоя — это «входы» в usecase из разных транспортов. Регистрируется fx.Lifecycle того же `cmd/api`.
 
 ```go
-package subscribers
+// internal/domain/verification/delivery/nats/handler.go
+package nats
 
-type UserRegistered struct {
-    notifier Notifier  // порт из текущего пакета
+type Usecase interface {
+    IssueEmailVerification(ctx context.Context, userID, email string) error
 }
 
-func (h *UserRegistered) Handle(ctx context.Context, ev user.Registered) error {
-    return h.notifier.SendWelcomeEmail(ctx, ev.Email)
+type Handler struct {
+    uc  Usecase
+    log logkit.Logger
 }
 
-func (h *UserRegistered) Subject() string { return user.RegisteredSubject }
+func NewHandler(uc Usecase, log logkit.Logger) *Handler {
+    return &Handler{uc: uc, log: log.With("delivery", "verification.nats")}
+}
+
+func (h *Handler) onUserRegistered(ctx context.Context, e UserRegisteredEvent) error {
+    return h.uc.IssueEmailVerification(ctx, e.ID, e.Email)
+}
+
+func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
+    // подписка через natskit.Subscribe[UserRegisteredEvent](bus, h.onUserRegistered)
+    // запуск/остановка через fx.Lifecycle
+}
 ```
 
-Регистрируется в worker-е через `natskit.Subscribe[user.Registered](js, h)`.
+Регистрация — в `module/module.go` потребляющего домена: `fx.Provide(nats.NewHandler)` + `fx.Invoke(nats.Register)`.
+
+**Cross-domain payload**: subscriber объявляет **локальный** payload-тип (`UserRegisteredEvent` в `verification/delivery/nats/dto.go`), даже если он 1:1 совпадает с типом из домена-источника. Прямой импорт `user`-домена из `verification` запрещён depguard'ом.
 
 ## Гарантии
 

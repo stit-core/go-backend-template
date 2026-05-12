@@ -20,13 +20,13 @@
 | `make test-cover` | Coverage по domain + platform |
 | `make lint` | golangci-lint |
 | `make fmt` | gofumpt -w |
-| `make build` / `make build-worker` | Собрать api / worker бинарники |
+| `make build` | Собрать api-бинарник (`bin/api`). Воркер как отдельный бинарь не используется — outbox drain, NATS subscribers и background jobs живут внутри `cmd/api/` через fx.Lifecycle. |
 | `make sqlc` / `make sqlc-diff` | Регенерация / проверка pgx-кода |
 | `make mocks` / `make mocks-check` | Регенерация / проверка mockery v3 моков |
 | `make migrate-up` / `make migrate-down` | Накатить / откатить одну миграцию (нужен `PG_DSN`) |
 | `make new-domain NAME=order` | Скаффолд скелета нового домена |
 | `make pre-merge` | Канонический gate: fmt + vet + lint + test + build + sqlc-diff + mocks-check. Гонится pre-push хуком. |
-| `make release-check` / `make release` | Pre-flight (main / clean / annotated `vX.Y.Z` / buildx) + push `<host>/<org>/backend{,-migrate,-worker}:<tag>`. См. README §Release. |
+| `make release-check` / `make release` | Pre-flight (main / clean / annotated `vX.Y.Z` / buildx) + push `<host>/<org>/backend{,-migrate}:<tag>` (lockstep). См. README §Release. |
 | `make hooks-install` | Установить git-хуки (commit-msg, pre-commit, pre-push) |
 
 **Agent-friendly обёртки** в `scripts/agent-tools/` дают сжатый вывод (≤25k токенов, сначала фейлы, в конце канонический status-line). В работе агента предпочитай их сырым командам:
@@ -40,6 +40,7 @@
 | `agent-tools/repomap.sh [pkg]` | (нет) | Сводка публичных символов по пакетам, размер ограничен бюджетом |
 | `agent-tools/status.sh [--full]` | (нет) | Сводка состояния репо для `/smartdev`: ветка, working tree, активные планы, домены, миграции, TODO. `--full` добавляет sqlc-diff/mocks/lint. |
 | `agent-tools/validate-domain-doc.sh [path]` | (нет) | Валидатор DDD-артефактов в `docs/domains/`. Проверяет frontmatter, обязательные секции, при `status: stable` — non-empty bodies + ref-целостность. |
+| `agent-tools/logs.sh {query\|errors\|watch}` | (нет) | Чтение прод-логов через корп-Loki (`loki.stit.tech`) под bearer-токеном из `./credentials.md`. Локальный dev — логи в stdout, тулза не нужна. Подробнее — skill `query-logs`. |
 
 Все обёртки принимают `--format=concise|detailed` и заканчиваются одной канонической строкой статуса (`OK` / `FAIL: <reason>`).
 
@@ -53,40 +54,49 @@
 
 ## 3. Структура проекта
 
+Один runtime-бинарь (`cmd/api`) + standalone-CLI миграций (`cmd/migrate`). HTTP, outbox drain, NATS subscribers, background jobs — всё внутри `cmd/api` через одну fx.Lifecycle. Отдельного worker-процесса нет.
+
 ```
 cmd/
-  api/           HTTP-сервер entrypoint, fx wiring
-  worker/        Фоновые подписчики, jobs, outbox drain
-  migrate/       Раннер миграций (golang-migrate)
+  api/           Единственный runtime-бинарь: HTTP-сервер (huma+chi) + outbox drain
+                 (golibinfra/outboxkit) + NATS subscribers + background jobs.
+  migrate/       Standalone CLI: golang-migrate up/down. Запускается init-контейнером
+                 (отдельный image `<org>/backend-migrate:<tag>` со вшитыми SQL-файлами).
 internal/
-  domain/<name>/                Бизнес-домен
+  domain/<name>/                Бизнес-домен (bounded context).
     dto.go, entity.go, errors.go, events.go, policy.go, usecase.go, *_test.go
-    delivery/http/              huma/v2 + chi хендлеры
-    infra/postgres/             repository.go + queries/*.sql + db/ (sqlc-сгенерированный)
-    module/                     fx.Module + cross-domain адаптеры
+    delivery/http/              huma/v2 + chi REST-хендлеры
+    delivery/nats/              NATS-subscriber (опц.) — обрабатывает входящие
+                                события других доменов. Регистрируется fx того же
+                                `cmd/api`. Реф. пример: `verification/delivery/nats/`
+                                ловит `user.registered` и запускает email-verification.
+    infra/postgres/             repository.go + queries/*.sql + db/ (sqlc, read-only)
+    module/                     fx.Module + cross-domain адаптеры (`adapters.go`)
   platform/
-    authgate/    Гейт authn/authz, виден хендлерам
+    authgate/    Гейт authn/authz (JWT + identity.Principal), виден хендлерам
     config/      Прикладной конфиг, fx.Module
     identity/    Типы subject/principal
-  worker/        bruteforce.go + subscribers/ (NATS-консьюмеры)
+  jobs/          Background jobs (например, `bruteforce.go` — cleanup brute-force
+                 counters). Поднимаются fx.Lifecycle того же `cmd/api`.
   testkit/       pgseed/, identitytest/ — хелперы для тестов
 pkg/
   policy/        Публичные policy-примитивы
   tokens/        Публичные token-примитивы
 migrations/      NNNN_name.up.sql + NNNN_name.down.sql, последовательная нумерация
 scripts/
-  agent-tools/   Обёртки с agent-friendly выводом
+  agent-tools/   Обёртки с agent-friendly выводом (см. §1)
   claude-hooks/  Детерминированные хуки для Claude Code
   git-hooks/     commit-msg, pre-commit, pre-push (ставятся через `make hooks-install`)
 .claude/
-  settings.json  Конфиг Claude Code (хуки, permissions, model)
-  rules/         Path-scoped правила (грузятся когда соотв. файлы в контексте)
-  skills/        Процедурные воркфлоу: smartdev, plan, add-domain, add-migration,
-                 add-endpoint, add-event, add-port, triage-failure, run-pre-merge
-  agents/        Subagent'ы (explorer, reviewer, migration-author)
-  plans/         roadmap.md (индекс) + <slug>.md (per-task) — committable, ревьюются в PR
-  WORKFLOW.md    Описание дневного флоу для людей
-  research/      vendor-briefings/ — кросс-вендорное исследование (по необходимости)
+  settings.json        Конфиг Claude Code (хуки, permissions, model) — committed
+  settings.local.json  Локальные user-overrides — .gitignore'нутые
+  rules/               Path-scoped правила (грузятся когда соотв. файлы в контексте)
+  skills/              Процедурные воркфлоу: smartdev, plan, add-domain, add-migration,
+                       add-endpoint, add-event, add-port, triage-failure, run-pre-merge,
+                       domain-deepen, query-logs, release
+  agents/              Subagent'ы (explorer, reviewer, migration-author)
+  plans/               roadmap.md (индекс) + <slug>.md (per-task) — committable, ревьюются в PR
+  WORKFLOW.md          Описание дневного флоу для людей
 ```
 
 `internal/domain/auth`, `user`, `verification` — это **референс-примеры**. Для реального сервиса изучи их, потом удали и замени своими доменами.
@@ -115,7 +125,7 @@ Production-значения **в этот repo не попадают**. Они �
 - **Conventional Commits** проверяются `scripts/git-hooks/commit-msg`. Допустимые типы: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `meta`. Формат: `<type>(<scope>)?: <subject>`, subject ≤72 символа.
 - **Линейная история**. Squash-merge в `main` через PR.
 - **Хуки** ставятся `make hooks-install` — commit-msg, pre-commit (gofumpt + vet + lint), pre-push (`make pre-merge` — полный gate). Skip только через `SKIP_PREPUSH=1`, не `--no-verify`.
-- **Релизы** — annotated semver-tag (`git tag -a vX.Y.Z -m "..."`) на чистом `main` после зелёного `make pre-merge`. Lightweight-теги отвергаются `release-preflight`. Тег = lockstep для api+migrate+worker images.
+- **Релизы** — annotated semver-tag (`git tag -a vX.Y.Z -m "..."`) на чистом `main` после зелёного `make pre-merge`. Lightweight-теги отвергаются `release-preflight`. Тег = lockstep для api+migrate images.
 - Примеры:
   - `feat(user): add password reset flow`
   - `fix(auth): block reused refresh tokens by validating jti`

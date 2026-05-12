@@ -1,104 +1,120 @@
 ---
-name: worker-subscribers
-description: Конвенции для cmd/worker и internal/worker/subscribers/. Фоновые консьюмеры и jobs.
+name: jobs-and-subscribers
+description: Конвенции для in-domain NATS subscribers и background jobs. Грузится при работе с internal/domain/*/delivery/nats/ или internal/jobs/.
 paths:
-  - "cmd/worker/**"
-  - "internal/worker/**"
+  - "internal/domain/*/delivery/nats/**"
+  - "internal/jobs/**"
 ---
 
-# Worker и подписчики
+# NATS subscribers и background jobs
 
-## Структура
+В этом шаблоне **нет отдельного worker-процесса**. HTTP, outbox drain, NATS subscribers и background jobs — всё в одном бинаре `cmd/api/` через одну fx.Lifecycle.
+
+## NATS subscribers (in-domain)
+
+Subscriber потребляющего домена лежит **внутри** этого домена, в `delivery/nats/` — рядом с `delivery/http/`. Оба слоя на равных правах: это «входы» в usecase из разных транспортов.
+
+### Структура
 
 ```
-cmd/worker/
-  main.go             fx.New(infraModules, platformModules, subscribersModule).Run()
-internal/worker/
-  bruteforce.go       Background job: cleanup brute-force counters
-  subscribers/
-    <event>_handler.go   Один подписчик на одно событие домена
-    module.go            fx.Module: Provide хендлеров + Invoke регистрации
+internal/domain/<consumer>/
+├── usecase.go             уже существует
+├── delivery/
+│   ├── http/              REST-входы
+│   └── nats/              NATS-входы (этот файл)
+│       ├── dto.go         payload-тип события (локальный для consumer'а)
+│       └── handler.go     Handler + Register (fx)
+└── module/module.go       fx.Provide(nats.NewHandler) + fx.Invoke(nats.Register)
 ```
 
-## Подписчик
-
-Один файл — одна подписка. Имя `<source_domain>_<event>_handler.go` или `<event>_handler.go` если domain очевиден.
-
-Структура:
+### Handler
 
 ```go
-package subscribers
+// internal/domain/<consumer>/delivery/nats/handler.go
+package nats
 
-type UserRegisteredHandler struct {
-    log      logkit.Logger
-    notifier Notifier  // порт, реализуется в module/adapters.go
+type Usecase interface {
+    DoSomething(ctx context.Context, ...) error
 }
 
-func NewUserRegisteredHandler(log logkit.Logger, n Notifier) *UserRegisteredHandler {
-    return &UserRegisteredHandler{log: log, notifier: n}
+type Handler struct {
+    uc  Usecase
+    log logkit.Logger
 }
 
-func (h *UserRegisteredHandler) Handle(ctx context.Context, ev user.Registered) error {
-    h.log.Info(ctx, "user registered", "user_id", ev.UserID)
-    return h.notifier.SendWelcomeEmail(ctx, ev.Email)
+func NewHandler(uc Usecase, log logkit.Logger) *Handler {
+    return &Handler{uc: uc, log: log.With("delivery", "<consumer>.nats")}
 }
 
-func (h *UserRegisteredHandler) Subject() string { return user.RegisteredSubject }
+func (h *Handler) onEventX(ctx context.Context, e EventXPayload) error {
+    if err := h.uc.DoSomething(ctx, ...); err != nil {
+        h.log.Error(ctx, "handle eventX", "err", err)
+        return fmt.Errorf("handle eventX: %w", err)
+    }
+    return nil
+}
+
+func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
+    // natskit.Subscribe[EventXPayload](bus, h.onEventX) под lifecycle-hook'и
+}
 ```
 
-## Регистрация в fx
+### Cross-domain payload
 
-`internal/worker/subscribers/module.go`:
+Subscriber объявляет **локальный** payload-тип в `delivery/nats/dto.go`, даже если он 1:1 повторяет тип из домена-источника. Прямой импорт другого бизнес-домена запрещён depguard'ом.
 
 ```go
-var Module = fx.Module(
-    "subscribers",
-    fx.Provide(NewUserRegisteredHandler),
-    fx.Invoke(func(js natskit.JetStream, h *UserRegisteredHandler) error {
-        return natskit.Subscribe[user.Registered](js, h)
-    }),
-)
+// internal/domain/verification/delivery/nats/dto.go
+package nats
+
+type UserRegisteredEvent struct {
+    ID    string `json:"id"`
+    Email string `json:"email"`
+}
 ```
 
-`natskit.Subscribe` — обёртка над nats.Subscription, разбирает payload в типизированную структуру.
+Если потребитель и источник эволюционируют независимо — это даёт чистое versioning'овое окно: меняешь payload в источнике, добавляешь поля в локальный DTO потребителя только когда они нужны.
 
-## Idempotency
+### Idempotency
 
-- Все подписчики должны быть **идемпотентны**: повторная обработка того же события не должна давать побочных эффектов.
-- Стратегии:
-  - Дедупликация по идентификатору события (если событие несёт `event_id`).
-  - Идемпотентная семантика: `INSERT ... ON CONFLICT DO NOTHING`, `UPDATE ... WHERE status = ...`.
-  - Внешние API: idempotency key в заголовке.
+NATS даёт **at-least-once**. Subscriber обязан быть идемпотентен:
+- INSERT с `ON CONFLICT (event_id) DO NOTHING`,
+- `UPDATE … WHERE status = 'pending'` для state-machine'ов,
+- Idempotency-key для внешних API.
 
-## Background jobs (не подписчики)
+Сделай это явно, не "вряд ли задвоится".
 
-Например `internal/worker/bruteforce.go` — периодический cleanup.
+## Background jobs (`internal/jobs/`)
+
+Job — это периодическая задача без события-триггера (cleanup, aggregation, polling external system). Лежит в `internal/jobs/<name>.go`. Запускается fx.Lifecycle того же `cmd/api`.
 
 ```go
-type BruteforceJob struct {
-    repo  bruteforcekit.Repository
-    timer timerkit.Ticker
+// internal/jobs/bruteforce.go
+package jobs
+
+func cleanupBruteforce(ctx context.Context, db *pgkit.DB) error {
+    _, err := db.Exec(ctx, cleanupBruteforceSQL)
+    return err
 }
 
-func (j *BruteforceJob) Start(ctx context.Context) error {
-    return j.timer.Every(ctx, 5*time.Minute, func(ctx context.Context) error {
-        return j.repo.CleanupExpired(ctx)
-    })
+func RegisterBruteforceCleanup(lc fx.Lifecycle, db *pgkit.DB, t timerkit.Ticker, log logkit.Logger) {
+    // Ticker.Every(ctx, interval, cleanupBruteforce); запуск/остановка — через lifecycle.
 }
 ```
 
-Регистрируется аналогично — через fx.Module + fx.Invoke стартует через lifecycle hook.
+Регистрация — в `cmd/api/main.go` через `fx.Invoke(jobs.RegisterBruteforceCleanup)`.
 
 ## Логирование
 
-- Все хендлеры логируют через `logkit.Logger`.
-- На входе — `Info` с ключевыми полями события.
-- На ошибке — `Error` с `err`. Возврат err — natskit ретраит сообщение.
-- Не логируй `Debug` в проде (если не включён debug-mode).
+- `logkit.Logger` с лейблом транспорта: subscriber — `log.With("delivery", "<domain>.nats")`; job — `log.With("job", "<name>")`.
+- Ошибка из subscriber → `return err` → natskit ретраит сообщение (с учётом backoff).
+- В job — `Error` с контекстом, возврат err НЕ должен ронять процесс; job-runner логирует и ждёт следующий tick.
 
 ## Anti-patterns
 
-- ❌ Два подписчика на один Subject в одном консьюмере. Запросы дедуплицируются — будет один из них.
-- ❌ Подписчик использует прямой импорт другого домена. Используй порт + адаптер в `module/adapters.go`.
-- ❌ Тяжёлая работа синхронно (например, генерация PDF). Выноси в отдельный job-runner.
-- ❌ Захват контекстных полей в горутины — utilizировать `ctx` явно через cancellation.
+- ❌ Создавать отдельный `cmd/worker/` бинарь. В этом шаблоне всё в одном процессе.
+- ❌ Subscriber импортит домен-источник напрямую. Объяви локальный payload-DTO в `delivery/nats/dto.go`.
+- ❌ Два subscriber'а на один Subject в одном NATS-consumer'е. Сообщение получит только один.
+- ❌ Тяжёлая логика в subscriber (генерация PDF, batch на 1M строк). Subscriber должен быть быстрым; длинное — вынеси в job или в отдельный usecase, который subscriber только дёргает.
+- ❌ Захват `ctx` в горутины без явного cancellation.
+- ❌ `time.Now()` в job — инжекть `clockkit.Clock` для тестируемости.

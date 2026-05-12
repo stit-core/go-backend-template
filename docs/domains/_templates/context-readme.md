@@ -37,7 +37,7 @@
 
 | direction | other context | nature |
 |---|---|---|
-| outbound | `verification` | port `EmailVerificationIssuer` для запуска подтверждения |
+| outbound | `<other-context>` | port `<OtherDomain>Reader` для чтения данных кросс-контекстно |
 | inbound | `auth` | читает `<Name>` через port `UserReader` |
 
 ## Ubiquitous Language
