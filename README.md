@@ -11,16 +11,23 @@
    ```bash
    git clone git@git.stit.tech:<org>/<service>.git && cd <service>
    ```
-3. Заменить module path:
+3. (Один раз на машину) Настроить git и Go под приватные модули `git.stit.tech` —
+   `golibinfra` и любые stit-private deps. Без этого `go mod download` для
+   шаблона упадёт по auth/proxy:
+   ```bash
+   git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/
+   ```
+   (`GOPRIVATE` ставится автоматически в `make tools` ниже.)
+4. Заменить module path:
    ```bash
    OLD=git.stit.tech/akadmin/go-backend-template
    NEW=git.stit.tech/<org>/<service>
    grep -rl "$OLD" --exclude-dir=.git | xargs sed -i "s|$OLD|$NEW|g"
    go mod edit -module "$NEW" && go mod tidy
    ```
-4. `make tools && make hooks-install && make pre-merge` — убедиться что зелёное.
-5. `cp .env.example .env` и заполнить локальные переменные.
-6. Первый домен: `make new-domain NAME=<context>` → `docs/domains/<context>/` (см. `docs/domains/README.md`).
+5. `make tools && make hooks-install && make pre-merge` — убедиться что зелёное.
+6. `cp .env.example .env` и заполнить локальные переменные.
+7. Первый домен: `make new-domain NAME=<context>` → `docs/domains/<context>/` (см. `docs/domains/README.md`).
 
 Альтернатива через Gitea API:
 ```bash

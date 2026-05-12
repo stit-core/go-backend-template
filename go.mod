@@ -2,13 +2,8 @@ module git.stit.tech/akadmin/go-backend-template
 
 go 1.26
 
-// LOCAL FIX for Probe collision (cachekit/natskit оба provide'ят Probe одного
-// типа). Patch временно живёт в локальном clone golibinfra — после ревью идёт
-// upstream PR + bump версии, и replace снимается.
-replace git.stit.tech/stit/golibinfra => ../golibinfra
-
 require (
-	git.stit.tech/stit/golibinfra v0.17.0
+	git.stit.tech/stit/golibinfra v0.18.0
 	github.com/danielgtaylor/huma/v2 v2.37.3
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
