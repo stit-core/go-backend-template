@@ -189,6 +189,19 @@ Consumers golibinfra: только этот шаблон + admin-panel-backend. 
 - Решения по ходу:
   - Добавлен **dev-time `replace git.stit.tech/stit/golibinfra => /root/git/stit/golibinfra`** в `template/go.mod`. Уберётся когда golibinfra будет тегнут и опубликован (новая минорная — kit refactor breaking).
   - `bruteforcekit.Config` остался импортируемым из root-package (`bruteforcekit.NewConfig` в `kitConfigs`) — это правильно, root держит типы; импорт `bruteforcepg` нужен только для fx.Module.
-- Текущее состояние: golibinfra + template **готовы к новой версии**. Фаза 3 (A8-A9) — отложена, выполняется по запросу юзера, разблокирует `cleanup-and-iam` в admin-panel-backend.
-- **Изменения не коммичены** — юзер сам решает когда коммитить, в каком порядке/PR'ах.
+
+### 2026-05-12 20:12 — обнаружен и закрыт остаточный leak
+
+- При финальном аудите перед push'ем нашёл вторую дырявую абстракцию: `internal/jobs/bruteforce.go` чистил `bruteforce_attempts` через raw SQL — app знал private-схему kit'а. Это тот же класс проблем, что и DDL-копипаст, только в runtime-коде.
+- Фикс (золотыми коммитами на той же branch):
+  - **golibinfra `3ec743c`**: `bruteforcekit.Guard.Cleanup(ctx)` + `Config.CleanupRetention` (default 24h) + `pgstore.Store.Cleanup` impl + integration test (`TestStore_Cleanup`). `auth.LoginGuard` остаётся подмножеством Guard — структурный alias не сломан.
+  - **template `34cb71c`**: `internal/jobs/bruteforce.go` теперь принимает `bruteforcekit.Guard` и зовёт `g.Cleanup(ctx)`. Pinned golibinfra `3ec743c`.
+  - **template `00b58ae`**: `.claude/rules/jobs-and-subscribers.md` — пример переписан с raw SQL на `Guard.Cleanup`, добавлено правило "не лезь сырым SQL в kit-таблицу, зови kit-метод". Иначе rule учил бы будущих авторов на анти-паттерне.
+
+### Финал (push state)
+
+- golibinfra branch `refactor/kit-pluggable-store` @ `3ec743c`: 3 коммита — `feat(pgkit)`, `refactor(bruteforcekit)!`, `feat(bruteforcekit) Cleanup`.
+- template branch `refactor/kit-pluggable-store` @ `00b58ae`: 3 коммита — `refactor` (compose + 0002 cleanup + cmd/api wiring), `refactor(jobs)`, `docs(rules)`.
+- Фаза 3 (A8-A9, admin-panel-backend) — отложена по запросу юзера.
+- **Перед merge**: golibinfra → tag `v0.19.0` (breaking minor), template `go.mod` repin с pseudo-version на `v0.19.0`.
 
