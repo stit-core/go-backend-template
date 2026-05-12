@@ -92,17 +92,18 @@ Job — это периодическая задача без события-т�
 // internal/jobs/bruteforce.go
 package jobs
 
-func cleanupBruteforce(ctx context.Context, db *pgkit.DB) error {
-    _, err := db.Exec(ctx, cleanupBruteforceSQL)
-    return err
-}
-
-func RegisterBruteforceCleanup(lc fx.Lifecycle, db *pgkit.DB, t timerkit.Ticker, log logkit.Logger) {
-    // Ticker.Every(ctx, interval, cleanupBruteforce); запуск/остановка — через lifecycle.
+func NewBruteforceCleanup(g bruteforcekit.Guard) timerkit.Job {
+    return timerkit.Job{
+        Name:     "bruteforce.cleanup",
+        Interval: 5 * time.Minute,
+        Run:      func(ctx context.Context) error { return g.Cleanup(ctx) },
+    }
 }
 ```
 
-Регистрация — в `cmd/api/main.go` через `fx.Invoke(jobs.RegisterBruteforceCleanup)`.
+Регистрация — в `cmd/api/main.go` через `fx.Annotate(jobs.NewBruteforceCleanup, fx.ResultTags(\`group:"timer.job"\`))`.
+
+**Правило:** если job чистит/обходит таблицу, которой владеет какой-то kit (`bruteforcekit`, в будущем `auditkit`/`outboxkit`), зови метод kit-интерфейса (`Guard.Cleanup`), а не сырой SQL по имени таблицы. Сырой SQL → app знает приватную схему kit'а → дырявая абстракция, ломается при апгрейде kit'а.
 
 ## Логирование
 
