@@ -58,9 +58,14 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 TOKEN=""
 if [ -n "${STIT_OBS_TOKEN:-}" ]; then
     TOKEN="$STIT_OBS_TOKEN"
-elif [ -f credentials.md ]; then
+else
     # Любая строка содержащая STIT_OBS_TOKEN=<value>. Допускает list-prefix `- `, code-fence-ы.
-    TOKEN=$(grep -m1 -oE 'STIT_OBS_TOKEN=[^[:space:]`"'"'"']+' credentials.md 2>/dev/null | head -1 | cut -d= -f2-)
+    for f in credentials.md credential.md; do
+        if [ -f "$f" ]; then
+            TOKEN=$(grep -m1 -oE 'STIT_OBS_TOKEN=[^[:space:]`"'"'"']+' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
+            [ -n "$TOKEN" ] && break
+        fi
+    done
 fi
 if [ -z "$TOKEN" ]; then
     echo "FAIL: no STIT_OBS_TOKEN. Set env or add line 'STIT_OBS_TOKEN=<token>' to ./credentials.md" >&2
@@ -107,7 +112,7 @@ run_query() {
     echo
 
     local tmp
-    tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
+    tmp=$(mktemp); trap 'rm -f -- "${tmp:-}"' EXIT
     if ! logcli query --quiet --no-labels --since="$since" --limit="$LIMIT" "$q" >"$tmp" 2>&1; then
         head -c "$MAX_BYTES" "$tmp"
         echo
@@ -148,7 +153,7 @@ run_errors() {
     echo
 
     local tmp
-    tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
+    tmp=$(mktemp); trap 'rm -f -- "${tmp:-}"' EXIT
     if ! logcli query --quiet --no-labels --since="$since" --limit="5000" "$q" >"$tmp" 2>&1; then
         head -c "$MAX_BYTES" "$tmp"
         echo
@@ -205,7 +210,7 @@ run_watch() {
     # logcli query --tail стримит новые строки. timeout прерывает на $FOR.
     # 124 = timeout normal exit, 143 = SIGTERM.
     local tmp ec
-    tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
+    tmp=$(mktemp); trap 'rm -f -- "${tmp:-}"' EXIT
     timeout "$FOR" logcli query --quiet --tail --no-labels "$q" 2>&1 | tee "$tmp"
     ec="${PIPESTATUS[0]}"
 
