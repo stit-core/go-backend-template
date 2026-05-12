@@ -7,7 +7,6 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit/golibinfra/auditkit"
 	"git.stit.tech/stit/golibinfra/authnkit"
 	"git.stit.tech/stit/golibinfra/clockkit"
@@ -38,7 +37,6 @@ func TestModuleAssembles(t *testing.T) {
 			func() authnkit.Hasher { return stubHasher{} },
 			func() auditkit.Logger { return stubAudit{} },
 			func() clockkit.Clock { return clockkit.Real{} },
-			func() user.EmailVerificationIssuer { return stubIssuer{} },
 			logkit.Nop,
 			func() metric.Meter { return noopmetric.NewMeterProvider().Meter("test") },
 			func() trace.Tracer { return noopt.NewTracerProvider().Tracer("test") },
@@ -62,7 +60,3 @@ func (stubHasher) Verify(string, string) (bool, error) { return true, nil }
 type stubAudit struct{}
 
 func (stubAudit) Log(context.Context, auditkit.Entry) error { return nil }
-
-type stubIssuer struct{}
-
-func (stubIssuer) IssueEmailVerification(context.Context, string, string) error { return nil }

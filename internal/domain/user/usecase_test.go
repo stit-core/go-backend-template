@@ -2,7 +2,6 @@ package user_test
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,13 +21,6 @@ import (
 	"git.stit.tech/stit/golibinfra/testkit/eventbus"
 	"git.stit.tech/stit/golibinfra/testkit/txkit"
 )
-
-type stubIssuer struct{ called atomic.Int64 }
-
-func (s *stubIssuer) IssueEmailVerification(context.Context, string, string) error {
-	s.called.Add(1)
-	return nil
-}
 
 func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 	t.Helper()
@@ -51,11 +43,10 @@ func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 }
 
 type ucFixture struct {
-	uc     *user.Usecase
-	repo   *mocks.MockRepository
-	bus    *eventbus.Recorder
-	audit  *audittest.Recorder
-	issuer *stubIssuer
+	uc    *user.Usecase
+	repo  *mocks.MockRepository
+	bus   *eventbus.Recorder
+	audit *audittest.Recorder
 }
 
 type ucOpts struct {
@@ -83,24 +74,22 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 
 	bus := &eventbus.Recorder{}
 	aud := &audittest.Recorder{}
-	iss := &stubIssuer{}
 
 	m, err := user.NewMetrics(noopmetric.NewMeterProvider().Meter("test"))
 	require.NoError(t, err)
 
 	uc := user.NewUsecase(user.UsecaseDeps{
-		Repo:          o.repo,
-		Hasher:        authntest.DeterministicHasher{},
-		Policy:        o.pol,
-		Tx:            txkit.Identity{},
-		Events:        bus,
-		Audit:         aud,
-		Metrics:       m,
-		Log:           logkit.Nop(),
-		EmailVerifier: iss,
-		Clock:         clockkit.NewFixed(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
+		Repo:    o.repo,
+		Hasher:  authntest.DeterministicHasher{},
+		Policy:  o.pol,
+		Tx:      txkit.Identity{},
+		Events:  bus,
+		Audit:   aud,
+		Metrics: m,
+		Log:     logkit.Nop(),
+		Clock:   clockkit.NewFixed(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
 	})
-	return ucFixture{uc: uc, repo: o.repo, bus: bus, audit: aud, issuer: iss}
+	return ucFixture{uc: uc, repo: o.repo, bus: bus, audit: aud}
 }
 
 func TestRegister(t *testing.T) {

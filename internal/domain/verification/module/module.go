@@ -6,6 +6,7 @@ import (
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/verification"
 	verifhttp "git.stit.tech/akadmin/go-backend-template/internal/domain/verification/delivery/http"
+	verifnats "git.stit.tech/akadmin/go-backend-template/internal/domain/verification/delivery/nats"
 	verifpg "git.stit.tech/akadmin/go-backend-template/internal/domain/verification/infra/postgres"
 )
 
@@ -16,13 +17,15 @@ var Module = fx.Module(
 		newUserReaderAdapter,
 		func(uc *user.Usecase) verification.PasswordSetter { return uc },
 		func(uc *user.Usecase) verification.EmailVerificationSetter { return uc },
-		func(uc *verification.Usecase) user.EmailVerificationIssuer { return uc },
 		newLogMailerAdapter,
 		verification.NewUsecase,
 		verifhttp.NewHandler,
 		func(u *verification.Usecase) verifhttp.Usecase { return u },
+		verifnats.NewHandler,
+		func(u *verification.Usecase) verifnats.Usecase { return u },
 	),
 	fx.Invoke(verifhttp.Register),
+	fx.Invoke(verifnats.Register),
 )
 
 func newUserReaderAdapter(uc *user.Usecase) verification.UserReader {

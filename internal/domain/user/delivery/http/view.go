@@ -6,7 +6,7 @@ import (
 	"git.stit.tech/akadmin/go-backend-template/internal/domain/user"
 )
 
-type View struct {
+type UserView struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
@@ -15,7 +15,7 @@ type View struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (v *View) FromEntity(u *user.User) {
+func (v *UserView) FromEntity(u *user.User) {
 	v.ID = u.ID
 	v.Email = u.Email
 	v.Name = u.Name

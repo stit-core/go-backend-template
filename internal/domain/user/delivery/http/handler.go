@@ -134,7 +134,7 @@ func (h *Handler) list(ctx context.Context, in *ListInput) (*ListOutput, error) 
 	out.Body.Total = total
 	out.Body.Page = pg.Page
 	out.Body.Size = pg.Size
-	out.Body.Data = make([]View, len(list))
+	out.Body.Data = make([]UserView, len(list))
 	for i, u := range list {
 		out.Body.Data[i].FromEntity(u)
 	}

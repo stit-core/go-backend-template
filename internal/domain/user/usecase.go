@@ -39,50 +39,43 @@ type Authorizer interface {
 	CanDelete(ctx context.Context, caller identity.Identity, targetID string) policy.Decision
 }
 
-type EmailVerificationIssuer interface {
-	IssueEmailVerification(ctx context.Context, userID, email string) error
-}
-
 type UsecaseDeps struct {
 	fx.In
 
-	Repo          Repository
-	Hasher        authnkit.Hasher
-	Policy        Authorizer
-	Tx            pgkit.Transactor
-	Events        outboxkit.Publisher
-	Audit         auditkit.Logger
-	Metrics       *Metrics
-	Log           logkit.Logger
-	EmailVerifier EmailVerificationIssuer
-	Clock         clockkit.Clock
+	Repo    Repository
+	Hasher  authnkit.Hasher
+	Policy  Authorizer
+	Tx      pgkit.Transactor
+	Events  outboxkit.Publisher
+	Audit   auditkit.Logger
+	Metrics *Metrics
+	Log     logkit.Logger
+	Clock   clockkit.Clock
 }
 
 type Usecase struct {
-	repo          Repository
-	hasher        authnkit.Hasher
-	policy        Authorizer
-	tx            pgkit.Transactor
-	events        outboxkit.Publisher
-	audit         auditkit.Logger
-	metrics       *Metrics
-	log           logkit.Logger
-	emailVerifier EmailVerificationIssuer
-	clock         clockkit.Clock
+	repo    Repository
+	hasher  authnkit.Hasher
+	policy  Authorizer
+	tx      pgkit.Transactor
+	events  outboxkit.Publisher
+	audit   auditkit.Logger
+	metrics *Metrics
+	log     logkit.Logger
+	clock   clockkit.Clock
 }
 
 func NewUsecase(d UsecaseDeps) *Usecase {
 	return &Usecase{
-		repo:          d.Repo,
-		hasher:        d.Hasher,
-		policy:        d.Policy,
-		tx:            d.Tx,
-		events:        d.Events,
-		audit:         d.Audit,
-		metrics:       d.Metrics,
-		log:           d.Log.With("domain", "user"),
-		emailVerifier: d.EmailVerifier,
-		clock:         d.Clock,
+		repo:    d.Repo,
+		hasher:  d.Hasher,
+		policy:  d.Policy,
+		tx:      d.Tx,
+		events:  d.Events,
+		audit:   d.Audit,
+		metrics: d.Metrics,
+		log:     d.Log.With("domain", "user"),
+		clock:   d.Clock,
 	}
 }
 
@@ -109,18 +102,8 @@ func (uc *Usecase) Register(ctx context.Context, in *Create) (u *User, err error
 			return err
 		}
 
-		if err := uc.events.Publish(txCtx, "user.events.registered",
-			UserRegistered{ID: newU.ID, Email: newU.Email, At: newU.CreatedAt}); err != nil {
-			return fmt.Errorf("outbox publish registered: %w", err)
-		}
-
-		if uc.emailVerifier != nil {
-			if err := uc.emailVerifier.IssueEmailVerification(txCtx, newU.ID, newU.Email); err != nil {
-				return fmt.Errorf("issue email verification: %w", err)
-			}
-		}
-
-		return nil
+		return uc.events.Publish(txCtx, "user.events.registered",
+			UserRegistered{ID: newU.ID, Email: newU.Email, At: newU.CreatedAt})
 	}); err != nil {
 		return nil, err
 	}

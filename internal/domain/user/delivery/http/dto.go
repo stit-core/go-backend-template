@@ -20,7 +20,7 @@ func (i *RegisterInput) ToEntity() *user.Create {
 
 type RegisterOutput struct {
 	Body struct {
-		Data View `json:"data"`
+		Data UserView `json:"data"`
 	}
 }
 
@@ -30,13 +30,13 @@ type GetUserInput struct {
 
 type GetUserOutput struct {
 	Body struct {
-		Data View `json:"data"`
+		Data UserView `json:"data"`
 	}
 }
 
 type MeOutput struct {
 	Body struct {
-		Data View `json:"data"`
+		Data UserView `json:"data"`
 	}
 }
 
@@ -48,10 +48,10 @@ type ListInput struct {
 
 type ListOutput struct {
 	Body struct {
-		Data  []View `json:"data"`
-		Total int    `json:"total"`
-		Page  int    `json:"page"`
-		Size  int    `json:"size"`
+		Data  []UserView `json:"data"`
+		Total int        `json:"total"`
+		Page  int        `json:"page"`
+		Size  int        `json:"size"`
 	}
 }
 
@@ -66,7 +66,7 @@ type UpdateInput struct {
 
 type UpdateOutput struct {
 	Body struct {
-		Data View `json:"data"`
+		Data UserView `json:"data"`
 	}
 }
 

@@ -1,4 +1,4 @@
-.PHONY: help tools test test-int test-fuzz test-bench test-cover lint fmt build build-worker tidy migrate-up migrate-down new-domain hooks-install sqlc sqlc-diff mocks mocks-check pre-merge release-check release image-api image-migrate image-worker
+.PHONY: help tools test test-int test-fuzz test-bench test-cover lint fmt build tidy migrate-up migrate-down new-domain hooks-install sqlc sqlc-diff mocks mocks-check pre-merge release-check release image-api image-migrate
 
 # Release-вычисления. Image-path выводится из `git remote get-url origin`
 # (host+org), repo-name всегда `backend` — совпадает с infra-template
@@ -45,9 +45,6 @@ fmt: ## gofumpt
 
 build: ## Локальная сборка бинарника (для CI image — см. Dockerfile)
 	go build -o ./bin/api ./cmd/api
-
-build-worker: ## Сборка бинарника worker (фоновые подписчики, jobs, outbox drain)
-	go build -o ./bin/worker ./cmd/worker
 
 new-domain: ## new-domain NAME=order — создать скелет нового домена в internal/domain/<NAME>/
 	@bash scripts/new-domain.sh $(NAME)
@@ -99,16 +96,8 @@ image-migrate: release-check ## Собрать и запушить migrate-image
 	  --build-arg GIT_SHA=$(GIT_SHA) \
 	  -t $(IMAGE_BASE)-migrate:$(TAG) .
 
-image-worker: release-check ## Собрать и запушить worker-image (silent skip если cmd/worker отсутствует)
-	@if [ ! -d cmd/worker ]; then echo "image-worker: cmd/worker не найден — skip"; exit 0; fi; \
-	docker buildx build --platform linux/amd64 --push \
-	  --build-arg TARGET=worker \
-	  --build-arg VERSION=$(TAG) \
-	  --build-arg GIT_SHA=$(GIT_SHA) \
-	  -t $(IMAGE_BASE)-worker:$(TAG) .
-
-release: release-check image-api image-migrate image-worker ## Полный релиз: pushed lockstep tag для api+migrate+worker
-	@echo "✓ released $(IMAGE_BASE){,-migrate,-worker}:$(TAG)"
+release: release-check image-api image-migrate ## Полный релиз: pushed lockstep tag для api+migrate
+	@echo "✓ released $(IMAGE_BASE){,-migrate}:$(TAG)"
 	@echo "→ next: на корп-стороне vault kv patch kv/projects/<p>/<env>/meta backend_tag=$(TAG)"
 	@echo "→ then: на VPS bash scripts/deploy.sh (или make ship в infra-репо)"
 
@@ -121,9 +110,8 @@ pre-merge: ## канонический pre-push/pre-merge gate: fmt + vet + lint
 	@$(MAKE) lint
 	@echo "→ make test"
 	@$(MAKE) test
-	@echo "→ make build && make build-worker"
+	@echo "→ make build"
 	@$(MAKE) build
-	@$(MAKE) build-worker
 	@echo "→ make sqlc-diff"
 	@$(MAKE) sqlc-diff
 	@echo "→ make mocks-check"

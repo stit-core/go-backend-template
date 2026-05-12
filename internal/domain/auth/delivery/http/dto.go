@@ -9,9 +9,9 @@ type LoginInput struct {
 
 type LoginOutput struct {
 	Body struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		User         View   `json:"user"`
+		AccessToken  string       `json:"access_token"`
+		RefreshToken string       `json:"refresh_token"`
+		User         AuthUserView `json:"user"`
 	}
 }
 
@@ -23,9 +23,9 @@ type RefreshInput struct {
 
 type RefreshOutput struct {
 	Body struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		User         View   `json:"user"`
+		AccessToken  string       `json:"access_token"`
+		RefreshToken string       `json:"refresh_token"`
+		User         AuthUserView `json:"user"`
 	}
 }
 
