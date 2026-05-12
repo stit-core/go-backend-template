@@ -3,7 +3,7 @@
 #
 # Использование:
 #   scripts/agent-tools/logs.sh query   --service NAME [--match REGEX] [--since 1h] [--limit 200]
-#   scripts/agent-tools/logs.sh query   --raw '{service="api"} |~ "panic"'  [--since 1h] [--limit 200]
+#   scripts/agent-tools/logs.sh query   --raw '{service_name="api"} |~ "panic"'  [--since 1h] [--limit 200]
 #   scripts/agent-tools/logs.sh errors  --service NAME [--since 15m] [--top 10]
 #   scripts/agent-tools/logs.sh watch   --service NAME [--match REGEX] --for 5m
 #
@@ -92,7 +92,7 @@ build_query() {
         echo "FAIL: provide --service NAME or --raw '<LogQL>'" >&2
         exit 1
     fi
-    local q="{service=\"$SERVICE\"}"
+    local q="{service_name=\"$SERVICE\"}"
     if [ -n "$MATCH" ]; then
         q="$q |~ \"$MATCH\""
     fi
@@ -145,7 +145,7 @@ run_errors() {
         q="$RAW_QUERY"
     else
         # Стандартный набор паттернов ошибок для Go-бэкендов + общие.
-        q="{service=\"$SERVICE\"} |~ \"(?i)level=error|panic:|fatal|\\\"level\\\":\\\"error\\\"\""
+        q="{service_name=\"$SERVICE\"} |~ \"(?i)level=error|panic:|fatal|\\\"level\\\":\\\"error\\\"\""
     fi
 
     echo "== Errors =="

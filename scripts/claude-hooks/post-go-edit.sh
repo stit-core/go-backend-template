@@ -51,15 +51,11 @@ if command -v gofumpt >/dev/null 2>&1; then
 fi
 
 # 2. go vet на пакет файла (skip если go недоступен).
+# cd в директорию файла и vet '.' — устойчиво к абсолютным путям вне CWD
+# (например при правке golibinfra через `replace` directive из другого репо).
 if command -v go >/dev/null 2>&1; then
-    REL_FILE="${FILE#"$(pwd)/"}"
-    PKG_DIR=$(dirname "$REL_FILE")
-    if [ "$PKG_DIR" = "." ] || [ "$PKG_DIR" = "$REL_FILE" ]; then
-        PKG_PATH="."
-    else
-        PKG_PATH="./$PKG_DIR"
-    fi
-    VET_OUT=$(go vet "$PKG_PATH" 2>&1 || true)
+    PKG_DIR=$(dirname "$FILE")
+    VET_OUT=$(cd "$PKG_DIR" && go vet . 2>&1 || true)
     if [ -n "$VET_OUT" ] && ! echo "$VET_OUT" | grep -q "no Go files"; then
         MESSAGES+="go vet: $(echo "$VET_OUT" | head -3)\n"
     fi
