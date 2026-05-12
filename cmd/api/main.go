@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit/golibinfra/auditkit"
+	auditpg "git.stit.tech/stit/golibinfra/auditkit/pgstore"
 	"git.stit.tech/stit/golibinfra/authnkit"
 	"git.stit.tech/stit/golibinfra/bruteforcekit"
 	bruteforcepg "git.stit.tech/stit/golibinfra/bruteforcekit/pgstore"
@@ -16,6 +16,7 @@ import (
 	"git.stit.tech/stit/golibinfra/logkit"
 	"git.stit.tech/stit/golibinfra/natskit"
 	"git.stit.tech/stit/golibinfra/outboxkit"
+	outboxpg "git.stit.tech/stit/golibinfra/outboxkit/pgstore"
 	"git.stit.tech/stit/golibinfra/pgkit"
 	"git.stit.tech/stit/golibinfra/telemetry"
 	"git.stit.tech/stit/golibinfra/timerkit"
@@ -66,9 +67,10 @@ var (
 		authgate.Module,
 		authnkit.Module,
 		bruteforcepg.Module,
-		auditkit.Module,
+		auditpg.Module,
 		clockkit.Module,
 		outboxkit.Module,
+		outboxpg.Module,
 		fx.Provide(
 			fx.Annotate(pgkit.DBProbe, fx.ResultTags(`group:"health"`)),
 			fx.Annotate(natskit.Probe, fx.ResultTags(`group:"health"`)),
