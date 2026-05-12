@@ -3,7 +3,7 @@ module git.stit.tech/stit/go-backend-template
 go 1.26
 
 require (
-	git.stit.tech/stit/golibinfra v0.18.1-0.20260512150422-b926348953c1
+	git.stit.tech/stit/golibinfra v0.18.1-0.20260512151005-3ec743cf3c8d
 	github.com/danielgtaylor/huma/v2 v2.37.3
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
