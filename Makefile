@@ -13,7 +13,7 @@ GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null)
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-tools: ## Поставить pinned версии dev-инструментов (gofumpt, golangci-lint, sqlc)
+tools: ## Поставить pinned версии dev-инструментов (gofumpt, golangci-lint, sqlc, mockery, logcli)
 	@bash scripts/install-tools.sh
 
 test: ## Юнит-тесты (без integration build-tag). -race гонится только при CGO_ENABLED=1.
