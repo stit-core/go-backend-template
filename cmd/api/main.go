@@ -94,7 +94,7 @@ func main() {
 		platformModules,
 		domainModules,
 		fx.Invoke(func(ctx context.Context, log logkit.Logger) {
-			log.Info(ctx, "starting", "service", "api", "version", version, "commit", commit)
+			log.Info(ctx, "starting", "component", "api", "version", version, "commit", commit)
 		}),
 	).Run()
 }

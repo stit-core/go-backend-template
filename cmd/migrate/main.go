@@ -34,7 +34,7 @@ func main() {
 	}
 
 	log := logkit.New(logkit.Config{Level: "info"}, providers.LoggerProvider)
-	log.Info(ctx, "starting", "service", "migrate", "version", version, "commit", commit)
+	log.Info(ctx, "starting", "component", "migrate", "version", version, "commit", commit)
 
 	// run возвращает exit code. os.Exit обходит defer'ы — поэтому
 	// shutdown зовём здесь, явно, до Exit. Без shutdown'а BatchProcessor
