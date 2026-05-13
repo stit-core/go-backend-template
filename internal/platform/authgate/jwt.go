@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit/golibinfra/authnkit"
@@ -19,17 +18,11 @@ func NewExtractor(parser authnkit.JWTParser) *Extractor {
 	return &Extractor{parser: parser}
 }
 
-const bearerPrefix = "Bearer "
-
 func (e *Extractor) Extract(r *http.Request) (context.Context, error) {
-	raw := strings.TrimSpace(r.Header.Get("Authorization"))
-	if raw == "" {
-		return r.Context(), errors.New("authgate: empty Authorization header")
+	token, err := tokenFromRequest(r)
+	if err != nil {
+		return r.Context(), err
 	}
-	if !strings.HasPrefix(raw, bearerPrefix) {
-		return r.Context(), errors.New("authgate: Authorization must start with \"Bearer \"")
-	}
-	token := strings.TrimPrefix(raw, bearerPrefix)
 
 	claims, err := e.parser.Parse(token)
 	if err != nil {
@@ -44,4 +37,12 @@ func (e *Extractor) Extract(r *http.Request) (context.Context, error) {
 		Role:   identity.Role(role),
 	}
 	return identity.With(r.Context(), id), nil
+}
+
+func tokenFromRequest(r *http.Request) (string, error) {
+	c, err := r.Cookie(CookieAccess)
+	if err != nil || c.Value == "" {
+		return "", errors.New("authgate: no auth cookie")
+	}
+	return c.Value, nil
 }
