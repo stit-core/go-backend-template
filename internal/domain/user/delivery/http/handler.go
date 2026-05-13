@@ -41,7 +41,7 @@ func Register(api huma.API, h *Handler) {
 		Method:      http.MethodGet,
 		Path:        "/api/users/me",
 		Tags:        []string{"users"},
-		Security:    []map[string][]string{{"Bearer": {}}},
+		Security:    []map[string][]string{{"Cookie": {}}},
 		Summary:     "Текущий пользователь",
 	}, h.me)
 
@@ -50,7 +50,7 @@ func Register(api huma.API, h *Handler) {
 		Method:      http.MethodGet,
 		Path:        "/api/users",
 		Tags:        []string{"users"},
-		Security:    []map[string][]string{{"Bearer": {}}},
+		Security:    []map[string][]string{{"Cookie": {}}},
 		Summary:     "Список пользователей (admin)",
 	}, h.list)
 
@@ -59,7 +59,7 @@ func Register(api huma.API, h *Handler) {
 		Method:      http.MethodGet,
 		Path:        "/api/users/{id}",
 		Tags:        []string{"users"},
-		Security:    []map[string][]string{{"Bearer": {}}},
+		Security:    []map[string][]string{{"Cookie": {}}},
 		Summary:     "Получить пользователя по ID",
 	}, h.getByID)
 
@@ -68,7 +68,7 @@ func Register(api huma.API, h *Handler) {
 		Method:      http.MethodPatch,
 		Path:        "/api/users/{id}",
 		Tags:        []string{"users"},
-		Security:    []map[string][]string{{"Bearer": {}}},
+		Security:    []map[string][]string{{"Cookie": {}}},
 		Summary:     "Обновить пользователя",
 	}, h.update)
 
@@ -77,7 +77,7 @@ func Register(api huma.API, h *Handler) {
 		Method:        http.MethodDelete,
 		Path:          "/api/users/{id}",
 		Tags:          []string{"users"},
-		Security:      []map[string][]string{{"Bearer": {}}},
+		Security:      []map[string][]string{{"Cookie": {}}},
 		Summary:       "Удалить пользователя (soft-delete)",
 		DefaultStatus: http.StatusNoContent,
 	}, h.delete)
