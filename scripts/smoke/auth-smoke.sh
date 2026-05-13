@@ -6,7 +6,7 @@
 #   1. `scripts/smoke/up.sh` отработал зелёным (api/migrate/postgres healthy).
 #
 # Сценарий:
-#   1. POST /api/users  — регистрируем тестового юзера (через публичный register).
+#   1. POST /api/auth/register — регистрируем тестового юзера (публичная ручка).
 #   2. POST /api/auth/login — ожидаем 200 + Set-Cookie access_token/refresh_token.
 #   3. GET  /api/users/me с cookie — 200 + email совпадает.
 #   4. POST /api/auth/refresh с cookie — 204 + новые cookies, refresh_token rotated.
@@ -33,9 +33,9 @@ trap 'rm -f "$JAR" "$JAR_REFRESH" "$JAR_AFTER"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # === 1. Register ===
-echo "== POST /api/users (register) =="
+echo "== POST /api/auth/register =="
 STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
-    -X POST "$API/api/users" \
+    -X POST "$API/api/auth/register" \
     -H 'Content-Type: application/json' \
     -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"$NAME\"}")
 if [[ "$STATUS" != "201" && "$STATUS" != "200" ]]; then
