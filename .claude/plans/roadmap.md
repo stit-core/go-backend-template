@@ -4,11 +4,11 @@
 
 ## Active
 
-- [cookie-only-auth](./cookie-only-auth.md) — bearer→cookie scheme + golibinfra v0.20 bump (port из ROC) — `in-progress` 0/6 atoms
+—
 
 ## Recently done
 
-—
+- cookie-only-auth — done 2026-05-13 — bearer→cookie scheme + golibinfra v0.20 bump (port из ROC iam); commits `b2f3d4c..928dd51`, pre-merge clean
 
 ## Backlog (idea state)
 
