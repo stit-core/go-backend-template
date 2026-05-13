@@ -8,6 +8,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"git.stit.tech/stit/go-backend-template/internal/domain/auth"
+	"git.stit.tech/stit/go-backend-template/internal/platform/authgate"
 	"git.stit.tech/stit/golibinfra/httpkit"
 )
 
@@ -19,10 +20,13 @@ type Usecase interface {
 }
 
 type Handler struct {
-	uc Usecase
+	uc        Usecase
+	cookieCfg authgate.CookieConfig
 }
 
-func NewHandler(uc Usecase) *Handler { return &Handler{uc: uc} }
+func NewHandler(uc Usecase, cookieCfg authgate.CookieConfig) *Handler {
+	return &Handler{uc: uc, cookieCfg: cookieCfg}
+}
 
 func Register(api huma.API, h *Handler) {
 	huma.Register(api, huma.Operation{
@@ -30,15 +34,16 @@ func Register(api huma.API, h *Handler) {
 		Method:      http.MethodPost,
 		Path:        "/api/auth/login",
 		Tags:        []string{"auth"},
-		Summary:     "Аутентификация пользователя",
+		Summary:     "Аутентификация пользователя (cookie-сессия)",
 	}, h.login)
 
 	huma.Register(api, huma.Operation{
-		OperationID: "refreshToken",
-		Method:      http.MethodPost,
-		Path:        "/api/auth/refresh",
-		Tags:        []string{"auth"},
-		Summary:     "Обновление токенов",
+		OperationID:   "refreshToken",
+		Method:        http.MethodPost,
+		Path:          "/api/auth/refresh",
+		Tags:          []string{"auth"},
+		DefaultStatus: http.StatusNoContent,
+		Summary:       "Ротация access + refresh cookie",
 	}, h.refresh)
 
 	huma.Register(api, huma.Operation{
@@ -55,7 +60,7 @@ func Register(api huma.API, h *Handler) {
 		Method:        http.MethodPost,
 		Path:          "/api/auth/change-password",
 		Tags:          []string{"auth"},
-		Security:      []map[string][]string{{"Bearer": {}}},
+		Security:      []map[string][]string{{"Cookie": {}}},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Смена пароля",
 	}, h.changePassword)
@@ -69,30 +74,37 @@ func (h *Handler) login(ctx context.Context, in *LoginInput) (*LoginOutput, erro
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	out := &LoginOutput{}
-	out.Body.AccessToken = result.AccessToken
-	out.Body.RefreshToken = result.RefreshToken
+	out := &LoginOutput{
+		SetCookie: authgate.BuildAuthCookies(result.AccessToken, result.RefreshToken, h.cookieCfg),
+	}
 	out.Body.User.FromEntity(result.User)
 	return out, nil
 }
 
 func (h *Handler) refresh(ctx context.Context, in *RefreshInput) (*RefreshOutput, error) {
-	result, err := h.uc.Refresh(ctx, in.Body.RefreshToken)
-	if err != nil {
-		return nil, mapErr(err)
+	if in.RefreshCookie.Value == "" {
+		return nil, mapRefreshErr(auth.ErrRefreshExpired)
 	}
-	out := &RefreshOutput{}
-	out.Body.AccessToken = result.AccessToken
-	out.Body.RefreshToken = result.RefreshToken
-	out.Body.User.FromEntity(result.User)
-	return out, nil
+	result, err := h.uc.Refresh(ctx, in.RefreshCookie.Value)
+	if err != nil {
+		return nil, mapRefreshErr(err)
+	}
+	return &RefreshOutput{
+		SetCookie: authgate.BuildAuthCookies(result.AccessToken, result.RefreshToken, h.cookieCfg),
+	}, nil
 }
 
-func (h *Handler) logout(ctx context.Context, in *LogoutInput) (*struct{}, error) {
-	if err := h.uc.Logout(ctx, in.Body.RefreshToken); err != nil {
-		return nil, mapErr(err)
+func (h *Handler) logout(ctx context.Context, in *LogoutInput) (*LogoutOutput, error) {
+	if in.RefreshCookie.Value != "" {
+		if err := h.uc.Logout(ctx, in.RefreshCookie.Value); err != nil {
+			// Битый/просроченный/reused refresh — всё равно очищаем cookies и отвечаем 204
+			// (logout идемпотентен с точки зрения клиента).
+			if !errors.Is(err, auth.ErrRefreshExpired) && !errors.Is(err, auth.ErrRefreshReused) {
+				return nil, mapErr(err)
+			}
+		}
 	}
-	return nil, nil
+	return &LogoutOutput{SetCookie: authgate.BuildExpiredAuthCookies(h.cookieCfg)}, nil
 }
 
 func (h *Handler) changePassword(ctx context.Context, in *ChangePasswordInput) (*struct{}, error) {
@@ -143,6 +155,24 @@ func mapErr(err error) error {
 			Code:   "FORBIDDEN",
 			Status: http.StatusForbidden,
 			Detail: "forbidden",
+		},
+	)
+}
+
+func mapRefreshErr(err error) error {
+	return httpkit.MapErr(
+		err,
+		httpkit.ErrorMapping{
+			Match:  func(e error) bool { return errors.Is(e, auth.ErrRefreshExpired) },
+			Code:   "AUTH_REFRESH_EXPIRED",
+			Status: http.StatusUnauthorized,
+			Detail: "refresh token expired or missing",
+		},
+		httpkit.ErrorMapping{
+			Match:  func(e error) bool { return errors.Is(e, auth.ErrRefreshReused) },
+			Code:   "AUTH_REFRESH_REUSED",
+			Status: http.StatusUnauthorized,
+			Detail: "refresh token reused",
 		},
 	)
 }

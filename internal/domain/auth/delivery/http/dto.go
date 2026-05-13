@@ -1,5 +1,7 @@
 package http
 
+import "net/http"
+
 type LoginInput struct {
 	Body struct {
 		Email    string `json:"email"    required:"true"`
@@ -8,31 +10,26 @@ type LoginInput struct {
 }
 
 type LoginOutput struct {
-	Body struct {
-		AccessToken  string       `json:"access_token"`
-		RefreshToken string       `json:"refresh_token"`
-		User         AuthUserView `json:"user"`
+	SetCookie []http.Cookie `header:"Set-Cookie"`
+	Body      struct {
+		User AuthUserView `json:"user"`
 	}
 }
 
 type RefreshInput struct {
-	Body struct {
-		RefreshToken string `json:"refresh_token" required:"true"`
-	}
+	RefreshCookie http.Cookie `cookie:"refresh_token"`
 }
 
 type RefreshOutput struct {
-	Body struct {
-		AccessToken  string       `json:"access_token"`
-		RefreshToken string       `json:"refresh_token"`
-		User         AuthUserView `json:"user"`
-	}
+	SetCookie []http.Cookie `header:"Set-Cookie"`
 }
 
 type LogoutInput struct {
-	Body struct {
-		RefreshToken string `json:"refresh_token" required:"true"`
-	}
+	RefreshCookie http.Cookie `cookie:"refresh_token"`
+}
+
+type LogoutOutput struct {
+	SetCookie []http.Cookie `header:"Set-Cookie"`
 }
 
 type ChangePasswordInput struct {
