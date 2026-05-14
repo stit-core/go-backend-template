@@ -35,7 +35,7 @@ Outbox оправдан когда:
 
 - Какой домен **публикует**?
 - Какие поля в payload (минимум — `EventID` или ID агрегата + timestamp)?
-- Какой Subject? Формат: `<domain>.<event>` (kebab через точку): `user.registered`, `payment.refunded.v2`.
+- Какой Subject? Формат: `<source>.events.<event>` (реф. — `user.events.registered`, `verification.events.password_reset_requested` из `internal/domain/*/usecase.go`).
 - Какой домен **обрабатывает** (или несколько)?
 - Idempotency: как consumer защитится от дубликатов?
 
@@ -46,40 +46,38 @@ package <source>
 
 import "time"
 
-const <Event>Subject = "<source>.<event>"
-
 type <Event> struct {
-    EventID   string    `json:"event_id"`   // для идемпотентности
-    <Aggregate>ID string `json:"<aggregate>_id"`
+    EventID       string    `json:"event_id"`   // для идемпотентности
+    <Aggregate>ID string    `json:"<aggregate>_id"`
     // ...payload поля
-    At        time.Time `json:"at"`
+    At            time.Time `json:"at"`
 }
 ```
 
-`EventID` — uuid, генерится в usecase при публикации. `At` — `clock.Now()`.
+`EventID` — uuid, генерится в usecase при публикации. `At` — `uc.clock.Now()`. Subject как именованную константу публикатор обычно **не экспортит** — он литералом передаётся в `Publish(...)`, а consumer заводит свою локальную константу (см. шаг 4).
 
 ### 3. Публикация в usecase
 
-В uсcase-методе, **внутри той же tx что и основное изменение**:
+В usecase-методе, **внутри той же tx что и основное изменение**, через `pgkit.Transactor.WithTx` (tx живёт в `context`, передаётся в repo и outbox через `txCtx`):
 
 ```go
 err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
     if err := uc.repo.UpdateX(txCtx, ...); err != nil {
         return err
     }
-    return uc.events.Publish(txCtx, <source>.<Event>Subject, <source>.<Event>{
-        EventID: uuid.NewString(),
-        // ...
-        At: uc.clock.Now(),
+    return uc.events.Publish(txCtx, "<source>.events.<event>", <source>.<Event>{
+        EventID:       uuid.NewString(),
+        <Aggregate>ID: ...,
+        At:            uc.clock.Now(),
     })
 })
 ```
 
-`uc.events` — это `outboxkit.Publisher`, уже инжектится в `UsecaseDeps`. Сериализация в JSON — внутри `outboxkit`.
+`uc.events` — это `outboxkit.Publisher` (`Publish(ctx, subject, payload) error`), уже инжектится в `UsecaseDeps`. Сериализация в JSON — внутри `outboxkit/pgstore.Insert`.
 
 ### 4. Subscriber in-domain (`internal/domain/<consumer>/delivery/nats/`)
 
-Subscriber лежит **внутри** потребляющего домена, рядом с `delivery/http/`. depguard не пускает прямой импорт `<source>`-домена из `<consumer>` — поэтому payload-тип события объявляется **локально** в `delivery/nats/dto.go`, даже если он 1:1 совпадает с типом из источника.
+Subscriber лежит **внутри** потребляющего домена, рядом с `delivery/http/`. depguard не пускает прямой импорт `<source>`-домена из `<consumer>` — поэтому payload-тип события объявляется **локально** в `delivery/nats/dto.go`, даже если он 1:1 совпадает с типом из источника. Subject — тоже локальная константа.
 
 ```go
 // internal/domain/<consumer>/delivery/nats/dto.go
@@ -89,6 +87,8 @@ type <Event>Payload struct {
     EventID string `json:"event_id"`
     // …поля 1:1 с <source>.<Event>, но локальный тип
 }
+
+const Subject<Event> = "<source>.events.<event>"
 ```
 
 ```go
@@ -128,7 +128,13 @@ func (h *Handler) on<Event>(ctx context.Context, e <Event>Payload) error {
 }
 
 func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
-    // natskit.Subscribe[<Event>Payload](bus, h.on<Event>) с lifecycle hooks
+    ctx, cancel := context.WithCancel(context.Background())
+    lc.Append(fx.Hook{
+        OnStart: func(_ context.Context) error {
+            return natskit.SubscribeJSON(bus, ctx, Subject<Event>, h.on<Event>)
+        },
+        OnStop: func(_ context.Context) error { cancel(); return nil },
+    })
 }
 ```
 
@@ -152,7 +158,7 @@ var Module = fx.Module(
 
 Subscriber фактически — это просто ещё один транспорт в usecase. Никаких отдельных fx-модулей "subscribers" не заводи.
 
-### 7. Idempotency
+### 6. Idempotency
 
 Subscriber должен переживать повторную доставку:
 - INSERT с `ON CONFLICT (event_id) DO NOTHING` если пишет в свою БД.
@@ -161,13 +167,13 @@ Subscriber должен переживать повторную доставку
 
 Сделай это явно, не "оно вряд ли задвоится".
 
-### 8. Тесты
+### 7. Тесты
 
-- В домене-публикаторе: `usecase_test.go` проверяет, что `eventbus.Recorder` зафиксировал нужный subject и payload (`testkit/eventbus` уже есть).
-- Subscriber: unit-тест на `Handle()` с моком `Notifier`. Минимум — happy path + один error path (Notifier возвращает err → Handle возвращает err).
+- В домене-публикаторе: `usecase_test.go` через мок `outboxkit.Publisher` (`Mock<...>` — `make mocks` поднимает по `.mockery.yml`) проверяет, что вызов `Publish` пришёл с ожидаемым subject и payload.
+- Subscriber: unit-тест на handler-метод с моком `Usecase`-порта (мок генерируется автоматически — `.mockery.yml` уже включает `delivery/nats` если ты его добавил). Минимум — happy path + один error path (usecase возвращает err → handler возвращает err).
 - Integration: если есть end-to-end — отдельный тест под `//go:build integration` с реальным NATS через testcontainers.
 
-### 9. Верификация
+### 8. Верификация
 
 ```bash
 scripts/agent-tools/test.sh
@@ -175,14 +181,14 @@ scripts/agent-tools/lint.sh
 make mocks-check  # если добавил интерфейс из .mockery.yml
 ```
 
-### 10. Коммит
+### 9. Коммит
 
-`feat(<source>): emit <event> event` или `feat(worker): handle <event>` — в зависимости от того, что добавил. Если оба в одном коммите — `feat(<source>): emit <event> + handler`.
+`feat(<source>): emit <event> event` или `feat(<consumer>): handle <event>` — в зависимости от того, что добавил. Если оба в одном коммите — `feat(<source>): emit <event> + <consumer> handler`.
 
 ## Versioning событий
 
 Если меняешь payload-структуру с breaking change:
-1. Новый тип `<Event>V2`, новый `<Event>SubjectV2 = "<source>.<event>.v2"`.
+1. Новый тип `<Event>V2`, новый литерал-subject `"<source>.events.<event>.v2"`.
 2. Старый subscriber продолжает работать со старым subject.
 3. Когда все consumer'ы перешли — удаляешь публикацию старого.
 

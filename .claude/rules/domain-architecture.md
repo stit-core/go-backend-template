@@ -118,16 +118,16 @@ type NewsListOutput  struct { Body struct { Items []NewsView; Total int64 } }
 
 ## Outbox-события
 
-Если usecase эмитит событие (например, `user.registered`), оно идёт в `events.go` как тип:
+Если usecase эмитит событие (например, `user.events.registered`), payload-тип идёт в `events.go`:
 
 ```go
 type UserRegistered struct {
-    UserID    string
-    Email     string
-    Timestamp time.Time
+    ID    string
+    Email string
+    At    time.Time
 }
 ```
 
-Repository пишет событие в outbox-таблицу в той же транзакции что и основное изменение (`outboxkit.Publisher`). Outbox-drain живёт внутри того же `cmd/api` бинаря (fx.Lifecycle, без отдельного worker-процесса) и публикует в NATS. Subscriber'ы потребляющего домена лежат **внутри** этого домена в `delivery/nats/handler.go` — рядом с `delivery/http/`, на равных правах. Регистрируются они в `module/module.go` потребляющего домена.
+**Usecase** (не репозиторий) вызывает `outboxkit.Publisher.Publish(txCtx, subject, payload)` внутри `pgkit.Transactor.WithTx(ctx, fn)` — `txCtx` несёт `pgx.Tx`, репозиторий и outbox оба достают его через `pgkit.Conn(ctx, pool)`. Outbox-drain живёт внутри того же `cmd/api` бинаря (fx.Lifecycle, без отдельного worker-процесса) и публикует в NATS. Subscriber'ы потребляющего домена лежат **внутри** этого домена в `delivery/nats/handler.go` — рядом с `delivery/http/`, на равных правах. Регистрируются в `module/module.go` потребляющего домена.
 
-Реф. пример: `internal/domain/verification/delivery/nats/handler.go` — подписан на `user.registered`, запускает email-verification flow в своём же домене.
+Subject — литерал формата `<domain>.events.<event>` (`user.events.registered`, `verification.events.email_verification_requested`). Реф. пример: `internal/domain/verification/delivery/nats/{handler.go,dto.go}` — subscriber объявляет локальную константу `SubjectUserRegistered` и payload-тип, не импортирует домен-источник.

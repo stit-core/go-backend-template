@@ -87,5 +87,5 @@ model: sonnet
 
 - ❌ Править существующую миграцию которая накатилась в проде.
 - ❌ Делать `DROP TABLE` без явного OK от parent.
-- ❌ Менять структуру колонок которые используются в outbox-таблице (`0003_outbox`) — это инфраструктурный слой.
+- ❌ Дублировать миграции, которые держат kit'ы из golibinfra (`outboxkit/pgstore`, `auditkit/pgstore`, `bruteforcekit/pgstore`). Их `MigrationsFS` подключается в `cmd/migrate/main.go` — добавлять локальные `CREATE TABLE` для `outbox` / `audit_log` / `bruteforce_attempts` не нужно. Расширять схему этих таблиц можно только через PR в `golibinfra`.
 - ❌ Оставлять sqlc-diff красным после правок.

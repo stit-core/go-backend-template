@@ -89,8 +89,9 @@ package $NAME
 
 import "time"
 
-const ${TITLE}CreatedSubject = "$NAME.created"
-
+// Subject — литерал \`$NAME.events.created\` (см. .claude/rules/outbox-events.md).
+// Публикатор передаёт его прямо в \`events.Publish(...)\`; consumer заводит свою
+// локальную константу в \`<consumer>/delivery/nats/dto.go\`.
 type ${TITLE}Created struct {
 	${TITLE}ID string    \`json:"${NAME}_id"\`
 	Timestamp time.Time \`json:"timestamp"\`

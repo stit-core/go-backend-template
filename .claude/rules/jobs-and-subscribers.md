@@ -55,7 +55,13 @@ func (h *Handler) onEventX(ctx context.Context, e EventXPayload) error {
 }
 
 func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
-    // natskit.Subscribe[EventXPayload](bus, h.onEventX) под lifecycle-hook'и
+    ctx, cancel := context.WithCancel(context.Background())
+    lc.Append(fx.Hook{
+        OnStart: func(_ context.Context) error {
+            return natskit.SubscribeJSON(bus, ctx, SubjectEventX, h.onEventX)
+        },
+        OnStop: func(_ context.Context) error { cancel(); return nil },
+    })
 }
 ```
 

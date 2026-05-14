@@ -111,9 +111,9 @@ if [ "$FULL" -eq 1 ]; then
     fi
 
     if command -v mockery >/dev/null 2>&1; then
-        TMP_BEFORE=$(git diff --stat -- '**/mock_*_test.go' 2>/dev/null)
+        TMP_BEFORE=$(git diff --stat -- '**/mocks/*.go' 2>/dev/null)
         mockery >/dev/null 2>&1 || true
-        TMP_AFTER=$(git diff --stat -- '**/mock_*_test.go' 2>/dev/null)
+        TMP_AFTER=$(git diff --stat -- '**/mocks/*.go' 2>/dev/null)
         if [ "$TMP_BEFORE" = "$TMP_AFTER" ]; then
             echo "mocks-check: OK"
         else

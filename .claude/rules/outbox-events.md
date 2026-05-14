@@ -4,7 +4,6 @@ description: Outbox-паттерн и доменные события. Груз�
 paths:
   - "internal/domain/*/events.go"
   - "internal/domain/*/delivery/nats/**"
-  - "migrations/0004_outbox*"
 ---
 
 # Outbox и доменные события
@@ -17,40 +16,41 @@ paths:
 
 **Отдельного worker-процесса нет.** API, outbox drain, NATS subscribers и background jobs живут в одном бинаре через одну fx-графу.
 
+Сама `outbox`-таблица — **не миграция в этом репо**: схему держит `golibinfra/outboxkit/pgstore` (`MigrationsFS`), `cmd/migrate` накатывает её рядом с миграциями приложения и kit'ов (`auditkit`, `bruteforcekit`). См. `cmd/migrate/main.go`.
+
 ## Слой событий
 
-В корне домена — `events.go` с типами:
+В корне домена — `events.go` с payload-типами. Реф. `internal/domain/user/events.go`:
 
 ```go
 package user
 
-type Registered struct {
-    UserID    string    `json:"user_id"`
-    Email     string    `json:"email"`
-    Timestamp time.Time `json:"timestamp"`
-}
+import "time"
 
-const RegisteredSubject = "user.registered"
+type UserRegistered struct {
+    ID    string
+    Email string
+    At    time.Time
+}
 ```
 
-`Subject` — имя топика NATS (kebab-case через точку: `domain.event`).
+**Subject — это литерал в формате `<domain>.events.<event>`**, передаётся прямо в `events.Publish(...)`. Константу субджекта домен-источник **не экспортит** — публикатор знает свой subject, а consumer заводит **локальную** константу в `delivery/nats/dto.go` (`const SubjectUserRegistered = "user.events.registered"` — реф. `internal/domain/verification/delivery/nats/dto.go`). Это даёт version-coexistence: меняешь subject у источника → старый consumer тихо отвалится от старого, не сломав компиляцию.
 
 ## Запись в outbox из usecase
 
-В транзакции репозитория:
+`outboxkit.Publisher` пишет в outbox-таблицу **через context-bound транзакцию**: `pgkit.Transactor.WithTx(ctx, fn)` кладёт `pgx.Tx` в context, репозиторий и `outboxkit/pgstore` оба достают его через `pgkit.Conn(ctx, pool)`. Никаких явных `tx` в сигнатуре `Publish`. Реф. — `internal/domain/user/usecase.go:103`:
 
 ```go
-err := pgkit.InTx(ctx, r.pool, func(tx pgx.Tx) error {
-    // 1. Основное изменение.
-    if err := r.queries.WithTx(tx).InsertUser(ctx, params); err != nil {
+if err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
+    if err := uc.repo.Create(txCtx, newU); err != nil {
         return err
     }
-    // 2. Событие в outbox — той же tx.
-    return r.outbox.Publish(ctx, tx, user.RegisteredSubject, event)
-})
+    return uc.events.Publish(txCtx, "user.events.registered",
+        UserRegistered{ID: newU.ID, Email: newU.Email, At: newU.CreatedAt})
+}); err != nil { ... }
 ```
 
-`outbox.Publish` — из `golibinfra/outboxkit`, принимает Subject + payload. Сериализует payload в JSON и пишет строку в `outbox` таблицу.
+`uc.events` имеет тип `outboxkit.Publisher` (узкий interface — `Publish(ctx, subject, payload) error`). Инжектится в `UsecaseDeps` через fx. Сериализация payload в JSON — внутри `outboxkit/pgstore.Insert`.
 
 ## Подписчики (in-domain — `internal/domain/<consumer>/delivery/nats/`)
 
@@ -78,8 +78,13 @@ func (h *Handler) onUserRegistered(ctx context.Context, e UserRegisteredEvent) e
 }
 
 func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
-    // подписка через natskit.Subscribe[UserRegisteredEvent](bus, h.onUserRegistered)
-    // запуск/остановка через fx.Lifecycle
+    ctx, cancel := context.WithCancel(context.Background())
+    lc.Append(fx.Hook{
+        OnStart: func(_ context.Context) error {
+            return natskit.SubscribeJSON(bus, ctx, SubjectUserRegistered, h.onUserRegistered)
+        },
+        OnStop: func(_ context.Context) error { cancel(); return nil },
+    })
 }
 ```
 
@@ -102,11 +107,11 @@ NATS даёт ordered delivery в рамках одного subject и одно�
 - ❌ Прямая публикация в NATS из usecase в обход outbox — нет транзакционной гарантии.
 - ❌ Тяжёлая логика в подписчике — она должна быть быстрой и идемпотентной. Длинная логика — отдельный job.
 - ❌ Подписчик мутирует БД своего же домена → опасно (можно зациклить через outbox). Лучше — отдельный домен / отдельный воркер.
-- ❌ Изменение payload-структуры события без version-poly. Если ломаешь — новый Subject (`user.registered.v2`).
+- ❌ Изменение payload-структуры события без version-poly. Если ломаешь — новый Subject (`user.events.registered.v2`).
 
 ## Миграция события (breaking change)
 
-1. Новая структура `RegisteredV2`.
-2. Новый Subject (`user.registered.v2`).
+1. Новая структура `UserRegisteredV2`.
+2. Новый Subject (`user.events.registered.v2`).
 3. Подписчики на старый Subject продолжают работать.
 4. Когда все подписчики мигрировали — снимаешь публикацию старого.

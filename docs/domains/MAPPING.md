@@ -75,7 +75,7 @@
 | Consumers | `internal/domain/<consumer>/delivery/nats/handler.go` — handler рядом с `delivery/http/`, на равных правах. Регистрируется fx того же `cmd/api`. |
 | Delivery `idempotency key` | поле в payload; subscriber хранит уже обработанные ID |
 | Delivery `at-least-once` | `outboxkit.Publisher` гарантирует, subscriber обязан быть идемпотентен |
-| Delivery `ordering: per-aggregate` | partition key = `<Aggregate>ID` в NATS-конфиге subscriber'а |
+| Delivery `ordering: per-aggregate` | в текущем `natskit`/core-NATS upgrade'а до partition'а **нет**: ordering держится только тем, что outbox-drain — single-instance worker, читает строки в порядке `id`. Если subscriber'у важен per-aggregate order — он сам сериализует обработку по `<Aggregate>ID` (например, очередь in-memory keyed by ID). |
 
 ## Use Case
 
@@ -131,7 +131,7 @@ depguard в `.golangci.yml` блокирует прямые импорты ме�
 | Property `Constraints` | `CHECK`-constraint или валидируется только в коде (если бизнес-уровень) |
 | Lifecycle enum | `CHECK (status IN ('active', 'blocked', 'deleted'))` или отдельная enum-таблица |
 | Identity ID type | `id UUID PRIMARY KEY` или `TEXT` для composite |
-| Outbox-эмит | требует `outbox` таблицу — обычно одна на проект, не на контекст |
+| Outbox-эмит | таблица `outbox` — **не в `migrations/` этого репо**; схему держит `golibinfra/outboxkit/pgstore` (`MigrationsFS`), `cmd/migrate/main.go` накатывает её рядом с миграциями приложения. То же про `audit_log` (`auditkit/pgstore`) и `bruteforce_attempts` (`bruteforcekit/pgstore`). |
 
 ## Что НЕ маппится 1:1
 
