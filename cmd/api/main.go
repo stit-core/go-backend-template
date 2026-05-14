@@ -72,6 +72,7 @@ var (
 		outboxkit.Module,
 		outboxpg.Module,
 		fx.Provide(
+			func(s *outboxpg.Store) outboxkit.LagReporter { return s },
 			fx.Annotate(pgkit.DBProbe, fx.ResultTags(`group:"health"`)),
 			fx.Annotate(natskit.Probe, fx.ResultTags(`group:"health"`)),
 			fx.Annotate(cachekit.Probe, fx.ResultTags(`group:"health"`)),
