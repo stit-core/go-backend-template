@@ -116,7 +116,9 @@ scripts/
 `golibinfra/telemetry` поддерживает два режима:
 
 - **Local dev** (дефолт `.env.example`): `OTEL_STDOUT_ONLY=true` — никакого OTLP, всё в stdout. Или: указать локальный коллектор через `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- **Production**: `OTEL_TENANT` + `OTEL_TOKEN` непустые → к каждому OTLP-запросу добавляется `Authorization: Bearer <token>`, в resource'ы добавляется `service.namespace=<tenant>` и `tenant=<tenant>`. Корп-сторона использует это для per-tenant маршрутизации.
+- **Production**: `OTEL_TENANT` + `OTEL_TOKEN` непустые → к каждому OTLP-запросу добавляется `Authorization: Bearer <token>`. Resource attrs приложения: `service.name`, `service.version`, `deployment.environment.name`. `tenant` и `service.namespace` **ставит/перезатирает корп-otel-collector** на edge (по Bearer→`X-Scope-OrgID` через `tenant-auth` middleware → `resource/service_namespace` processor; `service_namespace == tenant` — инвариант, см. `stit/infra` ADR-0004 §2). Приложение может выставить `service.namespace` сам — оно перезатрётся.
+
+Корп-сторона маршрутизирует по `X-Scope-OrgID` header (не по `service.namespace`), но логи/метрики/трейсы получают `service_namespace=<tenant>` как label/attr автоматически — это даёт фильтр в Loki (`{service_namespace="<tenant>"}`) и Tempo (`{resource.service.namespace="<tenant>"}`).
 
 Production-значения **в этот repo не попадают**. Они выдаются корп-onboarding (`stit/infra/scripts/onboard-project.sh`) и рендерятся vault-agent'ом в env_file на проектном VPS — см. `stit/project-infra-template-compose` (ADR 0002 о централизации env'ов в infra-repo).
 

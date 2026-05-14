@@ -230,9 +230,40 @@ Domain usecase'ы дополнительно открывают span через 
 
 Если не нужны OTLP-экспортёры, поставь `OTEL_STDOUT_ONLY=true` — все три сигнала пойдут в stdout через `stdoutlog`/`stdoutmetric`/`stdouttrace`. Удобно для дебаггинга `trace_id`/`span_id` корреляций.
 
+### Где смотреть в Grafana
+
+Корп-Grafana (`grafana.stit.tech`) автоматически собирает всё что эмитит шаблон. Папка **Apps/** содержит общие дашборды для **всех** golibinfra-сервисов; они фильтруются по variable `$tenant`/`$service`/`$env` — твой сервис появляется без правок инфры:
+
+| Дашборд | Что показывает |
+|---|---|
+| `Apps · Service Overview` | Матрица сервис × tenant: RPS, error %, p95 (entry-point) |
+| `Apps · HTTP` | RED + status breakdown + top endpoints + recent error logs |
+| `Apps · Database` | Postgres pool (acquired/idle/max), acquire wait, saturation |
+| `Apps · Bus` | NATS publish/consume, handle p95, inflight, errors by subject |
+| `Apps · Outbox` | Insert vs publish throughput, lag, batch size, status breakdown |
+| `Apps · Logs` | Loki log-viewer + level breakdown, trace correlation |
+| `Apps · Traces` | Service Graph + slowest spans + TraceQL search |
+| `Apps · Business` | Auto-discover `biz_*` метрик, repeating panel по `result` |
+| `Apps · Auth` | JWT verify rate/result, Argon2id duration, TOTP |
+
+В шапке выбирай `tenant=<project>`, `service=backend`, `env=<твоё-env>`.
+
+> Retention в корп-стеке: **logs/traces — 7 дней**, **metrics — 90 дней** (см. `stit/infra` ADR-0004). Если нужен longer forensic — обсуждать с infra-team отдельно.
+
+### Project-specific дашборды (опционально)
+
+Если у проекта есть domain-specific funnel'и/KPI, которые не покрывает шаблонный `Apps · Business` — можно завести **собственные дашборды** в `stit/infra` репо под `configs/grafana/dashboards/Tenants/<project>/`. Это **PR в infra-repo**, не в этом репо:
+
+1. Скопировать [`_skeleton.json.example`](https://git.stit.tech/stit/infra/src/branch/main/configs/grafana/dashboards/Tenants/_skeleton.json.example) в `Tenants/<project>/<topic>.json`.
+2. Заменить `<PROJECT>`/`<TOPIC>`, добавить panels.
+3. Полный гайд: [`docs/observability-app-guide.md` § 8](https://git.stit.tech/stit/infra/src/branch/main/docs/observability-app-guide.md).
+
+Конвенция: `$tenant` constant + hidden, uid `tenants-<project>-<topic>`, tags `["tenants", "<project>"]`. После merge в infra — provisioner подхватит ≤60 сек, дашборд появится в папке `Tenants/<project>` в Grafana.
+
 ## Контракт со stit-инфрой
 
 - `git.stit.tech` — registry для `<org>/backend{,-migrate}` images (build локальный, см. [Release](#release)).
 - `vault.stit.tech` — secrets backend, AppRole `project-<p>` (см. `stit/infra` → `scripts/onboard-project.sh`).
-- `otel.stit.tech` — OTLP ingest (Bearer-token), tenant routing по `service.namespace`.
+- `otel.stit.tech` — OTLP ingest (Bearer-token = `OTEL_TOKEN`). Tenant определяется **на edge** middleware'ом `tenant-auth` по токену → header `X-Scope-OrgID` → resource attr `tenant` через otel-collector. `service.namespace` приложения **перезатирается** на actual tenant (ADR-0004 §2 в `stit/infra` — гарантия инварианта `service_namespace == tenant`).
+- **Корп-дашборды на golibinfra-метриках работают автоматически** — выставлять `service.name`, `service.version`, `deployment.environment.name` достаточно; `tenant` ставит infra.
 - Деплой через `stit/project-infra-template-compose` (docker-compose стек на проектный VPS).
