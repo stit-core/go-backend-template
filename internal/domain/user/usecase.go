@@ -84,16 +84,19 @@ func (uc *Usecase) Register(ctx context.Context, in *Create) (u *User, err error
 	defer end(&err)
 
 	if len(in.Password) < minPasswordLen {
+		uc.metrics.RecordRegistered(ctx, "weak_password")
 		return nil, ErrWeakPassword
 	}
 
 	hash, err := uc.hasher.Hash(in.Password)
 	if err != nil {
+		uc.metrics.RecordRegistered(ctx, "error")
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
 	newU, err := NewUser(in.Email, hash, in.Name, identity.RoleClient)
 	if err != nil {
+		uc.metrics.RecordRegistered(ctx, "invalid")
 		return nil, err
 	}
 
@@ -105,10 +108,11 @@ func (uc *Usecase) Register(ctx context.Context, in *Create) (u *User, err error
 		return uc.events.Publish(txCtx, "user.events.registered",
 			UserRegistered{ID: newU.ID, Email: newU.Email, At: newU.CreatedAt})
 	}); err != nil {
+		uc.metrics.RecordRegistered(ctx, "error")
 		return nil, err
 	}
 
-	uc.metrics.Registered.Add(ctx, 1)
+	uc.metrics.RecordRegistered(ctx, "ok")
 	uc.log.Info(ctx, "user registered", "user_id", newU.ID, "email", newU.Email)
 
 	if auditErr := uc.audit.Log(ctx, auditkit.Entry{
@@ -194,13 +198,16 @@ func (uc *Usecase) Update(ctx context.Context, id string, in Update) (u *User, e
 
 	caller, ok := identity.From(ctx)
 	if !ok {
+		uc.metrics.RecordUpdated(ctx, "forbidden")
 		return nil, &ForbiddenError{Reason: "no identity"}
 	}
 	if d := uc.policy.CanUpdate(ctx, caller, id); !d.IsAllowed {
+		uc.metrics.RecordUpdated(ctx, "forbidden")
 		return nil, &ForbiddenError{Reason: d.Reason}
 	}
 
 	if in.Name == nil && in.Status == nil {
+		uc.metrics.RecordUpdated(ctx, "invalid")
 		return nil, ErrNoUpdateFields
 	}
 
@@ -221,9 +228,11 @@ func (uc *Usecase) Update(ctx context.Context, id string, in Update) (u *User, e
 		return uc.events.Publish(txCtx, "user.events.updated",
 			UserUpdated{ID: updated.ID, At: updated.UpdatedAt})
 	}); err != nil {
+		uc.metrics.RecordUpdated(ctx, "error")
 		return nil, err
 	}
 
+	uc.metrics.RecordUpdated(ctx, "ok")
 	uc.log.Info(ctx, "user updated", "user_id", u.ID)
 
 	if auditErr := uc.audit.Log(ctx, auditkit.Entry{
@@ -247,9 +256,11 @@ func (uc *Usecase) Delete(ctx context.Context, id string) (err error) {
 
 	caller, ok := identity.From(ctx)
 	if !ok {
+		uc.metrics.RecordDeleted(ctx, "forbidden")
 		return &ForbiddenError{Reason: "no identity"}
 	}
 	if d := uc.policy.CanDelete(ctx, caller, id); !d.IsAllowed {
+		uc.metrics.RecordDeleted(ctx, "forbidden")
 		return &ForbiddenError{Reason: d.Reason}
 	}
 
@@ -267,9 +278,11 @@ func (uc *Usecase) Delete(ctx context.Context, id string) (err error) {
 		return uc.events.Publish(txCtx, "user.events.deleted",
 			UserDeleted{ID: id, At: uc.clock.Now()})
 	}); err != nil {
+		uc.metrics.RecordDeleted(ctx, "error")
 		return err
 	}
 
+	uc.metrics.RecordDeleted(ctx, "ok")
 	uc.log.Info(ctx, "user deleted", "user_id", id)
 
 	if auditErr := uc.audit.Log(ctx, auditkit.Entry{

@@ -177,7 +177,9 @@ Image в registry уже лежит — пересборка не нужна. П
 Сейчас в шаблоне:
 
 ```
-biz_users_registered_total
+biz_users_registered_total{result=ok|weak_password|invalid|error}
+biz_users_updated_total{result=ok|forbidden|invalid|error}
+biz_users_deleted_total{result=ok|forbidden|error}
 biz_auth_login_attempts_total{result=ok|invalid_credentials|locked|blocked}
 biz_auth_refresh_total{result=ok|expired|reused|invalid}
 biz_auth_logouts_total
