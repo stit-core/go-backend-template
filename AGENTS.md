@@ -4,6 +4,14 @@
 
 Этот файл — постоянный гайд (грузится в контекст всегда). Контекстные правила лежат в `.claude/rules/`. Процедурные воркфлоу — в `.claude/skills/`. Описание дневного флоу — в `.claude/WORKFLOW.md`.
 
+## Где это в экосистеме
+
+**Роль:** шаблон Go-бэкенда. Форкается в `<client-org>/backend`, разработчик собирает + пушит образ в `git.stit.tech/<client-org>/backend:<vX.Y.Z>`. Деплоем этот репо **не занимается** — handoff в `<client-org>/infra`.
+**Зависит от:** `stit/golibinfra` (импорт всех kit'ов: telemetry, httpkit, pgkit, authnkit, outboxkit, natskit, …); `stit/infra` (контракт — `service_namespace == tenant`, OTLP endpoint, registry); `git.stit.tech` (push images).
+**Используется:** `<client-org>/infra` (форк `stit/project-infra-template-compose`) — пуллит образ через `vault kv patch …/meta backend_tag=<tag>` + `make ship` на проектной VPS.
+
+Карта 4 репо, tenant/AppRole conventions и handoff-флоу — `stit/infra/docs/ecosystem.md`. Локально про observability: `README.md §Observability` и `golibinfra/README.md` (ADR-0004 invariants).
+
 **Точка входа в сессию: `/smartdev`** — даёт сводку о состоянии репо (ветка, drift, активные планы, висящие TODO) и предлагает следующее действие. Если задача нетривиальная — оттуда переключайся в `/plan` для декомпозиции на атомы (план переживает `/clear` через `.claude/plans/<slug>.md`).
 
 **Проектирование первично, код вторичен.** DDD-артефакты живут в `docs/domains/<context>/` и являются source of truth для бизнес-смысла. Перед скаффолдингом домена → артефакт; `/domain-deepen <ctx>` углубляет драфты до stable. См. `docs/domains/README.md` и `docs/domains/MAPPING.md` (DDD ↔ Go).

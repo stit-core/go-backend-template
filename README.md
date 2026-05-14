@@ -2,6 +2,8 @@
 
 Шаблон Go HTTP-бэкенда на стеке stit.tech: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + `golibinfra` (telemetry, authn, outbox, brute-force, cache, NATS, audit, clock).
 
+Часть экосистемы из 4 репо: [`stit/infra`](https://git.stit.tech/stit/infra) (corp control plane) ←── **этот** (форкается в `<org>/backend`, build+push) ──► [`stit/project-infra-template-compose`](https://git.stit.tech/stit/project-infra-template-compose) (форкается в `<org>/infra`, deploy) — оба используют [`stit/golibinfra`](https://git.stit.tech/stit/golibinfra). Канон — [`stit/infra/docs/ecosystem.md`](https://git.stit.tech/stit/infra/src/branch/main/docs/ecosystem.md).
+
 ## Использовать как шаблон
 
 В Gitea этот репо помечен `template: true`. Старт нового сервиса:
