@@ -18,6 +18,7 @@ var Module = fx.Module(
 		func(uc *user.Usecase) verification.PasswordSetter { return uc },
 		func(uc *user.Usecase) verification.EmailVerificationSetter { return uc },
 		newLogMailerAdapter,
+		verification.NewMetrics,
 		verification.NewUsecase,
 		verifhttp.NewHandler,
 		func(u *verification.Usecase) verifhttp.Usecase { return u },

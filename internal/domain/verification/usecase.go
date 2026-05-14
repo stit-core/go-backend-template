@@ -59,6 +59,7 @@ type UsecaseDeps struct {
 	Mailer        Mailer
 	Log           logkit.Logger
 	Clock         clockkit.Clock
+	Metrics       *Metrics
 }
 
 type Usecase struct {
@@ -72,6 +73,7 @@ type Usecase struct {
 	mailer   Mailer
 	log      logkit.Logger
 	clock    clockkit.Clock
+	metrics  *Metrics
 }
 
 func NewUsecase(d UsecaseDeps) *Usecase {
@@ -86,6 +88,7 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 		mailer:   d.Mailer,
 		log:      d.Log.With("domain", "verification"),
 		clock:    d.Clock,
+		metrics:  d.Metrics,
 	}
 }
 
@@ -112,12 +115,15 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email str
 				At:      uc.clock.Now(),
 			})
 	}); err != nil {
+		uc.metrics.RecordEmailIssued(ctx, "error")
 		return err
 	}
 
 	if err := uc.mailer.SendEmailVerification(ctx, email, t); err != nil {
+		uc.metrics.RecordEmailIssued(ctx, "error")
 		return fmt.Errorf("send verification email: %w", err)
 	}
+	uc.metrics.RecordEmailIssued(ctx, "ok")
 	return nil
 }
 
@@ -127,9 +133,11 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) (err 
 
 	u, err := uc.users.GetByEmail(ctx, email)
 	if err != nil {
+		uc.metrics.RecordPasswordResetRequested(ctx, "user_not_found")
 		return nil
 	}
 	if !u.Active {
+		uc.metrics.RecordPasswordResetRequested(ctx, "inactive")
 		return nil
 	}
 
@@ -152,12 +160,15 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) (err 
 				At:      uc.clock.Now(),
 			})
 	}); err != nil {
+		uc.metrics.RecordPasswordResetRequested(ctx, "error")
 		return err
 	}
 
 	if err := uc.mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
+		uc.metrics.RecordPasswordResetRequested(ctx, "error")
 		return fmt.Errorf("send password reset email: %w", err)
 	}
+	uc.metrics.RecordPasswordResetRequested(ctx, "ok")
 	return nil
 }
 
@@ -166,14 +177,21 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 	defer end(&err)
 
 	if len(newPassword) < minPasswordLen {
+		uc.metrics.RecordPasswordResetConfirmed(ctx, "weak")
 		return ErrWeakPassword
 	}
 
 	pr, err := uc.repo.GetPasswordReset(ctx, tokens.Hash(token))
 	if err != nil {
+		uc.metrics.RecordPasswordResetConfirmed(ctx, "invalid")
 		return err
 	}
-	if pr.UsedAt != nil || uc.clock.Now().After(pr.ExpiresAt) {
+	if pr.UsedAt != nil {
+		uc.metrics.RecordPasswordResetConfirmed(ctx, "already_used")
+		return ErrInvalidResetToken
+	}
+	if uc.clock.Now().After(pr.ExpiresAt) {
+		uc.metrics.RecordPasswordResetConfirmed(ctx, "expired")
 		return ErrInvalidResetToken
 	}
 
@@ -197,6 +215,7 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 	}
 
 	uc.log.Info(ctx, "password reset", "user_id", pr.UserID)
+	uc.metrics.RecordPasswordResetConfirmed(ctx, "ok")
 	return nil
 }
 
@@ -206,16 +225,26 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) (err error) {
 
 	ev, err := uc.repo.GetEmailVerification(ctx, tokens.Hash(token))
 	if err != nil {
+		uc.metrics.RecordEmailConfirmed(ctx, "invalid")
 		return err
 	}
-	if ev.UsedAt != nil || uc.clock.Now().After(ev.ExpiresAt) {
+	if ev.UsedAt != nil {
+		uc.metrics.RecordEmailConfirmed(ctx, "already_used")
+		return ErrInvalidVerificationToken
+	}
+	if uc.clock.Now().After(ev.ExpiresAt) {
+		uc.metrics.RecordEmailConfirmed(ctx, "expired")
 		return ErrInvalidVerificationToken
 	}
 
-	return uc.tx.WithTx(ctx, func(txCtx context.Context) error {
+	if err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
 		if err := uc.emailSet.MarkEmailVerified(txCtx, ev.UserID); err != nil {
 			return err
 		}
 		return uc.repo.MarkEmailVerificationUsed(txCtx, ev.ID)
-	})
+	}); err != nil {
+		return err
+	}
+	uc.metrics.RecordEmailConfirmed(ctx, "ok")
+	return nil
 }

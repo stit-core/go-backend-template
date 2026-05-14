@@ -26,6 +26,7 @@ var Module = fx.Module(
 			return &tokenParserAdapter{parser: p}
 		},
 		func(g bruteforcekit.Guard) auth.LoginGuard { return g },
+		auth.NewMetrics,
 		auth.NewUsecase,
 		authhttp.NewHandler,
 		func(u *auth.Usecase) authhttp.Usecase { return u },

@@ -1,22 +1,24 @@
 package user
 
 import (
-	"fmt"
-
 	"go.opentelemetry.io/otel/metric"
+
+	"git.stit.tech/stit/golibinfra/bizmetric"
 )
 
+// Metrics — domain-уровень счётчики. Имена строятся через bizmetric.*
+// (конвенция `biz_<domain>_<event>_total|_seconds`). Это позволяет
+// дашборду Apps/business автодискаверить метрики через
+// {__name__=~"biz_.*", service_name="$service"} без ручного списка.
 type Metrics struct {
 	Registered metric.Int64Counter
 }
 
 func NewMetrics(m metric.Meter) (*Metrics, error) {
-	c, err := m.Int64Counter(
-		"users_registered_total",
-		metric.WithDescription("Number of successfully registered users"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("user metrics: counter: %w", err)
-	}
-	return &Metrics{Registered: c}, nil
+	return &Metrics{
+		Registered: bizmetric.Counter(
+			m, "users", "registered",
+			metric.WithDescription("Successfully registered users"),
+		),
+	}, nil
 }

@@ -84,6 +84,7 @@ type UsecaseDeps struct {
 	Audit          auditkit.Logger
 	Log            logkit.Logger
 	Clock          clockkit.Clock
+	Metrics        *Metrics
 }
 
 type Usecase struct {
@@ -100,6 +101,7 @@ type Usecase struct {
 	audit    auditkit.Logger
 	log      logkit.Logger
 	clock    clockkit.Clock
+	metrics  *Metrics
 }
 
 func NewUsecase(d UsecaseDeps) *Usecase {
@@ -117,6 +119,7 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 		audit:    d.Audit,
 		log:      d.Log.With("domain", "auth"),
 		clock:    d.Clock,
+		metrics:  d.Metrics,
 	}
 }
 
@@ -131,6 +134,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 		uc.log.Error(ctx, "guard check", "err", guardErr)
 	} else if lock != nil {
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_locked", "locked")
+		uc.metrics.RecordLogin(ctx, "locked")
 		return nil, ErrAccountLocked
 	}
 
@@ -140,6 +144,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 			uc.log.Error(ctx, "guard record failure", "err", recordErr)
 		}
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_failed", "invalid_credentials")
+		uc.metrics.RecordLogin(ctx, "invalid_credentials")
 		return nil, ErrInvalidCredentials
 	}
 
@@ -148,6 +153,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 			uc.log.Error(ctx, "guard record failure", "err", recordErr)
 		}
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_failed", "blocked")
+		uc.metrics.RecordLogin(ctx, "blocked")
 		return nil, ErrInvalidCredentials
 	}
 
@@ -157,6 +163,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 			uc.log.Error(ctx, "guard record failure", "err", recordErr)
 		}
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_failed", "invalid_credentials")
+		uc.metrics.RecordLogin(ctx, "invalid_credentials")
 		return nil, ErrInvalidCredentials
 	}
 
@@ -189,6 +196,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 	}); auditErr != nil {
 		uc.log.Error(ctx, "audit login", "err", auditErr)
 	}
+	uc.metrics.RecordLogin(ctx, "ok")
 
 	return &LoginOutput{AccessToken: access, RefreshToken: refresh, User: u}, nil
 }
@@ -200,31 +208,38 @@ func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (out *Login
 	userID, oldJTI, err := uc.tparser.ParseRefresh(refreshToken)
 	if err != nil {
 		if errors.Is(err, ErrTokenExpired) {
+			uc.metrics.RecordRefresh(ctx, "expired")
 			return nil, ErrRefreshExpired
 		}
+		uc.metrics.RecordRefresh(ctx, "invalid")
 		return nil, ErrInvalidCredentials
 	}
 
 	session, err := uc.sessions.GetByJTI(ctx, oldJTI)
 	if err != nil {
 		if errors.Is(err, ErrSessionNotFound) {
+			uc.metrics.RecordRefresh(ctx, "invalid")
 			return nil, ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("get refresh session: %w", err)
 	}
 	if session.UserID != userID {
+		uc.metrics.RecordRefresh(ctx, "invalid")
 		return nil, ErrInvalidCredentials
 	}
 	if session.UsedAt != nil {
 		uc.writeRefreshReusedAudit(ctx, userID, oldJTI)
+		uc.metrics.RecordRefresh(ctx, "reused")
 		return nil, ErrRefreshReused
 	}
 	if uc.clock.Now().After(session.ExpiresAt) {
+		uc.metrics.RecordRefresh(ctx, "expired")
 		return nil, ErrRefreshExpired
 	}
 
 	u, err := uc.users.GetByID(ctx, userID)
 	if err != nil {
+		uc.metrics.RecordRefresh(ctx, "invalid")
 		return nil, ErrInvalidCredentials
 	}
 
@@ -245,6 +260,7 @@ func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (out *Login
 	}); err != nil {
 		return nil, fmt.Errorf("rotate refresh session: %w", err)
 	}
+	uc.metrics.RecordRefresh(ctx, "ok")
 
 	return &LoginOutput{AccessToken: access, RefreshToken: newRefresh, User: u}, nil
 }
@@ -284,6 +300,7 @@ func (uc *Usecase) Logout(ctx context.Context, refreshToken string) (err error) 
 	}); auditErr != nil {
 		uc.log.Error(ctx, "audit logout", "err", auditErr)
 	}
+	uc.metrics.RecordLogout(ctx)
 	return nil
 }
 
@@ -293,13 +310,16 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 
 	caller, ok := identity.From(ctx)
 	if !ok {
+		uc.metrics.RecordPasswordChange(ctx, "forbidden")
 		return &ForbiddenError{Reason: "no identity"}
 	}
 	if d := uc.policy.CanChangePassword(ctx, caller, userID); !d.IsAllowed {
+		uc.metrics.RecordPasswordChange(ctx, "forbidden")
 		return &ForbiddenError{Reason: d.Reason}
 	}
 
 	if len(newPassword) < minPasswordLen {
+		uc.metrics.RecordPasswordChange(ctx, "weak")
 		return ErrWeakPassword
 	}
 
@@ -308,6 +328,7 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 		return fmt.Errorf("verify old password: %w", err)
 	}
 	if !ok {
+		uc.metrics.RecordPasswordChange(ctx, "invalid_old")
 		return ErrInvalidCredentials
 	}
 
@@ -335,6 +356,7 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 	}); auditErr != nil {
 		uc.log.Error(ctx, "audit change_password", "err", auditErr)
 	}
+	uc.metrics.RecordPasswordChange(ctx, "ok")
 
 	return nil
 }

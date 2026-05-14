@@ -125,6 +125,109 @@ Image в registry уже лежит — пересборка не нужна. П
 
 Версия зашивается в бинарник через `-ldflags` (`-X main.version=$TAG -X main.commit=$GIT_SHA`). На старте каждый сервис логирует `"starting" service=<name> version=v1.2.3 commit=<short-sha>` через `logkit.Logger` — на проде сразу понятно какой коммит крутится, без захода в Gitea за map'ом tag↔SHA.
 
+## Observability
+
+Шаблон эмитит **метрики, логи, трейсы** через OTel в `otel.stit.tech` (auth bearer = `OTEL_TOKEN`). Все три сигнала корелируются через `trace_id`.
+
+### Что эмитится автоматически (из golibinfra ≥ v0.21.2)
+
+**Process & runtime** — `runtime.go.goroutines`, `runtime.go.mem.heap_alloc/inuse`, `runtime.go.gc.duration`, `process.*`.
+
+**HTTP сервер** (`httpkit`):
+- `http_requests_total{method,path,status}`
+- `http_request_duration_seconds{method,path,status}`
+- `http_panics_total{path}` — recovered панки
+- `http_max_body_rejections_total{path}` — отказы 413
+- `http_idempotency_total{path,result}` — replayed | stored
+
+**HTTP клиент** (`httpclient`):
+- `http_client_request_duration_seconds{host,method,status}`
+- `http_client_breaker_transitions_total{name,from,to}`, `http_client_breaker_open{name}`
+- `http_client_retry_attempts_total{host}`
+
+**Postgres** (`pgkit`):
+- `db_pool_{acquired,idle,total,max,constructing}_conns`
+- `db_pool_{empty,canceled,acquire}_total`, `db_pool_acquire_duration_seconds_total`
+- Span'ы на каждый query (через `otelpgx`)
+
+**NATS** (`natskit`):
+- `nats_messages_{published,consumed}_total{subject,status,transport}`
+- `nats_{publish,handle}_duration_seconds{subject,transport}`
+- `nats_inflight_messages{subject,transport}`
+- Producer/Consumer span'ы с W3C trace-propagation через `nats.Header`
+
+**Outbox** (`outboxkit`):
+- `outbox_events_{inserted,processed}_total{subject,status}`
+- `outbox_batch_{size,duration_seconds}`, `outbox_publish_duration_seconds{subject}`
+- `outbox_lag_seconds{subject}` — возраст самого старого unpublished event'а (через `LagReporter` в `outboxkit/pgstore`)
+
+**Auth primitives** (`authnkit`):
+- `jwt_verifications_total{result=ok|expired|signature_invalid|malformed}`
+- `password_hash_duration_seconds`, `password_verify_duration_seconds`
+- `totp_verifications_total{result}`
+
+**Логи** (`logkit`):
+- Структурированный slog → OTLP → Loki, `trace_id`/`span_id` инжектятся в каждое сообщение
+- `log_messages_total{level}` counter — `errors/min` без LogQL-парсинга
+
+### Business-метрики
+
+Конвенция: `biz_<domain>_<event>_{total|seconds}` — это позволяет автодискаверу на Grafana-дашборде `Apps/business` подхватить новые метрики через `{__name__=~"biz_.*"}` без ручного списка.
+
+Сейчас в шаблоне:
+
+```
+biz_users_registered_total
+biz_auth_login_attempts_total{result=ok|invalid_credentials|locked|blocked}
+biz_auth_refresh_total{result=ok|expired|reused|invalid}
+biz_auth_logouts_total
+biz_auth_password_change_total{result=ok|forbidden|weak|invalid_old}
+biz_verification_email_issued_total{result=ok|error}
+biz_verification_email_confirmed_total{result=ok|invalid|expired|already_used}
+biz_verification_password_reset_requested_total{result=ok|user_not_found|inactive|error}
+biz_verification_password_reset_confirmed_total{result=ok|weak|invalid|expired|already_used}
+```
+
+### Как добавить свою бизнес-метрику
+
+1. Создай (или расширь) `internal/domain/<x>/metrics.go`:
+   ```go
+   import "git.stit.tech/stit/golibinfra/bizmetric"
+
+   type Metrics struct {
+       myCounter metric.Int64Counter
+   }
+
+   func NewMetrics(m metric.Meter) (*Metrics, error) {
+       return &Metrics{
+           myCounter: bizmetric.Counter(m, "<domain>", "<event>",
+               metric.WithDescription("...")),
+       }, nil
+   }
+
+   func (m *Metrics) RecordSomething(ctx context.Context, result string) {
+       if m == nil { return }  // nil-safe для unit-тестов
+       m.myCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+   }
+   ```
+2. Зарегистрируй `NewMetrics` в `module.go` через `fx.Provide`.
+3. Добавь в `UsecaseDeps`, инжектируй в usecase, вызывай `Record*` в нужных точках.
+
+См. `internal/domain/auth/metrics.go` как канонический пример.
+
+### Trace-context propagation
+
+- HTTP-входы → `otelhttp.NewHandler` стартует server-span автоматически
+- HTTP-исходы (`httpclient`) → `otelhttp.NewTransport` стартует client-span автоматически
+- NATS → trace-context в `nats.Header` (`traceparent`/`tracestate`), `natskit.Publish` инжектит, `Subscribe` экстрактит
+- Postgres → `otelpgx` создаёт span на каждый Query/Exec, привязанный к parent-span'у из ctx
+
+Domain usecase'ы дополнительно открывают span через `telemetry.Span(ctx, "domain.usecase.method")` для семантической разметки операций.
+
+### Локальная разработка
+
+Если не нужны OTLP-экспортёры, поставь `OTEL_STDOUT_ONLY=true` — все три сигнала пойдут в stdout через `stdoutlog`/`stdoutmetric`/`stdouttrace`. Удобно для дебаггинга `trace_id`/`span_id` корреляций.
+
 ## Контракт со stit-инфрой
 
 - `git.stit.tech` — registry для `<org>/backend{,-migrate}` images (build локальный, см. [Release](#release)).
