@@ -101,8 +101,8 @@ import (
 
     "go.uber.org/fx"
 
-    "git.stit.tech/stit/golibinfra/logkit"
-    "git.stit.tech/stit/golibinfra/natskit"
+    "git.stit.tech/stit-infra/golibinfra/logkit"
+    "git.stit.tech/stit-infra/golibinfra/natskit"
 )
 
 type Usecase interface {
@@ -142,7 +142,7 @@ func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
 
 ```go
 import (
-    natsdelivery "git.stit.tech/stit/go-backend-template/internal/domain/<consumer>/delivery/nats"
+    natsdelivery "git.stit.tech/stit-infra/go-backend-template/internal/domain/<consumer>/delivery/nats"
 )
 
 var Module = fx.Module(

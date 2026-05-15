@@ -4,8 +4,8 @@ import (
 	"net/mail"
 	"testing"
 
-	"git.stit.tech/stit/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-infra/go-backend-template/internal/platform/identity"
 )
 
 func FuzzNewUser(f *testing.F) {

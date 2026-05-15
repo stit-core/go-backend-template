@@ -7,11 +7,11 @@ formatter: goimports
 force-file-write: true
 template: testify
 packages:
-  git.stit.tech/stit/go-backend-template/internal/domain/user:
+  git.stit.tech/stit-infra/go-backend-template/internal/domain/user:
     interfaces:
       Repository:
       Authorizer:
-  git.stit.tech/stit/go-backend-template/internal/domain/auth:
+  git.stit.tech/stit-infra/go-backend-template/internal/domain/auth:
     interfaces:
       UserReader:
       PasswordVerifier:
@@ -21,19 +21,19 @@ packages:
       SessionRepository:
       Authorizer:
       LoginGuard:
-  git.stit.tech/stit/go-backend-template/internal/domain/verification:
+  git.stit.tech/stit-infra/go-backend-template/internal/domain/verification:
     interfaces:
       UserReader:
       PasswordSetter:
       EmailVerificationSetter:
       Repository:
       Mailer:
-  git.stit.tech/stit/go-backend-template/internal/domain/user/delivery/http:
+  git.stit.tech/stit-infra/go-backend-template/internal/domain/user/delivery/http:
     interfaces:
       Usecase:
-  git.stit.tech/stit/go-backend-template/internal/domain/auth/delivery/http:
+  git.stit.tech/stit-infra/go-backend-template/internal/domain/auth/delivery/http:
     interfaces:
       Usecase:
-  git.stit.tech/stit/go-backend-template/internal/domain/verification/delivery/http:
+  git.stit.tech/stit-infra/go-backend-template/internal/domain/verification/delivery/http:
     interfaces:
       Usecase:

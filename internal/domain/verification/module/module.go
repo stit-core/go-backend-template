@@ -3,11 +3,11 @@ package module
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit/go-backend-template/internal/domain/verification"
-	verifhttp "git.stit.tech/stit/go-backend-template/internal/domain/verification/delivery/http"
-	verifnats "git.stit.tech/stit/go-backend-template/internal/domain/verification/delivery/nats"
-	verifpg "git.stit.tech/stit/go-backend-template/internal/domain/verification/infra/postgres"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/verification"
+	verifhttp "git.stit.tech/stit-infra/go-backend-template/internal/domain/verification/delivery/http"
+	verifnats "git.stit.tech/stit-infra/go-backend-template/internal/domain/verification/delivery/nats"
+	verifpg "git.stit.tech/stit-infra/go-backend-template/internal/domain/verification/infra/postgres"
 )
 
 var Module = fx.Module(

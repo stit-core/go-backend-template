@@ -7,8 +7,8 @@ package mocks
 import (
 	"context"
 
-	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-infra/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-infra/go-backend-template/pkg/policy"
 	mock "github.com/stretchr/testify/mock"
 )
 

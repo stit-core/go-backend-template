@@ -9,17 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 
-	"git.stit.tech/stit/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit/go-backend-template/internal/domain/user/mocks"
-	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit/go-backend-template/internal/testkit/identitytest"
-	"git.stit.tech/stit/go-backend-template/pkg/policy"
-	"git.stit.tech/stit/golibinfra/clockkit"
-	"git.stit.tech/stit/golibinfra/logkit"
-	"git.stit.tech/stit/golibinfra/testkit/audittest"
-	"git.stit.tech/stit/golibinfra/testkit/authntest"
-	"git.stit.tech/stit/golibinfra/testkit/eventbus"
-	"git.stit.tech/stit/golibinfra/testkit/txkit"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/user/mocks"
+	"git.stit.tech/stit-infra/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-infra/go-backend-template/internal/testkit/identitytest"
+	"git.stit.tech/stit-infra/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-infra/golibinfra/clockkit"
+	"git.stit.tech/stit-infra/golibinfra/logkit"
+	"git.stit.tech/stit-infra/golibinfra/testkit/audittest"
+	"git.stit.tech/stit-infra/golibinfra/testkit/authntest"
+	"git.stit.tech/stit-infra/golibinfra/testkit/eventbus"
+	"git.stit.tech/stit-infra/golibinfra/testkit/txkit"
 )
 
 func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {

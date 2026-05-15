@@ -7,9 +7,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"git.stit.tech/stit/go-backend-template/internal/domain/auth"
-	"git.stit.tech/stit/go-backend-template/internal/platform/authgate"
-	"git.stit.tech/stit/golibinfra/httpkit"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/auth"
+	"git.stit.tech/stit-infra/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-infra/golibinfra/httpkit"
 )
 
 type Usecase interface {

@@ -6,16 +6,16 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit/go-backend-template/pkg/policy"
-	"git.stit.tech/stit/golibinfra/auditkit"
-	"git.stit.tech/stit/golibinfra/authnkit"
-	"git.stit.tech/stit/golibinfra/clockkit"
-	"git.stit.tech/stit/golibinfra/httpkit"
-	"git.stit.tech/stit/golibinfra/logkit"
-	"git.stit.tech/stit/golibinfra/outboxkit"
-	"git.stit.tech/stit/golibinfra/pgkit"
-	"git.stit.tech/stit/golibinfra/telemetry"
+	"git.stit.tech/stit-infra/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-infra/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-infra/golibinfra/auditkit"
+	"git.stit.tech/stit-infra/golibinfra/authnkit"
+	"git.stit.tech/stit-infra/golibinfra/clockkit"
+	"git.stit.tech/stit-infra/golibinfra/httpkit"
+	"git.stit.tech/stit-infra/golibinfra/logkit"
+	"git.stit.tech/stit-infra/golibinfra/outboxkit"
+	"git.stit.tech/stit-infra/golibinfra/pgkit"
+	"git.stit.tech/stit-infra/golibinfra/telemetry"
 )
 
 const minPasswordLen = 8

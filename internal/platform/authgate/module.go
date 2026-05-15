@@ -6,9 +6,9 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit/golibinfra/httpkit"
-	"git.stit.tech/stit/golibinfra/logkit"
+	"git.stit.tech/stit-infra/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-infra/golibinfra/httpkit"
+	"git.stit.tech/stit-infra/golibinfra/logkit"
 )
 
 const SecuritySchemeName = "Cookie"

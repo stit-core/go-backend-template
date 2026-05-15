@@ -7,7 +7,7 @@ GOFUMPT_VERSION="${GOFUMPT_VERSION:-v0.10.0}"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.12.2}"
 SQLC_VERSION="${SQLC_VERSION:-v1.31.1}"
 MOCKERY_VERSION="${MOCKERY_VERSION:-v3.7.0}"
-# logcli pinned to match Loki server version in stit/infra (compose/loki.yml).
+# logcli pinned to match Loki server version in stit-infra/infra (compose/loki.yml).
 LOGCLI_VERSION="${LOGCLI_VERSION:-v3.7.1}"
 
 GOBIN="$(go env GOPATH)/bin"

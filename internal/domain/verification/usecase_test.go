@@ -8,13 +8,13 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"git.stit.tech/stit/go-backend-template/internal/domain/verification"
-	"git.stit.tech/stit/go-backend-template/internal/domain/verification/mocks"
-	"git.stit.tech/stit/golibinfra/clockkit"
-	"git.stit.tech/stit/golibinfra/logkit"
-	"git.stit.tech/stit/golibinfra/testkit/authntest"
-	"git.stit.tech/stit/golibinfra/testkit/eventbus"
-	"git.stit.tech/stit/golibinfra/testkit/txkit"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/verification"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/verification/mocks"
+	"git.stit.tech/stit-infra/golibinfra/clockkit"
+	"git.stit.tech/stit-infra/golibinfra/logkit"
+	"git.stit.tech/stit-infra/golibinfra/testkit/authntest"
+	"git.stit.tech/stit-infra/golibinfra/testkit/eventbus"
+	"git.stit.tech/stit-infra/golibinfra/testkit/txkit"
 )
 
 type ucFixture struct {

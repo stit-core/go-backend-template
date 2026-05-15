@@ -7,10 +7,10 @@
 ## Где это в экосистеме
 
 **Роль:** шаблон Go-бэкенда. Форкается в `<client-org>/backend`, разработчик собирает + пушит образ в `git.stit.tech/<client-org>/backend:<vX.Y.Z>`. Деплоем этот репо **не занимается** — handoff в `<client-org>/infra`.
-**Зависит от:** `stit/golibinfra` (импорт всех kit'ов: telemetry, httpkit, pgkit, authnkit, outboxkit, natskit, …); `stit/infra` (контракт — `service_namespace == tenant`, OTLP endpoint, registry); `git.stit.tech` (push images).
-**Используется:** `<client-org>/infra` (форк `stit/project-infra-template-compose`) — пуллит образ через `vault kv patch …/meta backend_tag=<tag>` + `make ship` на проектной VPS.
+**Зависит от:** `stit-infra/golibinfra` (импорт всех kit'ов: telemetry, httpkit, pgkit, authnkit, outboxkit, natskit, …); `stit-infra/infra` (контракт — `service_namespace == tenant`, OTLP endpoint, registry); `git.stit.tech` (push images).
+**Используется:** `<client-org>/infra` (форк `stit-infra/project-infra-template-compose`) — пуллит образ через `vault kv patch …/meta backend_tag=<tag>` + `make ship` на проектной VPS.
 
-Карта 4 репо, tenant/AppRole conventions и handoff-флоу — `stit/infra/docs/ecosystem.md`. Локально про observability: `README.md §Observability` и `golibinfra/README.md` (ADR-0004 invariants).
+Карта 4 репо, tenant/AppRole conventions и handoff-флоу — `stit-infra/infra/docs/ecosystem.md`. Локально про observability: `README.md §Observability` и `golibinfra/README.md` (ADR-0004 invariants).
 
 **Точка входа в сессию: `/smartdev`** — даёт сводку о состоянии репо (ветка, drift, активные планы, висящие TODO) и предлагает следующее действие. Если задача нетривиальная — оттуда переключайся в `/plan` для декомпозиции на атомы (план переживает `/clear` через `.claude/plans/<slug>.md`).
 
@@ -124,11 +124,11 @@ scripts/
 `golibinfra/telemetry` поддерживает два режима:
 
 - **Local dev** (дефолт `.env.example`): `OTEL_STDOUT_ONLY=true` — никакого OTLP, всё в stdout. Или: указать локальный коллектор через `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- **Production**: `OTEL_TENANT` + `OTEL_TOKEN` непустые → к каждому OTLP-запросу добавляется `Authorization: Bearer <token>`. Resource attrs приложения: `service.name`, `service.version`, `deployment.environment.name`. `tenant` и `service.namespace` **ставит/перезатирает корп-otel-collector** на edge (по Bearer→`X-Scope-OrgID` через `tenant-auth` middleware → `resource/service_namespace` processor; `service_namespace == tenant` — инвариант, см. `stit/infra` ADR-0004 §2). Приложение может выставить `service.namespace` сам — оно перезатрётся.
+- **Production**: `OTEL_TENANT` + `OTEL_TOKEN` непустые → к каждому OTLP-запросу добавляется `Authorization: Bearer <token>`. Resource attrs приложения: `service.name`, `service.version`, `deployment.environment.name`. `tenant` и `service.namespace` **ставит/перезатирает корп-otel-collector** на edge (по Bearer→`X-Scope-OrgID` через `tenant-auth` middleware → `resource/service_namespace` processor; `service_namespace == tenant` — инвариант, см. `stit-infra/infra` ADR-0004 §2). Приложение может выставить `service.namespace` сам — оно перезатрётся.
 
 Корп-сторона маршрутизирует по `X-Scope-OrgID` header (не по `service.namespace`), но логи/метрики/трейсы получают `service_namespace=<tenant>` как label/attr автоматически — это даёт фильтр в Loki (`{service_namespace="<tenant>"}`) и Tempo (`{resource.service.namespace="<tenant>"}`).
 
-Production-значения **в этот repo не попадают**. Они выдаются корп-onboarding (`stit/infra/scripts/onboard-project.sh`) и рендерятся vault-agent'ом в env_file на проектном VPS — см. `stit/project-infra-template-compose` (ADR 0002 о централизации env'ов в infra-repo).
+Production-значения **в этот repo не попадают**. Они выдаются корп-onboarding (`stit-infra/infra/scripts/onboard-project.sh`) и рендерятся vault-agent'ом в env_file на проектном VPS — см. `stit-infra/project-infra-template-compose` (ADR 0002 о централизации env'ов в infra-repo).
 
 ## 5. Git workflow
 

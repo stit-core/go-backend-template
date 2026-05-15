@@ -1,6 +1,6 @@
 package auth
 
-import "git.stit.tech/stit/golibinfra/bruteforcekit"
+import "git.stit.tech/stit-infra/golibinfra/bruteforcekit"
 
 type LoginInput struct {
 	Email    string

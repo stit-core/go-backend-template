@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"git.stit.tech/stit/go-backend-template/internal/domain/auth"
-	"git.stit.tech/stit/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit/golibinfra/authnkit"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/auth"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-infra/golibinfra/authnkit"
 )
 
 type userReaderAdapter struct {

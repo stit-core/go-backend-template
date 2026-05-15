@@ -37,7 +37,7 @@ paths:
 1. Объяви интерфейс в `usecase.go` (например, `OrderRepository`).
 2. В `.mockery.yml` под нужным пакетом добавь:
    ```yaml
-   git.stit.tech/stit/go-backend-template/internal/domain/order:
+   git.stit.tech/stit-infra/go-backend-template/internal/domain/order:
      interfaces:
        OrderRepository:
    ```
@@ -48,7 +48,7 @@ paths:
 
 ```go
 import (
-    "git.stit.tech/stit/go-backend-template/internal/domain/order/mocks"
+    "git.stit.tech/stit-infra/go-backend-template/internal/domain/order/mocks"
 )
 
 func TestUsecase_CreateOrder(t *testing.T) {
@@ -83,7 +83,7 @@ package mypkg_test
 
 package mypkg_test
 
-import "git.stit.tech/stit/go-backend-template/internal/testkit/pgseed"
+import "git.stit.tech/stit-infra/go-backend-template/internal/testkit/pgseed"
 
 func TestRepo_E2E(t *testing.T) {
     pool := pgseed.New(t)  // testcontainers + миграции

@@ -2,13 +2,13 @@
 
 Шаблон Go HTTP-бэкенда на стеке stit.tech: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + `golibinfra` (telemetry, authn, outbox, brute-force, cache, NATS, audit, clock).
 
-Часть экосистемы из 4 репо: [`stit/infra`](https://git.stit.tech/stit/infra) (corp control plane) ←── **этот** (форкается в `<org>/backend`, build+push) ──► [`stit/project-infra-template-compose`](https://git.stit.tech/stit/project-infra-template-compose) (форкается в `<org>/infra`, deploy) — оба используют [`stit/golibinfra`](https://git.stit.tech/stit/golibinfra). Канон — [`stit/infra/docs/ecosystem.md`](https://git.stit.tech/stit/infra/src/branch/main/docs/ecosystem.md).
+Часть экосистемы из 4 репо: [`stit-infra/infra`](https://git.stit.tech/stit-infra/infra) (corp control plane) ←── **этот** (форкается в `<org>/backend`, build+push) ──► [`stit-infra/project-infra-template-compose`](https://git.stit.tech/stit-infra/project-infra-template-compose) (форкается в `<org>/infra`, deploy) — оба используют [`stit-infra/golibinfra`](https://git.stit.tech/stit-infra/golibinfra). Канон — [`stit-infra/infra/docs/ecosystem.md`](https://git.stit.tech/stit-infra/infra/src/branch/main/docs/ecosystem.md).
 
 ## Использовать как шаблон
 
 В Gitea этот репо помечен `template: true`. Старт нового сервиса:
 
-1. Открыть https://git.stit.tech/stit/go-backend-template → **Use this template** → создать `<org>/<service>`.
+1. Открыть https://git.stit.tech/stit-infra/go-backend-template → **Use this template** → создать `<org>/<service>`.
 2. Склонировать новый репо локально:
    ```bash
    git clone git@git.stit.tech:<org>/<service>.git && cd <service>
@@ -22,7 +22,7 @@
    (`GOPRIVATE` ставится автоматически в `make tools` ниже.)
 4. Заменить module path:
    ```bash
-   OLD=git.stit.tech/stit/go-backend-template
+   OLD=git.stit.tech/stit-infra/go-backend-template
    NEW=git.stit.tech/<org>/<service>
    grep -rl "$OLD" --exclude-dir=.git | xargs sed -i "s|$OLD|$NEW|g"
    go mod edit -module "$NEW" && go mod tidy
@@ -113,8 +113,8 @@ Build локальный (никаких gitea-runner'ов), push в `git.stit.t
 
 | Зона | Где | Что делает |
 |---|---|---|
-| Корп-сторона | `stit/infra` (root-токен Vault, только админ) | `vault kv patch kv/projects/<p>/<env>/meta backend_tag=v1.2.3` |
-| Проектная инфра | `<client-org>/infra` (← `stit/project-infra-template-compose`) | `make ship` → ssh-deploy → `vault-agent` рендерит новый `BACKEND_TAG` → `deploy.sh` force-recreate'ит backend-контейнер |
+| Корп-сторона | `stit-infra/infra` (root-токен Vault, только админ) | `vault kv patch kv/projects/<p>/<env>/meta backend_tag=v1.2.3` |
+| Проектная инфра | `<client-org>/infra` (← `stit-infra/project-infra-template-compose`) | `make ship` → ssh-deploy → `vault-agent` рендерит новый `BACKEND_TAG` → `deploy.sh` force-recreate'ит backend-контейнер |
 | Verify | там же | `make ps`, логи `"starting" service=api version=v1.2.3 commit=<sha>` |
 
 В инфра-репо есть skill `/request-secret` который формирует stdout-блок `vault kv patch …` для корп-админа out-of-band. Здесь, в backend-репо, мы лишь печатаем подсказку — кому что передать.
@@ -196,7 +196,7 @@ biz_verification_password_reset_confirmed_total{result=ok|weak|invalid|expired|a
 
 1. Создай (или расширь) `internal/domain/<x>/metrics.go`:
    ```go
-   import "git.stit.tech/stit/golibinfra/bizmetric"
+   import "git.stit.tech/stit-infra/golibinfra/bizmetric"
 
    type Metrics struct {
        myCounter metric.Int64Counter
@@ -250,22 +250,22 @@ Domain usecase'ы дополнительно открывают span через 
 
 В шапке выбирай `tenant=<project>`, `service=backend`, `env=<твоё-env>`.
 
-> Retention в корп-стеке: **logs/traces — 7 дней**, **metrics — 90 дней** (см. `stit/infra` ADR-0004). Если нужен longer forensic — обсуждать с infra-team отдельно.
+> Retention в корп-стеке: **logs/traces — 7 дней**, **metrics — 90 дней** (см. `stit-infra/infra` ADR-0004). Если нужен longer forensic — обсуждать с infra-team отдельно.
 
 ### Project-specific дашборды (опционально)
 
-Если у проекта есть domain-specific funnel'и/KPI, которые не покрывает шаблонный `Apps · Business` — можно завести **собственные дашборды** в `stit/infra` репо под `configs/grafana/dashboards/Tenants/<project>/`. Это **PR в infra-repo**, не в этом репо:
+Если у проекта есть domain-specific funnel'и/KPI, которые не покрывает шаблонный `Apps · Business` — можно завести **собственные дашборды** в `stit-infra/infra` репо под `configs/grafana/dashboards/Tenants/<project>/`. Это **PR в infra-repo**, не в этом репо:
 
-1. Скопировать [`_skeleton.json.example`](https://git.stit.tech/stit/infra/src/branch/main/configs/grafana/dashboards/Tenants/_skeleton.json.example) в `Tenants/<project>/<topic>.json`.
+1. Скопировать [`_skeleton.json.example`](https://git.stit.tech/stit-infra/infra/src/branch/main/configs/grafana/dashboards/Tenants/_skeleton.json.example) в `Tenants/<project>/<topic>.json`.
 2. Заменить `<PROJECT>`/`<TOPIC>`, добавить panels.
-3. Полный гайд: [`docs/observability-app-guide.md` § 8](https://git.stit.tech/stit/infra/src/branch/main/docs/observability-app-guide.md).
+3. Полный гайд: [`docs/observability-app-guide.md` § 8](https://git.stit.tech/stit-infra/infra/src/branch/main/docs/observability-app-guide.md).
 
 Конвенция: `$tenant` constant + hidden, uid `tenants-<project>-<topic>`, tags `["tenants", "<project>"]`. После merge в infra — provisioner подхватит ≤60 сек, дашборд появится в папке `Tenants/<project>` в Grafana.
 
 ## Контракт со stit-инфрой
 
 - `git.stit.tech` — registry для `<org>/backend{,-migrate}` images (build локальный, см. [Release](#release)).
-- `vault.stit.tech` — secrets backend, AppRole `project-<p>` (см. `stit/infra` → `scripts/onboard-project.sh`).
-- `otel.stit.tech` — OTLP ingest (Bearer-token = `OTEL_TOKEN`). Tenant определяется **на edge** middleware'ом `tenant-auth` по токену → header `X-Scope-OrgID` → resource attr `tenant` через otel-collector. `service.namespace` приложения **перезатирается** на actual tenant (ADR-0004 §2 в `stit/infra` — гарантия инварианта `service_namespace == tenant`).
+- `vault.stit.tech` — secrets backend, AppRole `project-<p>` (см. `stit-infra/infra` → `scripts/onboard-project.sh`).
+- `otel.stit.tech` — OTLP ingest (Bearer-token = `OTEL_TOKEN`). Tenant определяется **на edge** middleware'ом `tenant-auth` по токену → header `X-Scope-OrgID` → resource attr `tenant` через otel-collector. `service.namespace` приложения **перезатирается** на actual tenant (ADR-0004 §2 в `stit-infra/infra` — гарантия инварианта `service_namespace == tenant`).
 - **Корп-дашборды на golibinfra-метриках работают автоматически** — выставлять `service.name`, `service.version`, `deployment.environment.name` достаточно; `tenant` ставит infra.
-- Деплой через `stit/project-infra-template-compose` (docker-compose стек на проектный VPS).
+- Деплой через `stit-infra/project-infra-template-compose` (docker-compose стек на проектный VPS).

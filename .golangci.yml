@@ -60,9 +60,9 @@ linters:
             - "!**/*_test.go"
             - "!**/internal/domain/user/module/**"
           deny:
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/auth"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/auth"
               desc: "user domain must not import auth"
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/verification"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/verification"
               desc: "user domain must not import verification"
         auth-domain-isolation:
           list-mode: lax
@@ -71,9 +71,9 @@ linters:
             - "!**/*_test.go"
             - "!**/internal/domain/auth/module/**"
           deny:
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/user"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/user"
               desc: "auth domain must not import user; use auth.UserReader port + adapter"
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/verification"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/verification"
               desc: "auth domain must not import verification"
         verification-domain-isolation:
           list-mode: lax
@@ -82,9 +82,9 @@ linters:
             - "!**/*_test.go"
             - "!**/internal/domain/verification/module/**"
           deny:
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/user"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/user"
               desc: "verification domain must not import user; use verification.UserReader port + adapter"
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/auth"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/auth"
               desc: "verification domain must not import auth"
         mocks-isolation:
           list-mode: lax
@@ -92,17 +92,17 @@ linters:
             - "**"
             - "!**/*_test.go"
           deny:
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/auth/mocks"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/auth/mocks"
               desc: "mocks are test-only; import only from *_test.go"
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/auth/delivery/http/mocks"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/auth/delivery/http/mocks"
               desc: "mocks are test-only; import only from *_test.go"
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/user/mocks"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/user/mocks"
               desc: "mocks are test-only; import only from *_test.go"
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/user/delivery/http/mocks"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/user/delivery/http/mocks"
               desc: "mocks are test-only; import only from *_test.go"
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/verification/mocks"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/verification/mocks"
               desc: "mocks are test-only; import only from *_test.go"
-            - pkg: "git.stit.tech/stit/go-backend-template/internal/domain/verification/delivery/http/mocks"
+            - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/verification/delivery/http/mocks"
               desc: "mocks are test-only; import only from *_test.go"
     tagalign:
       align: true

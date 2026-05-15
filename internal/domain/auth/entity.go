@@ -3,7 +3,7 @@ package auth
 import (
 	"time"
 
-	"git.stit.tech/stit/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-infra/go-backend-template/internal/platform/identity"
 )
 
 type User struct {

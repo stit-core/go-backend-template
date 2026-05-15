@@ -7,9 +7,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"git.stit.tech/stit/go-backend-template/internal/domain/auth"
-	"git.stit.tech/stit/go-backend-template/internal/domain/auth/infra/postgres/db"
-	"git.stit.tech/stit/golibinfra/pgkit"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/auth"
+	"git.stit.tech/stit-infra/go-backend-template/internal/domain/auth/infra/postgres/db"
+	"git.stit.tech/stit-infra/golibinfra/pgkit"
 )
 
 type Repository struct {
