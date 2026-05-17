@@ -58,17 +58,14 @@
       "Bash(git checkout -- *)",
       "Bash(git clean -f*)",
       "Bash(rm -rf *)",
-      "Read(.env*)",
       "Read(**/credentials*)",
       "Read(**/*.pem)",
       "Read(**/*.key)",
-      "Edit(.env*)",
       "Edit(**/*.pem)",
       "Edit(**/*.key)",
       "Edit(**/infra/postgres/db/**)",
       "Edit(**/mocks/*.go)",
       "Edit(go.sum)",
-      "Write(.env*)",
       "Write(**/infra/postgres/db/**)",
       "Write(**/mocks/*.go)"
     ]
