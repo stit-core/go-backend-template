@@ -7,7 +7,7 @@
 
 `docs/domains/<context>/` ↔ `internal/domain/<context>/` — один Go-пакет, один FX-модуль (`module/module.go`).
 
-`docs/domains/_shared/<Name>.md` (kind=vo) ↔ `internal/platform/<area>/` — платформенные cross-context VO. Не зависят от бизнес-доменов; бизнес-домены импортят их напрямую.
+`docs/domains/_shared/<Name>.md` (kind=vo) ↔ `internal/platform/shared/` — платформенные cross-context VO в одном пакете. Не зависят от бизнес-доменов; бизнес-домены импортят их напрямую.
 
 ## Aggregate / Entity
 
@@ -54,13 +54,13 @@
 
 | Артефакт | Go-код |
 |---|---|
-| `kind: vo` файл (`_shared/<Name>.md`) | `internal/platform/<area>/<name>.go` (`type <Name> struct{...}`) |
+| `kind: vo` файл (`_shared/<Name>.md`) | `internal/platform/shared/<name>.go` (`type <Name> struct{...}`) |
 | Properties → таблица | поля struct'а |
 | Constructor секция | `New<Name>(...) (<Name>, error)` рядом со struct'ом |
 | Invariants | проверки в конструкторе → возврат sentinel-ошибки |
 | Equality | `==` (если все поля comparable) или метод `Equal` |
 | Consumed by | импорты из бизнес-доменов; **не** наоборот — `_shared/` ничего не импортит из `internal/domain/` |
-| Errors секция | sentinel в `internal/platform/<area>/errors.go`; домены оборачивают через `%w` |
+| Errors секция | sentinel в `internal/platform/shared/errors.go`; домены оборачивают через `%w` |
 
 `_shared/` — узкий список (большинство VO остаются inline в aggregate-файле своего контекста). Доменные VO (`Phone`, `Email`, `OrderTotal`) — не сюда: их семантика принадлежит контексту, а не платформе.
 

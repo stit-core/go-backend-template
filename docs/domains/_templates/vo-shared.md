@@ -50,7 +50,7 @@ New<Name>(...) (<Name>, error)
 |---|---|
 | `ErrInvalid<Name>` | <условия> |
 
-Sentinel-ошибка живёт в `internal/platform/<area>/errors.go`.
+Sentinel-ошибка живёт в `internal/platform/shared/errors.go`.
 
 ## Notes
 

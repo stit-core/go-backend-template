@@ -86,6 +86,9 @@ internal/
     authgate/    Гейт authn/authz (JWT + identity.Principal), виден хендлерам
     config/      Прикладной конфиг, fx.Module
     identity/    Типы subject/principal
+    shared/      Cross-context платформенные VO (`docs/domains/_shared/`,
+                 kind: vo). Один файл = один VO + его errors.go. Не зависит
+                 от `internal/domain/`; бизнес-домены импортят напрямую.
   jobs/          Background jobs (например, `bruteforce.go` — cleanup brute-force
                  counters). Поднимаются fx.Lifecycle того же `cmd/api`.
   testkit/       pgseed/, identitytest/ — хелперы для тестов
@@ -152,6 +155,9 @@ docs/domains/
 ├── README.md         ← структура, workflow
 ├── MAPPING.md        ← DDD ↔ Go (куда что ляжет в коде)
 ├── _templates/       ← шаблоны для копирования
+├── _shared/          ← cross-context платформенные VO (kind: vo)
+│   ├── README.md     ← роллап: какие VO здесь и для кого
+│   └── <Name>.md     ← один cross-context VO (PhotoRef, MoneyAmount, …)
 └── <context>/
     ├── README.md     ← purpose + ubiquitous language (роллап)
     ├── <Aggregate>.md
@@ -160,7 +166,9 @@ docs/domains/
     └── policies/<PolicyName>.md
 ```
 
-**Kinds:** `aggregate`, `entity`, `event`, `use-case`, `policy`. Каждый имеет обязательный набор H2-секций, проверяемый валидатором.
+Cross-context платформенный VO (структурно идентичен в ≥2 контекстах, без доменной семантики) — **только** отдельным файлом `_shared/<Name>.md` (`kind: vo`), маппится в `internal/platform/shared/`. Внутри-контекстные VO (`Phone`, `Email`, `OrderTotal`) остаются inline в aggregate-файле своего контекста — в `_shared/` их класть нельзя.
+
+**Kinds:** `aggregate`, `entity`, `event`, `use-case`, `policy`, `vo` (`vo` — только `_shared/`). Каждый имеет обязательный набор H2-секций, проверяемый валидатором.
 
 **Workflow:**
 1. Копируешь шаблоны в `docs/domains/<ctx>/`, заполняешь минимум (frontmatter + Properties + Methods names).

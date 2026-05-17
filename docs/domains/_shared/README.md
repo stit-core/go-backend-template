@@ -4,7 +4,7 @@
 
 1. структурно идентично между ≥2 доменами,
 2. не несёт доменной семантики (не относится к ubiquitous language конкретного контекста),
-3. в Go-коде ляжет в `internal/platform/<area>/`, а не в `internal/domain/<ctx>/`.
+3. в Go-коде ляжет в `internal/platform/shared/`, а не в `internal/domain/<ctx>/`.
 
 ## Purpose
 
