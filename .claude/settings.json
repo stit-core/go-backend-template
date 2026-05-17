@@ -58,7 +58,6 @@
       "Bash(git checkout -- *)",
       "Bash(git clean -f*)",
       "Bash(rm -rf *)",
-      "Read(**/credentials*)",
       "Read(**/*.pem)",
       "Read(**/*.key)",
       "Edit(**/*.pem)",

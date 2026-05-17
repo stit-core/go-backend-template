@@ -25,7 +25,7 @@ description: Прочитать или последить логи задепл�
 ## Pre-flight
 
 - [ ] `command -v logcli` — установлен? Если нет → `make tools` (или скажи юзеру).
-- [ ] `./credentials.md` существует и содержит строку `STIT_OBS_TOKEN=...`? Сам файл **не читай** через `Read` (deny в settings). Просто запусти `logs.sh` — он сам прочитает через bash, или вернёт `FAIL: no STIT_OBS_TOKEN` с инструкцией.
+- [ ] `./credentials.md` существует и содержит строку `STIT_OBS_TOKEN=...`? Сам файл читать не нужно — запусти `logs.sh`, он прочитает токен через bash (значение не попадёт в чат), или вернёт `FAIL: no STIT_OBS_TOKEN` с инструкцией.
 - [ ] Знаешь `service` label? Дефолт в шаблоне — имя бинаря (`api` для runtime, `migrate` для init-контейнера миграций); маппинг — `OTEL_SERVICE_NAME` env при деплое.
 - [ ] Для `watch` — оценил длительность? Не больше 10m по дефолту, юзер может расширить.
 
@@ -70,7 +70,7 @@ scripts/agent-tools/logs.sh watch --service api --for 5m
 
 ## Anti-patterns
 
-- ❌ `cat ./credentials.md` или `Read` на него — Claude этого не может, deny в settings. Только через `logs.sh`.
+- ❌ `cat ./credentials.md` / `Read` на него ради токена — значение утечёт в transcript/память. Доступ к токену — только через `logs.sh` (держит его в bash-процессе).
 - ❌ Цитировать токен в чат, даже частично. Если случайно подсмотрел в exec output — НЕ повторяй.
 - ❌ Гонять `watch --for 30m` без явного OK юзера. Cache miss + большой transcript.
 - ❌ Звать `query --raw` без `{}-matcher` — Loki потребует label selector, выдаст 400.

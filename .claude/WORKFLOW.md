@@ -141,7 +141,7 @@ Plan mode запрещает edits до approve.
 | AGENTS.md | repo root | Always-on advisory | Каждый запуск |
 | Subagent system prompts | `.claude/agents/*.md` | Role-specific | Когда subagent вызван |
 
-Цитата Anthropic: *"CLAUDE.md instructions are advisory; hooks are deterministic and guarantee the action happens."* Поэтому критичные инварианты (gofumpt, no `--no-verify`, no edits сгенерированных файлов и credentials/ключей) — в хуках. Soft-guidance (стиль, conventions) — в AGENTS.md и rules.
+Цитата Anthropic: *"CLAUDE.md instructions are advisory; hooks are deterministic and guarantee the action happens."* Поэтому критичные инварианты (gofumpt, no `--no-verify`, no edits сгенерированных файлов и `*.pem`/`*.key`) — в хуках. Soft-guidance (стиль, conventions) — в AGENTS.md и rules.
 
 ## 5. Course correction — как вмешаться
 

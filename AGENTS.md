@@ -192,7 +192,7 @@ docs/domains/
 
 ### Не делать никогда
 - Скипать pre-commit / pre-push через `--no-verify`. PreToolUse-хук это блокирует.
-- Коммитить креды / `*.pem` / `*.key`. Pre-write хук защищает эти пути. (`.env` / `.env.local` правятся свободно — от коммита страхует `.gitignore`.)
+- Коммитить `credentials.md` / `.env` / `*.pem` / `*.key` или цитировать их содержимое в чат. От коммита страхует `.gitignore`; pre-write хук защищает от правки только `*.pem` / `*.key` + сгенерированные файлы.
 - Править сгенерированные файлы руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`). Регенерируй через `make sqlc` / `make mocks`.
 - Использовать `fmt.Print*` или `slog.*` напрямую. Только `logkit.Logger`.
 - Пушить в `main` напрямую. PR + squash-merge.

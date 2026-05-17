@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code hook: PreToolUse на Edit/Write/MultiEdit.
-# Защищает пути от прямой правки: секреты (credentials/ключи), сгенерированные файлы.
+# Защищает пути от прямой правки: ключи (*.pem/*.key/*secrets*), сгенерированные файлы.
 
 set -uo pipefail
 
@@ -29,7 +29,7 @@ EOF
 
 # Секреты.
 case "$REL" in
-    *.pem|*.key|*credentials*|*secrets*)
+    *.pem|*.key|*secrets*)
         block "путь похож на секреты. Если это не так и реально нужно записать — пользователь должен явно одобрить."
         ;;
 esac

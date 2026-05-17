@@ -1,6 +1,6 @@
 ---
 name: dev-tokens
-description: Формат и правила использования ./credentials.md — локальный файл с токенами для dev-tooling. Gitignored, не читается Claude'ом напрямую (deny в settings + pre-write-protect hook). Грузится при работе с credentials.md или agent-tools/logs.sh.
+description: Формат и правила использования ./credentials.md — локальный файл с токенами для dev-tooling. Gitignored. Доступ к значению токена — через agent-tools (logs.sh), не цитированием в чат. Грузится при работе с credentials.md или agent-tools/logs.sh.
 globs: "credentials.md,scripts/agent-tools/logs.sh"
 ---
 
@@ -34,9 +34,9 @@ FOO_TOKEN=bar
 
 ## Кто читает
 
-- **Claude НЕ может читать `credentials.md` напрямую.** `Read(**/credentials*)` в `.claude/settings.json` → deny. Страховка от утечки в чат/память.
-- **Agent-tools читают через shell.** Пример: `scripts/agent-tools/logs.sh` делает `grep -m1 -oE 'STIT_OBS_TOKEN=...'`, передаёт `logcli` как `LOKI_BEARER_TOKEN`. Токен остаётся внутри bash-процесса, в stdout не попадает.
-- **Pre-write hook** (`scripts/claude-hooks/pre-write-protect.sh`) блокирует `Edit`/`Write` на пути `*credentials*` — обновление файла идёт **юзером руками**, не Claude'ом.
+- **Доступ к значению токена — только через agent-tools.** `scripts/agent-tools/logs.sh` делает `grep -m1 -oE 'STIT_OBS_TOKEN=...'`, передаёт `logcli` как `LOKI_BEARER_TOKEN`. Токен остаётся внутри bash-процесса, в stdout/transcript не попадает.
+- **Claude технически может читать/писать `credentials.md`** (нет deny/хука на этот путь). Но `Read`/`cat` ради токена — необратимая утечка в transcript и `MEMORY.md` (придётся ротировать). Поэтому: значение токена не вытаскивай в чат — зови agent-tool.
+- **Обновление файла — предпочтительно юзером руками.** Если правит Claude — не эхо-ить значения в вывод.
 
 ## Правила
 
