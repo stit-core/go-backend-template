@@ -157,7 +157,7 @@ Plan mode запрещает edits до approve.
 ## 6. Что осознанно не делаем
 
 - ❌ Multi-agent swarm. Cognition + Anthropic Multi-Agent Research caveat про код.
-- ❌ Hierarchy team-lead → task-lead → workers (предыдущая попытка). Cognition Principle 1 ("share full traces") сложнее в иерархии чем в едином агенте с subagent-изоляцией.
+- ❌ Hierarchy team-lead → task-lead → workers. Cognition Principle 1 ("share full traces") сложнее в иерархии чем в едином агенте с subagent-изоляцией.
 - ❌ 22 специализированных агента. GitHub 2,500-repo study: успех = чёткие границы в *правилах*, не множественность *агентов*.
 - ❌ Vector DB для retrieval. Sourcegraph дропнул, Aider использует AST. ripgrep + `gopls` достаточно для Go-репо.
 - ❌ Bloated CLAUDE.md. Anthropic: bloat снижает adherence. Лимит 200 строк.

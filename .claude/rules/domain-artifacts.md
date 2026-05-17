@@ -53,7 +53,7 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
 2. Заполнить frontmatter + минимум (Properties с именами+типами, Methods с именами).
 3. `/domain-deepen <ctx>` — углубление по волнам inside-out.
 4. `scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>` — зелёный → промоушн `status: stable`.
-5. `add-domain` / `add-endpoint` / `add-event` теперь разрешены (claude-hook гейтит).
+5. `add-domain` / `add-endpoint` / `add-event` разрешены только при зелёном валидаторе (claude-hook гейтит).
 
 ## Делать
 
