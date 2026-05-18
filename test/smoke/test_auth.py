@@ -77,6 +77,48 @@ def test_bruteforce_counter_persisted(
 
 
 @pytest.mark.smoke
+def test_bruteforce_lock(
+    api: Api, user: RegisteredUser, other_user: RegisteredUser, pg: Pg
+) -> None:
+    # BRUTEFORCE_MAX_FAILURES=5: давим неверным паролем пока не словим 429
+    got_lock = False
+    for _ in range(8):
+        if (
+            api.status(
+                "POST",
+                "/api/auth/login",
+                json={"email": user.email, "password": "nope"},
+            )
+            == 429
+        ):
+            got_lock = True
+            break
+    assert got_lock, "lock (429) не наступил за 8 попыток при MAX_FAILURES=5"
+
+    rows = pg.bruteforce_for(user.email)
+    assert any(r["locked_until"] is not None for r in rows)
+
+    # верный пароль во время лока тоже 429 (lock перекрывает)
+    assert (
+        api.status(
+            "POST",
+            "/api/auth/login",
+            json={"email": user.email, "password": user.password},
+        )
+        == 429
+    )
+    # другой свежий email не залочен — один неверный даёт 401, не 429
+    assert (
+        api.status(
+            "POST",
+            "/api/auth/login",
+            json={"email": other_user.email, "password": "nope"},
+        )
+        == 401
+    )
+
+
+@pytest.mark.smoke
 def test_change_password(
     api: Api, user: RegisteredUser, stack: str
 ) -> None:
