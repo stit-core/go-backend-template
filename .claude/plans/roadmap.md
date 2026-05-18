@@ -6,8 +6,7 @@
 
 ## Active
 
-- [cmd-seed-admin](./cmd-seed-admin.md) — Go `cmd/seed-admin` (authnkit-хеш) + stack-wiring + .env.local + admin/other_user фикстуры (План A, ops-bootstrap) — `planning` 0/5 atoms
-- [e2e-exhaustive-coverage](./e2e-exhaustive-coverage.md) — coverage-матрица: authz/bruteforce-lock/write/негативы/list (План B, blocked-by `cmd-seed-admin`) — `planning` 0/10 atoms
+- [e2e-exhaustive-coverage](./e2e-exhaustive-coverage.md) — coverage-матрица: authz/bruteforce-lock/write/негативы/list (План B) — `in-progress` 0/10 atoms
 
 ## Backlog (idea state)
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).

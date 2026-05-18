@@ -2,7 +2,7 @@
 
 **Slug:** `e2e-exhaustive-coverage`
 **Создан:** 2026-05-18
-**Статус:** planning (blocked-by `cmd-seed-admin`)
+**Статус:** in-progress
 **Последний чекпоинт:** 2026-05-18 (см. ниже)
 
 ## Контекст
@@ -125,3 +125,9 @@ bruteforce-LOCK, write-ручки, тонкие негативы, list. Go-ст�
   blocked-by Плана A.
 - Obsolete `test/infra/seed.py` (написан до пивота) удаляется в Плане A (PA4).
 - Следующий шаг: после approve — выполнить План A, затем разблокировать B1.
+
+### 2026-05-18 — План A закрыт, B разблокирован
+- План A (`cmd-seed-admin`) закрыт 5/5: `cmd/seed-admin` + stack-wiring +
+  `.env.local` E2E_ADMIN_* + фикстуры `admin`/`other_user`. Admin login→200
+  доказан. Коммиты `ef4f7fa..ca76ac1` в ветке `e2e-harness`.
+- Этот план разблокирован. Следующий шаг: B1 (authz list).
