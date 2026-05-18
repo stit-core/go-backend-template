@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +12,9 @@ import pytest
 
 from client.http import Api
 from client.models import RegisterRequest
+from infra.nats import NatsCollector
+from infra.pg import Pg
+from infra.redis import RedisInspect
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _BASE_URL = "http://127.0.0.1:8080"
@@ -66,3 +69,26 @@ def user(api: Api) -> RegisteredUser:
     )
     api.register(RegisterRequest(email=u.email, password=u.password, name=u.name))
     return u
+
+
+@pytest.fixture
+def pg(stack: str) -> Iterator[Pg]:
+    with Pg() as p:
+        yield p
+
+
+@pytest.fixture
+def redis(stack: str) -> Iterator[RedisInspect]:
+    with RedisInspect() as r:
+        yield r
+
+
+@pytest.fixture
+def nats_collector(stack: str) -> Callable[[list[str]], NatsCollector]:
+    """Фабрика: тест сам входит в `with`, чтобы подписка встала ДО HTTP-действия
+    (core NATS без реплея)."""
+
+    def _make(subjects: list[str]) -> NatsCollector:
+        return NatsCollector(subjects)
+
+    return _make
