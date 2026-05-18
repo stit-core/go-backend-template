@@ -124,6 +124,24 @@ services:
         condition: service_healthy
     networks: [smoke]
 
+  seed-admin:
+    image: backend-smoke:local
+    container_name: smoke-seed-admin
+    environment:
+      <<: *app-env
+      SEED_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
+      SEED_ADMIN_PASSWORD: ${E2E_ADMIN_PASSWORD}
+      SEED_ADMIN_NAME: E2E Admin
+    entrypoint: ["seed-admin"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-agent:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [smoke]
+
   api:
     image: backend-smoke:local
     container_name: smoke-api
@@ -140,6 +158,8 @@ services:
       otel-agent:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      seed-admin:
         condition: service_completed_successfully
     ports:
       - "127.0.0.1:8080:8080"

@@ -55,6 +55,14 @@ fi
 export STIT_OBS_TOKEN="$TOKEN"
 export OTEL_TENANT="$TENANT"
 
+# Креды seed-admin (one-off bootstrap первого admin). Не прод-секрет —
+# admin эфемерного e2e-стека; дефолты если .env.local не задаёт.
+export E2E_ADMIN_EMAIL="$(resolve_kv E2E_ADMIN_EMAIL "${E2E_ADMIN_EMAIL:-}" || true)"
+export E2E_ADMIN_PASSWORD="$(resolve_kv E2E_ADMIN_PASSWORD "${E2E_ADMIN_PASSWORD:-}" || true)"
+: "${E2E_ADMIN_EMAIL:=e2e-admin@example.com}"
+: "${E2E_ADMIN_PASSWORD:=e2e-admin-pass-1234}"
+export E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD
+
 # === Build binaries locally ===
 mkdir -p "$BIN_DIR"
 echo "== Build (CGO_ENABLED=0) =="
