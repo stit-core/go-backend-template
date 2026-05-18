@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 import subprocess
 import uuid
 from collections.abc import Callable, Iterator
@@ -11,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from client.http import Api
-from client.models import RegisterRequest
+from client.models import LoginRequest, RegisterRequest
 from infra.nats import NatsCollector
 from infra.pg import Pg
 from infra.redis import RedisInspect
@@ -25,6 +27,20 @@ class RegisteredUser:
     email: str
     password: str
     name: str
+
+
+def _env_local(key: str, default: str) -> str:
+    """env > ./.env.local > default. Значение не логируем (как up.sh)."""
+    if os.environ.get(key):
+        return os.environ[key]
+    f = _REPO_ROOT / ".env.local"
+    if f.is_file():
+        pat = re.compile(rf"^\s*(?:export\s+)?{re.escape(key)}=(.*)$")
+        for line in f.read_text().splitlines():
+            m = pat.match(line)
+            if m:
+                return m.group(1).strip().strip("\"'")
+    return default
 
 
 def _run(script: str) -> subprocess.CompletedProcess[str]:
@@ -68,6 +84,31 @@ def user(api: Api) -> RegisteredUser:
         name="E2E Tester",
     )
     api.register(RegisterRequest(email=u.email, password=u.password, name=u.name))
+    return u
+
+
+@pytest.fixture
+def admin(stack: str) -> Iterator[Api]:
+    """Api, залогиненный как admin. Самого админа создаёт cmd/seed-admin
+    one-off при старте стека; здесь только login кредами из .env.local."""
+    email = _env_local("E2E_ADMIN_EMAIL", "e2e-admin@example.com")
+    password = _env_local("E2E_ADMIN_PASSWORD", "e2e-admin-pass-1234")
+    with Api(stack) as client:
+        client.login(LoginRequest(email=email, password=password))
+        yield client
+
+
+@pytest.fixture
+def other_user(stack: str) -> RegisteredUser:
+    """Второй обычный client (cross-user 403). Регистрируется своим Api,
+    чтобы не трогать cookie-сессию теста."""
+    u = RegisteredUser(
+        email=f"other-{uuid.uuid4().hex[:12]}@example.com",
+        password="e2e-pass-12345",
+        name="Other User",
+    )
+    with Api(stack) as c:
+        c.register(RegisterRequest(email=u.email, password=u.password, name=u.name))
     return u
 
 
