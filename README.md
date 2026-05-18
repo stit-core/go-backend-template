@@ -93,11 +93,12 @@ scripts/agent-tools/        обёртки с компактным выводо�
 | Стек (docker + секреты, bash) | `test/stack/` — `up.sh`/`down.sh`, `compose.yml`, `Dockerfile.local`, `configs/` |
 | Транспорт + pydantic-модели | `test/client/` |
 | Переиспользуемые step-функции | `test/scenarios/` |
+| Infra-интроспекция side-effects | `test/infra/` — `pg`/`outbox`/`nats`/`redis` |
 | Smoke-тесты (`@pytest.mark.smoke`) | `test/smoke/` |
 | E2E-тесты (`@pytest.mark.e2e`) | `test/e2e/` |
-| Фикстуры (session-стек, api, user) | `test/conftest.py` |
+| Фикстуры (session-стек, api, user, pg, redis, nats) | `test/conftest.py` |
 
-Папки организуют, маркеры селектят (`pytest -m smoke` / `-m e2e`).
+Папки организуют, маркеры селектят (`pytest -m smoke` / `-m e2e`). Тесты не только black-box: `test/infra/` ходит в Postgres/NATS/Redis (порты на `127.0.0.1`) и ассертит side-effects — строки БД, outbox-эвенты, core-NATS доставку, cross-domain async-флоу.
 
 ```
 make e2e          # весь набор: поднять стек → pytest → снести
