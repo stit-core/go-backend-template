@@ -36,6 +36,26 @@ Showcase полного async-пути — `e2e/test_event_flow.py`. Bruteforce-
 `admin` логинится этими кредами; `other_user` — второй client для
 cross-user 403.
 
+## Покрытие и границы
+
+Покрыто (side-effects сверяются в Postgres/outbox/NATS):
+- **auth**: login/refresh-rotation/reuse-detect/logout, change-password,
+  bruteforce-LOCK (429 + `locked_until`).
+- **user**: register, /me, get-by-id, list (пагинация/`status`/границы),
+  PATCH (optimistic version → 409), DELETE (soft → `status=deleted`).
+- **authz** (`user/policy.go`): list = admin-only; get/update/delete =
+  selfOrAdmin; cross-user → 403.
+- **negatives**: huma schema-валидация (4xx, у v2 — 422), 404, 401-без-cookie.
+- **cross-domain**: register → outbox → core-NATS → verification consume →
+  `email_verifications` (`e2e/test_event_flow.py`).
+
+Сознательно вне e2e: **verification confirm-roundtrip** (email-verify /
+password-reset confirm). У шаблона нет канала доставки — `logMailerAdapter`
+заглушка by design, raw-токен в outbox/NATS осознанно отсутствует. Это не
+баг и не дыра харнеса: confirm-логика — дом Go usecase/integration-тестов,
+request-side покрыт e2e. Реальный Mailer + mail-capture (Mailpit) — extension
+point форка.
+
 ## Запуск
 
 Нужен Docker и `./.env.local` с `STIT_OBS_TOKEN` + `OTEL_TENANT`
