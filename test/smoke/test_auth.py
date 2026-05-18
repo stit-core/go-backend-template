@@ -74,3 +74,54 @@ def test_bruteforce_counter_persisted(
     rows = pg.bruteforce_for(user.email)
     assert len(rows) >= 1
     assert sum(int(r["failed_count"]) for r in rows) >= 1
+
+
+@pytest.mark.smoke
+def test_change_password(
+    api: Api, user: RegisteredUser, stack: str
+) -> None:
+    login(api, user.email, user.password)
+    uid = api.me().id
+    new_password = "new-pass-123456"
+
+    # неверный old → 401
+    assert (
+        api.status(
+            "POST",
+            "/api/auth/change-password",
+            json={
+                "user_id": uid,
+                "old_password": "WRONG-old",
+                "new_password": new_password,
+            },
+        )
+        == 401
+    )
+    # верный old → 204
+    api.expect(
+        "POST",
+        "/api/auth/change-password",
+        expected=204,
+        json={
+            "user_id": uid,
+            "old_password": user.password,
+            "new_password": new_password,
+        },
+    )
+    # старый пароль больше не логинит, новый — да
+    with Api(stack) as fresh:
+        assert (
+            fresh.status(
+                "POST",
+                "/api/auth/login",
+                json={"email": user.email, "password": user.password},
+            )
+            == 401
+        )
+    with Api(stack) as fresh2:
+        fresh2.expect(
+            "POST",
+            "/api/auth/login",
+            expected=200,
+            json={"email": user.email, "password": new_password},
+        )
