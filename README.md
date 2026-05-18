@@ -84,6 +84,28 @@ scripts/agent-tools/        обёртки с компактным выводо�
 
 См. `AGENTS.md §3` — структура расписана подробнее.
 
+## E2E
+
+Типизированный pytest-харнес в `test/` поверх docker-compose стека (postgres/nats/redis/otel-agent/migrate/api). Чёткое разделение зон:
+
+| Зона | Где |
+|---|---|
+| Стек (docker + секреты, bash) | `test/stack/` — `up.sh`/`down.sh`, `compose.yml`, `Dockerfile.local`, `configs/` |
+| Транспорт + pydantic-модели | `test/client/` |
+| Переиспользуемые step-функции | `test/scenarios/` |
+| Smoke-тесты (`@pytest.mark.smoke`) | `test/smoke/` |
+| E2E-тесты (`@pytest.mark.e2e`) | `test/e2e/` |
+| Фикстуры (session-стек, api, user) | `test/conftest.py` |
+
+Папки организуют, маркеры селектят (`pytest -m smoke` / `-m e2e`).
+
+```
+make e2e          # весь набор: поднять стек → pytest → снести
+make e2e-smoke    # только -m smoke (быстрый gate)
+```
+
+Нужен Docker и `./.env.local` с `STIT_OBS_TOKEN` + `OTEL_TENANT` (шаблон — `.env.local.example`; формат — `.claude/rules/env-local.md`). Детали и пины — `test/README.md`.
+
 ## Release
 
 **Зона ответственности этого репо: код → image в registry. На этом — STOP.** Деплой, vault-patch и проверка контейнера на проде — другие репо (см. [Handoff](#handoff) ниже).

@@ -7,8 +7,12 @@ bin/
 *.out
 coverage.*
 
-credential.md
-credentials.md
+# Python e2e-харнес (test/)
+test/.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Claude Code local state
 .claude/settings.local.json

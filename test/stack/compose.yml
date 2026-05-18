@@ -89,7 +89,7 @@ services:
     volumes:
       - ./configs/otel-agent.yaml:/etc/otel/config.yaml:ro
     environment:
-      # Резолвится в up.sh из ./credential.md.
+      # Резолвится в up.sh из ./.env.local.
       OTEL_TENANT: ${OTEL_TENANT}
       OTEL_TOKEN: ${STIT_OBS_TOKEN}
     healthcheck:
@@ -107,7 +107,7 @@ services:
     container_name: smoke-migrate
     build:
       context: ../..
-      dockerfile: scripts/smoke/Dockerfile.local
+      dockerfile: test/stack/Dockerfile.local
     environment:
       <<: *app-env
     entrypoint: ["migrate"]

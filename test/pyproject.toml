@@ -1,0 +1,25 @@
+# Только tool-конфиг. Зависимости — test/requirements.txt (не packaging-проект:
+# editable install не используется, импорты через pytest pythonpath).
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["."]
+pythonpath = ["."]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+  "smoke: быстрый boot + критический happy-path, CI-gate",
+  "e2e: полный сценарий по домену",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+files = ["client", "scenarios", "conftest.py"]

@@ -1,0 +1,7 @@
+# Pinned deps для e2e-харнеса. Ставится в test/.venv (см. Makefile `make e2e`).
+# Обновление пинов — осознанно, через ревью (как go.mod).
+pytest==8.3.4
+httpx==0.28.1
+pydantic==2.10.4
+ruff==0.8.6
+mypy==1.14.1

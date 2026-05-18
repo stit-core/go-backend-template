@@ -1,4 +1,4 @@
-.PHONY: help tools test test-int test-fuzz test-bench test-cover lint fmt build tidy migrate-up migrate-down new-domain hooks-install sqlc sqlc-diff mocks mocks-check pre-merge release-check release image-api image-migrate
+.PHONY: help tools test test-int test-fuzz test-bench test-cover e2e e2e-smoke lint fmt build tidy migrate-up migrate-down new-domain hooks-install sqlc sqlc-diff mocks mocks-check pre-merge release-check release image-api image-migrate
 
 # Release-вычисления. Image-path выводится из `git remote get-url origin`
 # (host+org), repo-name всегда `backend` — совпадает с infra-template
@@ -36,6 +36,12 @@ test-bench: ## Бенчмарки
 test-cover: ## Coverage по доменным пакетам
 	go test -short -coverprofile=coverage.out ./internal/domain/... ./internal/platform/...
 	go tool cover -func=coverage.out | tail -1
+
+e2e: ## Типизированный e2e-харнес (test/): поднимает стек, гоняет pytest, сносит. Нужен Docker + ./.env.local
+	@bash scripts/agent-tools/e2e.sh --format=detailed
+
+e2e-smoke: ## Только smoke-набор e2e-харнеса (-m smoke) — быстрый gate
+	@bash scripts/agent-tools/e2e.sh --smoke --format=detailed
 
 lint: ## golangci-lint
 	golangci-lint run

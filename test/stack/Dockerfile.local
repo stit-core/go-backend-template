@@ -1,7 +1,7 @@
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates
 # Context = repo root (см. compose.yml: build.context: ../..).
-COPY scripts/smoke/bin/api      /usr/local/bin/api
-COPY scripts/smoke/bin/migrate  /usr/local/bin/migrate
+COPY test/stack/bin/api      /usr/local/bin/api
+COPY test/stack/bin/migrate  /usr/local/bin/migrate
 COPY migrations                  /migrations
 EXPOSE 8080

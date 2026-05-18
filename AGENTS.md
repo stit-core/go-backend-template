@@ -50,7 +50,8 @@
 | `agent-tools/repomap.sh [pkg]` | (нет) | Сводка публичных символов по пакетам, размер ограничен бюджетом |
 | `agent-tools/status.sh [--full]` | (нет) | Сводка состояния репо для `/smartdev`: ветка, working tree, активные планы, домены, миграции, TODO. `--full` добавляет sqlc-diff/mocks/lint. |
 | `agent-tools/validate-domain-doc.sh [path]` | (нет) | Валидатор DDD-артефактов в `docs/domains/`. Проверяет frontmatter, обязательные секции, при `status: stable` — non-empty bodies + ref-целостность. |
-| `agent-tools/logs.sh {query\|errors\|watch}` | (нет) | Чтение прод-логов через корп-Loki (`loki.stit.tech`) под bearer-токеном из `./credentials.md`. Локальный dev — логи в stdout, тулза не нужна. Подробнее — skill `query-logs`. |
+| `agent-tools/logs.sh {query\|errors\|watch}` | (нет) | Чтение прод-логов через корп-Loki (`loki.stit.tech`) под bearer-токеном из `./.env.local`. Локальный dev — логи в stdout, тулза не нужна. Подробнее — skill `query-logs`. |
+| `agent-tools/e2e.sh [--smoke]` | `make e2e` | Поднять стек → pytest-харнес `test/` → снести. На фейле падающие тесты + хвост вывода; в конце `OK`/`FAIL`. Нужен Docker + `./.env.local`. |
 
 Все обёртки принимают `--format=concise|detailed` и заканчиваются одной канонической строкой статуса (`OK` / `FAIL: <reason>`).
 
@@ -60,6 +61,7 @@
 - **Интеграционные тесты** под build-tag `integration`: `//go:build integration`. Запускаются через `make test-int`. Поднимают Postgres + NATS через `internal/testkit/pgseed` и `testcontainers-go`.
 - **Моки** — mockery v3, файлы `<interface_snake>.go` в подпакете `mocks/` рядом с интерфейсом (пакет `mocks`, тип `Mock<Interface>`). Конфиг — `.mockery.yml`. Руками никогда не править — `make mocks` после изменения интерфейсов.
 - **Fuzz**-таргеты лежат рядом с тестами; `make test-fuzz` гоняет 10s-смок на каждую цель.
+- **E2E/smoke** — типизированный pytest-харнес в `test/` поверх docker-compose стека. `make e2e` / `make e2e-smoke` (или `scripts/agent-tools/e2e.sh [--smoke]`). Зоны: `test/stack/` (docker+bash), `test/client/` (typed httpx+pydantic), `test/scenarios/` (step-функции), `test/smoke/` + `test/e2e/` (тесты, маркеры `smoke`/`e2e`). Нужен Docker + `./.env.local`. Детали — `test/README.md`.
 - **TDD обязателен** для багфиксов: сначала пишешь падающий тест, видишь red, потом фиксишь до green.
 
 ## 3. Структура проекта
@@ -96,6 +98,9 @@ pkg/
   policy/        Публичные policy-примитивы
   tokens/        Публичные token-примитивы
 migrations/      NNNN_name.up.sql + NNNN_name.down.sql, последовательная нумерация
+test/            E2E/smoke-харнес (pytest): stack/ (docker+bash up.sh/down.sh),
+                 client/ (typed httpx+pydantic), scenarios/ (step-функции),
+                 smoke/ + e2e/ (тесты, маркеры). Запуск — make e2e / e2e-smoke.
 scripts/
   agent-tools/   Обёртки с agent-friendly выводом (см. §1)
   claude-hooks/  Детерминированные хуки для Claude Code
@@ -200,7 +205,7 @@ Cross-context платформенный VO (структурно идентич
 
 ### Не делать никогда
 - Скипать pre-commit / pre-push через `--no-verify`. PreToolUse-хук это блокирует.
-- Коммитить `credentials.md` / `.env` / `*.pem` / `*.key` или цитировать их содержимое в чат. От коммита страхует `.gitignore`; pre-write хук защищает от правки только `*.pem` / `*.key` + сгенерированные файлы.
+- Коммитить `.env.local` / `.env` / `*.pem` / `*.key` или цитировать их содержимое в чат. От коммита страхует `.gitignore`; pre-write хук защищает от правки только `*.pem` / `*.key` + сгенерированные файлы.
 - Править сгенерированные файлы руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`). Регенерируй через `make sqlc` / `make mocks`.
 - Использовать `fmt.Print*` или `slog.*` напрямую. Только `logkit.Logger`.
 - Пушить в `main` напрямую. PR + squash-merge.

@@ -3,8 +3,8 @@
 # cadvisor/node-exporter). Приём OTLP от backend, обогащение
 # service.namespace+tenant из env, форвард в corp otel.stit.tech.
 #
-# OTEL_TENANT и OTEL_TOKEN приходят из smoke-up.sh (резолвится из
-# ./credential.md). Endpoint — корп-константа.
+# OTEL_TENANT и OTEL_TOKEN приходят из test/stack/up.sh (резолвится из
+# ./.env.local). Endpoint — корп-константа.
 
 receivers:
   otlp:

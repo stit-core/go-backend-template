@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# scripts/smoke/up.sh — собрать бинари локально и поднять smoke-стек.
+# test/stack/up.sh — собрать бинари локально и поднять стек.
 #
 # Резолв секретов (НЕ логируем, НЕ возвращаем наружу):
-#   STIT_OBS_TOKEN: env > ./credentials.md > ./credential.md
-#   OTEL_TENANT:    env > ./credentials.md > ./credential.md
+#   STIT_OBS_TOKEN: env > ./.env.local
+#   OTEL_TENANT:    env > ./.env.local
 #
 # Шаги:
-#   1. Build api/worker/migrate бинарей локально в scripts/smoke/bin/
+#   1. Build api/worker/migrate бинарей локально в test/stack/bin/
 #      (использует прогретый GOMODCACHE; не нужен ssh/.netrc в docker).
 #   2. docker compose up -d --build с подстановкой токена через окружение.
 #   3. Дождаться healthy / migrate completed.
@@ -17,9 +17,9 @@ set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-SMOKE_DIR="scripts/smoke"
-BIN_DIR="$SMOKE_DIR/bin"
-COMPOSE="$SMOKE_DIR/compose.yml"
+STACK_DIR="test/stack"
+BIN_DIR="$STACK_DIR/bin"
+COMPOSE="$STACK_DIR/compose.yml"
 
 # === Token resolution ===
 resolve_kv() {
@@ -29,28 +29,26 @@ resolve_kv() {
         printf '%s' "$env_val"
         return 0
     fi
-    for f in credentials.md credential.md; do
-        if [ -f "$f" ]; then
-            local v
-            v=$(grep -m1 -oE "${key}=[^[:space:]\`\"']+" "$f" 2>/dev/null | head -1 | cut -d= -f2-)
-            if [ -n "$v" ]; then
-                printf '%s' "$v"
-                return 0
-            fi
-        fi
-    done
-    return 1
+    local file=".env.local"
+    [ -f "$file" ] || return 1
+    local line v
+    line=$(grep -E "^[[:space:]]*(export[[:space:]]+)?${key}=" "$file" 2>/dev/null | tail -1)
+    [ -n "$line" ] || return 1
+    v="${line#*=}"
+    v="${v%\"}"; v="${v#\"}"
+    v="${v%\'}"; v="${v#\'}"
+    printf '%s' "$v"
 }
 
 TOKEN=$(resolve_kv STIT_OBS_TOKEN "${STIT_OBS_TOKEN:-}") || true
 TENANT=$(resolve_kv OTEL_TENANT "${OTEL_TENANT:-}") || true
 
 if [ -z "${TOKEN:-}" ]; then
-    echo "FAIL: no STIT_OBS_TOKEN. Add line 'STIT_OBS_TOKEN=<token>' to ./credentials.md (or set env)." >&2
+    echo "FAIL: no STIT_OBS_TOKEN. Add line 'STIT_OBS_TOKEN=<token>' to ./.env.local (or set env)." >&2
     exit 1
 fi
 if [ -z "${TENANT:-}" ]; then
-    echo "FAIL: no OTEL_TENANT. Add line 'OTEL_TENANT=<tenant>' to ./credentials.md (or set env)." >&2
+    echo "FAIL: no OTEL_TENANT. Add line 'OTEL_TENANT=<tenant>' to ./.env.local (or set env)." >&2
     exit 1
 fi
 
