@@ -74,6 +74,9 @@ cmd/
                  (golibinfra/outboxkit) + NATS subscribers + background jobs.
   migrate/       Standalone CLI: golang-migrate up/down. Запускается init-контейнером
                  (отдельный image `<org>/backend-migrate:<tag>` со вшитыми SQL-файлами).
+  seed-admin/    Standalone one-off: idempotent bootstrap первого admin
+                 (SEED_ADMIN_EMAIL/PASSWORD, хеш authnkit). Публичного пути
+                 сделать admin нет (register=client). Нужен PG_DSN; не runtime.
 internal/
   domain/<name>/                Бизнес-домен (bounded context).
     dto.go, entity.go, errors.go, events.go, policy.go, usecase.go, *_test.go

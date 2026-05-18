@@ -14,7 +14,7 @@
 | Infra-интроспекция | `infra/` | типизированный доступ к side-effects: `pg.py` (psycopg, users/refresh_sessions/bruteforce/email_verifications), `outbox.py` (outbox-таблица), `nats.py` (core-NATS collector), `redis.py` (cache-probe). |
 | Smoke-тесты | `smoke/` | boot + критический happy-path, `@pytest.mark.smoke`. |
 | E2E-тесты | `e2e/` | сценарии по доменам, `@pytest.mark.e2e`. |
-| Фикстуры | `conftest.py` | session-стек (shell-out в `stack/up.sh`), `api`, `user`, `pg`, `redis`, `nats_collector`. |
+| Фикстуры | `conftest.py` | session-стек, `api`, `user`, `admin`, `other_user`, `pg`, `redis`, `nats_collector`. |
 
 Папки `smoke/`/`e2e/` организуют, маркеры селектят: `pytest -m smoke` / `pytest -m e2e`.
 
@@ -27,6 +27,14 @@
 **до** HTTP-действия; `outbox.wait_for(..., published=True)` подтверждает дрен.
 Showcase полного async-пути — `e2e/test_event_flow.py`. Bruteforce-счётчики
 в Postgres (`bruteforcekit/pgstore`), не Redis.
+
+## Admin-принципал
+
+Публичного пути сделать admin нет (`register` → `client`). Стек при старте
+гоняет one-off `cmd/seed-admin` (creds `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`
+из `.env.local`, дефолты в `up.sh`), `api` ждёт его completed. Фикстура
+`admin` логинится этими кредами; `other_user` — второй client для
+cross-user 403.
 
 ## Запуск
 

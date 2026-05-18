@@ -107,6 +107,8 @@ make e2e-smoke    # только -m smoke (быстрый gate)
 
 Нужен Docker и `./.env.local` с `STIT_OBS_TOKEN` + `OTEL_TENANT` (шаблон — `.env.local.example`; формат — `.claude/rules/env-local.md`). Детали и пины — `test/README.md`.
 
+**Bootstrap admin.** Публичного пути сделать admin нет (`register` → `client`). Первого admin создаёт one-off `cmd/seed-admin` (`SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`, хеш через `authnkit`, идемпотентный upsert; нужен `PG_DSN`, не runtime-сервис) — это и ops-инструмент свежего деплоя, и источник `admin`-фикстуры e2e (стек гоняет его при старте, креды — `E2E_ADMIN_*` в `.env.local`).
+
 ## Release
 
 **Зона ответственности этого репо: код → image в registry. На этом — STOP.** Деплой, vault-patch и проверка контейнера на проде — другие репо (см. [Handoff](#handoff) ниже).
