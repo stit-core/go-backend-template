@@ -36,7 +36,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	log := logkit.New(logkit.Config{Level: "info"}, providers.LoggerProvider)
+	logCfg := logkit.Config{Level: "info"}
+	log := logkit.New(logCfg, providers.LoggerProvider)
+	if !telCfg.StdoutOnly {
+		// init-контейнер: логи нужны в stdout (docker/kubectl logs), не только
+		// в Loki. В StdoutOnly telemetry уже пишет в stdout — дубль не нужен.
+		log = teeLogger{primary: log, mirror: logkit.NewWithWriter(logCfg, os.Stdout)}
+	}
 	log.Info(ctx, "starting", "component", "migrate", "version", version, "commit", commit)
 
 	// run возвращает exit code. os.Exit обходит defer'ы — поэтому
@@ -47,6 +53,32 @@ func main() {
 	_ = providers.Shutdown(shutdownCtx)
 	cancel()
 	os.Exit(exitCode)
+}
+
+type teeLogger struct{ primary, mirror logkit.Logger }
+
+func (t teeLogger) Debug(ctx context.Context, msg string, kv ...any) {
+	t.primary.Debug(ctx, msg, kv...)
+	t.mirror.Debug(ctx, msg, kv...)
+}
+
+func (t teeLogger) Info(ctx context.Context, msg string, kv ...any) {
+	t.primary.Info(ctx, msg, kv...)
+	t.mirror.Info(ctx, msg, kv...)
+}
+
+func (t teeLogger) Warn(ctx context.Context, msg string, kv ...any) {
+	t.primary.Warn(ctx, msg, kv...)
+	t.mirror.Warn(ctx, msg, kv...)
+}
+
+func (t teeLogger) Error(ctx context.Context, msg string, kv ...any) {
+	t.primary.Error(ctx, msg, kv...)
+	t.mirror.Error(ctx, msg, kv...)
+}
+
+func (t teeLogger) With(kv ...any) logkit.Logger {
+	return teeLogger{primary: t.primary.With(kv...), mirror: t.mirror.With(kv...)}
 }
 
 func run(ctx context.Context, log logkit.Logger) int {
