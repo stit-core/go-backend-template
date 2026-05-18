@@ -1,6 +1,6 @@
 ---
 name: query-logs
-description: Прочитать или последить логи задеплоенного бэка через корп-Loki (`loki.stit.tech`) под bearer-токеном из `./credentials.md`. Активируй когда юзер просит "посмотри логи", "что в логах", "следи за деплоем", "почему упало в проде", "/query-logs".
+description: Прочитать или последить логи задеплоенного бэка через корп-Loki (`loki.stit.tech`) под bearer-токеном из `./.env.local`. Активируй когда юзер просит "посмотри логи", "что в логах", "следи за деплоем", "почему упало в проде", "/query-logs".
 ---
 
 # Skill: query-logs
@@ -20,12 +20,12 @@ description: Прочитать или последить логи задепл�
 
 - **Локальный dev.** `OTEL_STDOUT_ONLY=true` (дефолт в `.env.example`) — логи идут в stdout, в Loki ничего не попадает. Смотри прямо в терминал/stderr контейнера.
 - **Юзер хочет метрики (latency / RPS / errors-per-second)** — это VictoriaMetrics, наружу не опубликована. Скажи юзеру смотреть в Grafana.
-- **Юзер хочет трейсы по trace-id** — Tempo read API существует (`tempo.stit.tech/api/traces/<id>`), но в этом skill'е не покрыт. Сделай `curl -H "Authorization: Bearer $(grep -oE 'STIT_OBS_TOKEN=...' credentials.md | cut -d= -f2-)" https://tempo.stit.tech/api/traces/<id>` либо подними отдельный agent-tool позже.
+- **Юзер хочет трейсы по trace-id** — Tempo read API существует (`tempo.stit.tech/api/traces/<id>`), но в этом skill'е не покрыт. Сделай `curl -H "Authorization: Bearer $(grep -oE 'STIT_OBS_TOKEN=[^[:space:]]+' .env.local | cut -d= -f2-)" https://tempo.stit.tech/api/traces/<id>` либо подними отдельный agent-tool позже.
 
 ## Pre-flight
 
 - [ ] `command -v logcli` — установлен? Если нет → `make tools` (или скажи юзеру).
-- [ ] `./credentials.md` существует и содержит строку `STIT_OBS_TOKEN=...`? Сам файл читать не нужно — запусти `logs.sh`, он прочитает токен через bash (значение не попадёт в чат), или вернёт `FAIL: no STIT_OBS_TOKEN` с инструкцией.
+- [ ] `./.env.local` существует и содержит строку `STIT_OBS_TOKEN=...`? Сам файл читать не нужно — запусти `logs.sh`, он прочитает токен через bash (значение не попадёт в чат), или вернёт `FAIL: no STIT_OBS_TOKEN` с инструкцией.
 - [ ] Знаешь `service` label? Дефолт в шаблоне — имя бинаря (`api` для runtime, `migrate` для init-контейнера миграций); маппинг — `OTEL_SERVICE_NAME` env при деплое.
 - [ ] Для `watch` — оценил длительность? Не больше 10m по дефолту, юзер может расширить.
 
@@ -70,7 +70,7 @@ scripts/agent-tools/logs.sh watch --service api --for 5m
 
 ## Anti-patterns
 
-- ❌ `cat ./credentials.md` / `Read` на него ради токена — значение утечёт в transcript/память. Доступ к токену — только через `logs.sh` (держит его в bash-процессе).
+- ❌ `cat ./.env.local` / `Read` на него ради токена — значение утечёт в transcript/память. Доступ к токену — только через `logs.sh` (держит его в bash-процессе).
 - ❌ Цитировать токен в чат, даже частично. Если случайно подсмотрел в exec output — НЕ повторяй.
 - ❌ Гонять `watch --for 30m` без явного OK юзера. Cache miss + большой transcript.
 - ❌ Звать `query --raw` без `{}-matcher` — Loki потребует label selector, выдаст 400.
@@ -78,7 +78,7 @@ scripts/agent-tools/logs.sh watch --service api --for 5m
 
 ## См. также
 
-- `.claude/rules/dev-tokens.md` — формат `credentials.md`, какие ключи там живут.
+- `.claude/rules/env-local.md` — формат `.env.local`, какие ключи там живут.
 - `scripts/agent-tools/logs.sh --help` — точный синтаксис флагов.
 - infra-repo `docs/project-secrets.md` → секция «Observability read API» — где брать токен, как ротировать.
 - infra-repo `.claude/plans/observability-read-api.md` — design / verification API.

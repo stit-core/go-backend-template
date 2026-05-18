@@ -9,7 +9,7 @@
 #
 # Токен берётся в этом порядке:
 #   1) env STIT_OBS_TOKEN
-#   2) строка `STIT_OBS_TOKEN=...` в ./credentials.md
+#   2) строка `STIT_OBS_TOKEN=...` в ./.env.local
 #
 # Endpoint:
 #   STIT_LOKI_ADDR (default https://loki.stit.tech). Tenant зашит в токен — не передаётся отдельно.
@@ -58,17 +58,14 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 TOKEN=""
 if [ -n "${STIT_OBS_TOKEN:-}" ]; then
     TOKEN="$STIT_OBS_TOKEN"
-else
-    # Любая строка содержащая STIT_OBS_TOKEN=<value>. Допускает list-prefix `- `, code-fence-ы.
-    for f in credentials.md credential.md; do
-        if [ -f "$f" ]; then
-            TOKEN=$(grep -m1 -oE 'STIT_OBS_TOKEN=[^[:space:]`"'"'"']+' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
-            [ -n "$TOKEN" ] && break
-        fi
-    done
+elif [ -f .env.local ]; then
+    line=$(grep -E '^[[:space:]]*(export[[:space:]]+)?STIT_OBS_TOKEN=' .env.local 2>/dev/null | tail -1)
+    TOKEN="${line#*=}"
+    TOKEN="${TOKEN%\"}"; TOKEN="${TOKEN#\"}"
+    TOKEN="${TOKEN%\'}"; TOKEN="${TOKEN#\'}"
 fi
 if [ -z "$TOKEN" ]; then
-    echo "FAIL: no STIT_OBS_TOKEN. Set env or add line 'STIT_OBS_TOKEN=<token>' to ./credentials.md" >&2
+    echo "FAIL: no STIT_OBS_TOKEN. Set env or add line 'STIT_OBS_TOKEN=<token>' to ./.env.local" >&2
     exit 1
 fi
 
