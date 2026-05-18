@@ -58,7 +58,7 @@ consumes: [verification.EmailVerified]
 
 ## Обязательные секции по kind
 
-См. валидатор `scripts/agent-tools/validate-domain-doc.sh`. Кратко:
+См. валидатор `scripts/tools/validate-domain-doc.sh`. Кратко:
 
 | kind | обязательные H2 |
 |---|---|
@@ -92,7 +92,7 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
 3. /domain-deepen <ctx>
    — пачкой по волнам, AskUserQuestion'ами добиваем секции inside-out.
 
-4. scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>
+4. scripts/tools/validate-domain-doc.sh docs/domains/<ctx>
    — зелёный → промоушн status: draft → stable.
 
 5. /smartdev → /plan <task>

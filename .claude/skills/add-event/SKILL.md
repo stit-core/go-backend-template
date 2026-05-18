@@ -169,16 +169,16 @@ Subscriber должен переживать повторную доставку
 
 ### 7. Тесты
 
-- В домене-публикаторе: `usecase_test.go` через мок `outboxkit.Publisher` (`Mock<...>` — `make mocks` поднимает по `.mockery.yml`) проверяет, что вызов `Publish` пришёл с ожидаемым subject и payload.
+- В домене-публикаторе: `usecase_test.go` через мок `outboxkit.Publisher` (`Mock<...>` — `make gen` поднимает по `.mockery.yml`) проверяет, что вызов `Publish` пришёл с ожидаемым subject и payload.
 - Subscriber: unit-тест на handler-метод с моком `Usecase`-порта (мок генерируется автоматически — `.mockery.yml` уже включает `delivery/nats` если ты его добавил). Минимум — happy path + один error path (usecase возвращает err → handler возвращает err).
 - Integration: если есть end-to-end — отдельный тест под `//go:build integration` с реальным NATS через testcontainers.
 
 ### 8. Верификация
 
 ```bash
-scripts/agent-tools/test.sh
-scripts/agent-tools/lint.sh
-make mocks-check  # если добавил интерфейс из .mockery.yml
+scripts/tools/test.sh
+scripts/tools/lint.sh
+make gen-check  # если добавил интерфейс из .mockery.yml
 ```
 
 ### 9. Коммит

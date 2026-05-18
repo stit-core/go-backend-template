@@ -112,8 +112,8 @@ Cognition Devin Review публично заявляет: ревьюер с чи
 - `Bash` — read-only:
   - `git diff HEAD~1`, `git diff main..HEAD`, `git show <commit>`
   - `git log --oneline -20`, `git blame path/to/file.go`
-  - `scripts/agent-tools/search.sh` — поиск
-  - `scripts/agent-tools/repomap.sh` — структура пакета
+  - `make search Q=` — поиск (ripgrep)
+  - `make map` — список пакетов
   - `go list`, `go doc`
   - **НЕ** запускай тесты — это работа парента. Если нужно — флагни в findings.
 

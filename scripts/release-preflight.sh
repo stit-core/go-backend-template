@@ -5,6 +5,7 @@
 #   - на HEAD стоит annotated tag формата vX.Y.Z
 #   - tag (если передан как $1) совпадает с тем, что на HEAD
 #   - docker buildx доступен
+#   - make doctor (docker-auth/sqlc-drift/непарные миграции) — fail-fast
 # Output: внятное сообщение на каждый fail, exit 2 (отличаем от "сбоя shell"=1).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -32,5 +33,8 @@ kind=$(git cat-file -t "$tag" 2>/dev/null || echo "?")
 [ "$kind" = "tag" ] || fail "tag=$tag не annotated (kind=$kind) — пересоздай через git tag -a"
 
 docker buildx version >/dev/null 2>&1 || fail "docker buildx не доступен"
+
+echo "release-preflight: → doctor"
+bash "$(dirname "$0")/tools/doctor.sh" || fail "doctor preflight не прошёл (см. вывод выше)"
 
 echo "release-preflight: OK (tag=$tag)"

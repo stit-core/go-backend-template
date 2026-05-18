@@ -10,3 +10,4 @@
 
 ## Backlog (idea state)
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).
+- Глубокий рефактор хуков (облегчить Stop-хук `stop-build-check`, soft TDD-nudge на fix-коммит без `_test.go`) — отдельно, после `workflow-rebuild` (юзер: «с хуками не переборщить»).

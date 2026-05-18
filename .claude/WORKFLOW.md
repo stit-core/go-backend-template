@@ -22,18 +22,21 @@ Anthropic Agent SDK называет это явно: **gather → act → verif
 ```
 [твой prompt]
      ↓
+COCKPIT ─── /smartdev: make status, грузит план+память,
+            ЧЕЙНИТ в нужный режим (plan/triage/add-*/infra-handoff)
+     ↓
 GATHER  ─── Claude читает файлы (path-scoped правила автогрузятся)
             может вызвать subagent `explorer` для fan-out
-            может активировать skill если description match
      ↓
-PLAN    ─── Plan Mode (Shift+Tab) для неоднозначных задач
-            пропускается если "diff в одно предложение"
+PLAN    ─── /plan skill (план в .claude/plans/, переживает /clear)
+            или Plan Mode (Shift+Tab); пропускается если "diff в фразу"
      ↓
-ACT     ─── Edit/Write tool calls
-            PostToolUse хук: gofumpt + go vet (детерминированно)
+ACT     ─── RED→GREEN→REFACTOR по дефолту (тест-first)
+            Edit/Write; PostToolUse хук: gofumpt + go vet
+            инфра-поверхность задета → skill infra-handoff
      ↓
-VERIFY  ─── make test / make lint / make build
-            или agent-tools wrappers для сжатого вывода
+VERIFY  ─── make test / lint / build (concise-by-default;
+            FORMAT=detailed/VERBOSE=1 — полно); claim «готово» → make check
      ↓
 REVIEW  ─── (опционально) subagent `reviewer` со свежим контекстом
      ↓
@@ -48,8 +51,7 @@ COMMIT  ─── conventional prefix per AGENTS.md
 ```
 git clone <шаблон> my-service
 cd my-service
-make tools          # установить pinned dev-tools
-make hooks-install  # поставить git-хуки
+make setup          # pinned dev-tools + git-хуки
 claude              # запустить Claude Code
 ```
 
@@ -79,8 +81,8 @@ claude              # запустить Claude Code
 4. План: использовать существующий `verification`-домен для 2FA-кодов
 5. Реализация: правки в `auth/usecase.go`, `auth/dto.go`, новые тесты в `auth/usecase_test.go`
 6. PostToolUse-хук на каждый `.go` edit → gofumpt + vet
-7. Реген моков: `make mocks` (если поменялись интерфейсы)
-8. `make test` → green
+7. Реген сгенерированного: `make gen` (если поменялись интерфейсы/запросы)
+8. `make test` → green (перед claim «готово» — `make check`)
 9. `reviewer` subagent — свежий контекст, читает diff, возвращает severity-graded findings
 10. Фикс находок → коммит
 
@@ -173,5 +175,5 @@ Plan mode запрещает edits до approve.
 | Subagent ушёл слишком надолго | `tools` в frontmatter — урезать до read-only набора |
 | AGENTS.md игнорируется | Длина файла > 200 строк, либо instructions конфликтуют между секциями |
 | Коммит-сообщение reject'нуто | `scripts/git-hooks/commit-msg` — проверь что type ∈ {feat,fix,refactor,docs,test,chore,meta} |
-| `make sqlc` падает | Запросы в `internal/domain/*/infra/postgres/queries/` ссылаются на колонки которых нет в `migrations/` |
-| `make mocks-check` падает | Изменили интерфейс из `.mockery.yml` без `make mocks` |
+| `make gen` падает | Запросы в `internal/domain/*/infra/postgres/queries/` ссылаются на колонки которых нет в `migrations/` |
+| `make gen-check` падает | Изменили sqlc-запрос или интерфейс из `.mockery.yml` без `make gen` |

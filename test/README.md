@@ -67,7 +67,7 @@ make e2e-smoke    # только -m smoke (быстрый gate)
 ```
 
 Под капотом: `test/.venv` (из `test/requirements.txt`) + pytest. Конкретно —
-`scripts/agent-tools/e2e.sh` (сжатый вывод, каноничная строка `OK`/`FAIL`).
+`scripts/tools/e2e.sh` (сжатый вывод, каноничная строка `OK`/`FAIL`).
 
 ## Зависимости
 

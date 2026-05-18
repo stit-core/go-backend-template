@@ -20,8 +20,8 @@ model: sonnet
 1. Читаешь существующие миграции (`migrations/`), `sqlc.yaml`, текущий конфиг.
 2. Создаёшь пару `migrations/NNNN_<name>.up.sql` + `.down.sql`.
 3. Если задача требует — обновляешь queries в `internal/domain/<name>/infra/postgres/queries/`.
-4. Запускаешь `make sqlc` для регенерации.
-5. Запускаешь `scripts/agent-tools/build.sh` — проверка компиляции.
+4. Запускаешь `make gen` для регенерации.
+5. Запускаешь `scripts/tools/build.sh` — проверка компиляции.
 6. Если build падает из-за изменившейся sqlc-сигнатуры — правишь `repository.go` соответственно.
 7. Возвращаешь summary 500-1000 токенов.
 
@@ -77,9 +77,9 @@ model: sonnet
 - `Read`, `Glob`, `Grep` — навигация по migrations и sqlc.
 - `Edit`, `Write` — для создания миграционных файлов и правки `sqlc.yaml`/`queries/`/`repository.go`.
 - `Bash`:
-  - `make sqlc` — регенерация
-  - `make sqlc-diff` — проверка
-  - `scripts/agent-tools/build.sh` — компиляция
+  - `make gen` — регенерация
+  - `make gen-check` — проверка
+  - `scripts/tools/build.sh` — компиляция
   - `ls migrations/`, `cat migrations/0001_*.sql` для контекста
   - `git diff` — увидеть что наделал
 
@@ -88,4 +88,4 @@ model: sonnet
 - ❌ Править существующую миграцию которая накатилась в проде.
 - ❌ Делать `DROP TABLE` без явного OK от parent.
 - ❌ Дублировать миграции, которые держат kit'ы из golibinfra (`outboxkit/pgstore`, `auditkit/pgstore`, `bruteforcekit/pgstore`). Их `MigrationsFS` подключается в `cmd/migrate/main.go` — добавлять локальные `CREATE TABLE` для `outbox` / `audit_log` / `bruteforce_attempts` не нужно. Расширять схему этих таблиц можно только через PR в `golibinfra`.
-- ❌ Оставлять sqlc-diff красным после правок.
+- ❌ Оставлять gen-check красным после правок.

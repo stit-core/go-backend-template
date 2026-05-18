@@ -37,10 +37,10 @@ esac
 # Сгенерированные файлы — регенерация через make-таргеты.
 case "$REL" in
     */infra/postgres/db/*.go)
-        block "файл сгенерирован sqlc. Правь .sql в queries/ и запусти 'make sqlc'."
+        block "файл сгенерирован sqlc. Правь .sql в queries/ и запусти 'make gen'."
         ;;
     */mocks/*.go)
-        block "файл сгенерирован mockery. Правь интерфейс и запусти 'make mocks'."
+        block "файл сгенерирован mockery. Правь интерфейс и запусти 'make gen'."
         ;;
     coverage.out|coverage.*)
         block "артефакт coverage. Не должен лежать в репо."

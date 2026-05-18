@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# agent-tools/logs.sh — обёртка над logcli для чтения корп-Loki под bearer-токеном.
+# tools/logs.sh — обёртка над logcli для чтения корп-Loki под bearer-токеном.
 #
 # Использование:
-#   scripts/agent-tools/logs.sh query   --service NAME [--match REGEX] [--since 1h] [--limit 200]
-#   scripts/agent-tools/logs.sh query   --raw '{service_name="api"} |~ "panic"'  [--since 1h] [--limit 200]
-#   scripts/agent-tools/logs.sh errors  --service NAME [--since 15m] [--top 10]
-#   scripts/agent-tools/logs.sh watch   --service NAME [--match REGEX] --for 5m
+#   scripts/tools/logs.sh query   --service NAME [--match REGEX] [--since 1h] [--limit 200]
+#   scripts/tools/logs.sh query   --raw '{service_name="api"} |~ "panic"'  [--since 1h] [--limit 200]
+#   scripts/tools/logs.sh errors  --service NAME [--since 15m] [--top 10]
+#   scripts/tools/logs.sh watch   --service NAME [--match REGEX] --for 5m
 #
 # Токен берётся в этом порядке:
 #   1) env STIT_OBS_TOKEN
@@ -75,7 +75,7 @@ export LOKI_ADDR LOKI_BEARER_TOKEN="$TOKEN"
 
 # === Tool check ===
 if ! command -v logcli >/dev/null 2>&1; then
-    echo "FAIL: logcli not installed. Run 'make tools'." >&2
+    echo "FAIL: logcli not installed. Run 'make setup'." >&2
     exit 1
 fi
 

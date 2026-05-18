@@ -1,7 +1,7 @@
 ---
 name: env-local
-description: Формат и правила ./.env.local — локальный gitignored файл с токенами для dev-tooling (e2e-стек, чтение прод-логов). Доступ к значению токена — через agent-tools, не цитированием в чат. Грузится при работе с .env.local или agent-tools/logs.sh / test/stack/up.sh.
-globs: ".env.local,.env.local.example,scripts/agent-tools/logs.sh,test/stack/up.sh"
+description: Формат и правила ./.env.local — локальный gitignored файл с токенами для dev-tooling (e2e-стек, чтение прод-логов). Доступ к значению токена — через tools, не цитированием в чат. Грузится при работе с .env.local или tools/logs.sh / test/stack/up.sh.
+globs: ".env.local,.env.local.example,scripts/tools/logs.sh,test/stack/up.sh"
 ---
 
 # Dev tokens — .env.local
@@ -20,7 +20,7 @@ Dotenv: одна строка `KEY=value` на секрет. Парсится `g
 
 ## Кто читает
 
-- **Доступ к значению токена — только через agent-tools.** `scripts/agent-tools/logs.sh` и `test/stack/up.sh` сами `grep`-ают `KEY=` из `.env.local` и передают значение дальше внутри bash-процесса (`LOKI_BEARER_TOKEN` / env для compose). В stdout/transcript значение не попадает.
+- **Доступ к значению токена — только через tools.** `scripts/tools/logs.sh` и `test/stack/up.sh` сами `grep`-ают `KEY=` из `.env.local` и передают значение дальше внутри bash-процесса (`LOKI_BEARER_TOKEN` / env для compose). В stdout/transcript значение не попадает.
 - **`Read`/`cat` ради токена — необратимая утечка** в transcript и `MEMORY.md` (придётся ротировать). Значение токена в чат не вытаскивай — зови agent-tool.
 - **Обновление файла — предпочтительно юзером руками.** Если правит Claude — не эхо-ить значения в вывод.
 
@@ -43,6 +43,6 @@ Dotenv: одна строка `KEY=value` на секрет. Парсится `g
 
 | Ключ | Используется | Документация |
 |---|---|---|
-| `STIT_OBS_TOKEN` | `scripts/agent-tools/logs.sh`, `test/stack/up.sh` | `.claude/skills/query-logs/SKILL.md` + infra-repo `docs/project-secrets.md` |
+| `STIT_OBS_TOKEN` | `scripts/tools/logs.sh`, `test/stack/up.sh` | `.claude/skills/query-logs/SKILL.md` + infra-repo `docs/project-secrets.md` |
 | `OTEL_TENANT` | `test/stack/up.sh` (e2e otel-agent) | `test/stack/compose.yml`, stit-infra/infra ADR-0004 §2 |
 | `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` | `test/stack/up.sh` → `cmd/seed-admin` | `test/conftest.py` (`admin`-фикстура). Не прод-секрет — admin эфемерного e2e-стека; дефолты в up.sh |

@@ -66,7 +66,7 @@ git.stit.tech/stit-infra/go-backend-template/internal/domain/<consumer>:
     <Provider>Reader:
 ```
 
-`make mocks` → `internal/domain/<consumer>/mocks/<provider>_reader.go` (пакет `mocks`, тип `Mock<Provider>Reader`).
+`make gen` → `internal/domain/<consumer>/mocks/<provider>_reader.go` (пакет `mocks`, тип `Mock<Provider>Reader`).
 
 ### 5. Адаптер в `module/adapters.go` потребителя
 
@@ -123,7 +123,7 @@ var Module = fx.Module(
 ### 7. Проверить depguard
 
 ```bash
-scripts/agent-tools/lint.sh ./internal/domain/<consumer>/...
+scripts/tools/lint.sh ./internal/domain/<consumer>/...
 ```
 
 Если ругается — значит ты импортировал провайдер не из `module/`, а из самого домена. Перенеси код.
@@ -137,10 +137,10 @@ scripts/agent-tools/lint.sh ./internal/domain/<consumer>/...
 ### 9. Верификация
 
 ```bash
-scripts/agent-tools/lint.sh
-scripts/agent-tools/test.sh
-scripts/agent-tools/build.sh
-make mocks-check
+scripts/tools/lint.sh
+scripts/tools/test.sh
+scripts/tools/build.sh
+make gen-check
 ```
 
 ### 10. Коммит

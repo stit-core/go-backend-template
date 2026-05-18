@@ -5,9 +5,9 @@ description: Прочитать или последить логи задепл�
 
 # Skill: query-logs
 
-Чтение логов через корп-Loki read API (`https://loki.stit.tech`). Tenant-изоляция — на стороне `tenant-auth` ForwardAuth (см. infra-repo `docs/project-secrets.md`). Этот repo даёт обёртку `scripts/agent-tools/logs.sh` + правила, ничего к корпу не патчит.
+Чтение логов через корп-Loki read API (`https://loki.stit.tech`). Tenant-изоляция — на стороне `tenant-auth` ForwardAuth (см. infra-repo `docs/project-secrets.md`). Этот repo даёт обёртку `scripts/tools/logs.sh` + правила, ничего к корпу не патчит.
 
-**Инструмент один:** `scripts/agent-tools/logs.sh` (три режима). Tempo (trace API) — отдельно через `curl`, в этот skill пока не входит.
+**Инструмент один:** `scripts/tools/logs.sh` (три режима). Tempo (trace API) — отдельно через `curl`, в этот skill пока не входит.
 
 ## Когда применять
 
@@ -24,7 +24,7 @@ description: Прочитать или последить логи задепл�
 
 ## Pre-flight
 
-- [ ] `command -v logcli` — установлен? Если нет → `make tools` (или скажи юзеру).
+- [ ] `command -v logcli` — установлен? Если нет → `make setup` (или скажи юзеру).
 - [ ] `./.env.local` существует и содержит строку `STIT_OBS_TOKEN=...`? Сам файл читать не нужно — запусти `logs.sh`, он прочитает токен через bash (значение не попадёт в чат), или вернёт `FAIL: no STIT_OBS_TOKEN` с инструкцией.
 - [ ] Знаешь `service` label? Дефолт в шаблоне — имя бинаря (`api` для runtime, `migrate` для init-контейнера миграций); маппинг — `OTEL_SERVICE_NAME` env при деплое.
 - [ ] Для `watch` — оценил длительность? Не больше 10m по дефолту, юзер может расширить.
@@ -34,9 +34,9 @@ description: Прочитать или последить логи задепл�
 ### `query` — точечный поиск
 
 ```bash
-scripts/agent-tools/logs.sh query --service api --match 'panic' --since 1h --limit 200
+scripts/tools/logs.sh query --service api --match 'panic' --since 1h --limit 200
 # или raw LogQL:
-scripts/agent-tools/logs.sh query --raw '{service="api",env="prod"} |~ "user_id=abc-123"' --since 6h
+scripts/tools/logs.sh query --raw '{service="api",env="prod"} |~ "user_id=abc-123"' --since 6h
 ```
 
 Возвращает совпавшие строки. По умолчанию `--since 1h --limit 200`. Усечение при > 25k символов.
@@ -46,7 +46,7 @@ scripts/agent-tools/logs.sh query --raw '{service="api",env="prod"} |~ "user_id=
 ### `errors` — триаж недавних ошибок
 
 ```bash
-scripts/agent-tools/logs.sh errors --service api --since 15m --top 10
+scripts/tools/logs.sh errors --service api --since 15m --top 10
 ```
 
 Группирует совпавшие error-строки по сигнатуре (числа/uuid/hex/timestamps нормализованы), выдаёт топ-N групп с count'ом. Полезно когда юзер спрашивает "что упало" — а не "найди конкретное".
@@ -56,7 +56,7 @@ scripts/agent-tools/logs.sh errors --service api --since 15m --top 10
 ### `watch` — мониторинг N минут
 
 ```bash
-scripts/agent-tools/logs.sh watch --service api --for 5m
+scripts/tools/logs.sh watch --service api --for 5m
 ```
 
 **Запускай через `run_in_background: true`**, потом следи через `Monitor` tool. Стримит `logcli query --tail` за указанное окно, в конце — сводка (total lines, errors count). По SIGTERM/timeout — `OK` exit.
@@ -79,6 +79,6 @@ scripts/agent-tools/logs.sh watch --service api --for 5m
 ## См. также
 
 - `.claude/rules/env-local.md` — формат `.env.local`, какие ключи там живут.
-- `scripts/agent-tools/logs.sh --help` — точный синтаксис флагов.
+- `scripts/tools/logs.sh --help` — точный синтаксис флагов.
 - infra-repo `docs/project-secrets.md` → секция «Observability read API» — где брать токен, как ротировать.
 - infra-repo `.claude/plans/observability-read-api.md` — design / verification API.

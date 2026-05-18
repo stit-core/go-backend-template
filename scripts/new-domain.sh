@@ -317,7 +317,7 @@ echo "Дальше (см. .claude/skills/add-domain/SKILL.md):"
 echo "  1. Добавь миграцию: migrations/NNNN_${NAME}.{up,down}.sql"
 echo "  2. Добавь sqlc-блок в sqlc.yaml для пути queries/$NAME"
 echo "  3. Заполни запросы в infra/postgres/queries/$NAME.sql"
-echo "  4. make sqlc — регенерация"
+echo "  4. make gen — регенерация sqlc+mocks"
 echo "  5. Заполни usecase, handler, тесты"
 echo "  6. Подключи модуль в cmd/api/main.go (domainModules)"
 echo
@@ -343,4 +343,4 @@ cat <<DEPGUARD
               desc: 'Бизнес-домены не импортят друг друга. Используй порты + адаптеры в module/.'
 DEPGUARD
 echo
-echo "После правок: make mocks && make pre-merge"
+echo "После правок: make gen && make check"

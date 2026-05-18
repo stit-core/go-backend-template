@@ -70,7 +70,7 @@ fi
         echo "$VET_OUT" | head -20
         echo
     fi
-    echo "Запусти 'scripts/agent-tools/build.sh' для сжатого диагноза."
+    echo "Запусти 'make build' для сжатого диагноза."
 } >&2
 
 exit 2

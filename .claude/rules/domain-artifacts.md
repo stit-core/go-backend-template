@@ -52,7 +52,7 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
 1. Скопировать из `docs/domains/_templates/` в `docs/domains/<ctx>/`. Для cross-context VO — `_templates/vo-shared.md` → `docs/domains/_shared/<Name>.md`.
 2. Заполнить frontmatter + минимум (Properties с именами+типами, Methods с именами).
 3. `/domain-deepen <ctx>` — углубление по волнам inside-out.
-4. `scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>` — зелёный → промоушн `status: stable`.
+4. `scripts/tools/validate-domain-doc.sh docs/domains/<ctx>` — зелёный → промоушн `status: stable`.
 5. `add-domain` / `add-endpoint` / `add-event` разрешены только при зелёном валидаторе (claude-hook гейтит).
 
 ## Делать
@@ -74,7 +74,7 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
 
 ## Валидатор
 
-`scripts/agent-tools/validate-domain-doc.sh [path]` — детерминированный, без внешних зависимостей. Проверяет frontmatter, наличие секций, при `stable` — непустые секции и целостность ссылок (relations/emits/consumes указывают на существующие id).
+`scripts/tools/validate-domain-doc.sh [path]` — детерминированный, без внешних зависимостей. Проверяет frontmatter, наличие секций, при `stable` — непустые секции и целостность ссылок (relations/emits/consumes указывают на существующие id).
 
 Pre-commit hook гонит валидатор на изменённых `docs/domains/**.md`.
 Claude PreToolUse hook (Skill matcher) блокирует `add-domain`/`add-endpoint`/`add-event` если валидатор красный или есть `status: draft`.

@@ -118,7 +118,7 @@ WHERE id = $1 AND version = $2;
 ### 6. Сгенерировать sqlc-код
 
 ```bash
-make sqlc
+make gen
 ```
 
 Создаёт `internal/domain/<name>/infra/postgres/db/`. Не правь руками.
@@ -211,7 +211,7 @@ git.stit.tech/stit-infra/go-backend-template/internal/domain/<name>/delivery/htt
 ```
 
 ```bash
-make mocks
+make gen
 ```
 
 ### 14. Тесты
@@ -242,7 +242,7 @@ make mocks
 
 Перед claim "готово":
 ```bash
-make pre-merge
+make check
 ```
 
 Или поэтапно:
@@ -250,8 +250,7 @@ make pre-merge
 - `make lint`
 - `make test`
 - `make build`
-- `make sqlc-diff`
-- `make mocks-check`
+- `make gen-check`
 
 Всё green → коммит.
 
@@ -264,6 +263,6 @@ make pre-merge
 ## Что не делать
 
 - Не копируй существующий домен (`auth`/`user`/`verification`) целиком — это референсы, у них своя специфика. Используй `make new-domain` который даст чистый stub.
-- Не правь sgenerated `db/`-файлы. Регенерируй через `make sqlc`.
+- Не правь sgenerated `db/`-файлы. Регенерируй через `make gen`.
 - Не пропускай миграцию (`down`-файл обязателен).
 - Не подключай домен в main.go до того как он компилируется в изоляции.

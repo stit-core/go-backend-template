@@ -26,7 +26,7 @@ description: Углубить DDD-артефакты в docs/domains/<context>/ 
 
 ```bash
 ls docs/domains/<ctx>/
-scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>
+scripts/tools/validate-domain-doc.sh docs/domains/<ctx>
 ```
 
 Если валидатор зелёный и все артефакты stable — выходи: "уже всё stable, делать нечего".
@@ -96,7 +96,7 @@ Inside-out порядок (запоминай его, спрашивать у п
 После всех волн:
 
 ```bash
-scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>
+scripts/tools/validate-domain-doc.sh docs/domains/<ctx>
 ```
 
 Если зелёный — отредактируй frontmatter каждого артефакта `status: draft → stable`.
@@ -124,4 +124,4 @@ scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>
 - При status=stable — секции непусты, и relations/emits/consumes указывают на существующие id.
 - Для `<ctx>/README.md` — каждый aggregate-файл в директории должен быть слинкован, и каждая ссылка из README на локальный `*.md` должна резолвиться.
 
-См. `scripts/agent-tools/validate-domain-doc.sh` и `docs/domains/README.md`.
+См. `scripts/tools/validate-domain-doc.sh` и `docs/domains/README.md`.

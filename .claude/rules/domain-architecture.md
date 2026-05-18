@@ -114,7 +114,7 @@ type NewsListOutput  struct { Body struct { Items []NewsView; Total int64 } }
 
 - Юнит: моки портов, реальные структуры домена. Запускаются `make test`.
 - Integration: build-tag `integration`, поднимают Postgres через testcontainers. `make test-int`.
-- Все exported интерфейсы из `usecase.go` идут в `.mockery.yml`. После добавления — `make mocks`.
+- Все exported интерфейсы из `usecase.go` идут в `.mockery.yml`. После добавления — `make gen`.
 
 ## Outbox-события
 

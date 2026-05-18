@@ -47,7 +47,7 @@ type Usecase interface {
 }
 ```
 
-После этого `make mocks` (mockery поднимет порт из `.mockery.yml`, мок-файл регенерируется).
+После этого `make gen` (mockery поднимет порт из `.mockery.yml`, мок-файл регенерируется).
 
 ### 4. DTO в `delivery/http/dto.go`
 
@@ -124,9 +124,9 @@ httpkit.ErrorMapping{
 ### 9. Верификация
 
 ```bash
-scripts/agent-tools/test.sh ./internal/domain/<name>/...
-scripts/agent-tools/lint.sh ./internal/domain/<name>/...
-scripts/agent-tools/build.sh
+scripts/tools/test.sh ./internal/domain/<name>/...
+scripts/tools/lint.sh ./internal/domain/<name>/...
+scripts/tools/build.sh
 ```
 
 ### 10. Коммит

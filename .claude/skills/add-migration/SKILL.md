@@ -16,7 +16,7 @@ description: Добавить миграцию схемы БД с парой up/
 
 ## Когда НЕ применять
 
-- Изменение sqlc-запросов без правки схемы → просто правь queries/*.sql + `make sqlc`.
+- Изменение sqlc-запросов без правки схемы → просто правь queries/*.sql + `make gen`.
 - Откат уже применённой миграции в проде → опасно, обсуди с пользователем.
 
 ## Шаги
@@ -111,7 +111,7 @@ UPDATE users SET last_login_at = NOW() WHERE id = $1;
 ### 6. Регенерация sqlc
 
 ```bash
-make sqlc
+make gen
 ```
 
 Файлы в `internal/domain/<name>/infra/postgres/db/` обновятся автоматически.
@@ -119,7 +119,7 @@ make sqlc
 ### 7. Проверка компиляции
 
 ```bash
-scripts/agent-tools/build.sh
+scripts/tools/build.sh
 ```
 
 Если падает — обычно потому что `repository.go` использует старую сигнатуру sqlc-метода. Поправь.
@@ -129,14 +129,14 @@ scripts/agent-tools/build.sh
 Если миграция семантически меняет поведение — добавь тест.
 
 ```bash
-scripts/agent-tools/test.sh
+scripts/tools/test.sh
 ```
 
 Integration-тесты используют `testkit/pgseed`, который накатывает все миграции — твоя свежая попадёт автоматически.
 
 ### 9. CI-проверка
 
-`make sqlc-diff` проверяет что sqlc-код совпадает с тем что `make sqlc` производит. Если падает — `make sqlc` локально и закоммить дельту.
+`make gen-check` проверяет что sqlc-код совпадает с тем что `make gen` производит. Если падает — `make gen` локально и закоммить дельту.
 
 ### 10. Коммит
 
@@ -155,4 +155,4 @@ feat: add NNNN_name migration
 - ❌ Без `down`-файла — даже если откат бессмысленен, добавь stub.
 - ❌ DDL и DML в одной миграции (например, `ALTER TABLE ... ADD COLUMN` + `UPDATE table SET ...`). Раздели: одна миграция — schema change, следующая — data backfill.
 - ❌ Длинные блокирующие миграции на больших таблицах. Используй `CREATE INDEX CONCURRENTLY`, разбивай на батчи.
-- ❌ `make sqlc` забыли — sqlc-diff в CI поймает, но локальный flow ломает.
+- ❌ `make gen` забыли — gen-check в CI поймает, но локальный flow ломает.

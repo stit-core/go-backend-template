@@ -1,29 +1,131 @@
-.PHONY: help tools test test-int test-fuzz test-bench test-cover e2e e2e-smoke lint fmt build tidy migrate-up migrate-down new-domain hooks-install sqlc sqlc-diff mocks mocks-check pre-merge release-check release image-api image-migrate
+.PHONY: help test lint build fmt check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search logs release setup doctor plan-check test-int test-fuzz test-bench test-cover tidy
 
-# Release-вычисления. Image-path выводится из `git remote get-url origin`
-# (host+org), repo-name всегда `backend` — совпадает с infra-template
-# (compose/backend.yml ожидает `<host>/<org>/backend:<tag>`). Берём из
-# remote, а не из go.mod module path, чтобы шаблон работал без правки
-# Makefile при копировании в `<client-org>/<service>`.
-RELEASE_BASE := $(shell git remote get-url origin 2>/dev/null | sed -E 's#^(git@|https?://)([^:/]+)[:/]([^/]+)/.*$$#\2/\3#')
-IMAGE_BASE := $(RELEASE_BASE)/backend
-TAG ?= $(shell git describe --tags --exact-match HEAD 2>/dev/null)
-GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null)
+# Release-вычисления (image-path host/org, lockstep tag) self-contained в
+# scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
+# шаблон работал без правки при форке в `<client-org>/<service>`.
 
-help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+# Один словарь для агента: `make <verb>`. Concise-by-default; FORMAT=detailed
+# или VERBOSE=1 → полный вывод (test/lint/build — см. A3). Passthrough-аргументы
+# идут через A= (status/logs/plan-check) / Q=,P= (search) / NAME= (new-domain) /
+# VERSION= (release).
 
-tools: ## Поставить pinned версии dev-инструментов (gofumpt, golangci-lint, sqlc, mockery, logcli)
-	@bash scripts/install-tools.sh
+help: ## сгруппированный список команд
+	@awk 'BEGIN {FS = ":.*## "} \
+		/^##@ / {printf "\n\033[1m%s\033[0m\n", substr($$0, 5); next} \
+		/^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-test: ## Юнит-тесты (без integration build-tag). -race гонится только при CGO_ENABLED=1.
-	@if [ "$$(go env CGO_ENABLED)" = "1" ]; then \
-		go test -short -race ./...; \
+##@ LOOP
+# test/lint/build: concise-by-default (scripts/tools/* за make). FORMAT=detailed
+# — расширенный разбор фейлов; VERBOSE=1 — сырой инструмент. PKG= — подмножество
+# (default ./...). test.sh сам гейтит -race по CGO_ENABLED.
+test: ## Юнит-тесты concise (PKG=./x/... FORMAT=detailed VERBOSE=1)
+	@if [ -n "$(VERBOSE)" ]; then \
+		go test -short $$([ "$$(go env CGO_ENABLED)" = "1" ] && echo -race) $(if $(PKG),$(PKG),./...); \
 	else \
-		echo "(CGO_ENABLED=0, race detector unavailable — see ci.yml/pre-push fallback)"; \
-		go test -short ./...; \
+		bash scripts/tools/test.sh $(if $(filter detailed,$(FORMAT)),--format=detailed) $(if $(PKG),$(PKG),./...); \
 	fi
 
+lint: ## golangci-lint concise (PKG=./x/... FORMAT=detailed VERBOSE=1)
+	@if [ -n "$(VERBOSE)" ]; then \
+		golangci-lint run $(PKG); \
+	else \
+		bash scripts/tools/lint.sh $(if $(filter detailed,$(FORMAT)),--format=detailed) $(PKG); \
+	fi
+
+build: ## Сборка бинарника bin/api concise (VERBOSE=1 — сырой go build)
+	@if [ -n "$(VERBOSE)" ]; then \
+		go build -o ./bin/api ./cmd/api; \
+	else \
+		out=$$(go build -o ./bin/api ./cmd/api 2>&1) && echo "OK: build bin/api" \
+		  || { echo "$$out" | head -20; echo "FAIL: build"; exit 1; }; \
+	fi
+
+fmt: ## gofumpt -w .
+	gofumpt -w .
+
+check: ## Канонический gate: fmt+vet+lint+test+build+gen-check (pre-push)
+	@echo "→ make fmt"
+	@$(MAKE) fmt
+	@echo "→ go vet ./..."
+	@go vet ./...
+	@echo "→ make lint"
+	@$(MAKE) lint
+	@echo "→ make test"
+	@$(MAKE) test
+	@echo "→ make build"
+	@$(MAKE) build
+	@echo "→ make gen-check"
+	@$(MAKE) gen-check
+	@echo "✓ check clean"
+
+##@ GEN
+gen: ## Регенерация сгенерированного кода: sqlc + mockery
+	sqlc generate
+	@command -v mockery >/dev/null || go install github.com/vektra/mockery/v3@latest
+	mockery
+
+gen-check: ## Проверка, что sqlc/mocks актуальны (для check/CI)
+	sqlc diff
+	@command -v mockery >/dev/null || go install github.com/vektra/mockery/v3@latest
+	mockery
+	@git diff --exit-code -- '**/mocks/*.go' || (echo "mocks out of date — run make gen" && exit 1)
+
+##@ DB
+migrate-up: ## Накатить миграции (требует PG_DSN; PG_MIGRATIONS_PATH default ./migrations)
+	PG_MIGRATIONS_PATH=$${PG_MIGRATIONS_PATH:-./migrations} go run ./cmd/migrate up
+
+migrate-down: ## Откатить последнюю миграцию (требует PG_DSN)
+	PG_MIGRATIONS_PATH=$${PG_MIGRATIONS_PATH:-./migrations} go run ./cmd/migrate down
+
+##@ E2E
+e2e: ## Типизированный e2e-харнес (test/): up → pytest → down. Docker + ./.env.local
+	@bash scripts/tools/e2e.sh --format=detailed
+
+e2e-smoke: ## Только smoke-набор (-m smoke) — быстрый gate
+	@bash scripts/tools/e2e.sh --smoke --format=detailed
+
+##@ SCAFFOLD
+new-domain: ## new-domain NAME=order — скелет нового домена
+	@bash scripts/new-domain.sh $(NAME)
+
+##@ INTEL
+status: ## Сводка состояния репо для smartdev (A= "--full")
+	@bash scripts/tools/status.sh $(A)
+
+map: ## Список пакетов (A=./internal/...; символы пакета — go doc <pkg>)
+	@go list $(if $(A),$(A),./...) 2>/dev/null | sed 's|^|  |'
+
+search: ## Поиск по коду (Q=pattern [P=path]) — rg, fallback grep -rn
+	@if command -v rg >/dev/null 2>&1; then \
+		rg -n --max-count=80 -- "$(Q)" $(if $(P),$(P),.); \
+	else \
+		grep -rn --exclude-dir=.git -- "$(Q)" $(if $(P),$(P),.); \
+	fi
+
+logs: ## Прод-логи через корп-Loki (A= "query --service api --since 1h")
+	@bash scripts/tools/logs.sh $(A)
+
+##@ RELEASE
+release: ## release VERSION=vX.Y.Z — confirm→tag→preflight(+doctor)→push lockstep→handoff→STOP
+	@bash scripts/release.sh "$(VERSION)"
+
+##@ SETUP
+setup: ## Поставить pinned dev-tools + git-хуки (commit-msg, pre-commit, pre-push)
+	@bash scripts/install-tools.sh
+	@cp scripts/git-hooks/commit-msg .git/hooks/commit-msg
+	@cp scripts/git-hooks/pre-push .git/hooks/pre-push
+	@cp scripts/git-hooks/pre-commit .git/hooks/pre-commit 2>/dev/null || true
+	@chmod +x .git/hooks/commit-msg .git/hooks/pre-push .git/hooks/pre-commit 2>/dev/null || true
+	@echo "✓ setup: dev-tools + git hooks"
+
+doctor: ## Fail-fast preflight: auth/env/drift (тело — A5)
+	@test -x scripts/tools/doctor.sh && bash scripts/tools/doctor.sh $(A) || echo "doctor: not yet implemented (A5)"
+
+##@ META
+plan-check: ## Валидатор структуры планов (тело — A12)
+	@test -x scripts/tools/validate-plan.sh && bash scripts/tools/validate-plan.sh $(A) || echo "plan-check: not yet implemented (A12)"
+
+##@ EXTRA
 test-int: ## Только integration (testcontainers); требует docker
 	go test -race -tags=integration ./...
 
@@ -37,89 +139,5 @@ test-cover: ## Coverage по доменным пакетам
 	go test -short -coverprofile=coverage.out ./internal/domain/... ./internal/platform/...
 	go tool cover -func=coverage.out | tail -1
 
-e2e: ## Типизированный e2e-харнес (test/): поднимает стек, гоняет pytest, сносит. Нужен Docker + ./.env.local
-	@bash scripts/agent-tools/e2e.sh --format=detailed
-
-e2e-smoke: ## Только smoke-набор e2e-харнеса (-m smoke) — быстрый gate
-	@bash scripts/agent-tools/e2e.sh --smoke --format=detailed
-
-lint: ## golangci-lint
-	golangci-lint run
-
-fmt: ## gofumpt
-	gofumpt -w .
-
-build: ## Локальная сборка бинарника (для CI image — см. Dockerfile)
-	go build -o ./bin/api ./cmd/api
-
-new-domain: ## new-domain NAME=order — создать скелет нового домена в internal/domain/<NAME>/
-	@bash scripts/new-domain.sh $(NAME)
-
 tidy: ## go mod tidy
 	go mod tidy
-
-sqlc: ## Сгенерировать pgx-код из internal/domain/<domain>/infra/postgres/queries/
-	sqlc generate
-
-sqlc-diff: ## Проверить, что sqlc generate чист (для CI)
-	sqlc diff
-
-migrate-up: ## Накатить миграции (требует PG_DSN; PG_MIGRATIONS_PATH default ./migrations)
-	PG_MIGRATIONS_PATH=$${PG_MIGRATIONS_PATH:-./migrations} go run ./cmd/migrate up
-
-migrate-down: ## Откатить последнюю миграцию (требует PG_DSN)
-	PG_MIGRATIONS_PATH=$${PG_MIGRATIONS_PATH:-./migrations} go run ./cmd/migrate down
-
-mocks: ## Сгенерировать моки через mockery v3
-	@command -v mockery >/dev/null || go install github.com/vektra/mockery/v3@latest
-	mockery
-
-mocks-check: ## Проверить, что сгенерированные моки актуальны
-	@command -v mockery >/dev/null || go install github.com/vektra/mockery/v3@latest
-	mockery
-	@git diff --exit-code -- '**/mocks/*.go' || (echo "mocks out of date — run make mocks" && exit 1)
-
-hooks-install: ## Установить git-хуки репо (commit-msg, pre-commit, pre-push)
-	@cp scripts/git-hooks/commit-msg .git/hooks/commit-msg
-	@cp scripts/git-hooks/pre-push .git/hooks/pre-push
-	@cp scripts/git-hooks/pre-commit .git/hooks/pre-commit 2>/dev/null || true
-	@chmod +x .git/hooks/commit-msg .git/hooks/pre-push .git/hooks/pre-commit 2>/dev/null || true
-	@echo "git hooks installed"
-
-release-check: ## Pre-flight для release: ветка=main, чистое дерево, annotated tag vX.Y.Z на HEAD, buildx
-	@bash scripts/release-preflight.sh "$(TAG)"
-
-image-api: release-check ## Собрать и запушить api-image (require: annotated tag на HEAD, docker login git.stit.tech)
-	docker buildx build --platform linux/amd64 --push \
-	  --build-arg TARGET=api \
-	  --build-arg VERSION=$(TAG) \
-	  --build-arg GIT_SHA=$(GIT_SHA) \
-	  -t $(IMAGE_BASE):$(TAG) .
-
-image-migrate: release-check ## Собрать и запушить migrate-image (Dockerfile.migrate, в image вложены SQL-файлы)
-	docker buildx build --platform linux/amd64 --push -f Dockerfile.migrate \
-	  --build-arg VERSION=$(TAG) \
-	  --build-arg GIT_SHA=$(GIT_SHA) \
-	  -t $(IMAGE_BASE)-migrate:$(TAG) .
-
-release: release-check image-api image-migrate ## Полный релиз: pushed lockstep tag для api+migrate
-	@echo "✓ released $(IMAGE_BASE){,-migrate}:$(TAG)"
-	@echo "→ next: на корп-стороне vault kv patch kv/projects/<p>/<env>/meta backend_tag=$(TAG)"
-	@echo "→ then: на VPS bash scripts/deploy.sh (или make ship в infra-репо)"
-
-pre-merge: ## канонический pre-push/pre-merge gate: fmt + vet + lint + test + build + sqlc-diff + mocks-check
-	@echo "→ make fmt"
-	@$(MAKE) fmt
-	@echo "→ go vet ./..."
-	@go vet ./...
-	@echo "→ make lint"
-	@$(MAKE) lint
-	@echo "→ make test"
-	@$(MAKE) test
-	@echo "→ make build"
-	@$(MAKE) build
-	@echo "→ make sqlc-diff"
-	@$(MAKE) sqlc-diff
-	@echo "→ make mocks-check"
-	@$(MAKE) mocks-check
-	@echo "✓ pre-merge clean"

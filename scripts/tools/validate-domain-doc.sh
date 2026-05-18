@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# agent-tools/validate-domain-doc.sh — детерминированный валидатор DDD-артефактов в docs/domains/.
+# tools/validate-domain-doc.sh — детерминированный валидатор DDD-артефактов в docs/domains/.
 #
 # Использование:
-#   scripts/agent-tools/validate-domain-doc.sh <path>            # один файл или директория контекста
-#   scripts/agent-tools/validate-domain-doc.sh                   # вся docs/domains/
+#   scripts/tools/validate-domain-doc.sh <path>            # один файл или директория контекста
+#   scripts/tools/validate-domain-doc.sh                   # вся docs/domains/
 #
 # Проверяет:
 #   1. Frontmatter валиден: id, kind, context, name, status (обязательные); kind ∈ enum.

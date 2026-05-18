@@ -1,11 +1,13 @@
 ---
 name: triage-failure
-description: Структурированный разбор красного теста / lint'а / build'а / падающего CI. TDD-first для багфиксов. Активируй когда юзер пишет "тест падает", "lint ругается", "не компилится", "почему упало", "разбери failure", "вот трейс".
+description: Red-арм cockpit'а — структурированный разбор красного теста / lint'а / build'а / drift. TDD-first для багфиксов (RED→GREEN). smartdev чейнит сюда на ATTENTION; багфикс идёт сюда, НЕ в plan. Активируй когда юзер пишет "тест падает", "lint ругается", "не компилится", "почему упало", "разбери failure", "вот трейс".
 ---
 
 # Skill: triage-failure
 
 Дисциплинированный разбор падения. Цель — найти **корневую причину**, не замазать симптом, и зафиксировать инвариант тестом.
+
+**Red-арм cockpit'а:** `smartdev` переключает сюда, когда `make status`/`make check` дал `ATTENTION:` (build/sqlc-drift/красный тест) или задача — багфикс. Багфикс **никогда не идёт в `plan`** — он идёт сюда, по строгой петле RED→GREEN→REFACTOR. Фича-работа тоже дефолтно тест-first (ведёт `smartdev §4`), но её разбор отказов — здесь.
 
 ## Когда применять
 
@@ -23,13 +25,13 @@ description: Структурированный разбор красного т
 
 | Тип | Признаки | Где смотреть |
 |---|---|---|
-| **Build** | `cannot find package`, `undefined: ...`, `cannot use ... as ...` | `agent-tools/build.sh` — первая ошибка обычно главная |
-| **Lint** | `golangci-lint` сообщения с `[linter]` тегом | `agent-tools/lint.sh` — топ замечаний по severity |
-| **Unit test** | `--- FAIL: TestX`, assertion failure | `agent-tools/test.sh --format=detailed <pkg>` |
+| **Build** | `cannot find package`, `undefined: ...`, `cannot use ... as ...` | `make build` — первая ошибка обычно главная |
+| **Lint** | `golangci-lint` сообщения с `[linter]` тегом | `make lint` — топ замечаний по severity |
+| **Unit test** | `--- FAIL: TestX`, assertion failure | `make test PKG=<pkg> FORMAT=detailed` |
 | **Integration test** | падает только под `make test-int` | проблемы в БД-state, миграциях, testcontainers |
 | **Race** | `WARNING: DATA RACE` | `go test -race -run TestX` — стек двух горутин |
 | **Panic** | `goroutine N [running]: …` | nil-deref / index OOB / closed channel |
-| **Drift** | `make sqlc-diff` или `make mocks-check` падает | сгенерированный код не пересобрали после правки источника |
+| **Drift** | `make gen-check` падает | сгенерированный код не пересобрали после правки источника (`make gen`) |
 
 ## Шаги
 
@@ -77,22 +79,22 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 2. `go test -run TestNew ./pkg` → red. Подтверди что red — твой red, не тестовая инфра.
 3. **Только теперь** правь продакшен-код.
 4. `go test -run TestNew ./pkg` → green.
-5. `scripts/agent-tools/test.sh ./pkg` → весь пакет green (не сломал соседние тесты).
+5. `make test PKG=./pkg` → весь пакет green (не сломал соседние тесты).
 6. Коммит: оба файла одним `fix(<scope>): <one-liner>`.
 
 ### 5. Не-баг-флоу (build / lint / drift / race)
 
 | Случай | Действие |
 |---|---|
-| **Build error** после правки sqlc-запроса | `make sqlc` — проверь, что сигнатура в `infra/postgres/db/*.sql.go` обновилась. Если нет — посмотри запрос в `queries/*.sql`, синтаксис аннотации `-- name: X :one\|many\|exec\|execrows`. |
-| **Build error** после правки `.mockery.yml` или интерфейса | `make mocks` — мок-файл регенерится. |
+| **Build error** после правки sqlc-запроса | `make gen` — проверь, что сигнатура в `infra/postgres/db/*.sql.go` обновилась. Если нет — посмотри запрос в `queries/*.sql`, синтаксис аннотации `-- name: X :one\|many\|exec\|execrows`. |
+| **Build error** после правки `.mockery.yml` или интерфейса | `make gen` — мок-файл регенерится. |
 | **forbidigo** | замени `fmt.Print*` / `slog.*` на `logkit.Logger`. Внутри тестов forbidigo выключен — если падает в тесте, путь не _test.go. |
 | **depguard** | прямой импорт домена в домен. Делай port + adapter (skill `add-port`). |
 | **errcheck** | `_ = unhandledErr` — нет; разбери err-возврат и обработай. Если действительно игнор оправдан — `//nolint:errcheck // <причина>`. |
 | **gosec G115** | int-конверсия с потенциальным overflow. Если bounded — exclude в `.golangci.yml` (как сделано для `repository.go` G115). Если нет — добавь явный bound check. |
 | **Race detector** | прочти оба стека целиком; найди shared state без синхронизации. Минимальный фикс — sync.Mutex или channel; идеальный — устрани shared state. |
-| **mocks-check drift** | `make mocks` локально, закоммить дельту. Если в `_test.go` остались устаревшие EXPECT'ы — обнови. |
-| **sqlc-diff drift** | `make sqlc`, проверь дельту в `infra/postgres/db/*`, закоммить. |
+| **mocks drift** (`make gen-check`) | `make gen` локально, закоммить дельту. Если в `_test.go` остались устаревшие EXPECT'ы — обнови. |
+| **sqlc drift** (`make gen-check`) | `make gen`, проверь дельту в `infra/postgres/db/*`, закоммить. |
 
 ### 6. Если корневая причина в чужом коде
 
@@ -115,12 +117,12 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 ### 8. Верификация фикса
 
 ```bash
-scripts/agent-tools/test.sh                 # на свой пакет
-scripts/agent-tools/lint.sh                 # на свой пакет
-go test -run TestX -count=20 ./pkg          # для flaky — 20 прогонов подряд
+make test PKG=./pkg                  # на свой пакет
+make lint PKG=./pkg                  # на свой пакет
+go test -run TestX -count=20 ./pkg   # для flaky — 20 прогонов подряд
 ```
 
-Перед коммитом — `make pre-merge`.
+Перед коммитом — `make check`.
 
 ## Что искать дополнительно
 

@@ -41,8 +41,8 @@ paths:
      interfaces:
        OrderRepository:
    ```
-3. `make mocks` — генерирует `internal/domain/order/mocks/order_repository.go`.
-4. `make mocks-check` в CI проверит что моки не устарели.
+3. `make gen` — генерирует `internal/domain/order/mocks/order_repository.go`.
+4. `make gen-check` (в `make check`) проверит что моки не устарели.
 
 ### Использование моков в тестах
 

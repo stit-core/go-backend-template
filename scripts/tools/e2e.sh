@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# agent-tools/e2e.sh — обёртка над pytest-харнесом (test/) со сжатым выводом.
+# tools/e2e.sh — обёртка над pytest-харнесом (test/) со сжатым выводом.
 #
 # Использование:
-#   scripts/agent-tools/e2e.sh                 # весь набор
-#   scripts/agent-tools/e2e.sh --smoke         # только -m smoke
-#   scripts/agent-tools/e2e.sh --format=detailed
+#   scripts/tools/e2e.sh                 # весь набор
+#   scripts/tools/e2e.sh --smoke         # только -m smoke
+#   scripts/tools/e2e.sh --format=detailed
 #
 # Поднимает стек через test/stack/up.sh (нужен Docker + ./.env.local с
 # STIT_OBS_TOKEN+OTEL_TENANT), гоняет pytest, сносит стек. venv в test/.venv

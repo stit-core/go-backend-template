@@ -44,9 +44,9 @@ paths:
 
 1. Добавь новую миграцию `migrations/NNNN_X.up.sql` + `.down.sql`.
 2. Если нужны новые запросы — добавь в `internal/domain/<name>/infra/postgres/queries/`.
-3. Запусти `make sqlc` (регенерирует `infra/postgres/db/`).
+3. Запусти `make gen` (регенерирует `infra/postgres/db/`).
 4. Используй сгенерированный метод в `infra/postgres/repository.go`.
-5. `make sqlc-diff` в CI проверит что генерация чиста.
+5. `make gen-check` (в `make check`/pre-push) проверит что генерация чиста.
 
 ### Формат запроса
 
@@ -77,5 +77,5 @@ WHERE email = $1;
 
 ## CI-проверки
 
-- `make sqlc-diff` падает если сгенерированный код не совпадает с тем что в репо.
+- `make gen-check` падает если сгенерированный код не совпадает с тем что в репо.
 - Integration-тесты используют `internal/testkit/pgseed` для сидинга чистой БД.

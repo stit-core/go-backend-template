@@ -29,7 +29,7 @@ case "$SKILL" in
 esac
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-VALIDATOR="$ROOT/scripts/agent-tools/validate-domain-doc.sh"
+VALIDATOR="$ROOT/scripts/tools/validate-domain-doc.sh"
 
 # Если docs/domains/ пуст или нет валидатора — не мешаем (greenfield).
 if [ ! -d "$ROOT/docs/domains" ] || [ ! -x "$VALIDATOR" ]; then
@@ -66,7 +66,7 @@ cat >&2 <<EOF
 
 Что делать:
   1. /domain-deepen <context>  — добить драфты до stable
-  2. scripts/agent-tools/validate-domain-doc.sh docs/domains  — проверить
+  2. scripts/tools/validate-domain-doc.sh docs/domains  — проверить
   3. Повторить вызов '$SKILL'
 
 Если действительно нужен bypass (например, репо в greenfield-состоянии и docs/domains/

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# agent-tools/lint.sh — обёртка над golangci-lint со сжатым выводом.
+# tools/lint.sh — обёртка над golangci-lint со сжатым выводом.
 #
 # Использование:
-#   scripts/agent-tools/lint.sh [paths…]
-#   scripts/agent-tools/lint.sh --format=detailed
+#   scripts/tools/lint.sh [paths…]
+#   scripts/tools/lint.sh --format=detailed
 #
 # Топ замечаний (по умолчанию 20), сгруппированных по файлу, отсортированных
 # по severity. На зелёном — одна строка. Status-line: `OK` / `FAIL: N issues`.
@@ -34,7 +34,7 @@ done
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 if ! command -v golangci-lint >/dev/null 2>&1; then
-    echo "FAIL: golangci-lint не установлен. Запусти: make tools" >&2
+    echo "FAIL: golangci-lint не установлен. Запусти: make setup" >&2
     echo "FAIL: golangci-lint not installed"
     exit 1
 fi

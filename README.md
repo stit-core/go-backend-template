@@ -19,7 +19,7 @@
    ```bash
    git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/
    ```
-   (`GOPRIVATE` ставится автоматически в `make tools` ниже.)
+   (`GOPRIVATE` ставится автоматически в `make setup` ниже.)
 4. Заменить module path:
    ```bash
    OLD=git.stit.tech/stit-infra/go-backend-template
@@ -27,7 +27,7 @@
    grep -rl "$OLD" --exclude-dir=.git | xargs sed -i "s|$OLD|$NEW|g"
    go mod edit -module "$NEW" && go mod tidy
    ```
-5. `make tools && make hooks-install && make pre-merge` — убедиться что зелёное.
+5. `make setup && make check` — убедиться что зелёное.
 6. `cp .env.example .env` и заполнить локальные переменные.
 7. Первый домен: `make new-domain NAME=<context>` → `docs/domains/<context>/` (см. `docs/domains/README.md`).
 
@@ -47,23 +47,24 @@ curl -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: applicatio
 - **Платформа**: `golibinfra` — OTLP telemetry, JWT/session authn, outbox-pattern publisher, brute-force guard, cache (Redis/in-mem), NATS pub/sub, audit log, clock.
 - **DDD**: артефакты доменов в `docs/domains/<context>/` — source of truth перед кодом. См. `docs/domains/MAPPING.md` (DDD ↔ Go).
 - **Тесты**: unit (`-short -race`), integration (`//go:build integration` + testcontainers), fuzz, mockery v3.
-- **CI gate**: `make pre-merge` = fmt + vet + lint + test + build + sqlc-diff + mocks-check. Гонится pre-push хуком.
+- **CI gate**: `make check` = fmt + vet + lint + test + build + gen-check. Гонится pre-push хуком.
 
 ## Команды
 
+Единый интерфейс `make <verb>`; `make help` — сгруппированный список; concise-by-default (`FORMAT=detailed`/`VERBOSE=1` — полно).
+
 | Команда | Что делает |
 |---|---|
-| `make tools` | Pinned dev-инструменты (gofumpt, golangci-lint, sqlc, mockery) |
-| `make test` / `make test-int` / `make test-cover` | Unit / integration / coverage |
-| `make lint` / `make fmt` | golangci-lint / gofumpt |
-| `make build` | Бинарник `bin/api` (единственный runtime) |
-| `make sqlc` / `make sqlc-diff` | Регенерация / проверка pgx-кода |
-| `make mocks` / `make mocks-check` | Регенерация / проверка mockery v3 моков |
+| `make setup` | Pinned dev-инструменты + git-хуки |
+| `make test` / `make lint` / `make build` / `make fmt` | LOOP (concise; `PKG=./x/...`) |
+| `make check` | Канонический gate перед push (fmt+vet+lint+test+build+gen-check) |
+| `make gen` / `make gen-check` | Регенерация (sqlc+mockery) / проверка drift |
 | `make migrate-up` / `make migrate-down` | Миграции (нужен `PG_DSN`) |
+| `make e2e` / `make e2e-smoke` | pytest-харнес `test/` |
 | `make new-domain NAME=order` | Скаффолд нового домена |
-| `make pre-merge` | Канонический gate перед push |
-| `make release-check` / `make release` | Pre-flight + push api/migrate images в registry под lockstep tag |
-| `make hooks-install` | Поставить git-хуки |
+| `make status` / `map` / `search Q=` / `logs A=` | INTEL (cockpit-feed / пакеты / поиск / прод-логи) |
+| `make doctor` | Fail-fast preflight (docker-auth / drift / миграции) |
+| `make release VERSION=vX.Y.Z` | Релиз одной командой: tag→preflight→push api/migrate lockstep→handoff→STOP |
 
 Полный гайд для агентов и человеков — `AGENTS.md`. Дневной флоу — `.claude/WORKFLOW.md`. Точка входа в сессию — `/smartdev`.
 
@@ -79,7 +80,7 @@ pkg/                        публичные пакеты (policy, tokens)
 migrations/                 SQL-миграции (golang-migrate), парные up/down
 docs/domains/<context>/     DDD-артефакты — source of truth для домена
 .claude/                    skills, rules, agents, plans для Claude Code
-scripts/agent-tools/        обёртки с компактным выводом для агентов
+scripts/tools/        реализация make-таргетов (concise-вывод; напрямую не зовётся)
 ```
 
 См. `AGENTS.md §3` — структура расписана подробнее.
@@ -115,22 +116,20 @@ make e2e-smoke    # только -m smoke (быстрый gate)
 
 Build локальный (никаких gitea-runner'ов), push в `git.stit.tech/<org>/backend{,-migrate}` под одним lockstep `vX.Y.Z`-тегом.
 
-Шаги **в этом репо**:
+Шаги **в этом репо** — одна команда:
 
-1. `make pre-merge` — gate (fmt + lint + test + build + sqlc-diff + mocks-check). Должен быть зелёным.
-2. Аннотированный semver-tag на чистом `main`:
-   ```bash
-   git tag -a v1.2.3 -m "feat(user): password reset"
-   git push origin v1.2.3
-   ```
-   `make release` не примет lightweight-тег и тег не на HEAD — это by design (см. `scripts/release-preflight.sh`).
-3. `make release` — соберёт и запушит два image'а одним тегом:
-   - `git.stit.tech/<org>/backend:v1.2.3` (`cmd/api` — runtime)
-   - `git.stit.tech/<org>/backend-migrate:v1.2.3` (`cmd/migrate` + вложенные SQL-файлы, init-контейнер)
+1. `make check` зелёный на чистом `main`.
+2. `make release VERSION=vX.Y.Z` — один проход (`scripts/release.sh`):
+   confirm-промпт → annotated tag (если нет на HEAD; rich changelog — `git tag -a` заранее) →
+   `release-preflight` (ветка/clean/semver/buildx + `make doctor`) →
+   `docker buildx --push` двух image'ей lockstep:
+   - `<host>/<org>/backend:vX.Y.Z` (`cmd/api` — runtime)
+   - `<host>/<org>/backend-migrate:vX.Y.Z` (`cmd/migrate` + вложенные SQL, init-контейнер)
+   → агрегированный INFRA-HANDOFF → STOP.
 
-   `<host>` и `<org>` берутся из `git remote get-url origin` (host+первая path-компонента) — image-path следует за тем, где репо реально живёт в Gitea, без правок Makefile при копировании шаблона. Перед запуском убедись что залогинен: `docker login git.stit.tech`.
+   `<host>`/`<org>` берутся из `git remote get-url origin` — image-path следует за тем, где репо живёт в Gitea, без правок при форке. Lightweight/`:latest`/`:edge` и тег не на HEAD отвергаются by design. `docker login <host>` — креды оператора; `make doctor` в preflight ловит его отсутствие fail-fast.
 
-После шага 3 image'ы в registry. **Наша зона ответственности закончилась.** `make release` напечатает next-steps как подсказку оператору.
+После команды image'ы в registry. **Наша зона ответственности закончилась.** `make release` печатает агрегированный INFRA-HANDOFF (накопленные `## Infra impact` + vault/ship) как подсказку оператору.
 
 ### Handoff
 

@@ -24,44 +24,30 @@
 
 | Команда | Что делает |
 |---|---|
-| `make tools` | Поставить pinned-версии dev-инструментов (gofumpt, golangci-lint, sqlc, mockery) |
-| `make test` | Юнит-тесты, `-short -race` |
-| `make test-int` | Интеграционные тесты через testcontainers (нужен Docker) |
-| `make test-cover` | Coverage по domain + platform |
-| `make lint` | golangci-lint |
+| `make help` | Сгруппированный список всех таргетов |
+| `make test` / `lint` / `build` | Concise-by-default; `FORMAT=detailed`/`VERBOSE=1` — полно; `PKG=./x/...` — подмножество |
 | `make fmt` | gofumpt -w |
-| `make build` | Собрать api-бинарник (`bin/api`). Воркер как отдельный бинарь не используется — outbox drain, NATS subscribers и background jobs живут внутри `cmd/api/` через fx.Lifecycle. |
-| `make sqlc` / `make sqlc-diff` | Регенерация / проверка pgx-кода |
-| `make mocks` / `make mocks-check` | Регенерация / проверка mockery v3 моков |
+| `make check` | Канонический gate: fmt+vet+lint+test+build+gen-check. Гонится pre-push хуком |
+| `make gen` / `make gen-check` | Регенерация (sqlc+mockery) / проверка их drift |
 | `make migrate-up` / `make migrate-down` | Накатить / откатить одну миграцию (нужен `PG_DSN`) |
+| `make e2e` / `make e2e-smoke` | pytest-харнес `test/` (Docker + `./.env.local`) |
 | `make new-domain NAME=order` | Скаффолд скелета нового домена |
-| `make pre-merge` | Канонический gate: fmt + vet + lint + test + build + sqlc-diff + mocks-check. Гонится pre-push хуком. |
-| `make release-check` / `make release` | Pre-flight (main / clean / annotated `vX.Y.Z` / buildx) + push `<host>/<org>/backend{,-migrate}:<tag>` (lockstep). См. README §Release. |
-| `make hooks-install` | Установить git-хуки (commit-msg, pre-commit, pre-push) |
+| `make status` / `map` / `search Q=` / `logs A=` | INTEL: cockpit-feed / пакеты / поиск / прод-логи |
+| `make release VERSION=vX.Y.Z` | confirm→tag→preflight(+`doctor`)→buildx api+migrate push lockstep→INFRA-HANDOFF→STOP. См. README §Release |
+| `make setup` / `make doctor` | dev-tools+git-хуки / fail-fast preflight (docker-auth/drift/миграции) |
+| `make test-int` / `test-fuzz` / `test-bench` / `test-cover` / `tidy` | EXTRA вспомогательное |
 
-**Agent-friendly обёртки** в `scripts/agent-tools/` дают сжатый вывод (≤25k токенов, сначала фейлы, в конце канонический status-line). В работе агента предпочитай их сырым командам:
+`make build` собирает `bin/api`. Воркер отдельным бинарём не собирается — outbox drain, NATS subscribers и background jobs живут в `cmd/api/` через fx.Lifecycle.
 
-| Обёртка | Заменяет | Форма вывода |
-|---|---|---|
-| `agent-tools/test.sh [pkg…]` | `make test` | Счётчики PASS на зелёном; `pkg/file_test.go:line FAIL TestName` на каждое падение |
-| `agent-tools/lint.sh [paths…]` | `make lint` | Топ замечаний, отсортированные по severity, формат `file:line:col [linter] msg` |
-| `agent-tools/build.sh` | `go build ./...` | Первые 5 ошибок с `file:line:col`, дальше count остальных |
-| `agent-tools/search.sh PATTERN [path]` | `grep -r` | По умолчанию список файлов с матчами; `--lines` — с контекстом строк |
-| `agent-tools/repomap.sh [pkg]` | (нет) | Сводка публичных символов по пакетам, размер ограничен бюджетом |
-| `agent-tools/status.sh [--full]` | (нет) | Сводка состояния репо для `/smartdev`: ветка, working tree, активные планы, домены, миграции, TODO. `--full` добавляет sqlc-diff/mocks/lint. |
-| `agent-tools/validate-domain-doc.sh [path]` | (нет) | Валидатор DDD-артефактов в `docs/domains/`. Проверяет frontmatter, обязательные секции, при `status: stable` — non-empty bodies + ref-целостность. |
-| `agent-tools/logs.sh {query\|errors\|watch}` | (нет) | Чтение прод-логов через корп-Loki (`loki.stit.tech`) под bearer-токеном из `./.env.local`. Локальный dev — логи в stdout, тулза не нужна. Подробнее — skill `query-logs`. |
-| `agent-tools/e2e.sh [--smoke]` | `make e2e` | Поднять стек → pytest-харнес `test/` → снести. На фейле падающие тесты + хвост вывода; в конце `OK`/`FAIL`. Нужен Docker + `./.env.local`. |
-
-Все обёртки принимают `--format=concise|detailed` и заканчиваются одной канонической строкой статуса (`OK` / `FAIL: <reason>`).
+Реализация за таргетами — `scripts/tools/*` (`test.sh`/`lint.sh`/`build.sh`/`status.sh`/`e2e.sh`/`logs.sh`/`doctor.sh`/`validate-domain-doc.sh`/`validate-plan.sh`). Напрямую не зовутся: агент дёргает `make <verb>`, скрипты дают сжатый вывод и каноническую строку (`OK` / `FAIL: <reason>` / `ATTENTION:`). `make <x> FORMAT=detailed` / `VERBOSE=1` — полный вывод для человека/отладки.
 
 ## 2. Тестирование
 
 - **Юнит-тесты** лежат рядом с кодом как `<file>_test.go`. В корне домена тесты на `usecase.go`, `policy.go`. В `delivery/http/` — на хендлеры.
 - **Интеграционные тесты** под build-tag `integration`: `//go:build integration`. Запускаются через `make test-int`. Поднимают Postgres + NATS через `internal/testkit/pgseed` и `testcontainers-go`.
-- **Моки** — mockery v3, файлы `<interface_snake>.go` в подпакете `mocks/` рядом с интерфейсом (пакет `mocks`, тип `Mock<Interface>`). Конфиг — `.mockery.yml`. Руками никогда не править — `make mocks` после изменения интерфейсов.
+- **Моки** — mockery v3, файлы `<interface_snake>.go` в подпакете `mocks/` рядом с интерфейсом (пакет `mocks`, тип `Mock<Interface>`). Конфиг — `.mockery.yml`. Руками никогда не править — `make gen` после изменения интерфейсов.
 - **Fuzz**-таргеты лежат рядом с тестами; `make test-fuzz` гоняет 10s-смок на каждую цель.
-- **E2E/smoke** — типизированный pytest-харнес в `test/` поверх docker-compose стека. `make e2e` / `make e2e-smoke` (или `scripts/agent-tools/e2e.sh [--smoke]`). Зоны: `test/stack/` (docker+bash), `test/client/` (typed httpx+pydantic), `test/scenarios/` (step-функции), `test/infra/` (pg/outbox/nats/redis — side-effect ассерты, порты на 127.0.0.1), `test/smoke/` + `test/e2e/` (тесты, маркеры `smoke`/`e2e`). Тесты не только black-box: ассертят строки БД, outbox-эвенты, core-NATS доставку, authz-матрицу, bruteforce-lock. Verification confirm-roundtrip — дом Go usecase/integration-тестов (у шаблона нет mail-канала by design), не e2e-пробел. Нужен Docker + `./.env.local`. Детали — `test/README.md`.
+- **E2E/smoke** — типизированный pytest-харнес в `test/` поверх docker-compose стека. `make e2e` / `make e2e-smoke` (или `scripts/tools/e2e.sh [--smoke]`). Зоны: `test/stack/` (docker+bash), `test/client/` (typed httpx+pydantic), `test/scenarios/` (step-функции), `test/infra/` (pg/outbox/nats/redis — side-effect ассерты, порты на 127.0.0.1), `test/smoke/` + `test/e2e/` (тесты, маркеры `smoke`/`e2e`). Тесты не только black-box: ассертят строки БД, outbox-эвенты, core-NATS доставку, authz-матрицу, bruteforce-lock. Verification confirm-roundtrip — дом Go usecase/integration-тестов (у шаблона нет mail-канала by design), не e2e-пробел. Нужен Docker + `./.env.local`. Детали — `test/README.md`.
 - **TDD обязателен** для багфиксов: сначала пишешь падающий тест, видишь red, потом фиксишь до green.
 
 ## 3. Структура проекта
@@ -106,15 +92,15 @@ test/            E2E/smoke-харнес (pytest): stack/ (docker+bash up.sh/down
                  infra/ (pg/outbox/nats/redis side-effect ассерты),
                  smoke/ + e2e/ (тесты, маркеры). Запуск — make e2e / e2e-smoke.
 scripts/
-  agent-tools/   Обёртки с agent-friendly выводом (см. §1)
+  tools/   Обёртки с agent-friendly выводом (см. §1)
   claude-hooks/  Детерминированные хуки для Claude Code
-  git-hooks/     commit-msg, pre-commit, pre-push (ставятся через `make hooks-install`)
+  git-hooks/     commit-msg, pre-commit, pre-push (ставятся через `make setup`)
 .claude/
   settings.json        Конфиг Claude Code (хуки, permissions, model) — committed
   settings.local.json  Локальные user-overrides — .gitignore'нутые
   rules/               Path-scoped правила (грузятся когда соотв. файлы в контексте)
   skills/              Процедурные воркфлоу: smartdev, plan, add-domain, add-migration,
-                       add-endpoint, add-event, add-port, triage-failure, run-pre-merge,
+                       add-endpoint, add-event, add-port, triage-failure, infra-handoff,
                        domain-deepen, query-logs, release
   agents/              Subagent'ы (explorer, reviewer, migration-author)
   plans/               roadmap.md (индекс) + <slug>.md (per-task) — committable, ревьюются в PR
@@ -148,8 +134,8 @@ Production-значения **в этот repo не попадают**. Они �
 
 - **Conventional Commits** проверяются `scripts/git-hooks/commit-msg`. Допустимые типы: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `meta`. Формат: `<type>(<scope>)?: <subject>`, subject ≤72 символа.
 - **Линейная история**. Squash-merge в `main` через PR.
-- **Хуки** ставятся `make hooks-install` — commit-msg, pre-commit (gofumpt + vet + lint), pre-push (`make pre-merge` — полный gate). Skip только через `SKIP_PREPUSH=1`, не `--no-verify`.
-- **Релизы** — annotated semver-tag (`git tag -a vX.Y.Z -m "..."`) на чистом `main` после зелёного `make pre-merge`. Lightweight-теги отвергаются `release-preflight`. Тег = lockstep для api+migrate images.
+- **Хуки** ставятся `make setup` — commit-msg, pre-commit (gofumpt + vet + lint + validate-domain-doc + validate-plan), pre-push (`make check` — полный gate). Skip только через `SKIP_PREPUSH=1`, не `--no-verify`.
+- **Релизы** — `make release VERSION=vX.Y.Z` (один проход: confirm→annotated tag→preflight+doctor→buildx push lockstep→INFRA-HANDOFF→STOP) на чистом `main` после зелёного `make check`. Lightweight-теги отвергаются `release-preflight`.
 - Примеры:
   - `feat(user): add password reset flow`
   - `fix(auth): block reused refresh tokens by validating jti`
@@ -182,7 +168,7 @@ Cross-context платформенный VO (структурно идентич
 **Workflow:**
 1. Копируешь шаблоны в `docs/domains/<ctx>/`, заполняешь минимум (frontmatter + Properties + Methods names).
 2. `/domain-deepen <ctx>` — skill ведёт волнами вопросов inside-out, добивая секции.
-3. `scripts/agent-tools/validate-domain-doc.sh docs/domains/<ctx>` зелёный → промоушн `status: draft → stable`.
+3. `scripts/tools/validate-domain-doc.sh docs/domains/<ctx>` зелёный → промоушн `status: draft → stable`.
 4. `/smartdev` → `/plan <task>` → `add-domain` / `add-endpoint` / `add-event`. Скаффолдинг-скиллы блокируются если есть `status: draft` или валидатор красный.
 
 См. `.claude/rules/domain-artifacts.md` и `.claude/skills/domain-deepen/SKILL.md`.
@@ -190,14 +176,13 @@ Cross-context платформенный VO (структурно идентич
 ## 7. Границы
 
 ### Делать всегда
-- Перед claim "готово" гнать `make pre-merge` (или эквивалент через `agent-tools/*`). Без верификации ты единственный feedback-loop.
+- Перед claim "готово" гнать `make check`. Без верификации ты единственный feedback-loop.
+- **Тронул инфра-поверхность** (новый/изменённый required env-var или Vault-секрет; миграция destructive/lock/backfill/extension; cross-service NATS/outbox-subject; новый порт/breaking API; новая runtime-зависимость в `go.mod`) → **обязан оформить INFRA-HANDOFF-блок и попросить юзера передать его инфра-админу** до claim «готово»/коммита. Не молчи. Механизм — `.claude/rules/infra-impact.md` + skill `infra-handoff`; `make release` агрегирует.
 - Cross-domain вызовы — только через порты + адаптеры. depguard ловит прямые импорты.
 - Логи — через `logkit.Logger`.
-- Регенерить сгенерированный код при изменении источника:
-  - `make sqlc` после правки `internal/domain/*/infra/postgres/queries/` или `migrations/`
-  - `make mocks` после изменения интерфейсов из `.mockery.yml`
+- Регенерить сгенерированный код `make gen` после правки `internal/domain/*/infra/postgres/queries/`, `migrations/` или интерфейсов из `.mockery.yml`.
 - Conventional Commits.
-- В агентских флоу — обёртки `agent-tools/*`. Они режут вывод и подтягивают фейлы наверх.
+- Дёргай `make <verb>` — concise-by-default; скрипты `scripts/tools/*` за таргетами, напрямую не зови.
 
 ### Сначала спросить
 - `migrations/` — схему БД сложно откатывать. Используй skill `add-migration`.
@@ -210,7 +195,7 @@ Cross-context платформенный VO (структурно идентич
 ### Не делать никогда
 - Скипать pre-commit / pre-push через `--no-verify`. PreToolUse-хук это блокирует.
 - Коммитить `.env.local` / `.env` / `*.pem` / `*.key` или цитировать их содержимое в чат. От коммита страхует `.gitignore`; pre-write хук защищает от правки только `*.pem` / `*.key` + сгенерированные файлы.
-- Править сгенерированные файлы руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`). Регенерируй через `make sqlc` / `make mocks`.
+- Править сгенерированные файлы руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`). Регенерируй через `make gen`.
 - Использовать `fmt.Print*` или `slog.*` напрямую. Только `logkit.Logger`.
 - Пушить в `main` напрямую. PR + squash-merge.
 - Image-теги вида `:latest` / `:edge` / lightweight git-tags. `release-preflight` отвергает; infra-template их и не примет.

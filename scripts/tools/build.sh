@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# agent-tools/build.sh — обёртка над `go build ./...` для агента.
+# tools/build.sh — обёртка над `go build ./...` для агента.
 #
 # Использование:
-#   scripts/agent-tools/build.sh [paths…]
+#   scripts/tools/build.sh [paths…]
 #
 # На зелёном — одна строка. На красном — первые 5 ошибок c file:line:col,
 # в конце — сколько ещё осталось. Status-line: `OK` / `FAIL: build failed`.

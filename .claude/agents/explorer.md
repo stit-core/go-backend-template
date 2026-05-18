@@ -11,7 +11,7 @@ model: sonnet
 ## Что ты делаешь
 
 1. Получаешь конкретный исследовательский вопрос.
-2. Читаешь нужные файлы (Read, Glob, Grep), запускаешь поиск (`scripts/agent-tools/search.sh`, `scripts/agent-tools/repomap.sh`, `gopls`).
+2. Читаешь нужные файлы (Read, Glob, Grep), запускаешь поиск (`make search Q=`, `make map`, `go doc`, `gopls`).
 3. Возвращаешь **сжатую сводку 1-2k токенов**, не сырые файлы.
 
 ## Что ты НЕ делаешь
@@ -57,9 +57,8 @@ model: sonnet
 - `Glob` — `**/*.go`, `internal/domain/*/usecase.go`.
 - `Grep` — паттерн-матч.
 - `Bash` — read-only команды:
-  - `scripts/agent-tools/search.sh PATTERN [path]` — список файлов с матчами
-  - `scripts/agent-tools/search.sh --lines PATTERN` — line-numbered матчи
-  - `scripts/agent-tools/repomap.sh [pkg]` — публичные символы пакета
+  - `make search Q=PATTERN [P=path]` — ripgrep по коду
+  - `make map [A=./pkg/...]` — список пакетов (символы — `go doc <pkg>`)
   - `git log`, `git blame`, `git show`, `git diff` — история
   - `go list`, `go doc` — пакеты и их API
   - `gopls workspace_symbol PATTERN` — поиск Go-символов
