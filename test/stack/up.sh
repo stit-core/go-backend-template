@@ -58,7 +58,7 @@ export OTEL_TENANT="$TENANT"
 # === Build binaries locally ===
 mkdir -p "$BIN_DIR"
 echo "== Build (CGO_ENABLED=0) =="
-for target in api migrate; do
+for target in api migrate seed-admin; do
     out="$BIN_DIR/$target"
     echo "  go build -> $out"
     if ! CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags='-s -w' -o "$out" "./cmd/$target" 2>&1; then
