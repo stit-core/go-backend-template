@@ -8,6 +8,7 @@ bin/
 coverage.*
 
 # Python e2e-харнес (test/)
+test/stack/.e2e-endpoints.env
 test/.venv/
 __pycache__/
 .pytest_cache/

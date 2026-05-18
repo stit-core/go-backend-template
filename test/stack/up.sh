@@ -15,11 +15,7 @@
 
 set -uo pipefail
 
-cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-
-STACK_DIR="test/stack"
-BIN_DIR="$STACK_DIR/bin"
-COMPOSE="$STACK_DIR/compose.yml"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # === Token resolution ===
 resolve_kv() {
@@ -78,20 +74,47 @@ done
 # === Compose up (build context = repo root) ===
 echo
 echo "== Compose up =="
-if ! docker compose -f "$COMPOSE" up -d --build 2>&1; then
+if ! docker compose -p "$E2E_PROJECT" -f "$COMPOSE" up -d --build 2>&1; then
     echo "FAIL: docker compose up" >&2
     exit 1
 fi
+
+# === Resolve ephemeral host-ports → endpoints file ===
+# Порты эфемерны (127.0.0.1::<port>) для изоляции параллельных форков —
+# фактический host-порт известен только после `compose up`. pytest читает
+# ENDPOINTS_FILE (conftest), экспорт env обратно из subprocess не доходит.
+resolve_port() {
+    docker compose -p "$E2E_PROJECT" -f "$COMPOSE" port "$1" "$2" 2>/dev/null \
+        | awk -F: 'NF{print $NF; exit}'
+}
+API_PORT=$(resolve_port api 8080)
+PG_PORT=$(resolve_port postgres 5432)
+NATS_PORT=$(resolve_port nats 4222)
+REDIS_PORT=$(resolve_port redis 6379)
+for _p in API_PORT PG_PORT NATS_PORT REDIS_PORT; do
+    if [ -z "${!_p:-}" ]; then
+        echo "FAIL: could not resolve host port ($_p)" >&2
+        docker compose -p "$E2E_PROJECT" -f "$COMPOSE" ps >&2
+        exit 1
+    fi
+done
+API_BASE="http://127.0.0.1:${API_PORT}"
+cat > "$ENDPOINTS_FILE" <<EOF
+E2E_API_BASE_URL=${API_BASE}
+E2E_PG_DSN=postgresql://postgres:postgres@127.0.0.1:${PG_PORT}/app
+E2E_NATS_URL=nats://127.0.0.1:${NATS_PORT}
+E2E_REDIS_URL=redis://127.0.0.1:${REDIS_PORT}/0
+EOF
 
 # === Wait for api healthy via openapi ===
 echo
 echo "== Wait for api (max 60s) =="
 for i in $(seq 1 30); do
-    if curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8080/openapi.yaml 2>/dev/null \
-       || curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8080/healthz 2>/dev/null; then
+    if curl -fsS -o /dev/null --max-time 2 "${API_BASE}/openapi.yaml" 2>/dev/null \
+       || curl -fsS -o /dev/null --max-time 2 "${API_BASE}/healthz" 2>/dev/null; then
         echo "  api up after ${i}s × 2s = $((i*2))s"
         echo
-        docker compose -f "$COMPOSE" ps
+        docker compose -p "$E2E_PROJECT" -f "$COMPOSE" ps
         echo
         echo "OK"
         exit 0
@@ -100,5 +123,5 @@ for i in $(seq 1 30); do
 done
 
 echo "FAIL: api did not become healthy in 60s. Logs:" >&2
-docker compose -f "$COMPOSE" logs --tail=80 api migrate >&2
+docker compose -p "$E2E_PROJECT" -f "$COMPOSE" logs --tail=80 api migrate >&2
 exit 1

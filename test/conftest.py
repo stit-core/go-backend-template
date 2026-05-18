@@ -19,7 +19,20 @@ from infra.pg import Pg
 from infra.redis import RedisInspect
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_BASE_URL = "http://127.0.0.1:8080"
+_ENDPOINTS_FILE = _REPO_ROOT / "test" / "stack" / ".e2e-endpoints.env"
+
+
+def _read_endpoints() -> dict[str, str]:
+    """Резолвнутые эфемерные адреса стека — пишет test/stack/up.sh после
+    `compose up` (порты эфемерны для изоляции параллельных форков)."""
+    eps: dict[str, str] = {}
+    for line in _ENDPOINTS_FILE.read_text().splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or "=" not in s:
+            continue
+        k, _, v = s.partition("=")
+        eps[k.strip()] = v.strip().strip("\"'")
+    return eps
 
 
 @dataclass(frozen=True)
@@ -65,7 +78,7 @@ def stack() -> Iterator[str]:
             pytrace=False,
         )
     try:
-        yield _BASE_URL
+        yield _read_endpoints()["E2E_API_BASE_URL"]
     finally:
         _run("down.sh")
 
@@ -112,24 +125,31 @@ def other_user(stack: str) -> RegisteredUser:
     return u
 
 
+@pytest.fixture(scope="session")
+def endpoints(stack: str) -> dict[str, str]:
+    return _read_endpoints()
+
+
 @pytest.fixture
-def pg(stack: str) -> Iterator[Pg]:
-    with Pg() as p:
+def pg(endpoints: dict[str, str]) -> Iterator[Pg]:
+    with Pg(dsn=endpoints["E2E_PG_DSN"]) as p:
         yield p
 
 
 @pytest.fixture
-def redis(stack: str) -> Iterator[RedisInspect]:
-    with RedisInspect() as r:
+def redis(endpoints: dict[str, str]) -> Iterator[RedisInspect]:
+    with RedisInspect(url=endpoints["E2E_REDIS_URL"]) as r:
         yield r
 
 
 @pytest.fixture
-def nats_collector(stack: str) -> Callable[[list[str]], NatsCollector]:
+def nats_collector(
+    endpoints: dict[str, str],
+) -> Callable[[list[str]], NatsCollector]:
     """Фабрика: тест сам входит в `with`, чтобы подписка встала ДО HTTP-действия
     (core NATS без реплея)."""
 
     def _make(subjects: list[str]) -> NatsCollector:
-        return NatsCollector(subjects)
+        return NatsCollector(subjects, url=endpoints["E2E_NATS_URL"])
 
     return _make

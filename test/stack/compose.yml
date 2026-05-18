@@ -1,4 +1,4 @@
-name: backend-smoke
+name: ${COMPOSE_PROJECT_NAME:-e2e-local}
 
 x-app-env: &app-env
   HTTP_ADDR: ":8080"
@@ -43,7 +43,6 @@ x-app-env: &app-env
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: smoke-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -56,12 +55,11 @@ services:
       timeout: 3s
       retries: 20
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1::5432"
     networks: [smoke]
 
   nats:
     image: nats:2.10-alpine
-    container_name: smoke-nats
     command: ["-js", "-sd", "/data", "-m", "8222"]
     volumes:
       - natsdata:/data
@@ -71,25 +69,23 @@ services:
       timeout: 3s
       retries: 20
     ports:
-      - "127.0.0.1:8222:8222"
-      - "127.0.0.1:4222:4222"
+      - "127.0.0.1::8222"
+      - "127.0.0.1::4222"
     networks: [smoke]
 
   redis:
     image: redis:7-alpine
-    container_name: smoke-redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
       timeout: 3s
       retries: 20
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1::6379"
     networks: [smoke]
 
   otel-agent:
     image: otel/opentelemetry-collector-contrib:0.151.0
-    container_name: smoke-otel-agent
     command: ["--config=/etc/otel/config.yaml"]
     volumes:
       - ./configs/otel-agent.yaml:/etc/otel/config.yaml:ro
@@ -108,8 +104,7 @@ services:
     networks: [smoke]
 
   migrate:
-    image: backend-smoke:local
-    container_name: smoke-migrate
+    image: ${COMPOSE_PROJECT_NAME:-backend-smoke}:local
     build:
       context: ../..
       dockerfile: test/stack/Dockerfile.local
@@ -125,8 +120,7 @@ services:
     networks: [smoke]
 
   seed-admin:
-    image: backend-smoke:local
-    container_name: smoke-seed-admin
+    image: ${COMPOSE_PROJECT_NAME:-backend-smoke}:local
     environment:
       <<: *app-env
       SEED_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
@@ -143,8 +137,7 @@ services:
     networks: [smoke]
 
   api:
-    image: backend-smoke:local
-    container_name: smoke-api
+    image: ${COMPOSE_PROJECT_NAME:-backend-smoke}:local
     environment:
       <<: *app-env
     entrypoint: ["api"]
@@ -162,7 +155,7 @@ services:
       seed-admin:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1::8080"
     networks: [smoke]
 
 volumes:
