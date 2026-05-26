@@ -66,7 +66,7 @@ curl -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: applicatio
 | `make doctor` | Fail-fast preflight (docker-auth / drift / миграции) |
 | `make release VERSION=vX.Y.Z` | Релиз одной командой: tag→preflight→push api/migrate lockstep→handoff→STOP |
 
-Полный гайд для агентов и человеков — `AGENTS.md`. Дневной флоу — `.claude/WORKFLOW.md`. Точка входа в сессию — `/smartdev`.
+Полный гайд для агентов и человеков — `CLAUDE.md`. Дневной флоу — `.claude/WORKFLOW.md`. Точка входа в сессию — `/smartdev`.
 
 ## Структура
 
@@ -83,7 +83,7 @@ docs/domains/<context>/     DDD-артефакты — source of truth для д
 scripts/tools/        реализация make-таргетов (concise-вывод; напрямую не зовётся)
 ```
 
-См. `AGENTS.md §3` — структура расписана подробнее.
+См. `CLAUDE.md §3` — структура расписана подробнее.
 
 ## E2E
 

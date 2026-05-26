@@ -1,7 +1,11 @@
 ---
 name: env-local
 description: Формат и правила ./.env.local — локальный gitignored файл с токенами для dev-tooling (e2e-стек, чтение прод-логов). Доступ к значению токена — через tools, не цитированием в чат. Грузится при работе с .env.local или tools/logs.sh / test/stack/up.sh.
-globs: ".env.local,.env.local.example,scripts/tools/logs.sh,test/stack/up.sh"
+paths:
+  - ".env.local"
+  - ".env.local.example"
+  - "scripts/tools/logs.sh"
+  - "test/stack/up.sh"
 ---
 
 # Dev tokens — .env.local

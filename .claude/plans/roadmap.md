@@ -1,13 +1,122 @@
 # Roadmap
 
-Индекс активных планов. Каждый детальный план — в `<slug>.md` рядом. Управляется skill'ом `plan`.
+Единственный артефакт планирования проекта — этот файл. Подпапок, `<slug>.md`,
+архивов и changelog'ов нет: они расходятся с правдой и мешают.
 
-План удаляется сразу по завершении — история остаётся в `git log`. Индекс не держит секцию завершённого. Открытый follow-up из закрытой задачи переезжает строкой в `## Active`.
+**Planning-first.** Изменение идёт через план — секцию в `## Active` ниже.
+Прямая правка без плана допустима только для truly-atomic (опечатка, один
+очевидный файл) и багфиксов (→ skill `triage-failure`, RED-first). Отклонение
+от плана — осознанное и проговаривается с юзером.
+
+**Жизненный цикл.** `planning → in-progress → blocked? → done`. По `done` секция
+задачи удаляется целиком — история остаётся в `git log`. Незакрытый follow-up
+переезжает в backlog или новой Active-секцией, а не хвостом в удаляемой.
+
+**Current focus:** `doc-and-scaffold-overhaul`
 
 ## Active
 
-—
+### doc-and-scaffold-overhaul — переработка документации и скаффолд-системы
+**Создан:** 2026-05-26 · **Статус:** in-progress
+
+**Контекст.** Шаблон — «полупроект-полушаблон»: CLAUDE.md (203 строки, озаглавлен
+`# AGENTS.md`) смешивает ядро и справку; README (295 строк) тащит ~140 строк
+observability-референса; половина правил на нерабочем ключе `globs:` (грузятся
+всегда вместо path-scope); скиллы без единого спека. Цель: docs становятся
+design-source-of-truth, из которого скиллы (`/init-service` → `domain-deep-dive`
++ `stack-deep-dive` → `de-template`) разворачивают реальный проект; CLAUDE.md
+худеет до роутера (<200); правила/скиллы/планы приводятся к системным
+возможностям Claude Code. Решения по дизайну — в «Открытых вопросах».
+
+**Не входит в скоуп.**
+- Реальная де-темплейтизация конкретного форка (это запускает потребитель).
+- Правки `golibinfra` / соседних репо экосистемы.
+- Изменение runtime-кода доменов (auth/user/verification остаются reference).
+- git-хуки (commit-msg/pre-commit/pre-push) — остаются; убираем только Claude-хуки.
+
+**Открытые вопросы.** (закрыты до старта работы; A14 — единственный к решению в ходе)
+- [x] Канон агент-гайда → только `CLAUDE.md`, AGENTS.md выпиливаем.
+- [x] Push в `main` → разрешён; git `pre-push → make check` остаётся gate.
+- [x] Claude Code хуки → снести целиком (settings.json + scripts/claude-hooks/); git-хуки и permissions.deny остаются.
+- [x] Reference-домены → живут; удаление — шаг в docs/getting-started.
+- [x] `docs/stack` → rich-набор 8 kinds (service, runtime, config, messaging, observability, persistence, auth, dependencies).
+- [x] `/de-template` → гибрид: детерминированная механика + doc-driven wiring как reviewable diff поверх скелета.
+- [x] golibinfra-first → CLAUDE.md (инвариант) + правило `upstream-first.md` + `docs/reference/architecture.md`.
+- [x] Правила: slim `comments`/`domain-artifacts`/`env-local`/`infra-impact`/`sqlc-and-migrations`/`tests-pipeline`; split `domain-architecture`; merge `outbox-events`+`jobs-and-subscribers` → `events-and-messaging.md`; `forward-only` как есть.
+- [x] Планы → единый roadmap.md, планы inline; статусы {planning, in-progress, blocked}; planning-first = plan по default.
+- [x] `WORKFLOW.md` → растворить по ролям: §2 петля → smartdev; §1/§4/§5/§7 → docs/contributing; §6 non-goals → docs/reference/architecture; сценарии → getting-started/contributing. Файл удаляется.
+- [ ] Какие из 12 скиллов удалить — решается первым шагом Фазы 4 (атом A14).
+
+**Атомы.**
+
+#### Phase 0 — Механика (независима, низкий риск)
+- [x] **A1:** `globs:`→`paths:` в `comments`/`domain-artifacts`/`env-local`/`infra-impact`; сверить все 10 правил.
+  - Verify: `grep -l 'globs:' .claude/rules/*.md` → пусто · Зависит от: —
+  - **Done:** 4 правила сконвертированы в YAML-list `paths:`; `grep -l globs` пусто, `grep -L paths` пусто (все 10 path-scoped).
+- [x] **A2:** снести `hooks`-блок из `.claude/settings.json` + удалить `scripts/claude-hooks/`.
+  - Verify: `jq '.hooks' .claude/settings.json` → null; каталога нет · Зависит от: —
+  - **Done:** hooks-блок удалён (settings.json валиден через python3, ключа `hooks` нет); `scripts/claude-hooks/` снят `git rm -r`. `permissions.deny` сохранён.
+- [x] **A3:** разрешить push в `main` — убрать запрет из CLAUDE.md §Границы и skill `release`.
+  - Verify: `grep -rin 'main.*напряму\|напряму.*main' CLAUDE.md .claude/skills/release` → пусто · Зависит от: —
+  - **Done:** удалена строка-запрет в §7 «Не делать никогда»; §5 переформулирована «Push в main разрешён»; в release-скилле запрета не было.
+- [x] **A4:** ретайтл `# AGENTS.md`→нормальный заголовок; выпилить упоминания AGENTS.md.
+  - Verify: `grep -rl 'AGENTS.md' --exclude-dir=.git .` → пусто (кроме roadmap/WORKFLOW) · Зависит от: —
+  - **Done:** `CLAUDE.md` был симлинком на реальный `AGENTS.md` — инверсия плана. `git rm` симлинка + `git mv AGENTS.md→CLAUDE.md` (реальный файл); заголовок → «go-backend-template — гайд для агентов»; рефы вычищены в README/commit-msg/comments/forward-only. Остаток AGENTS.md — только WORKFLOW.md (умрёт в A21).
+
+#### Phase 1 — Система планов (foundational; догфуд этого файла)
+- [ ] **A5:** финализировать inline-формат единого roadmap (этот файл — эталон секции).
+  - Verify: human-review структуры · Зависит от: —
+- [ ] **A6:** переписать `validate-plan.sh` под секции внутри roadmap.md (per-section header, статусы {planning,in-progress,blocked}, Verify/Зависит каждого атома).
+  - Verify: `scripts/tools/validate-plan.sh` → OK на этом roadmap · Зависит от: A5
+- [ ] **A7:** переписать skill `plan` под single-file inline + planning-first + blocked; длинный список вопросов → `references/`.
+  - Verify: skill <500 строк; описание-триггеры по спеку · Зависит от: A5
+- [ ] **A8:** обновить pre-commit (валидирует roadmap.md) + smartdev читает roadmap как state-of-the-world.
+  - Verify: pre-commit dry-run зелёный · Зависит от: A6
+
+#### Phase 2 — docs/ + диспозиция правил
+- [ ] **A9:** дерево docs: `getting-started.md`/`contributing.md` [META] + `reference/{architecture,observability,release,ecosystem}.md` + `docs/README.md`-роутер. Контрибьютор-explainer (WORKFLOW §1/§4/§5/§7) → contributing.md; WORKFLOW §6 non-goals → architecture.md; сценарий «новый проект» → getting-started.
+  - Verify: файлы есть, внутренние ссылки резолвятся · Зависит от: —
+- [ ] **A10:** `docs/stack/` — 8 kinds: frontmatter-контракт, обязательные H2, `_templates/`, `validate-stack-doc.sh`.
+  - Verify: `scripts/tools/validate-stack-doc.sh docs/stack` → OK на templates · Зависит от: A9
+- [ ] **A11:** правила — slim/split/merge(`events-and-messaging`)/new `upstream-first`; проза/примеры → `docs/reference/architecture.md`.
+  - Verify: `make lint` зелёный; `grep -l 'globs:'` пусто; merge выполнен · Зависит от: A9
+
+#### Phase 3 — CLAUDE.md + README
+- [ ] **A12:** CLAUDE.md <200 строк: ядро-инварианты (+golibinfra-first, +planning-first) + таблица-роутер в docs/rules/skills.
+  - Verify: `wc -l CLAUDE.md` <200; ссылки резолвятся · Зависит от: A9, A11
+- [ ] **A13:** README — потребительская шапка + старт через `/init-service`; observability-блок → `docs/reference/observability.md`.
+  - Verify: README ссылается на docs; observability в reference · Зависит от: A9
+
+#### Phase 4 — Скиллы (skill-by-skill)
+- [ ] **A14:** решение keep/rework/delete по каждому из 12 скиллов (фиксируется чекпоинтом).
+  - Verify: чеклист решений в чекпоинте · Зависит от: A7
+- [ ] **A15:** `domain-deepen`→`domain-deep-dive` (rename + rework).
+  - Verify: skill-spec lint; ссылки обновлены · Зависит от: A14
+- [ ] **A16:** новые `init-service` (оркестратор) + `stack-deep-dive`.
+  - Verify: skill-spec; init-service чейнит deep-dives → de-template · Зависит от: A10, A15
+- [ ] **A17:** выжившие скиллы к канону `spec/agent-skills-spec.md`; перенос domain-gate в скиллы (soft-шаг); smartdev вбирает cockpit-петлю WORKFLOW §2 + сценарии.
+  - Verify: каждый <500 строк, description-триггеры, cross-ссылки резолвятся · Зависит от: A14
+
+#### Phase 5 — Движок de-template (гибрид)
+- [ ] **A18:** завести под-план движка `de-template` отдельной Active-секцией; реализовать механику + doc-driven wiring.
+  - Verify: под-план валиден; de-template на тест-форке даёт зелёный `make build` · Зависит от: A10, A16
+
+#### Phase 6 — Проводка и верификация
+- [ ] **A19:** сшить cross-ссылки rules↔skills↔docs↔roadmap; обновить pre-skill ссылки на новые имена скиллов.
+  - Verify: нет битых внутренних ссылок · Зависит от: A11, A12, A17
+- [ ] **A21:** удалить `.claude/WORKFLOW.md` (контент разнесён A9/A17); вычистить ссылки на него в CLAUDE.md и README.
+  - Verify: `grep -rl 'WORKFLOW.md' --exclude-dir=.git .` → пусто · Зависит от: A9, A13, A17
+- [ ] **A20:** финальный gate.
+  - Verify: `make check` → PASS; валидаторы plan/domain/stack зелёные; e2e не задет · Зависит от: A19, A21, A18
+
+**Infra impact.** — (вся работа — docs/skills/config; без env/миграций/cross-service-контрактов/go.mod).
+
+**Чекпоинты.**
+### 2026-05-26 — Phase 0 закрыта
+- Закрыто: A1, A2, A3, A4 ✓
+- Обнаружено: `CLAUDE.md` был симлинком на реальный `AGENTS.md` (план предполагал обратное). A4 выполнен как swap: `git rm` симлинка + `git mv AGENTS.md→CLAUDE.md`, AGENTS.md удалён.
+- Окружение: `jq`/`file` отсутствуют — JSON-проверки через `python3`. Учесть при написании новых валидаторов (A6/A10) — без внешних зависимостей.
+- Следующий шаг: Phase 1 (система планов, A5–A8) или Phase 2 (docs, A9–A11) — на выбор юзера.
 
 ## Backlog (idea state)
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).
-- Глубокий рефактор хуков (облегчить Stop-хук `stop-build-check`, soft TDD-nudge на fix-коммит без `_test.go`) — отдельно, после `workflow-rebuild` (юзер: «с хуками не переборщить»).

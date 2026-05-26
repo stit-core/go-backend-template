@@ -1,7 +1,8 @@
 ---
 name: domain-artifacts
 description: DDD-артефакты в docs/domains/ — конвенции, kinds, frontmatter, валидатор. Грузится при работе с docs/domains/.
-globs: docs/domains/**
+paths:
+  - "docs/domains/**"
 ---
 
 # Domain artifacts

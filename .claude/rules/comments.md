@@ -1,7 +1,8 @@
 ---
 name: comments
 description: Комментарии — только короткие и про WHY. Нельзя срать многословной нарративной документацией в коде. Грузится при правке любых .go-файлов.
-globs: "**/*.go"
+paths:
+  - "**/*.go"
 ---
 
 # Комментарии
@@ -12,7 +13,7 @@ globs: "**/*.go"
 
 - **Restate WHAT.** `// returns user by id` над `GetUserByID` — нет.
 - **Narration.** Многострочный пересказ "сначала делаем X, потом Y, наконец Z". Код это и так показывает.
-- **Архитектурные эссе в package docstring.** Не описывай pattern/принципы рядом с реализацией — это место для `docs/` или `AGENTS.md`. Особенно касается `package module` файлов.
+- **Архитектурные эссе в package docstring.** Не описывай pattern/принципы рядом с реализацией — это место для `docs/` или `CLAUDE.md`. Особенно касается `package module` файлов.
 - **Tombstones.** `// removed XXX`, `// was using Y before` — нет, для этого есть git log.
 - **Reference to current task/PR.** `// added for X flow`, `// fix for issue #123` — это в commit message / PR description, не в коде.
 - **Flavor commentary.** Художественный пересказ на русском того, что и так видно. "userReaderAdapter — реальный адаптер: проецирует X в Y" — нет.

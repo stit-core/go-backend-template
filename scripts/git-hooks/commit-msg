@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SSOT по разрешённым типам — AGENTS.md §5 "Git workflow".
+# SSOT по разрешённым типам — CLAUDE.md §5 "Git workflow".
 # При смене списка править оба места одним коммитом.
 set -e
 COMMIT_MSG_FILE="$1"

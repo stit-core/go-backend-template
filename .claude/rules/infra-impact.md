@@ -1,7 +1,15 @@
 ---
 name: infra-impact
 description: Изменение инфра-поверхности (env/секрет/миграция-с-эффектом/cross-service-контракт/runtime-deps/go.mod) ОБЯЗАНО породить INFRA-HANDOFF-блок инфра-админу до claim «готово»/коммита. Грузится при правке env/config/migrations/events/delivery-nats/cmd-api/go.mod.
-globs: ".env.example,.env.example.*,internal/platform/config/**,migrations/**,**/events.go,**/delivery/nats/**,cmd/api/**,go.mod"
+paths:
+  - ".env.example"
+  - ".env.example.*"
+  - "internal/platform/config/**"
+  - "migrations/**"
+  - "**/events.go"
+  - "**/delivery/nats/**"
+  - "cmd/api/**"
+  - "go.mod"
 ---
 
 # Infra-impact

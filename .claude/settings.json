@@ -75,57 +75,5 @@
       "Write(**/infra/postgres/db/**)",
       "Write(**/mocks/*.go)"
     ]
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "scripts/claude-hooks/pre-bash-no-verify.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "scripts/claude-hooks/pre-write-protect.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "scripts/claude-hooks/pre-skill-domain-gate.sh"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "scripts/claude-hooks/post-go-edit.sh"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "scripts/claude-hooks/stop-build-check.sh"
-          }
-        ]
-      }
-    ]
   }
 }
