@@ -55,8 +55,10 @@ claim «готово» / push — **`make check`** (fmt+vet+lint+test+build+gen-
   /noctx/rowserrcheck/bodyclose/sqlclosecheck — на.
 - Ошибки — `%w` + `errors.Is/As`; sentinel в `errors.go` корня домена.
 - Комментарии — только WHY (rule `comments`).
-- **Не городить велосипеды**: переиспользуемый/инфра-примитив → `golibinfra`, не сюда (rule
-  `upstream-first`).
+- **Не городить велосипеды**: переиспользуемый/инфра-примитив (generic util, HTTP-client,
+  middleware, любой «kit») → `golibinfra`, не локальная полукалека. Нет нужного — PR в
+  `golibinfra` + строка в roadmap-backlog; временный shim только с явным OK юзера. Граница и
+  обоснование — `docs/reference/architecture.md § Граница с golibinfra`.
 
 ## Git workflow
 

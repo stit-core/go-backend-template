@@ -60,4 +60,4 @@ Reference даёт variant-специфичные шаги; этот ритм о
 
 - `references/{domain,endpoint,event,migration,port}.md` — процедуры вариантов.
 - Правила (автогрузятся на matching-файлах): `domain-architecture`, `sqlc-and-migrations`,
-  `events-and-messaging`, `tests-pipeline`, `upstream-first`.
+  `events-and-messaging`, `tests-pipeline`.

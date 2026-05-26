@@ -15,7 +15,7 @@
 ### 2. dependencies → `docs/stack/dependencies.md`
 - kit-импорты + fx-провайдеры **только нужных** kit'ов golibinfra; прунь неиспользуемые из `go.mod`.
 - wiring внешних runtime-deps (Redis/NATS/…), если стек их объявил.
-- сверка с `upstream-first`: generic-примитив → golibinfra, не локально.
+- golibinfra-first: generic-примитив → golibinfra, не локально (CLAUDE.md § Стиль; обоснование — `docs/reference/architecture.md § Граница с golibinfra`).
 
 ### 3. messaging → `docs/stack/messaging.md`
 - subject-константы у consumer'ов (`internal/domain/<c>/delivery/nats/dto.go`) — локальные.

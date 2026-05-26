@@ -5,7 +5,7 @@
 **Gate (soft).** Скаффолдь по **stable** DDD-артефактам `docs/domains/<ctx>/`: код разворачивается
 по дизайну, не наоборот. Если артефакты ещё `draft` или `scripts/tools/validate-domain-doc.sh
 docs/domains/<ctx>` красный — сначала `domain-deep-dive` до `stable`, потом сюда. Жёсткого хука
-нет (снят) — это дисциплина (см. `.claude/rules/domain-artifacts.md`).
+нет (снят) — это дисциплина (см. `docs/domains/README.md § Gate`).
 
 ## Когда применять
 

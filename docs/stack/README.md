@@ -43,4 +43,4 @@ status: draft          # draft → stable (через валидатор)
 ## Gate
 
 `/de-template` не запускается, пока не все артефакты `stable` и валидатор не зелёный —
-зеркалит domain-gate. См. `.claude/rules/domain-artifacts.md` (аналогичная дисциплина).
+зеркалит domain-gate. См. `docs/domains/README.md § Gate` (аналогичная дисциплина).

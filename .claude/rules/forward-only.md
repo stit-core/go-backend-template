@@ -2,12 +2,7 @@
 name: forward-only
 description: Forward-only документация — текст описывает только текущее состояние, без changelog-нарратива. Грузится при правке любого doc/skill/rule/plan/CLAUDE.md.
 paths:
-  - "CLAUDE.md"
-  - "README.md"
-  - "docs/**/*.md"
-  - ".claude/skills/**/*.md"
-  - ".claude/rules/**/*.md"
-  - ".claude/plans/**/*.md"
+  - "**/*.md"
 ---
 
 # Forward-only документация

@@ -23,4 +23,4 @@ infra-стороны.>
 <Что de-template родит:
 - kit-импорты + fx-провайдеры (только нужные kit'ы — prune ненужных)
 - wiring внешних deps (Redis/NATS/…)
-- сверка с правилом `upstream-first` (generic util → golibinfra, не сюда)>
+- golibinfra-first: generic util → golibinfra, не сюда (CLAUDE.md § Стиль кода)>

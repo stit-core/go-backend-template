@@ -70,13 +70,14 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 
 Terse-инварианты — `.claude/rules/{events-and-messaging,domain-architecture,sqlc-and-migrations}.md`.
 
-## Граница с golibinfra (upstream-first)
+## Граница с golibinfra
 
 Переиспользуемое/инфраструктурное (generic util, HTTP-client, middleware, kit-подобный
 примитив) — **кандидат в `golibinfra`, не в этот репо**. Не плодить полукалеки здесь.
 Доменная логика — сюда; платформенный примитив — upstream (PR в golibinfra). Так шаблон
-остаётся тонким слоем над общей платформой, а улучшения едут всем сервисам сразу.
-Path-scoped напоминание — `.claude/rules/upstream-first.md`.
+остаётся тонким слоем над общей платформой, а улучшения едут всем сервисам сразу. Нет
+нужного примитива — PR в golibinfra + строка в roadmap-backlog; временный shim только с
+явным OK юзера. Инвариант для агента — CLAUDE.md § Стиль кода.
 
 ## Non-goals (осознанно не делаем)
 

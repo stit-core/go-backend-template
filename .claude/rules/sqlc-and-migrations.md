@@ -1,6 +1,6 @@
 ---
 name: sqlc-and-migrations
-description: Правила миграций и работы с sqlc. Грузится при работе с migrations/ или infra/postgres/.
+description: Инварианты миграций и sqlc. Грузится при работе с migrations/ или infra/postgres/. Процедура добавления — skill scaffold (вариант migration/domain).
 paths:
   - "migrations/**"
   - "internal/domain/*/infra/postgres/**"
@@ -9,73 +9,36 @@ paths:
 
 # Миграции и sqlc
 
+Процедура (создать миграцию, обновить sqlc.yaml, регенерация) — skill `scaffold`
+(`references/migration.md`, `references/domain.md`). Здесь — инварианты, которые обязан
+соблюдать при правке.
+
 ## Миграции
 
-- Файлы: `migrations/NNNN_name.up.sql` + `migrations/NNNN_name.down.sql`. Парные.
-- Нумерация — последовательная, четырёхзначная (`0001`, `0002`, …).
-- Имя — snake_case, описывает что делает: `0006_bruteforce_partial_index`.
-- Каждая миграция должна быть **обратимой** через `down`. Если откат не имеет смысла (например, удаление колонки с данными) — `down` всё равно есть, минимум `-- noop` с комментарием почему.
-- Не правь существующие миграции, которые уже накатились в боевой среде. Только новые.
-
-Команды:
-- `make migrate-up` — накатить все недокатанные. Нужна `PG_DSN`.
-- `make migrate-down` — откатить последнюю.
-- В CI применяются автоматически перед integration-тестами (testcontainers с чистой БД).
+- Файлы парные: `migrations/NNNN_name.up.sql` + `NNNN_name.down.sql`. Нумерация —
+  последовательная четырёхзначная (`0001`…), имя snake_case (`0006_bruteforce_partial_index`).
+- Каждая миграция **обратима** через `down`. Откат бессмыслен (drop колонки с данными) —
+  `down` всё равно есть: минимум `-- noop` + WHY-комментарий.
+- **Не правь уже накатившуюся в боевой среде миграцию.** Только новая.
+- `make migrate-up` / `make migrate-down` (нужна `PG_DSN`). В CI — автоматически перед
+  integration-тестами (testcontainers с чистой БД).
 
 ## sqlc
 
-Конфиг — `sqlc.yaml`. Каждый домен с PG-инфрой имеет свой блок:
+- Запросы пишешь сам в `internal/domain/<name>/infra/postgres/queries/<file>.sql`.
+  Сгенерированный `infra/postgres/db/` — **никогда руками**, только `make gen`.
+- Аннотация обязательна: `-- name: <Method> :<one|many|exec|execrows>`.
+  - `:one` — одна строка; отсутствие → `pgx.ErrNoRows`, маппь на sentinel (`ErrNotFound`).
+  - `:many` — срез; пусто → пустой срез.
+  - `:exec` — без возврата; `:execrows` — число затронутых строк (optimistic-lock).
+- После правки `queries/` или `migrations/` — `make gen`; `make gen-check` (в `make check`)
+  падает, если сгенерированное разошлось.
 
-```yaml
-- engine: postgresql
-  schema: migrations/
-  queries: internal/domain/<name>/infra/postgres/queries/
-  gen:
-    go:
-      package: db
-      out: internal/domain/<name>/infra/postgres/db
-      sql_package: pgx/v5
-      ...
-```
+## PG-конвенции
 
-Все запросы в `internal/domain/<name>/infra/postgres/queries/<file>.sql` — пишешь сам. Сгенерированный код — в `infra/postgres/db/` — **никогда не правится руками**, только регенерация.
-
-### Workflow при изменении схемы
-
-1. Добавь новую миграцию `migrations/NNNN_X.up.sql` + `.down.sql`.
-2. Если нужны новые запросы — добавь в `internal/domain/<name>/infra/postgres/queries/`.
-3. Запусти `make gen` (регенерирует `infra/postgres/db/`).
-4. Используй сгенерированный метод в `infra/postgres/repository.go`.
-5. `make gen-check` (в `make check`/pre-push) проверит что генерация чиста.
-
-### Формат запроса
-
-```sql
--- name: GetUserByEmail :one
-SELECT id, email, password_hash, status, role, version, created_at
-FROM users
-WHERE email = $1;
-```
-
-`-- name: <Method> :<one|many|exec>` — обязательная аннотация для sqlc.
-
-### Когда `:one`, когда `:many`, когда `:exec`
-
-- `:one` — возвращает одну строку. На отсутствие — `pgx.ErrNoRows`. Маппь на свою sentinel-ошибку (`ErrNotFound`).
-- `:many` — возвращает срез строк. Пустой результат — пустой срез.
-- `:exec` — без возврата (UPDATE/DELETE без RETURNING). Возвращает `pgconn.CommandTag`.
-- `:execrows` — `:exec`, но возвращает количество затронутых строк (полезно для optimistic lock).
-
-## PG-конвенции проекта
-
-- Первичные ключи — `uuid` (через `pgx`-расширение или `uuid_generate_v4()`).
-- Soft-delete — нет. Удалили — удалили.
-- Optimistic lock через `version` колонку: `WHERE id = $1 AND version = $2`. Возврат `:execrows` = 0 → `ErrConflict`.
-- Outbox / audit / bruteforce — таблицы **не лежат в `migrations/` этого репо**; схему держат `golibinfra/{outboxkit,auditkit,bruteforcekit}/pgstore` (`MigrationsFS`), `cmd/migrate/main.go` накатывает их рядом с миграциями приложения. Не дублируй CREATE TABLE — наследуй от kit'а.
-- Имена таблиц — множественное число, snake_case (`users`, `refresh_sessions`).
-- Имена колонок — snake_case (`created_at`, `password_hash`).
-
-## CI-проверки
-
-- `make gen-check` падает если сгенерированный код не совпадает с тем что в репо.
-- Integration-тесты используют `internal/testkit/pgseed` для сидинга чистой БД.
+- PK — `uuid`. Soft-delete нет: удалили — удалили.
+- Optimistic lock через `version`: `WHERE id=$1 AND version=$2`; `:execrows`=0 → `ErrConflict`.
+- **Kit-таблицы** (`outbox`/`audit_log`/`bruteforce_*`) схему держат
+  `golibinfra/{outboxkit,auditkit,bruteforcekit}/pgstore` (`MigrationsFS`), `cmd/migrate`
+  накатывает рядом. **Не дублируй их `CREATE TABLE`** в `migrations/`.
+- Имена: таблицы — множественное snake_case (`users`, `refresh_sessions`); колонки — snake_case.

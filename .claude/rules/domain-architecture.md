@@ -26,4 +26,4 @@ paths:
 - Pure-методы агрегата покрыты `*_test.go`; интерфейсы из `usecase.go` → `.mockery.yml` → `make gen`.
 
 Outbox / subscribers / jobs — `.claude/rules/events-and-messaging.md`. Миграции / sqlc —
-`.claude/rules/sqlc-and-migrations.md`. Переиспользуемые примитивы → `upstream-first.md`.
+`.claude/rules/sqlc-and-migrations.md`. Переиспользуемые примитивы → golibinfra (CLAUDE.md § Стиль кода).
