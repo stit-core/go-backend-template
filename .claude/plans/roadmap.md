@@ -64,14 +64,18 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
   - **Done:** `CLAUDE.md` был симлинком на реальный `AGENTS.md` — инверсия плана. `git rm` симлинка + `git mv AGENTS.md→CLAUDE.md` (реальный файл); заголовок → «go-backend-template — гайд для агентов»; рефы вычищены в README/commit-msg/comments/forward-only. Остаток AGENTS.md — только WORKFLOW.md (умрёт в A21).
 
 #### Phase 1 — Система планов (foundational; догфуд этого файла)
-- [ ] **A5:** финализировать inline-формат единого roadmap (этот файл — эталон секции).
+- [x] **A5:** финализировать inline-формат единого roadmap (этот файл — эталон секции).
   - Verify: human-review структуры · Зависит от: —
-- [ ] **A6:** переписать `validate-plan.sh` под секции внутри roadmap.md (per-section header, статусы {planning,in-progress,blocked}, Verify/Зависит каждого атома).
+  - **Done:** формат зафиксирован в roadmap + в `plan/SKILL.md §3` (шаблон секции); валидатор A6 его принимает. Чекпоинты — буллеты, фазы — `#### ` (не `### `, коллизия с план-секцией).
+- [x] **A6:** переписать `validate-plan.sh` под секции внутри roadmap.md (per-section header, статусы {planning,in-progress,blocked}, Verify/Зависит каждого атома).
   - Verify: `scripts/tools/validate-plan.sh` → OK на этом roadmap · Зависит от: A5
-- [ ] **A7:** переписать skill `plan` под single-file inline + planning-first + blocked; длинный список вопросов → `references/`.
+  - **Done:** переписан под inline-`### `-секции под `## Active`; тест на живом roadmap → OK, на сломанной копии ловит битый статус/нет секции/атом без Verify/битую зависимость. bash+awk, без внешних деп.
+- [x] **A7:** переписать skill `plan` под single-file inline + planning-first + blocked; длинный список вопросов → `references/`.
   - Verify: skill <500 строк; описание-триггеры по спеку · Зависит от: A5
-- [ ] **A8:** обновить pre-commit (валидирует roadmap.md) + smartdev читает roadmap как state-of-the-world.
+  - **Done:** `plan/SKILL.md` ~190 строк (planning-first дефолт, статус blocked, единый roadmap, чекпоинты-буллеты, DONE=удалить секцию); вопросы → `references/questions.md`. Description «pushy».
+- [x] **A8:** обновить pre-commit (валидирует roadmap.md) + smartdev читает roadmap как state-of-the-world.
   - Verify: pre-commit dry-run зелёный · Зависит от: A6
+  - **Done:** pre-commit валидирует `roadmap.md` (вместо `<slug>.md`); `status.sh` Plan-секция → компактная сводка (focus + `slug: status | next: A#`) вместо дампа всего плана; smartdev §2 указывает на inline-секцию. Глубокий рерайт smartdev (WORKFLOW §2) — A17.
 
 #### Phase 2 — docs/ + диспозиция правил
 - [ ] **A9:** дерево docs: `getting-started.md`/`contributing.md` [META] + `reference/{architecture,observability,release,ecosystem}.md` + `docs/README.md`-роутер. Контрибьютор-explainer (WORKFLOW §1/§4/§5/§7) → contributing.md; WORKFLOW §6 non-goals → architecture.md; сценарий «новый проект» → getting-started.
@@ -112,11 +116,14 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
 **Infra impact.** — (вся работа — docs/skills/config; без env/миграций/cross-service-контрактов/go.mod).
 
 **Чекпоинты.**
-### 2026-05-26 — Phase 0 закрыта
-- Закрыто: A1, A2, A3, A4 ✓
-- Обнаружено: `CLAUDE.md` был симлинком на реальный `AGENTS.md` (план предполагал обратное). A4 выполнен как swap: `git rm` симлинка + `git mv AGENTS.md→CLAUDE.md`, AGENTS.md удалён.
-- Окружение: `jq`/`file` отсутствуют — JSON-проверки через `python3`. Учесть при написании новых валидаторов (A6/A10) — без внешних зависимостей.
-- Следующий шаг: Phase 1 (система планов, A5–A8) или Phase 2 (docs, A9–A11) — на выбор юзера.
+- **2026-05-26 · Phase 0 закрыта.**
+  - Закрыто: A1, A2, A3, A4 ✓
+  - Обнаружено: `CLAUDE.md` был симлинком на реальный `AGENTS.md` (план предполагал обратное). A4 выполнен как swap: `git rm` симлинка + `git mv AGENTS.md→CLAUDE.md`, AGENTS.md удалён. Закоммичено `3b88931`.
+  - Окружение: `jq`/`file` отсутствуют — проверки через `python3`/`awk`. Новые валидаторы (A6 done, A10) — без внешних зависимостей.
+- **2026-05-26 · Phase 1 закрыта.**
+  - A5–A8 ✓: единый inline-roadmap как формат; `validate-plan.sh` переписан и протестирован; skill `plan` переписан (+`references/questions.md`); pre-commit/status.sh/smartdev читают единый roadmap.
+  - Формат: чекпоинт — буллеты, фазы — `#### ` (не `### `, коллизия с план-секцией). Учтено в `plan/SKILL.md`.
+  - Дальше: Phase 2 (docs + диспозиция правил, A9–A11).
 
 ## Backlog (idea state)
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).

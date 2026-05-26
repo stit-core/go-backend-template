@@ -125,19 +125,26 @@ else
 fi
 echo
 
-# === Plan === (roadmap Active + статус активного плана + следующий открытый атом)
+# === Plan === (единый roadmap: focus + по секции Active — статус и следующий открытый атом)
 echo "== Plan =="
 if [ -f .claude/plans/roadmap.md ]; then
-    awk '/^## Active/{f=1;next} /^## /{f=0} f && NF' .claude/plans/roadmap.md | sed 's|^|  |'
+    foc=$(grep -m1 '^\*\*Current focus:\*\*' .claude/plans/roadmap.md | sed -E 's/\*\*Current focus:\*\*[[:space:]]*//')
+    [ -n "$foc" ] && echo "  focus: $foc"
+    awk '
+      function flush(){ if(slug!="") printf "  %s: %s | next: %s\n", slug, st, (nx==""?"—":nx) }
+      /^## Active/ { inact=1; next }
+      /^## /       { flush(); inact=0; slug=""; next }
+      !inact       { next }
+      /^### /      { flush(); slug=$0; sub(/^### /,"",slug); sub(/ .*/,"",slug); st="?"; nx=""; next }
+      slug=="" { next }
+      /\*\*Статус:\*\*/ { s=$0; sub(/.*\*\*Статус:\*\*[[:space:]]*/,"",s); sub(/[[:space:]].*$/,"",s); st=s }
+      /^- \[ \] \*\*A[0-9]/ && nx=="" { n=$0; sub(/^- \[ \] \*\*/,"",n); sub(/:.*/,"",n); nx=n }
+      END { flush() }
+    ' .claude/plans/roadmap.md
+    grep -q '^### ' .claude/plans/roadmap.md || echo "  (no active plans)"
+else
+    echo "  (no roadmap)"
 fi
-for p in .claude/plans/*.md; do
-    [ -e "$p" ] || continue
-    case "$p" in */roadmap.md) continue ;; esac
-    st=$(grep -m1 '^\*\*Статус:\*\*' "$p" | sed 's/\*\*//g')
-    next=$(grep -m1 '^- \[ \] \*\*A[0-9]' "$p" | sed -E 's/^- \[ \] \*\*//; s/\*\*//')
-    echo "  ${p##*/}: ${st:-?} | next: ${next:-—}"
-done
-[ -f .claude/plans/roadmap.md ] || echo "  (no plans)"
 echo
 
 # === Memory ===

@@ -33,13 +33,11 @@ if [ -n "$CHANGED_DOCS" ]; then
     fi
 fi
 
-echo "pre-commit: validating plans in .claude/plans/..."
-CHANGED_PLANS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^\.claude/plans/.*\.md$' | grep -v '/roadmap\.md$' || true)
-if [ -n "$CHANGED_PLANS" ]; then
+echo "pre-commit: validating plan roadmap (.claude/plans/roadmap.md)..."
+CHANGED_ROADMAP=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^\.claude/plans/roadmap\.md$' || true)
+if [ -n "$CHANGED_ROADMAP" ]; then
     if [ -x scripts/tools/validate-plan.sh ]; then
-        echo "$CHANGED_PLANS" | while IFS= read -r p; do
-            [ -f "$p" ] && scripts/tools/validate-plan.sh "$p"
-        done
+        scripts/tools/validate-plan.sh
     else
         echo "WARN: validate-plan.sh not found or not executable, skipping"
     fi
