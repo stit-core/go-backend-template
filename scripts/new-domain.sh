@@ -89,7 +89,7 @@ package $NAME
 
 import "time"
 
-// Subject — литерал \`$NAME.events.created\` (см. .claude/rules/outbox-events.md).
+// Subject — литерал \`$NAME.events.created\` (см. .claude/rules/events-and-messaging.md).
 // Публикатор передаёт его прямо в \`events.Publish(...)\`; consumer заводит свою
 // локальную константу в \`<consumer>/delivery/nats/dto.go\`.
 type ${TITLE}Created struct {

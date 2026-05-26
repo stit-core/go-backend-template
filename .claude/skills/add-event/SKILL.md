@@ -7,7 +7,7 @@ description: Добавить новый outbox-эвент в домен-ист�
 
 Эвент-флоу: usecase домена-источника пишет событие в outbox в той же транзакции, что и основное изменение → `outboxkit.Publisher` (поднимается fx.Lifecycle того же `cmd/api`) публикует в NATS → subscriber потребляющего домена (`internal/domain/<consumer>/delivery/nats/`) обрабатывает. Отдельного worker-процесса нет — всё в одном бинаре.
 
-См. `.claude/rules/outbox-events.md` и `.claude/rules/jobs-and-subscribers.md` для бэкграунда — они автогрузятся, когда правишь `events.go` или `delivery/nats/`.
+См. `.claude/rules/events-and-messaging.md` (бэкграунд — автогрузится при правке `events.go` / `delivery/nats/` / `internal/jobs/`) и `docs/reference/architecture.md § События и messaging`.
 
 ## Когда применять
 

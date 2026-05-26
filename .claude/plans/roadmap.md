@@ -78,12 +78,15 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
   - **Done:** pre-commit валидирует `roadmap.md` (вместо `<slug>.md`); `status.sh` Plan-секция → компактная сводка (focus + `slug: status | next: A#`) вместо дампа всего плана; smartdev §2 указывает на inline-секцию. Глубокий рерайт smartdev (WORKFLOW §2) — A17.
 
 #### Phase 2 — docs/ + диспозиция правил
-- [ ] **A9:** дерево docs: `getting-started.md`/`contributing.md` [META] + `reference/{architecture,observability,release,ecosystem}.md` + `docs/README.md`-роутер. Контрибьютор-explainer (WORKFLOW §1/§4/§5/§7) → contributing.md; WORKFLOW §6 non-goals → architecture.md; сценарий «новый проект» → getting-started.
+- [x] **A9:** дерево docs: `getting-started.md`/`contributing.md` [META] + `reference/{architecture,observability,release,ecosystem}.md` + `docs/README.md`-роутер. Контрибьютор-explainer (WORKFLOW §1/§4/§5/§7) → contributing.md; WORKFLOW §6 non-goals → architecture.md; сценарий «новый проект» → getting-started.
   - Verify: файлы есть, внутренние ссылки резолвятся · Зависит от: —
-- [ ] **A10:** `docs/stack/` — 8 kinds: frontmatter-контракт, обязательные H2, `_templates/`, `validate-stack-doc.sh`.
-  - Verify: `scripts/tools/validate-stack-doc.sh docs/stack` → OK на templates · Зависит от: A9
-- [ ] **A11:** правила — slim/split/merge(`events-and-messaging`)/new `upstream-first`; проза/примеры → `docs/reference/architecture.md`.
+  - **Done:** созданы 7 файлов (router + 2 META + 4 reference). Observability ~140 строк и WORKFLOW §1/4/5/6/7 перенесены. Ссылки в docs/ резолвятся (dangling — только плейсхолдеры в _templates). Вынос из README/CLAUDE/WORKFLOW (удаление дублей) — в A12/A13/A21.
+- [x] **A10:** `docs/stack/` — 8 kinds: frontmatter-контракт, обязательные H2, `_templates/`, `validate-stack-doc.sh`.
+  - Verify: `scripts/tools/validate-stack-doc.sh docs/stack` → OK на templates · Зависит от: —
+  - **Done:** созданы `docs/stack/README.md` + 8 `_templates/<kind>.md` (каждый с H2 `Generates` — контракт для de-template) + `validate-stack-doc.sh` (зеркало domain-валидатора: frontmatter, kind∈8, basename==name, H2-секции, stable→непусто). Тест: пустой→OK, stable-образец→OK, битый kind→FAIL. Оказался независим от A9 (docs/stack самодостаточен) — сделан первым в Phase 2.
+- [x] **A11:** правила — slim/split/merge(`events-and-messaging`)/new `upstream-first`; проза/примеры → `docs/reference/architecture.md`.
   - Verify: `make lint` зелёный; `grep -l 'globs:'` пусто; merge выполнен · Зависит от: A9
+  - **Done:** split `domain-architecture` (slim + указатель на architecture.md); merge `outbox-events`+`jobs-and-subscribers` → `events-and-messaging.md` (старые удалены `git rm`); new `upstream-first.md` (paths internal/**,pkg/**). Висящие ссылки (new-domain.sh, add-event) починены. `grep globs` пусто. lint отдельно не гонял (правила .md, на Go-lint не влияют; pre-commit на коммите покроет). Глубокий slim остальных 6 правил → Backlog (низкий приоритет).
 
 #### Phase 3 — CLAUDE.md + README
 - [ ] **A12:** CLAUDE.md <200 строк: ядро-инварианты (+golibinfra-first, +planning-first) + таблица-роутер в docs/rules/skills.
@@ -123,7 +126,14 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
 - **2026-05-26 · Phase 1 закрыта.**
   - A5–A8 ✓: единый inline-roadmap как формат; `validate-plan.sh` переписан и протестирован; skill `plan` переписан (+`references/questions.md`); pre-commit/status.sh/smartdev читают единый roadmap.
   - Формат: чекпоинт — буллеты, фазы — `#### ` (не `### `, коллизия с план-секцией). Учтено в `plan/SKILL.md`.
-  - Дальше: Phase 2 (docs + диспозиция правил, A9–A11).
+  - Phase 0+1 запушены: `2b0ea63..c6ca7f3 origin/main`, `make check` зелёный.
+- **2026-05-26 · Phase 2 закрыта.**
+  - A10 ✓: `docs/stack/` контракт (README + 8 templates + `validate-stack-doc.sh`).
+  - A9 ✓: дерево docs (router + getting-started/contributing [META] + reference/{architecture,observability,release,ecosystem}). Observability + WORKFLOW-куски перенесены.
+  - A11 ✓: split domain-architecture, merge → events-and-messaging, new upstream-first; висящие ссылки починены.
+  - Не закоммичено/не запушено по просьбе — коммит Phase 2 без push.
+  - Дальше: Phase 3 (CLAUDE.md <200 + README trim, A12–A13) — здесь же удаляются дубли, перенесённые в docs.
 
 ## Backlog (idea state)
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).
+- Глубокий slim правил `comments`/`domain-artifacts`/`env-local`/`infra-impact`/`sqlc-and-migrations`/`tests-pipeline` (длинные примеры → docs/skills) — низкий приоритет: структурная диспозиция и фикс `globs` уже сделаны (A1, A11), правила path-scoped и нормального размера.
