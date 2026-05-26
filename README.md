@@ -1,295 +1,76 @@
 # go-backend-template
 
-Шаблон Go HTTP-бэкенда на стеке stit.tech: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + `golibinfra` (telemetry, authn, outbox, brute-force, cache, NATS, audit, clock).
+Шаблон Go HTTP-бэкенда на стеке stit.tech: huma/v2 + chi + pgx/v5 + sqlc + uber/fx +
+[`golibinfra`](https://git.stit.tech/stit-infra/golibinfra) (telemetry, authn, outbox,
+brute-force, cache, NATS, audit, clock).
 
-Часть экосистемы из 4 репо: [`stit-infra/infra`](https://git.stit.tech/stit-infra/infra) (corp control plane) ←── **этот** (форкается в `<org>/backend`, build+push) ──► [`stit-infra/project-infra-template-compose`](https://git.stit.tech/stit-infra/project-infra-template-compose) (форкается в `<org>/infra`, deploy) — оба используют [`stit-infra/golibinfra`](https://git.stit.tech/stit-infra/golibinfra). Канон — [`stit-infra/infra/docs/ecosystem.md`](https://git.stit.tech/stit-infra/infra/src/branch/main/docs/ecosystem.md).
+Часть экосистемы из 4 репо: [`stit-infra/infra`](https://git.stit.tech/stit-infra/infra)
+(corp control plane) ←── **этот** (форк в `<org>/backend`, build+push) ──►
+[`project-infra-template-compose`](https://git.stit.tech/stit-infra/project-infra-template-compose)
+(форк в `<org>/infra`, deploy). Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
 
 ## Использовать как шаблон
 
-В Gitea этот репо помечен `template: true`. Старт нового сервиса:
+В Gitea помечен `template: true`. **Полный пошаговый путь** от форка к своему проекту —
+[`docs/getting-started.md`](docs/getting-started.md): форк → `/init-service` →
+проектирование доменов (`docs/domains/`) и стека (`docs/stack/`) → `/de-template` → проект,
+который ничего не помнит про шаблон.
 
-1. Открыть https://git.stit.tech/stit-infra/go-backend-template → **Use this template** → создать `<org>/<service>`.
-2. Склонировать новый репо локально:
-   ```bash
-   git clone git@git.stit.tech:<org>/<service>.git && cd <service>
-   ```
-3. (Один раз на машину) Настроить git и Go под приватные модули `git.stit.tech` —
-   `golibinfra` и любые stit-private deps. Без этого `go mod download` для
-   шаблона упадёт по auth/proxy:
+Быстрый старт (чтобы собралось):
+
+1. **Use this template** → `<org>/<service>`, склонировать.
+2. (Один раз на машину) доступ к приватным модулям `git.stit.tech`:
    ```bash
    git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/
    ```
-   (`GOPRIVATE` ставится автоматически в `make setup` ниже.)
-4. Заменить module path:
-   ```bash
-   OLD=git.stit.tech/stit-infra/go-backend-template
-   NEW=git.stit.tech/<org>/<service>
-   grep -rl "$OLD" --exclude-dir=.git | xargs sed -i "s|$OLD|$NEW|g"
-   go mod edit -module "$NEW" && go mod tidy
-   ```
-5. `make setup && make check` — убедиться что зелёное.
-6. `cp .env.example .env` и заполнить локальные переменные.
-7. Первый домен: `make new-domain NAME=<context>` → `docs/domains/<context>/` (см. `docs/domains/README.md`).
+3. `make setup && make check` — зелёное.
+4. `cp .env.example .env`, заполнить. Запустить `claude` → `/init-service`.
 
-Альтернатива через Gitea API:
-```bash
-curl -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: application/json" \
-  -d '{"owner":"<org>","name":"<service>","private":false}' \
-  https://git.stit.tech/api/v1/repos/generate \
-  --url-query 'template_owner=stit' --url-query 'template_repo=go-backend-template'
-```
+Module path, README, фундамент и удаление reference-доменов — делает флоу `/init-service`
+→ `/de-template` по заполненным `docs/`. Не правь фундамент руками до этого.
 
 ## Что внутри
 
-- **HTTP**: huma/v2 поверх chi, OpenAPI 3.1 авто-генерация, structured errors.
-- **БД**: pgx/v5 + sqlc (typed queries), миграции через golang-migrate.
-- **DI**: uber/fx, lifecycle hooks. Один runtime-бинарь (`cmd/api`) — внутри него HTTP, outbox drain, NATS subscribers и background jobs. Standalone CLI миграций (`cmd/migrate`) собирается отдельным image и крутится init-контейнером.
-- **Платформа**: `golibinfra` — OTLP telemetry, JWT/session authn, outbox-pattern publisher, brute-force guard, cache (Redis/in-mem), NATS pub/sub, audit log, clock.
-- **DDD**: артефакты доменов в `docs/domains/<context>/` — source of truth перед кодом. См. `docs/domains/MAPPING.md` (DDD ↔ Go).
-- **Тесты**: unit (`-short -race`), integration (`//go:build integration` + testcontainers), fuzz, mockery v3.
-- **CI gate**: `make check` = fmt + vet + lint + test + build + gen-check. Гонится pre-push хуком.
+- **HTTP**: huma/v2 поверх chi, OpenAPI 3.1, structured errors.
+- **БД**: pgx/v5 + sqlc (typed queries), golang-migrate.
+- **DI**: uber/fx. Один runtime-бинарь `cmd/api` (HTTP + outbox-drain + NATS-subs + jobs);
+  `cmd/migrate` — отдельный image, init-контейнер.
+- **Платформа**: `golibinfra` — OTLP telemetry, JWT/session authn, outbox, brute-force,
+  cache, NATS, audit, clock.
+- **DDD**: артефакты в `docs/domains/` — source of truth перед кодом.
+- **Тесты**: unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
+- **Gate**: `make check` = fmt+vet+lint+test+build+gen-check (pre-push хук).
 
 ## Команды
 
-Единый интерфейс `make <verb>`; `make help` — сгруппированный список; concise-by-default (`FORMAT=detailed`/`VERBOSE=1` — полно).
+`make help` — полный список; concise-by-default. Канонический gate — `make check`. Полный
+гайд агента — [`CLAUDE.md`](CLAUDE.md); точка входа в сессию — `/smartdev`.
 
-| Команда | Что делает |
-|---|---|
-| `make setup` | Pinned dev-инструменты + git-хуки |
-| `make test` / `make lint` / `make build` / `make fmt` | LOOP (concise; `PKG=./x/...`) |
-| `make check` | Канонический gate перед push (fmt+vet+lint+test+build+gen-check) |
-| `make gen` / `make gen-check` | Регенерация (sqlc+mockery) / проверка drift |
-| `make migrate-up` / `make migrate-down` | Миграции (нужен `PG_DSN`) |
-| `make e2e` / `make e2e-smoke` | pytest-харнес `test/` |
-| `make new-domain NAME=order` | Скаффолд нового домена |
-| `make status` / `map` / `search Q=` / `logs A=` | INTEL (cockpit-feed / пакеты / поиск / прод-логи) |
-| `make doctor` | Fail-fast preflight (docker-auth / drift / миграции) |
-| `make release VERSION=vX.Y.Z` | Релиз одной командой: tag→preflight→push api/migrate lockstep→handoff→STOP |
+## Документация
 
-Полный гайд для агентов и человеков — `CLAUDE.md`. Дневной флоу — `.claude/WORKFLOW.md`. Точка входа в сессию — `/smartdev`.
-
-## Структура
-
-```
-cmd/{api,migrate}/          точки входа: api — runtime, migrate — standalone CLI миграций
-internal/<domain>/          бизнес-логика по доменам (DDD); subscribers — in-domain `delivery/nats/`
-internal/platform/          shared infra (authgate, config, identity)
-internal/jobs/              background jobs (поднимаются fx.Lifecycle того же cmd/api)
-internal/testkit/           pgseed, identitytest helpers
-pkg/                        публичные пакеты (policy, tokens)
-migrations/                 SQL-миграции (golang-migrate), парные up/down
-docs/domains/<context>/     DDD-артефакты — source of truth для домена
-.claude/                    skills, rules, agents, plans для Claude Code
-scripts/tools/        реализация make-таргетов (concise-вывод; напрямую не зовётся)
-```
-
-См. `CLAUDE.md §3` — структура расписана подробнее.
+Карта — [`docs/README.md`](docs/README.md):
+- Потребителю — [`getting-started.md`](docs/getting-started.md); контрибьютору —
+  [`contributing.md`](docs/contributing.md).
+- Reference — [architecture](docs/reference/architecture.md) ·
+  [observability](docs/reference/observability.md) · [release](docs/reference/release.md) ·
+  [ecosystem](docs/reference/ecosystem.md).
+- Design SoT — [`docs/domains/`](docs/domains/README.md) · [`docs/stack/`](docs/stack/README.md).
 
 ## E2E
 
-Типизированный pytest-харнес в `test/` поверх docker-compose стека (postgres/nats/redis/otel-agent/migrate/api). Чёткое разделение зон:
-
-| Зона | Где |
-|---|---|
-| Стек (docker + секреты, bash) | `test/stack/` — `up.sh`/`down.sh`, `compose.yml`, `Dockerfile.local`, `configs/` |
-| Транспорт + pydantic-модели | `test/client/` |
-| Переиспользуемые step-функции | `test/scenarios/` |
-| Infra-интроспекция side-effects | `test/infra/` — `pg`/`outbox`/`nats`/`redis` |
-| Smoke-тесты (`@pytest.mark.smoke`) | `test/smoke/` |
-| E2E-тесты (`@pytest.mark.e2e`) | `test/e2e/` |
-| Фикстуры (session-стек, api, user, pg, redis, nats) | `test/conftest.py` |
-
-Папки организуют, маркеры селектят (`pytest -m smoke` / `-m e2e`). Тесты не только black-box: `test/infra/` ходит в Postgres/NATS/Redis (порты на `127.0.0.1`) и ассертит side-effects — строки БД, outbox-эвенты, core-NATS доставку, cross-domain async-флоу.
+Типизированный pytest-харнес `test/` поверх docker-compose стека
+(postgres/nats/redis/otel-agent/migrate/api): `test/stack/` (docker+bash), `test/client/`
+(httpx+pydantic), `test/scenarios/`, `test/infra/` (side-effect ассерты), `test/{smoke,e2e}/`.
 
 ```
 make e2e          # весь набор: поднять стек → pytest → снести
 make e2e-smoke    # только -m smoke (быстрый gate)
 ```
 
-Нужен Docker и `./.env.local` с `STIT_OBS_TOKEN` + `OTEL_TENANT` (шаблон — `.env.local.example`; формат — `.claude/rules/env-local.md`). Детали и пины — `test/README.md`.
-
-**Bootstrap admin.** Публичного пути сделать admin нет (`register` → `client`). Первого admin создаёт one-off `cmd/seed-admin` (`SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`, хеш через `authnkit`, идемпотентный upsert; нужен `PG_DSN`, не runtime-сервис) — это и ops-инструмент свежего деплоя, и источник `admin`-фикстуры e2e (стек гоняет его при старте, креды — `E2E_ADMIN_*` в `.env.local`).
+Нужен Docker и `./.env.local` (`STIT_OBS_TOKEN` + `OTEL_TENANT`; шаблон — `.env.local.example`,
+формат — `.claude/rules/env-local.md`). Детали — `test/README.md`.
 
 ## Release
 
-**Зона ответственности этого репо: код → image в registry. На этом — STOP.** Деплой, vault-patch и проверка контейнера на проде — другие репо (см. [Handoff](#handoff) ниже).
-
-Build локальный (никаких gitea-runner'ов), push в `git.stit.tech/<org>/backend{,-migrate}` под одним lockstep `vX.Y.Z`-тегом.
-
-Шаги **в этом репо** — одна команда:
-
-1. `make check` зелёный на чистом `main`.
-2. `make release VERSION=vX.Y.Z` — один проход (`scripts/release.sh`):
-   confirm-промпт → annotated tag (если нет на HEAD; rich changelog — `git tag -a` заранее) →
-   `release-preflight` (ветка/clean/semver/buildx + `make doctor`) →
-   `docker buildx --push` двух image'ей lockstep:
-   - `<host>/<org>/backend:vX.Y.Z` (`cmd/api` — runtime)
-   - `<host>/<org>/backend-migrate:vX.Y.Z` (`cmd/migrate` + вложенные SQL, init-контейнер)
-   → агрегированный INFRA-HANDOFF → STOP.
-
-   `<host>`/`<org>` берутся из `git remote get-url origin` — image-path следует за тем, где репо живёт в Gitea, без правок при форке. Lightweight/`:latest`/`:edge` и тег не на HEAD отвергаются by design. `docker login <host>` — креды оператора; `make doctor` в preflight ловит его отсутствие fail-fast.
-
-После команды image'ы в registry. **Наша зона ответственности закончилась.** `make release` печатает агрегированный INFRA-HANDOFF (накопленные `## Infra impact` + vault/ship) как подсказку оператору.
-
-### Handoff
-
-Дальше работают **другие репо** (этот их не вызывает и не знает их команды):
-
-| Зона | Где | Что делает |
-|---|---|---|
-| Корп-сторона | `stit-infra/infra` (root-токен Vault, только админ) | `vault kv patch kv/projects/<p>/<env>/meta backend_tag=v1.2.3` |
-| Проектная инфра | `<client-org>/infra` (← `stit-infra/project-infra-template-compose`) | `make ship` → ssh-deploy → `vault-agent` рендерит новый `BACKEND_TAG` → `deploy.sh` force-recreate'ит backend-контейнер |
-| Verify | там же | `make ps`, логи `"starting" service=api version=v1.2.3 commit=<sha>` |
-
-В инфра-репо есть skill `/request-secret` который формирует stdout-блок `vault kv patch …` для корп-админа out-of-band. Здесь, в backend-репо, мы лишь печатаем подсказку — кому что передать.
-
-### Откат
-
-Image в registry уже лежит — пересборка не нужна. Полностью **в infra-репо**: корп-патч на предыдущий тег + `make ship`.
-
-### Versioning
-
-Версия зашивается в бинарник через `-ldflags` (`-X main.version=$TAG -X main.commit=$GIT_SHA`). На старте каждый сервис логирует `"starting" service=<name> version=v1.2.3 commit=<short-sha>` через `logkit.Logger` — на проде сразу понятно какой коммит крутится, без захода в Gitea за map'ом tag↔SHA.
-
-## Observability
-
-Шаблон эмитит **метрики, логи, трейсы** через OTel в `otel.stit.tech` (auth bearer = `OTEL_TOKEN`). Все три сигнала корелируются через `trace_id`.
-
-### Что эмитится автоматически (из golibinfra ≥ v0.21.2)
-
-**Process & runtime** — `runtime.go.goroutines`, `runtime.go.mem.heap_alloc/inuse`, `runtime.go.gc.duration`, `process.*`.
-
-**HTTP сервер** (`httpkit`):
-- `http_requests_total{method,path,status}`
-- `http_request_duration_seconds{method,path,status}`
-- `http_panics_total{path}` — recovered панки
-- `http_max_body_rejections_total{path}` — отказы 413
-- `http_idempotency_total{path,result}` — replayed | stored
-
-**HTTP клиент** (`httpclient`):
-- `http_client_request_duration_seconds{host,method,status}`
-- `http_client_breaker_transitions_total{name,from,to}`, `http_client_breaker_open{name}`
-- `http_client_retry_attempts_total{host}`
-
-**Postgres** (`pgkit`):
-- `db_pool_{acquired,idle,total,max,constructing}_conns`
-- `db_pool_{empty,canceled,acquire}_total`, `db_pool_acquire_duration_seconds_total`
-- Span'ы на каждый query (через `otelpgx`)
-
-**NATS** (`natskit`):
-- `nats_messages_{published,consumed}_total{subject,status,transport}`
-- `nats_{publish,handle}_duration_seconds{subject,transport}`
-- `nats_inflight_messages{subject,transport}`
-- Producer/Consumer span'ы с W3C trace-propagation через `nats.Header`
-
-**Outbox** (`outboxkit`):
-- `outbox_events_{inserted,processed}_total{subject,status}`
-- `outbox_batch_{size,duration_seconds}`, `outbox_publish_duration_seconds{subject}`
-- `outbox_lag_seconds{subject}` — возраст самого старого unpublished event'а (через `LagReporter` в `outboxkit/pgstore`)
-
-**Auth primitives** (`authnkit`):
-- `jwt_verifications_total{result=ok|expired|signature_invalid|malformed}`
-- `password_hash_duration_seconds`, `password_verify_duration_seconds`
-- `totp_verifications_total{result}`
-
-**Логи** (`logkit`):
-- Структурированный slog → OTLP → Loki, `trace_id`/`span_id` инжектятся в каждое сообщение
-- `log_messages_total{level}` counter — `errors/min` без LogQL-парсинга
-
-### Business-метрики
-
-Конвенция: `biz_<domain>_<event>_{total|seconds}` — это позволяет автодискаверу на Grafana-дашборде `Apps/business` подхватить новые метрики через `{__name__=~"biz_.*"}` без ручного списка.
-
-Сейчас в шаблоне:
-
-```
-biz_users_registered_total{result=ok|weak_password|invalid|error}
-biz_users_updated_total{result=ok|forbidden|invalid|error}
-biz_users_deleted_total{result=ok|forbidden|error}
-biz_auth_login_attempts_total{result=ok|invalid_credentials|locked|blocked}
-biz_auth_refresh_total{result=ok|expired|reused|invalid}
-biz_auth_logouts_total
-biz_auth_password_change_total{result=ok|forbidden|weak|invalid_old}
-biz_verification_email_issued_total{result=ok|error}
-biz_verification_email_confirmed_total{result=ok|invalid|expired|already_used}
-biz_verification_password_reset_requested_total{result=ok|user_not_found|inactive|error}
-biz_verification_password_reset_confirmed_total{result=ok|weak|invalid|expired|already_used}
-```
-
-### Как добавить свою бизнес-метрику
-
-1. Создай (или расширь) `internal/domain/<x>/metrics.go`:
-   ```go
-   import "git.stit.tech/stit-infra/golibinfra/bizmetric"
-
-   type Metrics struct {
-       myCounter metric.Int64Counter
-   }
-
-   func NewMetrics(m metric.Meter) (*Metrics, error) {
-       return &Metrics{
-           myCounter: bizmetric.Counter(m, "<domain>", "<event>",
-               metric.WithDescription("...")),
-       }, nil
-   }
-
-   func (m *Metrics) RecordSomething(ctx context.Context, result string) {
-       if m == nil { return }  // nil-safe для unit-тестов
-       m.myCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
-   }
-   ```
-2. Зарегистрируй `NewMetrics` в `module.go` через `fx.Provide`.
-3. Добавь в `UsecaseDeps`, инжектируй в usecase, вызывай `Record*` в нужных точках.
-
-См. `internal/domain/auth/metrics.go` как канонический пример.
-
-### Trace-context propagation
-
-- HTTP-входы → `otelhttp.NewHandler` стартует server-span автоматически
-- HTTP-исходы (`httpclient`) → `otelhttp.NewTransport` стартует client-span автоматически
-- NATS → trace-context в `nats.Header` (`traceparent`/`tracestate`), `natskit.Publish` инжектит, `Subscribe` экстрактит
-- Postgres → `otelpgx` создаёт span на каждый Query/Exec, привязанный к parent-span'у из ctx
-
-Domain usecase'ы дополнительно открывают span через `telemetry.Span(ctx, "domain.usecase.method")` для семантической разметки операций.
-
-### Локальная разработка
-
-Если не нужны OTLP-экспортёры, поставь `OTEL_STDOUT_ONLY=true` — все три сигнала пойдут в stdout через `stdoutlog`/`stdoutmetric`/`stdouttrace`. Удобно для дебаггинга `trace_id`/`span_id` корреляций.
-
-### Где смотреть в Grafana
-
-Корп-Grafana (`grafana.stit.tech`) автоматически собирает всё что эмитит шаблон. Папка **Apps/** содержит общие дашборды для **всех** golibinfra-сервисов; они фильтруются по variable `$tenant`/`$service`/`$env` — твой сервис появляется без правок инфры:
-
-| Дашборд | Что показывает |
-|---|---|
-| `Apps · Service Overview` | Матрица сервис × tenant: RPS, error %, p95 (entry-point) |
-| `Apps · HTTP` | RED + status breakdown + top endpoints + recent error logs |
-| `Apps · Database` | Postgres pool (acquired/idle/max), acquire wait, saturation |
-| `Apps · Bus` | NATS publish/consume, handle p95, inflight, errors by subject |
-| `Apps · Outbox` | Insert vs publish throughput, lag, batch size, status breakdown |
-| `Apps · Logs` | Loki log-viewer + level breakdown, trace correlation |
-| `Apps · Traces` | Service Graph + slowest spans + TraceQL search |
-| `Apps · Business` | Auto-discover `biz_*` метрик, repeating panel по `result` |
-| `Apps · Auth` | JWT verify rate/result, Argon2id duration, TOTP |
-
-В шапке выбирай `tenant=<project>`, `service=backend`, `env=<твоё-env>`.
-
-> Retention в корп-стеке: **logs/traces — 7 дней**, **metrics — 90 дней** (см. `stit-infra/infra` ADR-0004). Если нужен longer forensic — обсуждать с infra-team отдельно.
-
-### Project-specific дашборды (опционально)
-
-Если у проекта есть domain-specific funnel'и/KPI, которые не покрывает шаблонный `Apps · Business` — можно завести **собственные дашборды** в `stit-infra/infra` репо под `configs/grafana/dashboards/Tenants/<project>/`. Это **PR в infra-repo**, не в этом репо:
-
-1. Скопировать [`_skeleton.json.example`](https://git.stit.tech/stit-infra/infra/src/branch/main/configs/grafana/dashboards/Tenants/_skeleton.json.example) в `Tenants/<project>/<topic>.json`.
-2. Заменить `<PROJECT>`/`<TOPIC>`, добавить panels.
-3. Полный гайд: [`docs/observability-app-guide.md` § 8](https://git.stit.tech/stit-infra/infra/src/branch/main/docs/observability-app-guide.md).
-
-Конвенция: `$tenant` constant + hidden, uid `tenants-<project>-<topic>`, tags `["tenants", "<project>"]`. После merge в infra — provisioner подхватит ≤60 сек, дашборд появится в папке `Tenants/<project>` в Grafana.
-
-## Контракт со stit-инфрой
-
-- `git.stit.tech` — registry для `<org>/backend{,-migrate}` images (build локальный, см. [Release](#release)).
-- `vault.stit.tech` — secrets backend, AppRole `project-<p>` (см. `stit-infra/infra` → `scripts/onboard-project.sh`).
-- `otel.stit.tech` — OTLP ingest (Bearer-token = `OTEL_TOKEN`). Tenant определяется **на edge** middleware'ом `tenant-auth` по токену → header `X-Scope-OrgID` → resource attr `tenant` через otel-collector. `service.namespace` приложения **перезатирается** на actual tenant (ADR-0004 §2 в `stit-infra/infra` — гарантия инварианта `service_namespace == tenant`).
-- **Корп-дашборды на golibinfra-метриках работают автоматически** — выставлять `service.name`, `service.version`, `deployment.environment.name` достаточно; `tenant` ставит infra.
-- Деплой через `stit-infra/project-infra-template-compose` (docker-compose стек на проектный VPS).
+Зона репо: **код → image в registry, STOP.** Деплой — другие репо. Одна команда
+`make release VERSION=vX.Y.Z` (skill `/release`). Полностью — [`docs/reference/release.md`](docs/reference/release.md).

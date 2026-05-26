@@ -89,10 +89,12 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
   - **Done:** split `domain-architecture` (slim + указатель на architecture.md); merge `outbox-events`+`jobs-and-subscribers` → `events-and-messaging.md` (старые удалены `git rm`); new `upstream-first.md` (paths internal/**,pkg/**). Висящие ссылки (new-domain.sh, add-event) починены. `grep globs` пусто. lint отдельно не гонял (правила .md, на Go-lint не влияют; pre-commit на коммите покроет). Глубокий slim остальных 6 правил → Backlog (низкий приоритет).
 
 #### Phase 3 — CLAUDE.md + README
-- [ ] **A12:** CLAUDE.md <200 строк: ядро-инварианты (+golibinfra-first, +planning-first) + таблица-роутер в docs/rules/skills.
+- [x] **A12:** CLAUDE.md <200 строк: ядро-инварианты (+golibinfra-first, +planning-first) + таблица-роутер в docs/rules/skills.
   - Verify: `wc -l CLAUDE.md` <200; ссылки резолвятся · Зависит от: A9, A11
-- [ ] **A13:** README — потребительская шапка + старт через `/init-service`; observability-блок → `docs/reference/observability.md`.
+  - **Done:** 203→**96 строк**. §1–§6 (команды/тесты/структура/telemetry/DDD) → docs + rules; остались ядро (точка входа, planning-first, design-first, стиль, git, Границы, forward-only) + таблица-роутер. Ссылки на removed Claude-хуки убраны (теперь deny+git-hooks). Dangling-ссылок нет.
+- [x] **A13:** README — потребительская шапка + старт через `/init-service`; observability-блок → `docs/reference/observability.md`.
   - Verify: README ссылается на docs; observability в reference · Зависит от: A9
+  - **Done:** 296→**76 строк**. ~140-строчный observability-блок, Release-детали, ecosystem, структура → указатели на docs/reference/*. Шапка ведёт на getting-started + `/init-service`. Ссылки резолвятся; WORKFLOW/AGENTS-рефы убраны.
 
 #### Phase 4 — Скиллы (skill-by-skill)
 - [ ] **A14:** решение keep/rework/delete по каждому из 12 скиллов (фиксируется чекпоинтом).
@@ -131,8 +133,10 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
   - A10 ✓: `docs/stack/` контракт (README + 8 templates + `validate-stack-doc.sh`).
   - A9 ✓: дерево docs (router + getting-started/contributing [META] + reference/{architecture,observability,release,ecosystem}). Observability + WORKFLOW-куски перенесены.
   - A11 ✓: split domain-architecture, merge → events-and-messaging, new upstream-first; висящие ссылки починены.
-  - Не закоммичено/не запушено по просьбе — коммит Phase 2 без push.
   - Дальше: Phase 3 (CLAUDE.md <200 + README trim, A12–A13) — здесь же удаляются дубли, перенесённые в docs.
+- **2026-05-26 · Phase 3 закрыта.**
+  - A12 ✓: CLAUDE.md 203→96 строк (ядро + роутер). A13 ✓: README 296→76 (указатели на docs/reference).
+  - Дубли observability/structure/release сняты (контент в docs из A9). Дальше: Phase 4 (скиллы, A14–A17).
 
 ## Backlog (idea state)
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).
