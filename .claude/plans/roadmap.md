@@ -45,7 +45,7 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
 - [x] Правила: slim `comments`/`domain-artifacts`/`env-local`/`infra-impact`/`sqlc-and-migrations`/`tests-pipeline`; split `domain-architecture`; merge `outbox-events`+`jobs-and-subscribers` → `events-and-messaging.md`; `forward-only` как есть.
 - [x] Планы → единый roadmap.md, планы inline; статусы {planning, in-progress, blocked}; planning-first = plan по default.
 - [x] `WORKFLOW.md` → растворить по ролям: §2 петля → smartdev; §1/§4/§5/§7 → docs/contributing; §6 non-goals → docs/reference/architecture; сценарии → getting-started/contributing. Файл удаляется.
-- [ ] Какие из 12 скиллов удалить — решается первым шагом Фазы 4 (атом A14).
+- [x] Какие из 12 скиллов удалить → никто (каждый покрывает отдельный интент). add-* (5) сливаются в один `scaffold`-роутер + `references/<variant>.md` (A22). spec-канон = writing-guide skill-creator; глубина = канон + description-оптимизация (run_loop), без subagent eval-loop.
 
 **Атомы.**
 
@@ -97,26 +97,36 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
   - **Done:** 296→**76 строк**. ~140-строчный observability-блок, Release-детали, ecosystem, структура → указатели на docs/reference/*. Шапка ведёт на getting-started + `/init-service`. Ссылки резолвятся; WORKFLOW/AGENTS-рефы убраны.
 
 #### Phase 4 — Скиллы (skill-by-skill)
-- [ ] **A14:** решение keep/rework/delete по каждому из 12 скиллов (фиксируется чекпоинтом).
+- [x] **A14:** решение keep/rework/delete по каждому из 12 скиллов (фиксируется чекпоинтом).
   - Verify: чеклист решений в чекпоинте · Зависит от: A7
-- [ ] **A15:** `domain-deepen`→`domain-deep-dive` (rename + rework).
-  - Verify: skill-spec lint; ссылки обновлены · Зависит от: A14
-- [ ] **A16:** новые `init-service` (оркестратор) + `stack-deep-dive`.
-  - Verify: skill-spec; init-service чейнит deep-dives → de-template · Зависит от: A10, A15
-- [ ] **A17:** выжившие скиллы к канону `spec/agent-skills-spec.md`; перенос domain-gate в скиллы (soft-шаг); smartdev вбирает cockpit-петлю WORKFLOW §2 + сценарии.
-  - Verify: каждый <500 строк, description-триггеры, cross-ссылки резолвятся · Зависит от: A14
+  - **Done:** матрица в чекпоинте «A14 закрыт». Удалений 0; rename domain-deepen→domain-deep-dive; 2 новых (init-service, stack-deep-dive); 5 add-* → один `scaffold` (A22). Загружен skill-creator как источник канона.
+- [x] **A17:** канон скилл-авторинга = skill `skill-creator` (writing-guide, грузится по требованию). Отдельный `spec/agent-skills-spec.md` НЕ заводим — дублировал бы upstream-канон (`upstream-first`). A15/A16/A22/A23 конформятся к нему напрямую.
+  - Verify: решение зафиксировано в чекпоинте · Зависит от: A14
+  - **Done:** spec-файл отменён по решению юзера; источник канона — skill-creator (progressive disclosure, <500 строк, references/scripts, pushy-description). Атомы Phase 4 сверяются с ним без промежуточного файла.
+- [x] **A15:** `domain-deepen`→`domain-deep-dive` (`git mv` + rework под design-source-роль, конформно канону).
+  - Verify: каталога `domain-deepen` нет; `domain-deep-dive/SKILL.md` <500 строк, pushy-description; ссылки обновлены · Зависит от: A17
+  - **Done:** `git mv` (RM); SKILL.md 131 строка, pushy-description покрывает «спроектируем домен» + onboarding + `/domain-deep-dive`; роль source-of-truth + чейн `init-service → … → de-template` явные; финал §7 ветвит онбординг/день-в-день. 4 внешние ссылки (`domain-artifacts.md`, `doctor.sh`, `domains/README.md`, `status.sh`) перешиты; `grep domain-deepen` вне roadmap пусто.
+- [x] **A16:** новые `init-service` (оркестратор онбординга) + `stack-deep-dive`, по канону.
+  - Verify: оба <500 строк, pushy-description; init-service чейнит deep-dives → de-template · Зависит от: A10, A15, A17
+  - **Done:** `stack-deep-dive` (126 строк) — сиблинг domain-deep-dive: 8 kinds, волны фундамент→роллап (service→deps→persistence→messaging→auth→observability→config→runtime), упор на `Generates`, валидатор-gate. `init-service` (81 строка) — тонкий дирижёр: pre-flight (форк+make setup) → чейн domain-deep-dive → stack-deep-dive → de-template → prune reference; сам не проектирует. Ссылки getting-started.md резолвятся.
+- [x] **A22:** слить 5 add-* (domain/endpoint/event/migration/port) в один скилл `scaffold` — SKILL.md-роутер по канону + `references/{domain,endpoint,event,migration,port}.md`; общий скелет (вход → scaffold → make gen → test → make check → commit) в SKILL.md, variant-специфика в references (включая slim add-domain). Обновить кросс-рефы (smartdev-таблица, CLAUDE.md-роутер, docs).
+  - Verify: `ls .claude/skills/add-*` пусто; `ls .claude/skills/scaffold/references` = 5 файлов; description покрывает все 5 интентов · Зависит от: A17
+  - **Done:** `git mv` 5 тел → `scaffold/references/<variant>.md` (история сохранена), стрипнут frontmatter/заголовок; router `scaffold/SKILL.md` (63 строки) — таблица выбора варианта + общий ритм + общие anti-patterns + pushy-description на 5 интентов. 14 внешних ссылок перешиты (CLAUDE.md, smartdev, new-domain.sh, triage-failure, domain-deep-dive, init-service, plan/questions, domain-artifacts, domains/README). Заодно вычищены ложные ссылки на снятые в Phase 0 Claude PreToolUse-хуки (gate теперь soft: pre-commit-валидатор + дисциплина). Остаток `add-domain` — только WORKFLOW.md (A21).
+- [x] **A23:** привести остальных выживших к канону + микрофиксы: smartdev — снять отсылки к памяти (автопамять off) + cockpit-петля; infra-handoff/release — `.claude/plans/<slug>.md`/`*.md`→inline `roadmap.md`; domain-gate как soft-шаг в scaffold(domain).
+  - Verify: каждый затронутый <500 строк; `grep -rn 'recalled|== Memory ==|plans/\*.md' .claude/skills` чисто; status.sh без Memory-секции · Зависит от: A17
+  - **Done:** smartdev — память снята в 4 местах (description→«активный план из roadmap» + `scaffold` вместо add-*; §1 убрал `== Memory ==`; §2-bullet → «договорённости в закоммиченных артефактах»; anti-pattern). Источник памяти — Memory-секцию `status.sh` (хардкод про recalled) — удалил. infra-handoff/release: plan-модель → inline `roadmap.md`-секции + `**Infra impact.**`-блок. domain-gate: явный **Gate (soft)** в `scaffold/references/domain.md` (скаффолд по stable-артефактам). **Поправка A14-гипотезы:** `triage-failure` `explorer` НЕ трогал — это реальный subagent репо (`.claude/agents/explorer.md`), ссылка верна. **Находка:** `.claude/agents/migration-author.md` осиротел (единственная ссылка — умирающий WORKFLOW.md; миграции теперь в `scaffold` вариант migration) → кандидат на удаление, решить в A19/cleanup.
 
 #### Phase 5 — Движок de-template (гибрид)
 - [ ] **A18:** завести под-план движка `de-template` отдельной Active-секцией; реализовать механику + doc-driven wiring.
   - Verify: под-план валиден; de-template на тест-форке даёт зелёный `make build` · Зависит от: A10, A16
 
 #### Phase 6 — Проводка и верификация
-- [ ] **A19:** сшить cross-ссылки rules↔skills↔docs↔roadmap; обновить pre-skill ссылки на новые имена скиллов.
-  - Verify: нет битых внутренних ссылок · Зависит от: A11, A12, A17
+- [ ] **A19:** сшить cross-ссылки rules↔skills↔docs↔roadmap; обновить ссылки на новые/переименованные/слитые имена скиллов.
+  - Verify: нет битых внутренних ссылок · Зависит от: A11, A12, A15, A16, A17, A22, A23
 - [ ] **A21:** удалить `.claude/WORKFLOW.md` (контент разнесён A9/A17); вычистить ссылки на него в CLAUDE.md и README.
-  - Verify: `grep -rl 'WORKFLOW.md' --exclude-dir=.git .` → пусто · Зависит от: A9, A13, A17
-- [ ] **A20:** финальный gate.
-  - Verify: `make check` → PASS; валидаторы plan/domain/stack зелёные; e2e не задет · Зависит от: A19, A21, A18
+  - Verify: `grep -rl 'WORKFLOW.md' --exclude-dir=.git .` → пусто · Зависит от: A9, A13, A23
+- [ ] **A20:** финальный gate + description-оптимизация (run_loop из skill-creator) на новых/переименованных/слитых скиллах (init-service, domain-deep-dive, stack-deep-dive, scaffold).
+  - Verify: `make check` → PASS; валидаторы plan/domain/stack зелёные; e2e не задет; триггер-скоры скиллов сняты · Зависит от: A19, A21, A18, A22, A23
 
 **Infra impact.** — (вся работа — docs/skills/config; без env/миграций/cross-service-контрактов/go.mod).
 
@@ -137,6 +147,17 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
 - **2026-05-26 · Phase 3 закрыта.**
   - A12 ✓: CLAUDE.md 203→96 строк (ядро + роутер). A13 ✓: README 296→76 (указатели на docs/reference).
   - Дубли observability/structure/release сняты (контент в docs из A9). Дальше: Phase 4 (скиллы, A14–A17).
+- **2026-05-26 · A14 закрыт (старт Phase 4).**
+  - Решения по 12 скиллам. **keep:** plan, add-endpoint, add-event, add-migration, add-port, query-logs (как есть); triage-failure (+`explorer`→`Explore`); infra-handoff, release (+`<slug>.md`/`*.md`→inline roadmap). **rework:** smartdev (память off + WORKFLOW §2 cockpit-петля), add-domain (slim к канону). **rename+rework:** domain-deepen→domain-deep-dive (A15). **новые:** init-service, stack-deep-dive (A16). **delete:** 0.
+  - Развилки (решил юзер): 5 add-* → один `scaffold`-роутер + `references/<variant>.md` (новый атом A22); spec-канон = writing-guide skill-creator; глубина = канон + description-оптимизация (run_loop), без subagent eval-loop.
+  - Загружен skill-creator как источник канона. План перешит: A17 = зафиксировать «канон = skill-creator» (отдельный spec-файл отменён, дублировал бы upstream); «применение канона к выжившим» — новый A23; +A22 (merge add-*). Порядок Phase 4: **A17(done) → A15 → A16 → A22 → A23**. Зависимости A19/A20/A21 перешиты. Следующий шаг: A15 (rename → `domain-deep-dive`).
+- **2026-05-26 · A17/A15/A16 закрыты (Phase 4, ~⅔).**
+  - A17 ✓: spec-файл отменён, канон = skill-creator. A15 ✓: `domain-deepen`→`domain-deep-dive` (rename+rework, 4 ссылки перешиты). A16 ✓: новые `stack-deep-dive` (126) + `init-service` (81).
+  - Триада проектирования онбординга собрана: `init-service` → `domain-deep-dive` → `stack-deep-dive` → `de-template`. Осталось Phase 4: A22 (merge 5 add-* → `scaffold`), A23 (канон выжившим + микрофиксы). Следующий шаг: A22.
+- **2026-05-26 · Phase 4 ЗАКРЫТА.**
+  - A22 ✓: 5 add-* → один `scaffold` (router 63 + 5 references), 14 кросс-рефов перешиты, вычищены ложные ссылки на снятые Claude-хуки. A23 ✓: smartdev обеспамячен (+ status.sh Memory-секция удалена), infra-handoff/release на inline-roadmap, domain-gate soft в scaffold(domain).
+  - **Скилл-инвентарь после Phase 4:** plan, smartdev, triage-failure, infra-handoff, release, query-logs (core); domain-deep-dive, stack-deep-dive, init-service (онбординг-проектирование); scaffold (день-в-день скаффолд, 5 вариантов). Было 12 → стало 10.
+  - **Хвосты для Phase 6:** (1) `.claude/agents/migration-author.md` осиротел — удалить в A19/cleanup; (2) `de-template` (A18) пока висящая ссылка в init-service/getting-started — закроется на Phase 5; (3) WORKFLOW.md удалить (A21). Следующий шаг: Phase 5 (A18, de-template) или Phase 6 cleanup — на выбор юзера.
 
 ## Backlog (idea state)
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).

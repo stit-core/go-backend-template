@@ -6,8 +6,8 @@
 #   bash scripts/new-domain.sh order
 #
 # Создаёт минимальную структуру по конвенции `.claude/rules/domain-architecture.md`.
-# Дальше дописывает skill `add-domain`: usecase, repository, handler, моки, тесты,
-# миграцию, fx-wiring.
+# Дальше дописывает skill `scaffold` (вариант domain, references/domain.md): usecase,
+# repository, handler, моки, тесты, миграцию, fx-wiring.
 
 set -euo pipefail
 
@@ -313,7 +313,7 @@ EOF
 echo
 echo "✓ создан $DOMAIN_DIR/"
 echo
-echo "Дальше (см. .claude/skills/add-domain/SKILL.md):"
+echo "Дальше (см. .claude/skills/scaffold/references/domain.md):"
 echo "  1. Добавь миграцию: migrations/NNNN_${NAME}.{up,down}.sql"
 echo "  2. Добавь sqlc-блок в sqlc.yaml для пути queries/$NAME"
 echo "  3. Заполни запросы в infra/postgres/queries/$NAME.sql"

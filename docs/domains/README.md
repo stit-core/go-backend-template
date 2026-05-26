@@ -89,7 +89,7 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
 2. Заполнить вручную минимум: frontmatter + properties (имена, типы)
    + methods/operations (имена). Принести Claude.
 
-3. /domain-deepen <ctx>
+3. /domain-deep-dive <ctx>
    — пачкой по волнам, AskUserQuestion'ами добиваем секции inside-out.
 
 4. scripts/tools/validate-domain-doc.sh docs/domains/<ctx>
@@ -98,14 +98,14 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
 5. /smartdev → /plan <task>
    — планировщик читает stable-артефакты, разносит работу по слоям.
 
-6. add-domain / add-endpoint / add-event
-   — gate проверяет наличие stable-артефактов; скаффолдит код по ним.
+6. scaffold (вариант domain/endpoint/event)
+   — скаффолдит код по stable-артефактам.
 ```
 
 ## Gate
 
 - **Pre-commit hook** (`scripts/git-hooks/pre-commit`) гонит валидатор на изменённых `docs/domains/**.md`.
-- **Claude PreToolUse hook** на запуск skill `add-domain` фейлит если в `docs/domains/<context>/` есть `status: draft` или валидатор красный.
+- **Soft-guidance** — Claude-хуков в шаблоне нет; `scaffold`/`domain-deep-dive` по дисциплине идут по stable-артефактам и не стартуют на `status: draft` / красном валидаторе.
 
 ## Маппинг DDD → код
 

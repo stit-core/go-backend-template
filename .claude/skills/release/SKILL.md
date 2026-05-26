@@ -68,7 +68,7 @@ make release VERSION=vX.Y.Z
 `make release` сам печатает блок `=== INFRA HANDOFF ===`:
 
 - `backend_tag → <v>` (api+migrate lockstep);
-- **накопленные `## Infra impact`** — `release.sh` агрегирует секции `## Infra impact` из `.claude/plans/*.md` (механизм — `.claude/rules/infra-impact.md` + skill `infra-handoff`). Если пусто — печатает напоминание убедиться, что инфра-затрагивающее зафиксировано;
+- **накопленные `**Infra impact.**`** — `release.sh` агрегирует блоки `**Infra impact.**` из активных секций `.claude/plans/roadmap.md` (механизм — `.claude/rules/infra-impact.md` + skill `infra-handoff`). Если пусто — печатает напоминание убедиться, что инфра-затрагивающее зафиксировано;
 - действия инфра-стороны:
   - корп: `vault kv patch kv/projects/<project>/<env>/meta backend_tag=<v>`
   - проект: в `<client-org>/infra` → `make ship`.

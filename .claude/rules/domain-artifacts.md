@@ -52,9 +52,9 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
 
 1. Скопировать из `docs/domains/_templates/` в `docs/domains/<ctx>/`. Для cross-context VO — `_templates/vo-shared.md` → `docs/domains/_shared/<Name>.md`.
 2. Заполнить frontmatter + минимум (Properties с именами+типами, Methods с именами).
-3. `/domain-deepen <ctx>` — углубление по волнам inside-out.
+3. `/domain-deep-dive <ctx>` — углубление по волнам inside-out.
 4. `scripts/tools/validate-domain-doc.sh docs/domains/<ctx>` — зелёный → промоушн `status: stable`.
-5. `add-domain` / `add-endpoint` / `add-event` разрешены только при зелёном валидаторе (claude-hook гейтит).
+5. `scaffold` (вариант domain/endpoint/event) — только при зелёном валидаторе (gate — см. § Валидатор).
 
 ## Делать
 
@@ -71,11 +71,11 @@ Stateless / aggregate-of-one / пустые consumers — пишутся явн�
 - ❌ Описывать I/O-операцию (с repo/ports) как метод агрегата.
 - ❌ Spanning invariant между двумя aggregate'ами.
 - ❌ Промоутить `status: stable` руками без зелёного валидатора.
-- ❌ Запускать `add-domain` пока есть `status: draft` в `docs/domains/<ctx>/`.
+- ❌ Запускать `scaffold` (вариант domain) пока есть `status: draft` в `docs/domains/<ctx>/`.
 
 ## Валидатор
 
 `scripts/tools/validate-domain-doc.sh [path]` — детерминированный, без внешних зависимостей. Проверяет frontmatter, наличие секций, при `stable` — непустые секции и целостность ссылок (relations/emits/consumes указывают на существующие id).
 
 Pre-commit hook гонит валидатор на изменённых `docs/domains/**.md`.
-Claude PreToolUse hook (Skill matcher) блокирует `add-domain`/`add-endpoint`/`add-event` если валидатор красный или есть `status: draft`.
+Жёсткого Claude-хука на запуск нет (снят); детерминированный gate — pre-commit-валидатор на изменённых `docs/domains/**.md`. `scaffold`/`domain-deep-dive` по дисциплине не стартуют на красном валидаторе или `status: draft`.

@@ -91,7 +91,7 @@ if [ -d docs/domains ]; then
     if [ -z "$drafts" ]; then
         ok "domain-artifacts: нет status: draft"
     else
-        warn "domain-artifacts: draft —$drafts (углуби через /domain-deepen)"
+        warn "domain-artifacts: draft —$drafts (углуби через /domain-deep-dive)"
     fi
 fi
 

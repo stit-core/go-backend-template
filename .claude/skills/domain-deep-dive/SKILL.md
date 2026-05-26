@@ -1,17 +1,20 @@
 ---
-name: domain-deepen
-description: Углубить DDD-артефакты в docs/domains/<context>/ из минимального драфта до status=stable через волны вопросов inside-out. Активируй когда пользователь приносит черновики артефактов и говорит "разогнать", "углубить", "добить артефакты", "/domain-deepen <ctx>".
+name: domain-deep-dive
+description: Спроектировать бизнес-домен — довести DDD-артефакты в docs/domains/<context>/ от минимального драфта до status=stable через волны вопросов inside-out (properties→methods→invariants→lifecycle→events→use-cases→policies). Эти артефакты — source of truth, из которого de-template/scaffold разворачивают код. Активируй когда юзер проектирует домен, приносит черновики и говорит "спроектируем домен", "разогнать/углубить/добить артефакты", "/domain-deep-dive <ctx>", или когда init-service дошёл до шага проектирования доменов. Бизнес-решения не выдумывай — интервьюируй.
 ---
 
-# Skill: domain-deepen
+# Skill: domain-deep-dive
 
-Превращает минимальные драфты артефактов (frontmatter + properties + methods) в полные `status: stable` артефакты, готовые для add-domain. Работает через AskUserQuestion в режиме интервьюера, **не выдумывает** бизнес-решения сам.
+Проектирование бизнес-домена: превращает минимальные драфты артефактов (frontmatter + properties + methods) в полные `status: stable` артефакты. Это **source of truth** — из stable-артефактов `de-template` (онбординг) и `scaffold` (вариант domain, день-в-день) разворачивают код; проектируем здесь, кодим потом. Работает через AskUserQuestion в режиме интервьюера, **не выдумывает** бизнес-решения сам.
+
+В онбординг-флоу шаблона `init-service` чейнит сюда (шаг «спроектируй домены»), затем — `stack-deep-dive` → `de-template`.
 
 ## Когда применять
 
-- "Разогнать артефакты в docs/domains/user/"
+- "Спроектируем домен `order`" / "Разогнать артефакты в docs/domains/user/"
 - "Принёс драфты, давай добивать"
-- "/domain-deepen user"
+- "/domain-deep-dive user"
+- `init-service` дошёл до проектирования доменов
 - Когда пользователь просит превратить минимальный артефакт в готовый
 
 ## Когда НЕ применять
@@ -105,8 +108,9 @@ scripts/tools/validate-domain-doc.sh docs/domains/<ctx>
 
 ### 7. Финал
 
-Покажи короткую сводку: сколько артефактов теперь stable, что готово для `/plan` и `add-domain`. Предложи следующий шаг:
-> Все артефакты `<ctx>` stable. Можно идти в `/smartdev` → `/plan <task>` для имплементации, или скаффолдить через `add-domain`.
+Покажи короткую сводку: сколько артефактов теперь stable. Предложи следующий шаг по контексту:
+- **Онбординг** (пришёл из `init-service`): домены готовы → дальше `stack-deep-dive`, затем `de-template`.
+- **День-в-день** (домен в существующем проекте): `/smartdev` → `/plan <task>` для имплементации, или скаффолд через `scaffold` (вариант domain).
 
 ## Anti-patterns
 

@@ -1,9 +1,4 @@
----
-name: add-event
-description: Добавить новый outbox-эвент в домен-источник + subscriber-handler in-domain (delivery/nats/) + регистрацию в fx-модуле потребляющего домена. Активируй когда юзер просит "добавь событие", "новый outbox-эвент", "новый NATS subscriber", "после X должно произойти Y асинхронно".
----
-
-# Skill: add-event
+# scaffold › event — outbox-эвент + subscriber
 
 Эвент-флоу: usecase домена-источника пишет событие в outbox в той же транзакции, что и основное изменение → `outboxkit.Publisher` (поднимается fx.Lifecycle того же `cmd/api`) публикует в NATS → subscriber потребляющего домена (`internal/domain/<consumer>/delivery/nats/`) обрабатывает. Отдельного worker-процесса нет — всё в одном бинаре.
 

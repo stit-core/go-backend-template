@@ -1,9 +1,4 @@
----
-name: add-port
-description: Добавить cross-domain порт + адаптер с проверкой depguard. Активируй когда юзер просит "домену A нужны данные из B", "добавь port", "сделай adapter", "auth должен видеть user".
----
-
-# Skill: add-port
+# scaffold › port — cross-domain порт + адаптер
 
 Кросс-доменный вызов через порт + адаптер. Прямой импорт между бизнес-доменами заблокирован depguard'ом — это enforce-ит границу.
 

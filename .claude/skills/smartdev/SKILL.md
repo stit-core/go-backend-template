@@ -1,6 +1,6 @@
 ---
 name: smartdev
-description: Always-on cockpit дневного флоу. Запускай в начале сессии / после /clear / когда непонятно с чего начать. Грузит контекст (план+память), гонит make status, и САМ переключает в нужный режим (plan/triage-failure/add-*/infra-handoff), ведя RED→GREEN по дефолту. Активируй на "/smartdev", "что у нас?", "с чего начать?", "введи в курс дела", "статус проекта".
+description: Always-on cockpit дневного флоу. Запускай в начале сессии / после /clear / когда непонятно с чего начать. Грузит контекст (активный план из roadmap), гонит make status, и САМ переключает в нужный режим (plan/triage-failure/scaffold/infra-handoff), ведя RED→GREEN по дефолту. Активируй на "/smartdev", "что у нас?", "с чего начать?", "введи в курс дела", "статус проекта".
 ---
 
 # Skill: smartdev (cockpit)
@@ -28,12 +28,12 @@ make status
 
 (`make status A=--full` — добавит lint count, +~10s; только если нужен lint-обзор.)
 
-Парси секции: `== Branch ==`, `== Working tree ==`, `== Critical ==` (BUILD/SQLC/MIGRATIONS/DRAFT-ARTIFACTS), `== Infra-touch ==`, `== Plan ==` (roadmap Active + статус активного плана + **следующий открытый атом**), `== Memory ==`, `== Domains ==`, `== Recent commits ==`, `== TODOs ==`. Последняя строка — `OK` или `ATTENTION:<что>`: это твой сигнал ветвления.
+Парси секции: `== Branch ==`, `== Working tree ==`, `== Critical ==` (BUILD/SQLC/MIGRATIONS/DRAFT-ARTIFACTS), `== Infra-touch ==`, `== Plan ==` (roadmap Active + статус активного плана + **следующий открытый атом**), `== Domains ==`, `== Recent commits ==`, `== TODOs ==`. Последняя строка — `OK` или `ATTENTION:<что>`: это твой сигнал ветвления.
 
 ### 2. Поднять контекст (фикс «не помнит»)
 
 - Есть активный план (`== Plan ==` показал `<slug>: in-progress | next: A#`)? **Прочитай его inline-секцию в `.claude/plans/roadmap.md`** — последний чекпоинт + следующий открытый атом. Ты продолжаешь с него, не начинаешь с нуля и не перепланируешь.
-- Сверься с recalled memories (harness грузит индекс в контекст): user-преференсы, feedback, project-констрейнты. Не игнорь — они отражают договорённости прошлых сессий.
+- Договорённости прошлых сессий живут в закоммиченных артефактах (roadmap-чекпоинты, CLAUDE.md, rules) — там и сверяйся; авто-память в шаблоне не используется.
 
 ### 3. Чейнить (фикс «не ведёт дальше») — НЕ описывай, переключай
 
@@ -45,7 +45,7 @@ make status
 | `== Infra-touch ==` не `none` (или правишь env/секрет/миграцию/cross-service/go.mod) | → `infra-handoff` (оформить INFRA-HANDOFF до claim/коммита) |
 | Активный план `in-progress` | Продолжай со следующего открытого атома; чекпоинт по правилам plan-skill |
 | Юзер дал задачу, big (меняет схему/интерфейс/security, >5 шагов, >1 слой) | → `plan` (декомпозиция; planner спрашивает, не угадывает) |
-| Задача = скаффолд (домен/endpoint/event/port/миграция) | → `add-domain`/`add-endpoint`/`add-event`/`add-port`/`add-migration` |
+| Задача = скаффолд (домен/endpoint/event/port/миграция) | → `scaffold` (вариант по типу блока) |
 | Багфикс (любого размера) | → `triage-failure` (TDD red-first; **не** `plan`) |
 | Задача мелкая и понятная | Делай напрямую — но по RED→GREEN (см. §4) |
 | Пусто (нет задачи, нет плана, всё зелёно) | Спроси юзера какую задачу решаем |
@@ -99,5 +99,5 @@ make status
 - ❌ Описать проблему и остановиться («есть drift»). Cockpit **переключает**, а не комментирует.
 - ❌ Перепланировать вместо продолжения активного плана.
 - ❌ Багфикс через `plan`. Багфикс → `triage-failure`, RED-first.
-- ❌ Игнорить `== Infra-touch ==` / recalled memories.
+- ❌ Игнорить `== Infra-touch ==`.
 - ❌ `make status A=--full` без причины (+10s, ничего не меняет если нет lint-вопроса).

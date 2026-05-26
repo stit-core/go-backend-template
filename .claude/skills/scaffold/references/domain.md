@@ -1,11 +1,11 @@
----
-name: add-domain
-description: Скаффолд нового бизнес-домена в internal/domain/<name>/ — слои, миграция, sqlc, моки, fx-wiring. Активируй когда пользователь просит "добавить домен", "создать новый домен", "scaffold a domain".
----
-
-# Skill: add-domain
+# scaffold › domain — новый бизнес-домен
 
 Создаёт новый домен по конвенции этого шаблона. Соответствует `.claude/rules/domain-architecture.md` — открой его если ещё не загружено.
+
+**Gate (soft).** Скаффолдь по **stable** DDD-артефактам `docs/domains/<ctx>/`: код разворачивается
+по дизайну, не наоборот. Если артефакты ещё `draft` или `scripts/tools/validate-domain-doc.sh
+docs/domains/<ctx>` красный — сначала `domain-deep-dive` до `stable`, потом сюда. Жёсткого хука
+нет (снят) — это дисциплина (см. `.claude/rules/domain-artifacts.md`).
 
 ## Когда применять
 
@@ -17,6 +17,7 @@ description: Скаффолд нового бизнес-домена в internal
 
 - Изменение существующего домена → не активируй skill, работай напрямую.
 - Только миграция / только handler / только событие → точечная правка, skill не нужен.
+- Артефакты домена ещё `draft` / валидатор красный → сначала `domain-deep-dive` (см. Gate выше).
 
 ## Шаги
 

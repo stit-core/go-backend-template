@@ -40,7 +40,7 @@ claim «готово» / push — **`make check`** (fmt+vet+lint+test+build+gen-
 | Release (образы, handoff, откат) | `docs/reference/release.md` + skill `/release` |
 | Экосистема, контракт со stit-инфрой | `docs/reference/ecosystem.md` |
 | Тесты, моки, TDD, e2e | rule `tests-pipeline` + `test/README.md` |
-| Миграции, sqlc | rule `sqlc-and-migrations` + skill `/add-migration` |
+| Миграции, sqlc | rule `sqlc-and-migrations` + skill `/scaffold` (вариант migration) |
 | Outbox / NATS / jobs | rule `events-and-messaging` |
 | DDD-артефакты (kinds, workflow) | `docs/domains/README.md` + `docs/domains/MAPPING.md` |
 | Stack-артефакты (8 kinds, вход de-template) | `docs/stack/README.md` |
@@ -80,7 +80,7 @@ claim «готово» / push — **`make check`** (fmt+vet+lint+test+build+gen-
 - Conventional Commits. Дёргай `make <verb>`, не скрипты напрямую.
 
 ### Сначала спросить
-- `migrations/` (skill `/add-migration`), `pkg/policy` + `pkg/tokens`, `internal/platform/authgate/`,
+- `migrations/` (skill `/scaffold`, вариант migration), `pkg/policy` + `pkg/tokens`, `internal/platform/authgate/`,
   `go.mod`/`go.sum`, любой `--no-verify`, `git tag -a` / `make release` (артефакт вне репо).
 
 ### Не делать никогда

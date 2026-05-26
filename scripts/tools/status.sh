@@ -106,7 +106,7 @@ if [ -d docs/domains ]; then
     if [ -z "$drafts" ]; then
         echo "DRAFT-ARTIFACTS: none"
     else
-        echo "DRAFT-ARTIFACTS:$drafts (/domain-deepen)"
+        echo "DRAFT-ARTIFACTS:$drafts (/domain-deep-dive)"
     fi
 fi
 echo
@@ -145,12 +145,6 @@ if [ -f .claude/plans/roadmap.md ]; then
 else
     echo "  (no roadmap)"
 fi
-echo
-
-# === Memory ===
-echo "== Memory =="
-echo "harness грузит индекс памяти в контекст smartdev — сверься с recalled"
-echo "memories (user/feedback/project/reference) перед выбором действия."
 echo
 
 # === Domains ===
