@@ -12,7 +12,7 @@
 задачи удаляется целиком — история остаётся в `git log`. Незакрытый follow-up
 переезжает в backlog или новой Active-секцией, а не хвостом в удаляемой.
 
-**Current focus:** `doc-and-scaffold-overhaul`
+**Current focus:** `de-template-engine` (реализует A18 родительского `doc-and-scaffold-overhaul`)
 
 ## Active
 
@@ -116,9 +116,9 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
   - Verify: каждый затронутый <500 строк; `grep -rn 'recalled|== Memory ==|plans/\*.md' .claude/skills` чисто; status.sh без Memory-секции · Зависит от: A17
   - **Done:** smartdev — память снята в 4 местах (description→«активный план из roadmap» + `scaffold` вместо add-*; §1 убрал `== Memory ==`; §2-bullet → «договорённости в закоммиченных артефактах»; anti-pattern). Источник памяти — Memory-секцию `status.sh` (хардкод про recalled) — удалил. infra-handoff/release: plan-модель → inline `roadmap.md`-секции + `**Infra impact.**`-блок. domain-gate: явный **Gate (soft)** в `scaffold/references/domain.md` (скаффолд по stable-артефактам). **Поправка A14-гипотезы:** `triage-failure` `explorer` НЕ трогал — это реальный subagent репо (`.claude/agents/explorer.md`), ссылка верна. **Находка:** `.claude/agents/migration-author.md` осиротел (единственная ссылка — умирающий WORKFLOW.md; миграции теперь в `scaffold` вариант migration) → кандидат на удаление, решить в A19/cleanup.
 
-#### Phase 5 — Движок de-template (гибрид)
-- [ ] **A18:** завести под-план движка `de-template` отдельной Active-секцией; реализовать механику + doc-driven wiring.
-  - Verify: под-план валиден; de-template на тест-форке даёт зелёный `make build` · Зависит от: A10, A16
+#### Phase 5 — Движок de-template (skill-only)
+- [ ] **A18:** завести под-план движка `de-template` отдельной Active-секцией; реализовать. Ведётся в секции `### de-template-engine` ниже (skill-only — override прежнего hybrid-решения).
+  - Verify: секция `de-template-engine` закрыта; de-template на fixture-форке даёт зелёный `make build` · Зависит от: A10, A16
 
 #### Phase 6 — Проводка и верификация
 - [x] **A19:** сшить cross-ссылки rules↔skills↔docs↔roadmap; обновить ссылки на новые/переименованные/слитые имена скиллов.
@@ -163,6 +163,82 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
 - **2026-05-26 · Phase 6 cleanup (A19+A21) закрыт.**
   - A21 ✓: `.claude/WORKFLOW.md` удалён, путь убран из `forward-only.md`. A19 ✓: sweep битых ссылок чист, `migration-author.md` удалён (осиротел), explorer/reviewer оставлены.
   - **Остаётся только Phase 5: A18 (движок `de-template`)** + затем A20 (финальный gate, зависит от A18). После A18 `de-template`-ссылки перестанут висеть. A18 — отдельная Active-секция с дизайном/вопросами (не atomic). Следующий шаг: спланировать A18.
+
+### de-template-engine — движок развёртывания форка из stable-артефактов (реализует A18)
+**Создан:** 2026-05-26 · **Статус:** in-progress
+
+**Контекст.** A18 родительского `doc-and-scaffold-overhaul`. `de-template` читает stable
+`docs/{domains,stack}` и разворачивает фундамент форка: module path, README, `internal/platform/*`,
+`cmd/api`-композиция, `.env.example`, нужные kit'ы, prune reference-доменов. Контракт — секции
+`Generates` 8 stack-артефактов (`docs/stack/_templates/*` показывают форму). Скилл `init-service`
+чейнит сюда последним шагом; сейчас `/de-template` — висящая forward-ссылка. Движок —
+**skill-only** (без committed-скрипта): и механика, и wiring идут как Claude-driven reviewable
+edits под процедурой скилла.
+
+**Не входит в скоуп.**
+- **Fully-unattended CI-прогон движка** — невозможен: движок Claude-driven, не скрипт. Harness
+  автоматизирует только setup (tmp-копия + наложение fixtures) и финальный `make build`-assert;
+  сам прогон `de-template` — ручной через скилл (Claude).
+- Реальная де-темплейтизация конкретного форка (запускает потребитель, не мы).
+- Kit'ы вне текущего набора golibinfra (MinIO и пр. — backlog).
+- Изменение runtime-кода reference-доменов (они — вход для prune, не правятся).
+
+**Открытые вопросы.**
+- [x] Q1: механика — гибрид(committed-скрипт) или skill-only? → **skill-only** (override закрытого
+  ранее hybrid-решения): module-path rewrite / prune / env — Claude по точным командам скилла
+  (`git grep`+`sed`, `git rm`), без `scripts/de-template.sh` и `make`-таргета.
+- [x] Q2: verify «зелёный build на тест-форке» → fixture-harness `test/de-template/` (tmp-копия +
+  sample stable-артефакты + `make build`-assert); прогон движка в нём — ручной (см. Не-в-скоуп).
+- [x] Q3: скоуп → **фазированно**: Phase 1 детерминированная механика (service/config/persistence/
+  dependencies + prune) → зелёный build скелета; Phase 2 doc-driven wiring (runtime/messaging/
+  observability/auth) reviewable-diff.
+- [x] Q4: guard — скилл отказывается бежать на каноническом template-репо (module path ==
+  `…/go-backend-template` И это не tmp/fork) → защита от самоуничтожения шаблона.
+
+**Атомы.**
+
+#### Phase 1 — Скилл + детерминированная механика
+- [x] **A1:** `de-template/SKILL.md` — каркас по канону (pushy-description, gate: артефакты `stable`
+  + guard против прогона на каноническом репо) + детерминированная механика: module-path rewrite
+  (точные `git grep -l <old> | xargs sed -i`), README-шапка из `service.Generates`, `.env.example`
+  из `config.Generates`, strip `[META]`-доков (`getting-started.md`).
+  - Verify: `wc -l .claude/skills/de-template/SKILL.md` <500; human-review секций; описаны точные команды механики · Зависит от: —
+  - **Done:** 117 строк. Gate (stable-валидаторы + guard «не канонический шаблон»), Phase A (module-path/README/env/strip-META + reset roadmap; contributing.md оставлен), Phase B → wiring.md, prune → prune.md, verify `make build`/`make check`. Pushy-description (триггеры онбординга + /de-template).
+- [x] **A2:** prune reference-доменов — `de-template/references/prune.md`: чеклист удаления
+  `auth`/`user`/`verification` (`internal/domain/*`, `docs/domains/*`, блоки `sqlc.yaml`, их
+  `migrations/`, fx-wiring `cmd/api`, depguard в `.golangci.yml`, e2e в `test/`).
+  - Verify: чеклист покрывает все 7 точек удаления; `de-template/SKILL.md` ссылается на prune.md · Зависит от: A1
+  - **Done:** prune.md — 8 точек (8-я: `cmd/seed-admin`, обнаружен в recon), + раздел «что НЕ удалять» (platform authgate/identity/config, _templates) + verify (`make gen`/`go build`/`make lint`). SKILL.md §A.5 ссылается.
+
+#### Phase 2 — doc-driven wiring
+- [x] **A3:** `de-template/references/wiring.md` — процедура wiring остальных Generates как
+  reviewable-diff поверх скелета: `cmd/api/main.go` композиция (runtime), fx-модули, telemetry
+  (observability), subjects+publisher (messaging), authgate (auth), pgkit+sqlc (persistence),
+  kit-prune (dependencies).
+  - Verify: покрыты 6 wiring-kinds, каждый ссылается на свою `Generates`-секцию · Зависит от: A1
+  - **Done:** wiring.md — 6 kinds в порядке фундамент→роллап (persistence→dependencies→messaging→auth→observability→runtime последним), каждый маппит `docs/stack/<kind>.md § Generates`→место в коде; принцип «не сочинять, source of truth — Generates; TBD → назад в stack-deep-dive»; `go build` после каждого kind. SKILL.md Phase B ссылается.
+
+#### Phase 3 — fixture + валидирующий прогон
+- [ ] **A4:** `test/de-template/fixtures/` — минимальный sample: 1 stable domain-контекст +
+  8 stable stack-артефактов с заполненными `Generates`.
+  - Verify: `validate-domain-doc.sh` + `validate-stack-doc.sh` на fixtures → зелёные · Зависит от: —
+- [ ] **A5:** `test/de-template/harness.sh` — tmp-копия репо + наложение fixtures + (после ручного
+  прогона) `make build`-assert + cleanup; `test/de-template/README.md` с инструкцией прогона.
+  - Verify: `bash test/de-template/harness.sh --setup` ставит tmp-копию без ошибок · Зависит от: A4
+- [ ] **A6:** валидирующий прогон — выполнить скилл `de-template` на harness'd tmp-копии, довести
+  до зелёного `make build`, пофиксить пробелы скилла/references.
+  - Verify: `make build` в tmp-копии после прогона → PASS · Зависит от: A1, A2, A3, A5
+- [ ] **A7:** снять висящие forward-ссылки на `de-template` — сверить `getting-started.md §4`,
+  `init-service §3`, `docs/README`, stack-templates на актуальность теперь-существующего скилла.
+  - Verify: `grep -rn 'de-template' docs .claude/skills` резолвится на реальный скилл; нет «движок будет» · Зависит от: A6
+
+**Infra impact.** — (skill + test-fixtures; без env/миграций/cross-service/go.mod).
+
+**Чекпоинты.**
+- **2026-05-26 · Phase 1+2 (A1–A3) закрыты.**
+  - Скилл `de-template` собран: `SKILL.md` (117) + `references/prune.md` (8 точек) + `references/wiring.md` (6 kinds). Skill-only, gate+guard, Phase A механика / Phase B doc-driven.
+  - **Обнаружено:** в `docs/domains/` нет артефактов reference-доменов (только README/MAPPING/_shared) — prune-точка «docs/domains/{auth,user,verification}» у текущего шаблона no-op (в чеклисте оставлена как guidance для форка, который их спроектировал).
+  - Дальше Phase 3: A4 (fixtures — stable domain[12 секций] + 8 stack), A5 (harness), A6 (валидирующий прогон → зелёный build), A7 (forward-ссылки). Следующий шаг: A4.
 
 ## Backlog (idea state)
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).
