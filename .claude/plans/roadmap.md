@@ -121,10 +121,12 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
   - Verify: под-план валиден; de-template на тест-форке даёт зелёный `make build` · Зависит от: A10, A16
 
 #### Phase 6 — Проводка и верификация
-- [ ] **A19:** сшить cross-ссылки rules↔skills↔docs↔roadmap; обновить ссылки на новые/переименованные/слитые имена скиллов.
+- [x] **A19:** сшить cross-ссылки rules↔skills↔docs↔roadmap; обновить ссылки на новые/переименованные/слитые имена скиллов.
   - Verify: нет битых внутренних ссылок · Зависит от: A11, A12, A15, A16, A17, A22, A23
-- [ ] **A21:** удалить `.claude/WORKFLOW.md` (контент разнесён A9/A17); вычистить ссылки на него в CLAUDE.md и README.
+  - **Done:** sweep чист — остаточных AGENTS.md/WORKFLOW/domain-deepen/add-*/claude-hooks нет; битых .md-ссылок нет (плейсхолдеры в `docs/domains/_templates/` — by design); «PreToolUse» в contributing.md — корректное «хуков нет». Осиротевший `.claude/agents/migration-author.md` удалён (`git rm`, решение юзера); explorer/reviewer оставлены (валидно используются). Висящий `de-template` — forward-ref на A18, не битая ссылка.
+- [x] **A21:** удалить `.claude/WORKFLOW.md` (контент разнесён A9/A23); вычистить ссылки на него.
   - Verify: `grep -rl 'WORKFLOW.md' --exclude-dir=.git .` → пусто · Зависит от: A9, A13, A23
+  - **Done:** `git rm .claude/WORKFLOW.md` (§1/4/5/7→contributing, §6→architecture, §2→smartdev, §3→getting-started — всё на месте). Единственная ссылка — путь в `paths:` правила `forward-only.md` — убрана. `grep WORKFLOW` вне roadmap пусто.
 - [ ] **A20:** финальный gate + description-оптимизация (run_loop из skill-creator) на новых/переименованных/слитых скиллах (init-service, domain-deep-dive, stack-deep-dive, scaffold).
   - Verify: `make check` → PASS; валидаторы plan/domain/stack зелёные; e2e не задет; триггер-скоры скиллов сняты · Зависит от: A19, A21, A18, A22, A23
 
@@ -158,6 +160,9 @@ design-source-of-truth, из которого скиллы (`/init-service` → 
   - A22 ✓: 5 add-* → один `scaffold` (router 63 + 5 references), 14 кросс-рефов перешиты, вычищены ложные ссылки на снятые Claude-хуки. A23 ✓: smartdev обеспамячен (+ status.sh Memory-секция удалена), infra-handoff/release на inline-roadmap, domain-gate soft в scaffold(domain).
   - **Скилл-инвентарь после Phase 4:** plan, smartdev, triage-failure, infra-handoff, release, query-logs (core); domain-deep-dive, stack-deep-dive, init-service (онбординг-проектирование); scaffold (день-в-день скаффолд, 5 вариантов). Было 12 → стало 10.
   - **Хвосты для Phase 6:** (1) `.claude/agents/migration-author.md` осиротел — удалить в A19/cleanup; (2) `de-template` (A18) пока висящая ссылка в init-service/getting-started — закроется на Phase 5; (3) WORKFLOW.md удалить (A21). Следующий шаг: Phase 5 (A18, de-template) или Phase 6 cleanup — на выбор юзера.
+- **2026-05-26 · Phase 6 cleanup (A19+A21) закрыт.**
+  - A21 ✓: `.claude/WORKFLOW.md` удалён, путь убран из `forward-only.md`. A19 ✓: sweep битых ссылок чист, `migration-author.md` удалён (осиротел), explorer/reviewer оставлены.
+  - **Остаётся только Phase 5: A18 (движок `de-template`)** + затем A20 (финальный gate, зависит от A18). После A18 `de-template`-ссылки перестанут висеть. A18 — отдельная Active-секция с дизайном/вопросами (не atomic). Следующий шаг: спланировать A18.
 
 ## Backlog (idea state)
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).

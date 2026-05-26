@@ -7,7 +7,6 @@ paths:
   - "docs/**/*.md"
   - ".claude/skills/**/*.md"
   - ".claude/rules/**/*.md"
-  - ".claude/WORKFLOW.md"
   - ".claude/plans/**/*.md"
 ---
 
