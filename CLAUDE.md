@@ -87,7 +87,7 @@ claim «готово» / push — **`make check`** (fmt+vet+lint+test+build+gen-
 
 ### Не делать никогда
 - `--no-verify` (блокирует `permissions.deny`). Коммитить/цитировать `.env*`/`*.pem`/`*.key`.
-- Править сгенерированное руками (`infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
+- Править сгенерированное руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
 - `fmt.Print*`/`slog.*` напрямую. Image-теги `:latest`/`:edge`/lightweight.
 - Deploy-команды чужих репо (`make ship`, `ssh`, `vault kv patch`) — после `make release` STOP.
 - Принимать архитектурные решения без согласования — отклонение от skill/плана требует OK юзера.

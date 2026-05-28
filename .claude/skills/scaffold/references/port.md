@@ -123,6 +123,9 @@ scripts/tools/lint.sh ./internal/domain/<consumer>/...
 
 Если ругается — значит ты импортировал провайдер не из `module/`, а из самого домена. Перенеси код.
 
+Если `<consumer>` — **новый** домен, заведи ему правило `<consumer>-domain-isolation` в
+`.golangci.yml` (паттерн — `scaffold/references/domain.md`), иначе depguard его границу не стережёт.
+
 ### 8. Тесты
 
 - `usecase_test.go` потребителя: используй `Mock<Provider>Reader` (свежесгенерированный). Тестируй именно поведение consumer'а.

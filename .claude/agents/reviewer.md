@@ -67,7 +67,7 @@ Cognition Devin Review публично заявляет: ревьюер с чи
 
 - Комментарии — только когда `почему` неочевидно.
 - Logging — `logkit.Logger`, не `fmt.Print*` / `slog.*`.
-- gofumpt чистый (PostToolUse-хук должен был это сделать).
+- gofumpt чистый (`make fmt`).
 
 ### Conventional Commits
 

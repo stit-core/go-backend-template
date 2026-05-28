@@ -118,12 +118,12 @@ setup: ## Поставить pinned dev-tools + git-хуки (commit-msg, pre-co
 	@chmod +x .git/hooks/commit-msg .git/hooks/pre-push .git/hooks/pre-commit 2>/dev/null || true
 	@echo "✓ setup: dev-tools + git hooks"
 
-doctor: ## Fail-fast preflight: auth/env/drift (тело — A5)
-	@test -x scripts/tools/doctor.sh && bash scripts/tools/doctor.sh $(A) || echo "doctor: not yet implemented (A5)"
+doctor: ## Fail-fast preflight: auth/env/drift
+	@bash scripts/tools/doctor.sh $(A)
 
 ##@ META
-plan-check: ## Валидатор структуры планов (тело — A12)
-	@test -x scripts/tools/validate-plan.sh && bash scripts/tools/validate-plan.sh $(A) || echo "plan-check: not yet implemented (A12)"
+plan-check: ## Валидатор структуры планов
+	@bash scripts/tools/validate-plan.sh $(A)
 
 ##@ EXTRA
 test-int: ## Только integration (testcontainers); требует docker
