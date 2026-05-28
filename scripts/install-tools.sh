@@ -38,7 +38,7 @@ if ! git config --global --get-regexp '^url\..*\.insteadof$' 2>/dev/null \
   echo "    git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/"
 fi
 
-install() {
+go_install() {
   local pkg="$1" name
   name="$(basename "${pkg%@*}")"
   if command -v "$name" >/dev/null 2>&1 && "$name" --version 2>/dev/null | grep -q "${pkg##*@}"; then
@@ -49,9 +49,9 @@ install() {
   GOBIN="$GOBIN" go install "$pkg"
 }
 
-install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
-install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
-install "github.com/vektra/mockery/v3@${MOCKERY_VERSION}"
+go_install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
+go_install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
+go_install "github.com/vektra/mockery/v3@${MOCKERY_VERSION}"
 
 # golangci-lint ставится через свой installer (статическая сборка,
 # не через `go install`). Сравниваем версию — апгрейдим если pin изменился.
