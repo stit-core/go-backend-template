@@ -95,6 +95,18 @@ if [ -d docs/domains ]; then
     fi
 fi
 
+# 6. draft-артефакты stack (companion README/_templates исключены)
+if [ -d docs/stack ]; then
+    sdrafts=$(grep -rl '^status: draft' docs/stack --include='*.md' 2>/dev/null \
+        | grep -vE '/_templates/|/README\.md$' \
+        | sed 's#docs/stack/##' | tr '\n' ' ')
+    if [ -z "$sdrafts" ]; then
+        ok "stack-artifacts: нет status: draft"
+    else
+        warn "stack-artifacts: draft —$sdrafts (углуби через /stack-deep-dive)"
+    fi
+fi
+
 echo
 if [ "$FAIL" -gt 0 ]; then
     echo "FAIL: $FAIL blocking, $WARN warn"

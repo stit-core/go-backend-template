@@ -33,6 +33,16 @@ if [ -n "$CHANGED_DOCS" ]; then
     fi
 fi
 
+echo "pre-commit: validating stack artifacts in docs/stack/..."
+CHANGED_STACK=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^docs/stack/.*\.md$' || true)
+if [ -n "$CHANGED_STACK" ]; then
+    if [ -x scripts/tools/validate-stack-doc.sh ]; then
+        scripts/tools/validate-stack-doc.sh docs/stack
+    else
+        echo "WARN: validate-stack-doc.sh not found or not executable, skipping"
+    fi
+fi
+
 echo "pre-commit: validating plan roadmap (.claude/plans/roadmap.md)..."
 CHANGED_ROADMAP=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^\.claude/plans/roadmap\.md$' || true)
 if [ -n "$CHANGED_ROADMAP" ]; then

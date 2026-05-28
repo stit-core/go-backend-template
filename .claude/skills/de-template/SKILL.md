@@ -30,8 +30,13 @@ stack-артефактов. Движок **skill-only**: нет committed-скр
 1. **Не канонический шаблон.** `go.mod` module path всё ещё `git.stit.tech/stit-infra/go-backend-template`
    И каталог — не временная копия/форк → СТОП. Запуск на самом шаблоне его уничтожит. Спроси
    юзера явно подтвердить, что это форк/тест-копия, прежде чем продолжать.
-2. **Артефакты stable.** Оба зелёные, иначе СТОП → `domain-deep-dive`/`stack-deep-dive`:
+2. **Артефакты stable.** Оба зелёные, иначе СТОП → `domain-deep-dive`/`stack-deep-dive`.
+   Сначала проверь, что 8 stack-kind'ов существуют — на пустом `docs/stack` (только
+   `_templates/`+README) валидатор даёт ложный `OK`, ему нечего проверять:
    ```bash
+   for k in service runtime config persistence messaging auth observability dependencies; do
+     test -f "docs/stack/$k.md" || echo "STOP: docs/stack/$k.md нет — стек не спроектирован (/stack-deep-dive)"
+   done
    scripts/tools/validate-domain-doc.sh docs/domains
    scripts/tools/validate-stack-doc.sh  docs/stack
    ```
@@ -77,7 +82,7 @@ go mod tidy
 
 ### A.5 Prune reference-доменов
 
-`auth`/`user`/`verification` — учебные. Удаляются по полному чеклисту (7 точек) —
+`auth`/`user`/`verification` — учебные. Удаляются по полному чеклисту (8 точек) —
 см. **`references/prune.md`**. Делай это **после** того как свои домены спроектированы и
 сгенерированы (иначе теряешь живой образец). Если свои домены ещё не скаффолжены — сначала
 `scaffold` (вариант domain) по stable-артефактам, потом prune.
@@ -97,8 +102,7 @@ make build      # фундамент компилируется
 make check      # перед claim «готово»: fmt+vet+lint+test+build+gen-check
 ```
 
-Зелёный `make build` на развёрнутом форке — главный критерий движка. Тест-обвязка для
-воспроизводимой проверки — `test/de-template/` (harness ставит tmp-копию + ассертит build).
+Зелёный `make build` на развёрнутом форке — главный критерий движка.
 
 ## Anti-patterns
 
@@ -111,7 +115,7 @@ make check      # перед claim «готово»: fmt+vet+lint+test+build+gen
 
 ## См. также
 
-- `references/prune.md` — удаление reference-доменов (7 точек).
+- `references/prune.md` — удаление reference-доменов (8 точек).
 - `references/wiring.md` — doc-driven wiring 6 `Generates`-kinds.
 - `docs/stack/README.md` — контракт 8 артефактов и их `Generates`.
 - `.claude/skills/init-service/SKILL.md` — оркестратор, чейнит сюда последним шагом.

@@ -109,6 +109,18 @@ if [ -d docs/domains ]; then
         echo "DRAFT-ARTIFACTS:$drafts (/domain-deep-dive)"
     fi
 fi
+
+# stack draft-артефакты (companion README/_templates исключены)
+if [ -d docs/stack ]; then
+    sdrafts=$(grep -rl '^status: draft' docs/stack --include='*.md' 2>/dev/null \
+        | grep -vE '/_templates/|/README\.md$' \
+        | sed 's#docs/stack/##' | tr '\n' ' ')
+    if [ -z "$sdrafts" ]; then
+        echo "STACK-DRAFTS: none"
+    else
+        echo "STACK-DRAFTS:$sdrafts (/stack-deep-dive)"
+    fi
+fi
 echo
 
 # === Infra-touch === (незакоммиченный diff по инфра-поверхности → infra-handoff)
