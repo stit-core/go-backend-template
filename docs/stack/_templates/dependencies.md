@@ -8,19 +8,19 @@ status: draft
 # Dependencies — зависимости и ёмкость
 
 ## golibinfra kits
-<Какие kit'ы golibinfra подключены и зачем: telemetry, httpkit, pgkit, authnkit,
-outboxkit, natskit, bruteforcekit, auditkit, cachekit, clockkit, logkit. Версия golibinfra.>
+<Какие kit'ы golibinfra подключены и зачем (таблица `| Kit | Зачем |`): telemetry, httpkit, pgkit, authnkit, outboxkit, natskit, bruteforcekit, auditkit, cachekit, clockkit, logkit, storagekit, bizmetric. Версия golibinfra.>
+
+## Что НЕ подключено
+<Kit'ы, доступные в golibinfra, но НЕ wired в `cmd/api/main.go` — их env'ы runtime игнорирует, de-template их prune'ит. Перечисли (напр. natskit/outboxkit/cachekit/httpclient/flagkit), чтобы не было ложных ожиданий «эта env читается».>
 
 ## External runtime deps
-<Внешние runtime-зависимости: Postgres (обяз.), NATS, Redis, S3/MinIO — что реально
-используется. Каждая — это инфра-поверхность (INFRA-HANDOFF).>
+<Внешние runtime-зависимости, каждая — инфра-поверхность (INFRA-HANDOFF). Инфраструктурные: Postgres (обяз.), NATS, Redis, S3/MinIO — что реально используется. Внешние backend'ы/интеграции (геокодеры, платёжки, провайдеры): опиши как интеграцию — что/зачем, env-ключи, режим отказа (какой HTTP-код отдаём), retry/timeout, quota/лимиты, как менять провайдера.>
 
 ## Capacity
-<Ожидания по ёмкости: CPU/RAM, replicas, connection-pool, rate-ожидания. Грубо, для
-infra-стороны.>
+<Ожидания по ёмкости: CPU/RAM, replicas, connection-pool, rate-ожидания. Грубо, для infra-стороны.>
 
 ## Generates
 <Что de-template родит:
 - kit-импорты + fx-провайдеры (только нужные kit'ы — prune ненужных)
-- wiring внешних deps (Redis/NATS/…)
+- wiring внешних deps (Postgres/S3/NATS/…)
 - golibinfra-first: generic util → golibinfra, не сюда (CLAUDE.md § Стиль кода)>

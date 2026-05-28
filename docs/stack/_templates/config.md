@@ -7,19 +7,21 @@ status: draft
 
 # Config — конфигурация и секреты
 
+Этот артефакт — материализованная таблица всех env (тип, default, sensitive, Vault-ключ) и
+release-checklist. Конфиг = app-сторона (`internal/platform/config` через `golibinfra/config`) +
+golibinfra-сторона (envconfig-теги kit-структур). Новый `envconfig:"..."` дописывается сюда тем же PR.
+
 ## Required env
-<Обязательные env-vars (приложение не стартует без них): имя, тип, смысл. Эти
-переменные едут в INFRA-HANDOFF.>
+<Без них приложение не стартует (`config.Load` → envconfig fail-fast). Таблица `| Env | Тип | Назначение | Где живёт |`. Эти переменные едут в INFRA-HANDOFF.>
 
 ## Optional env
-<Опциональные env с дефолтами: имя, дефолт, когда менять.>
+<С code-default в kit-структурах; переопределяй только когда дефолт не подходит. Группируй по префиксу подсекциями `### <Группа>` с таблицей `| Env | Default | Назначение |` по подключённым kit'ам (напр. Telemetry `OTEL_*`, Postgres `PG_*`, HTTP `HTTP_*`, Auth `JWT_*`/`ARGON2_*`).>
 
 ## Secrets
-<Секреты Vault-класса (JWT-ключи, OIDC, OTEL_TOKEN, DB-пароль): имя ключа и факт
-«нужен» — НЕ значение. Кто выдаёт (корп-Vault / проект).>
+<Vault-класс (JWT/OIDC/OTEL_TOKEN/DB-пароль/...): таблица `| Env | Тип | Назначение | Vault-ключ |`. Имя ключа и факт «нужен» — НЕ значение; кто выдаёт (корп-Vault / проект). Прокатка значений — зона infra-репо, не здесь.>
 
 ## Validation
-<Как валидируется конфиг на старте (fail-fast): обязательность, формат, диапазоны.>
+<Как валидируется конфиг на старте (fail-fast): обязательность, формат, диапазоны. Добавь подсекцию `### Release-checklist` — перед релизом сверять: новые `envconfig` дописаны в таблицы выше, Sensitive-ключи лежат в Vault, infra-template подхватывает их через vault-agent.>
 
 ## Generates
 <Что de-template родит:
