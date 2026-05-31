@@ -1,126 +1,253 @@
 ---
 name: stack-deep-dive
-description: Спроектировать платформу/стек сервиса — довести 8 stack-артефактов в docs/stack/ (service/runtime/config/persistence/messaging/auth/observability/dependencies) от драфта до status=stable через волны вопросов. Каждый артефакт несёт секцию Generates — вход для de-template (что родится в коде). Активируй когда юзер проектирует стек, говорит "спроектируем стек", "добьём stack-артефакты", "/stack-deep-dive", или когда init-service дошёл до шага стека. Зеркало domain-deep-dive для платформенного слоя; решения не выдумывай — интервьюируй.
+description: Углублённая проработка 8 платформенных артефактов в `docs/stack/` (service · runtime · config · persistence · messaging · auth · observability · dependencies) — единственная точка входа для **проектирования стека**. Ведёт сессию заполнения через структурированные вопросы (AskUserQuestion), фиксирует рабочее состояние в собственной памяти `state/`, не выдумывает платформенные решения. Активируй когда юзер проектирует/добивает стек, говорит "/stack-deep-dive", "спроектируем стек", "добьём stack-артефакты", приносит сырьё (compose.yaml, k8s manifest, текущий main.go) под платформенный разбор, или когда `/init-service` дошёл до шага стека. Точечные правки **уже стабильного** артефакта (поменялся env / добавился subject) идут через прямой Edit, не сюда.
 ---
 
 # Skill: stack-deep-dive
 
-Проектирование платформы сервиса: доводит 8 singleton-артефактов `docs/stack/` до `status: stable`.
-Где `domain-deep-dive` отвечает «какая бизнес-логика», этот скилл — «на какой платформе она
-крутится»: runtime, env, kit'ы golibinfra, subjects, как версионируется и деплоится образ.
+Проектирование платформы сервиса. Превращает минимальные драфты 8
+артефактов `docs/stack/` (frontmatter + placeholder-H2) в полные
+`status: stable` артефакты с непустой секцией **Generates** в каждом.
 
-Это **source of truth и вход для `de-template`**: секция `Generates` каждого артефакта описывает,
-что из него родится в коде (module path, `internal/platform/*`, `cmd/api`-композиция, `.env.example`,
-нужные kit'ы). Проектируем здесь, разворачиваем потом. Работает через AskUserQuestion в режиме
-интервьюера, **не выдумывает** платформенные решения сам.
+Где `domain-deep-dive` отвечает «какая бизнес-логика», этот скилл —
+«на какой платформе она крутится»: runtime, env, kit'ы `golibinfra`,
+subjects, как версионируется и деплоится образ.
 
-В онбординг-флоу `init-service` чейнит сюда после `domain-deep-dive`, затем — `de-template`.
+Это **source of truth и вход для `de-template`**. Секция `Generates`
+каждого артефакта описывает, что из него родится в коде (module path,
+`internal/platform/*`, `cmd/api`-композиция, `.env.example`, нужные
+kit'ы). Канон артефактов и обязательных H2 — `docs/stack/README.md`;
+маппинг `Generates → код` — `.claude/skills/de-template/references/wiring.md`.
+Скилл их не дублирует, а исполняет.
 
-## Когда применять
+Работает в режиме интервьюера через `AskUserQuestion`. Платформенные
+решения **не выдумывает** — задаёт falsifiable-вопросы и пишет ответ
+юзера.
 
-- "Спроектируем стек сервиса" / "Добьём stack-артефакты"
-- "/stack-deep-dive"
-- `init-service` дошёл до шага проектирования стека
-- Артефакты `docs/stack/` в `draft` — нужно довести до `stable`
+В онбординг-флоу `init-service` чейнит сюда после `domain-deep-dive`,
+затем — `de-template`.
 
-## Когда НЕ применять
+## Точки входа
 
-- Артефактов ещё нет — сначала скопируй 8 шаблонов из `docs/stack/_templates/` в `docs/stack/`.
-- Всё уже `stable` — просто запусти валидатор, не интервьюй заново.
-- Правка одного готового артефакта (поменялся env) — это точечная правка, не deep-dive.
+| вызов | поведение |
+|---|---|
+| `/stack-deep-dive` | сводка состояния 8 артефактов + AskUserQuestion: что углубить / что заводить (если каких-то нет) |
+| `/stack-deep-dive <kind>` | завести/углубить артефакт указанного kind: режим A (если файла нет) или режим C (если есть) |
+| `/stack-deep-dive <свободный текст / приложение>` | сырьё → разбор (режим **B**) |
 
-## Шаги
+`kind` ∈ {`service`, `runtime`, `config`, `persistence`, `messaging`,
+`auth`, `observability`, `dependencies`} — фиксированные 8 singleton'ов.
 
-### 1. Сканируй контекст
+## Что делать сразу при запуске
 
-```bash
-ls docs/stack/
-scripts/tools/validate-stack-doc.sh docs/stack
-```
+1. Прочитать `docs/stack/README.md` — освежить канон (8 kinds,
+   обязательные H2, контракт `Generates`).
+2. Если args пустые — сделать сводку и через `AskUserQuestion`
+   предложить выбор.
+3. Если args указывают на kind — определить режим (A — нет файла, C —
+   есть), применить маршрут из `references/workflow-patterns.md`.
+4. Если args = сырьё (свободный текст / приложение) — режим B.
 
-Если валидатор зелёный и все 8 — `stable`: выходи, «стек спроектирован, делать нечего».
-Иначе для каждого артефакта прочитай frontmatter (`id`/`kind`/`status`) и H2-заголовки,
-вычисли заполненность по обязательным секциям (см. `docs/stack/README.md`).
+## Сводка состояния
 
-### 2. Покажи карту состояния
+1. `ls docs/stack/` — какие из 8 файлов уже есть.
+2. Для каждого присутствующего файла: прочитать frontmatter (`status`,
+   `kind`) и H2-заголовки; считать заполненность обязательных секций
+   (см. `references/field-checklists.md`).
+3. Прогнать `scripts/tools/validate-stack-doc.sh docs/stack`. Если
+   зелёный + все 8 stable — выйти: «стек спроектирован, делать нечего».
 
-Сжато, ≤12 строк — по одному на kind:
+   ⚠️ Перед валидатором проверить, что 8 kind-файлов **существуют**:
+   на пустом `docs/stack/` (только `_templates/` + README) валидатор
+   даёт ложный OK, ему нечего проверять. Если файлов меньше 8 —
+   зафиксировать «нужно завести K из 8» как первый шаг.
+4. Прочитать `state/` (если есть) — `## Открытые вопросы`; пометки
+   `**blocker**` приоритетны.
+5. Сжатая карта в чат:
 
-```
-## Состояние docs/stack
+   ```
+   ## Состояние docs/stack
 
-| kind | status | заполнено | дыры |
-|---|---|---|---|
-| service | draft | 2/4 | Versioning, Generates |
-| config  | draft | 1/5 | Optional env, Secrets, Validation, Generates |
-| …       |        |     |      |
-```
+   | kind | файл | status | H2 заполнено | дыры |
+   |---|---|---|---|---|
+   | service | ✅ | draft | 2/4 | Versioning, Generates |
+   | config | ✅ | draft | 1/5 | Optional, Secrets, Validation, Generates |
+   | runtime | ❌ нет | — | — | — |
+   …
+   ```
 
-### 3. Веди волны
+6. Через `AskUserQuestion` — что копать дальше (опции = существующие
+   draft-артефакты + «завести недостающие»).
 
-Порядок — фундамент → производное (запоминай, у пользователя не спрашивай):
+## Три режима
 
-1. **service** — имя, module path, версионирование, бинари.
-2. **dependencies** — какие kit'ы golibinfra, внешние runtime-deps, ёмкость.
+Детали — `references/workflow-patterns.md`. Краткая семантика:
+
+- **A. Новая (заведение).** Args = `<kind>` для которого файла ещё нет.
+  Скилл копирует `docs/stack/_templates/<kind>.md` → `docs/stack/<kind>.md`,
+  заполняет frontmatter, заводит минимум (одна фраза идентичности /
+  назначения), переходит в C.
+- **B. Сырьё.** Args = свободный текст / приложение (compose.yaml, k8s
+  manifest, текущий main.go, заметка про env'ы, описание интеграций).
+  Извлекает платформенные решения, привязывает к 8 kind'ам, показывает
+  план, по подтверждению — заводит/правит артефакты и переходит в C
+  по каждому затронутому.
+- **C. Углубление.** Args = `<kind>` существующего артефакта либо
+  выбран из сводки. Точечные вопросы по дырам и подозрениям; волны
+  по фундамент→роллап; чек-лист `draft → stable` после каждой правки.
+
+## Inside-out волны (порядок копания)
+
+Запоминается в скилле, у юзера не спрашивается. Фундамент → производное;
+два роллап-артефакта (`config`, `runtime`) идут последними, т.к. собирают
+решения предыдущих:
+
+1. **service** — идентичность: имя, module path, версионирование, бинари.
+2. **dependencies** — какие kit'ы golibinfra, внешние runtime-deps,
+   ёмкость.
 3. **persistence** — Postgres: driver, миграции, kit-таблицы, пул.
 4. **messaging** — published/consumed subjects, delivery semantics.
 5. **auth** — authn/authz, authgate, роли, seed-admin, brute-force.
-6. **observability** — telemetry-режим, resource attrs, biz-метрики, trace-points.
-7. **config** — required/optional env, секреты (Vault-класс), валидация (роллап того,
-   что запросили предыдущие kit'ы/subsystem'ы).
-8. **runtime** — entrypoints в `cmd/api` (HTTP / outbox-drain / NATS-subs / jobs), lifecycle,
-   shutdown (роллап: что из messaging/jobs реально поднимается).
+6. **observability** — telemetry-режим, resource attrs, biz-метрики,
+   trace-points.
+7. **config** (роллап) — required/optional env, секреты, валидация —
+   собирает все envconfig-теги из подключённых kit'ов и решений 1–6.
+8. **runtime** (роллап) — entrypoints в `cmd/api` (HTTP / outbox-drain /
+   NATS-subs / jobs), lifecycle, shutdown — собирает реально
+   поднимаемые подсистемы из 1–6.
 
-Для текущего kind:
+Юзеру в начале волн — короткое: «иду фундамент → роллап, начну с
+service; скажи если хочешь прыгнуть в конкретный kind».
 
-1. Собери пустые/неполные H2-секции (обязательные — в `required_sections` валидатора и
-   `docs/stack/README.md`).
-2. Сформулируй 3–5 предметных вопросов через `AskUserQuestion` (≤4 за tool-call — лимит).
-3. После ответов **сразу** пиши в md через Edit/Write — не копи «запишу в конце» (теряется при /clear).
-4. **Секция `Generates`** — заполняй явно: что из этого артефакта родится в коде (это контракт
-   для `de-template`). Без `Generates` артефакт бесполезен движку.
-5. Кратко покажи, что добавилось, переходи к следующему kind.
+## Стиль вопросов
 
-### 4. Правила вопросов
+См. `references/workflow-patterns.md § Стиль вопросов`. Дисциплина та
+же, что в `domain-deep-dive`:
 
-- **Конкретные, falsifiable.** Плохо: «как с конфигом?». Хорошо: «`DATABASE_URL` required без
-  дефолта, или есть fallback на localhost для dev?».
-- **Bounded.** Опции AskUserQuestion взаимоисключающие (или `multiSelect=true`).
-- **Не выдумывай.** «Не знаю» → пиши `TBD` явно, вернись позже. Артефакт = слепок решения юзера.
-- **Опирайся на reference.** Шаблонные `auth`/`user`/`verification` + `golibinfra` kit'ы — живой
-  пример: «telemetry сейчас через `otelkit` в stdout-режиме — оставляем или меняем?».
+- **Всегда через `AskUserQuestion`**, до 4 вопросов в одном раунде.
+- **Опции** только для:
+  - anti-patterns (см. шаблоны + `references/field-checklists.md`);
+  - enum-поля (`Telemetry mode`: `local stdout` / `OTLP prod`;
+    `Delivery`: `at-least-once` / `at-most-once`;
+    `Authn type`: `JWT` / `session` / `none`; и т.п.);
+  - тест-критерий kind'а (✅/❌-примеры через AskUserQuestion);
+  - выбор из известного множества (какой kit golibinfra, какой subject
+    из уже-объявленных).
+- **Свободная форма** (через Other) — только для **значения**: имя
+  сервиса, module path, имена env, имена subjects, человекочитаемые
+  описания, конкретные числа (timeout'ы, размер пула).
+- **Никогда** не предлагать конкретные env-имена / module path / subject'ы
+  как «правильный вариант» от себя. Anti-patterns как опции — да; имя
+  как значение — нет.
 
-### 5. Промоушн status
+## Память `state/<kind>.md`
 
-После всех волн:
+См. `references/state-format.md`. Кратко:
 
-```bash
-scripts/tools/validate-stack-doc.sh docs/stack
-```
+- Один файл на kind (стек — singleton); `state/<kind>.md` без вложений.
+- Файл существует, пока есть хоть одна непустая секция.
+- Три возможные секции (любая может отсутствовать):
+  - `## Открытые вопросы` (опц. `**blocker**` — блокирует stable);
+  - `## Платформенные решения` (неочевидные решения, не лезущие в
+    артефакт по форме);
+  - `## Что копать дальше`.
+- Если все три пусты — заметку удалить.
+- **Forward-only**: не аккумулировать «было/стало», даты сессий.
 
-Зелёный → отредактируй frontmatter каждого `status: draft → stable`. Запусти валидатор ещё раз
-(теперь проверит non-empty bodies). Красный → вернись к проблемным секциям, не маркируй stable.
+State лежит рядом со скиллом
+(`.claude/skills/stack-deep-dive/state/`), гитигнор. Не часть канона
+`docs/stack/`.
 
-### 6. Финал
+## Контракт `draft → stable`
 
-Покажи сводку: 8/8 stable. Предложи следующий шаг по контексту:
-- **Онбординг** (пришёл из `init-service`): стек спроектирован → дальше `de-template` развернёт
-  фундамент по секциям `Generates`.
-- **Отдельно**: артефакты — актуальный source of truth платформы; правь их при изменениях стека.
+См. `references/draft-stable.md`. Чек-лист после каждой правки (все 5
+✅ → предложить промоушн):
 
-## Anti-patterns
+1. **Обязательные H2 заполнены** (см. `references/field-checklists.md`
+   по kind) непустым осмысленным содержимым, без placeholder'ов из
+   шаблона.
+2. **Секция `Generates` непуста и конкретна.** Это контракт для
+   `de-template`: пустая / `TBD`-`Generates` = артефакт бесполезен
+   движку. Generates перечисляет конкретные пути в коде и/или env-имена.
+3. **Cross-kind sync согласован.** Решения, объявленные в kit-артефактах
+   (`auth`, `persistence`, `messaging`, `observability`, `dependencies`),
+   роллапятся в `config` (env + секреты) и `runtime` (subscribers, jobs,
+   shutdown-хуки). Если auth добавил `JWT_PUBLIC_KEY` — он есть в
+   `config.md § Required env`. См. `references/draft-stable.md § Cross-kind
+   sync`.
+4. **Валидатор зелёный** — `scripts/tools/validate-stack-doc.sh
+   docs/stack` без ошибок.
+5. **Тест-критерий kind'а явно подтверждён** в этой сессии. См.
+   `references/draft-stable.md § Тест-критерий по kind`.
+6. **State чист по `**blocker**`-вопросам.**
 
-- ❌ >4 вопросов одним AskUserQuestion (инструмент режет до 4).
-- ❌ Копить ответы в RAM и писать в файлы в конце волны — теряется прогресс при /clear.
-- ❌ Оставить `Generates` пустым — движок `de-template` именно по ней разворачивает код.
-- ❌ Самому додумывать платформенное решение (какой env, какой subject). Интервьюируй.
-- ❌ Промоутить `stable` при красном валидаторе.
-- ❌ Прыгать через волны: config/runtime — роллапы, их заполняют после concrete-подсистем.
+(Шесть пунктов: kind-специфичный `Generates` оформлен отдельным пунктом,
+т.к. это контракт de-template; cross-kind sync — отдельным, т.к. без него
+config/runtime роллапаются с пробелами.)
 
-## Что делает валидатор (для справки)
+Все ✅ → AskUserQuestion «Готов к stable, повышаем?» с опциями
+«Да» / «Нет, ещё не уверен» (Other). По «Да» — `Edit` `status: draft →
+stable`. **Скилл не повышает сам.**
 
-- Frontmatter: `id`, `kind`, `name`, `status` обязательны; `kind` ∈ 8 stack-kinds.
-- `basename == name`; `id == "stack.<name>"`.
-- Все обязательные H2 для kind присутствуют; при `status: stable` — непусты.
+## Cross-kind sync
 
-См. `scripts/tools/validate-stack-doc.sh` и `docs/stack/README.md`.
+В отличие от `domain-deep-dive` (где есть stub'ы и каскад между
+артефактами), стек — 8 фиксированных kind'ов, и связи между ними
+выражены через **`Generates`-секции** и через **роллапы в `config`/`runtime`**.
+
+Правило: после правки kit-артефакта (`auth`, `persistence`, `messaging`,
+`observability`, `dependencies`) — скилл предлагает через
+`AskUserQuestion` пройтись по `config` и `runtime`, чтобы обновить
+роллап (новый env / новый subscriber / новый job).
+
+- `auth` → `config.md § Required/Secrets` (JWT keys, seed-admin),
+  `runtime.md § Lifecycle` (если auth-cleanup-job).
+- `persistence` → `config.md § Required` (`DATABASE_URL`, pool tuning),
+  `runtime.md § Lifecycle` (миграция как init-контейнер? отдельный
+  бинарь?), `dependencies.md § External` (Postgres как зависимость).
+- `messaging` → `config.md § Required/Optional` (NATS URL, subjects),
+  `runtime.md § Entrypoints` (поднимаем ли NATS-subs, поднимаем ли
+  outbox-drain), `dependencies.md § External` (NATS).
+- `observability` → `config.md § Optional` (`OTEL_*`), `dependencies.md
+  § kit'ы` (telemetry/bizmetric).
+- `dependencies` → `config.md § Optional` (по подключённым kit'ам — их
+  envconfig-теги), `runtime.md § Entrypoints` (что из объявленного
+  действительно поднимается).
+
+Скилл держит sync **автоматически после каждой правки** kit-артефакта —
+без подтверждения добавляет роллап в `config` / `runtime` черновиком, и
+через `AskUserQuestion` показывает дифф «вот что добавилось — окей?».
+
+## Завершение сессии
+
+1. Перечислить затронутые артефакты (заведены / углублены / промоутнуты).
+2. Перечислить нерешённые `**blocker**`-вопросы (читая `state/`).
+3. Прогнать `scripts/tools/validate-stack-doc.sh docs/stack` —
+   подтвердить зелёный.
+4. Предложить следующий шаг:
+   - **Онбординг** (пришёл из `/init-service`): 8/8 stable → дальше
+     `/de-template`.
+   - **Отдельно** (стек уже жил, поменялся): артефакты теперь актуальный
+     source of truth; если правка задевает инфра-поверхность (env /
+     секрет / NATS subject / runtime-dep) — оформи через `/infra-handoff`
+     для админа.
+
+## Запреты
+
+- Не редактировать артефакты вслепую — всегда сначала `Read`.
+- Не выдумывать платформенные решения. Anti-patterns как опции — да;
+  имя env, subject, путь, конкретное число — нет.
+- Не оставлять `Generates` пустым / `TBD` — это вход `de-template`.
+  Артефакт без конкретной Generates `stable` не становится.
+- Не повышать `draft → stable` без явного подтверждения юзера, даже
+  при всех ✅.
+- Не понижать `stable → draft` сам.
+- Не игнорировать cross-kind sync: правка kit-артефакта без обновления
+  `config`/`runtime` оставляет роллапы с пробелами → de-template
+  разворачивает неполный скелет.
+- Не аккумулировать историю в `state/` — forward-only.
+- Не задавать >4 вопросов одним AskUserQuestion.
+- Не копить ответы «запишу в конце волны» — пиши сразу через `Edit`,
+  иначе теряется при `/clear`.
+- Не дублировать здесь правила `docs/stack/README.md` и шаблонов — они
+  source of truth канона, скилл их **исполняет**.

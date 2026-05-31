@@ -34,25 +34,38 @@ description: Оркестратор онбординга потребителя 
 ### 1. Спроектировать домены → `domain-deep-dive`
 
 - Скопировать шаблоны `docs/domains/_templates/` в `docs/domains/<context>/`, заполнить минимум
-  (frontmatter + properties + methods).
+  (frontmatter + properties + методы по имени) — `domain-deep-dive` в **режиме A** сделает это
+  сам, если дать ему `<ctx>:<kind>` без существующего файла. Принёс транскрипт интервью? Передай
+  как сырьё — он войдёт в **режим B**.
 - **Чейнь в `domain-deep-dive`** на каждый контекст: волны inside-out до `status: stable`.
+  Контракт промоушна и тест-критерии — `.claude/skills/domain-deep-dive/references/draft-stable.md`;
+  состав вопросов по kind — `references/field-checklists.md` того же скилла.
 - Reference-домены `auth`/`user`/`verification` — учебные образцы: изучить, свои проектировать
   рядом; удаление — этап 4.
-- Gate: `scripts/tools/validate-domain-doc.sh docs/domains` зелёный.
+- Gate: `scripts/tools/validate-domain-doc.sh docs/domains` зелёный + у всех артефактов
+  `status: stable`. Открытые вопросы скилла копятся в его памяти
+  `.claude/skills/domain-deep-dive/state/` (forward-only, гитигнор) — оркестратор туда не
+  лезет; если в state остался `**blocker**`-вопрос — артефакт ещё draft, gate не сдан.
 
 ### 2. Спроектировать стек → `stack-deep-dive`
 
-- Скопировать 8 шаблонов `docs/stack/_templates/` в `docs/stack/`.
-- **Чейнь в `stack-deep-dive`**: волнами до `status: stable` всех 8 артефактов (с непустой `Generates`).
-- Gate: `scripts/tools/validate-stack-doc.sh docs/stack` зелёный.
+- Скопировать 8 шаблонов `docs/stack/_templates/` в `docs/stack/` — либо `stack-deep-dive`
+  в **режиме A** разложит недостающие сам.
+- **Чейнь в `stack-deep-dive`**: волнами фундамент→роллап (`service` → kit'ы → `config`+`runtime`)
+  до `status: stable` всех 8 артефактов с **непустой `Generates`** в каждом — это контракт
+  входа для `de-template`. Полный чек-лист промоушна (включая cross-kind sync) —
+  `.claude/skills/stack-deep-dive/references/draft-stable.md`.
+- Gate: `scripts/tools/validate-stack-doc.sh docs/stack` зелёный + у всех 8 `status: stable`
+  + state-каталог `.claude/skills/stack-deep-dive/state/` чист по `**blocker**`-вопросам.
 
 ### 3. Развернуть фундамент → `de-template`
 
-- Gate перед запуском: домены и стек `stable`, оба валидатора зелёные (зеркалит domain-gate).
+- Gate перед запуском: домены и стек `stable`, оба валидатора зелёные, в `state/` обоих
+  deep-dive скиллов нет `**blocker**`-вопросов (зеркалит domain-gate).
 - **Чейнь в `de-template`**: читает stable-артефакты `docs/{domains,stack}`, разворачивает по
   секциям `Generates` — module path, README, `internal/platform/*`, `cmd/api`-композиция,
-  `go.mod`, `.env.example`, нужные kit'ы. Механика детерминирована; platform/main wiring —
-  reviewable diff.
+  `go.mod`, `.env.example`, нужные kit'ы. Механика детерминирована (Phase A); platform/main
+  wiring — reviewable diff (Phase B).
 
 ### 4. Удалить reference-домены
 
@@ -69,7 +82,10 @@ description: Оркестратор онбординга потребителя 
 
 ## Что init-service НЕ делает
 
-- ❌ Не интервьюирует по доменам/стеку сам — это `domain-deep-dive`/`stack-deep-dive`.
+- ❌ Не интервьюирует по доменам/стеку сам — это `domain-deep-dive`/`stack-deep-dive`
+  (там — 3 режима A/B/C, дисциплина опции-vs-Other, 5-пунктный draft→stable gate).
+- ❌ Не лезет в `state/` чейненных скиллов — это их рабочая память, оркестратор её только
+  проверяет на чистоту `**blocker**`-вопросов как gate-условие.
 - ❌ Не правит фундамент руками и не де-темплейтит — это `de-template` (по stable-артефактам).
 - ❌ Не запускает `de-template` до зелёных валидаторов (gate).
 - ❌ Не пропускает проектирование ради «быстро сгенерить» — docs первичны, иначе движку не из чего разворачивать.

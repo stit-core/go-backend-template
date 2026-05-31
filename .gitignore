@@ -19,3 +19,7 @@ __pycache__/
 .claude/settings.local.json
 .claude/worktrees/
 
+# Локальная рабочая память deep-dive скиллов (forward-only, не часть канона
+# docs/{domains,stack}; см. .claude/skills/{domain,stack}-deep-dive/references/state-format.md)
+.claude/skills/*/state/
+
