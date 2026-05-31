@@ -44,8 +44,9 @@ description: Оркестратор онбординга потребителя 
   рядом; удаление — этап 4.
 - Gate: `scripts/tools/validate-domain-doc.sh docs/domains` зелёный + у всех артефактов
   `status: stable`. Открытые вопросы скилла копятся в его памяти
-  `.claude/skills/domain-deep-dive/state/` (forward-only, гитигнор) — оркестратор туда не
-  лезет; если в state остался `**blocker**`-вопрос — артефакт ещё draft, gate не сдан.
+  `.claude/skills/domain-deep-dive/state/` (forward-only, коммитится вместе с репо —
+  общая проектная память между сессиями и тимейтами); если в state остался
+  `**blocker**`-вопрос — артефакт ещё draft, gate не сдан.
 
 ### 2. Спроектировать стек → `stack-deep-dive`
 

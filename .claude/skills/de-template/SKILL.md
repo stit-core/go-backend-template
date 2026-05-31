@@ -44,13 +44,12 @@ stack-артефактов. Движок **skill-only**: нет committed-скр
 3. **State deep-dive скиллов чист.** Открытые `**blocker**`-вопросы у `domain-deep-dive`
    / `stack-deep-dive` означают незакрытые проектные решения — артефакт мог попасть в
    `stable` только если blocker'ов нет (это §5/§6 их `references/draft-stable.md`), но
-   защёлка: пробежаться по их state-каталогам и убедиться.
+   защёлка: пробежаться по их state-каталогам (коммитятся вместе с репо) и убедиться.
    ```bash
    grep -RlE '\*\*blocker\*\*' .claude/skills/{domain,stack}-deep-dive/state/ 2>/dev/null \
      && echo "STOP: есть открытые blocker'ы в state deep-dive — добей их сначала" \
      || echo "OK: state чист"
    ```
-   Forward-only: state — рабочая память, не журнал; в `git log` его нет (гитигнор).
 
 ## Phase A — детерминированная механика
 
