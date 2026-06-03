@@ -61,6 +61,7 @@
       "Bash(*--no-verify*)",
       "Bash(*--no-gpg-sign*)",
       "Bash(git push --force*)",
+      "Bash(git push -f*)",
       "Bash(git reset --hard*)",
       "Bash(git checkout -- *)",
       "Bash(git clean -f*)",
@@ -73,7 +74,10 @@
       "Edit(**/mocks/*.go)",
       "Edit(go.sum)",
       "Write(**/infra/postgres/db/**)",
-      "Write(**/mocks/*.go)"
+      "Write(**/mocks/*.go)",
+      "Write(**/.claude/projects/**/memory/**)",
+      "Edit(**/.claude/projects/**/memory/**)",
+      "MultiEdit(**/.claude/projects/**/memory/**)"
     ]
   }
 }

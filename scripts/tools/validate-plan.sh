@@ -54,8 +54,9 @@ function finalize(   i,k,kk) {
     }
     for (k in deps) {
         split(k, kk, SUBSEP)
-        if (kk[1] == plan && !(kk[2] in atomids))
-            err[++ne] = plan ": атом " kk[3] " зависит от несуществующего " kk[2]
+        # kk = (plan, cur, dep): валидируем что dep (kk[3]) — атом этой секции.
+        if (kk[1] == plan && !(kk[3] in atomids))
+            err[++ne] = plan ": атом " kk[2] " зависит от несуществующего " kk[3]
     }
     plan = ""; status = ""; created = 0; blockedBy = 0; natoms = 0; cur = ""
     delete sec; delete vf; delete df; delete atomids; delete aorder

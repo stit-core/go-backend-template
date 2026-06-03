@@ -1,7 +1,10 @@
 # Ecosystem
 
-Место шаблона в экосистеме stit.tech из 5 репо (4 runtime/control-plane + design-time
-docs-репо). Канон — `stit-infra/infra/docs/ecosystem.md`.
+Место шаблона в экосистеме stit.tech: 4 форкаемых шаблона `stit-template/`
+(`go-backend-template`, `spa-frontend-template`, `project-docs-template`,
+`project-infra-template-compose`) + корп control-plane `stit-infra/` (`stit-infra/infra`,
+`stit-infra/golibinfra`) + дизайн-система `stit-design` (`@stit-design/ui`). Канон контрактов
+— `stit-infra/infra/docs/ecosystem.md`.
 
 ## Роль
 

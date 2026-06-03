@@ -4,8 +4,9 @@
 [`golibinfra`](https://git.stit.tech/stit-infra/golibinfra) (telemetry, authn, outbox,
 brute-force, cache, NATS, audit, clock).
 
-Часть экосистемы из 5 репо: [`stit-infra/infra`](https://git.stit.tech/stit-infra/infra)
-(corp control plane) ←── **этот** (форк в `<org>/backend`, build+push) ──►
+Часть экосистемы: 4 форкаемых шаблона `stit-template/` + корп control-plane
+[`stit-infra/infra`](https://git.stit.tech/stit-infra/infra) (corp control plane) ←── **этот**
+(форк в `<org>/backend`, build+push) ──►
 [`project-infra-template-compose`](https://git.stit.tech/stit-template/project-infra-template-compose)
 (форк в `<org>/infra`, deploy). Домены продукта — в соседнем docs-репо (`<org>/docs`, форк
 `project-docs-template`). Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
