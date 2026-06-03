@@ -2,10 +2,14 @@
 
 Создаёт новый домен по конвенции этого шаблона. Соответствует `.claude/rules/domain-architecture.md` — открой его если ещё не загружено.
 
-**Gate (soft).** Скаффолдь по **stable** DDD-артефактам `docs/domains/<ctx>/`: код разворачивается
-по дизайну, не наоборот. Если артефакты ещё `draft` или `scripts/tools/validate-domain-doc.sh
-docs/domains/<ctx>` красный — сначала `domain-deep-dive` до `stable`, потом сюда. Жёсткого хука
-нет (снят) — это дисциплина (см. `docs/domains/README.md § Gate`).
+**Gate (soft).** Домены проектируются **не в этом репо**, а в соседнем docs-репо орга
+(`<org>/docs`, форк `project-docs-template`). Скаффолдь по **stable**-артефактам оттуда:
+`<docs-path>/projects/<slug>/domains/<ctx>/`, где `<slug>` / `<docs-path>` — это
+`project-slug` / `docs-path` из `docs/stack/service.md § Identity` (дефолт `docs-path` =
+`../docs`, sibling-чекаут рядом). Код разворачивается по дизайну, не наоборот: если артефакт
+ещё `draft` (или sibling-репо не склонирован рядом) — сначала доведи домен до `stable` в
+docs-репо его скиллом `/domain-deep-dive <slug> <ctx>`, потом сюда. Жёсткого хука нет — это
+дисциплина. Как секции артефакта ложатся в Go-код этого репо — `docs/reference/domain-mapping.md`.
 
 ## Когда применять
 
@@ -17,7 +21,7 @@ docs/domains/<ctx>` красный — сначала `domain-deep-dive` до `s
 
 - Изменение существующего домена → не активируй skill, работай напрямую.
 - Только миграция / только handler / только событие → точечная правка, skill не нужен.
-- Артефакты домена ещё `draft` / валидатор красный → сначала `domain-deep-dive` (см. Gate выше).
+- Артефакты домена в docs-репо ещё `draft` → сначала `/domain-deep-dive <slug> <ctx>` там (см. Gate выше).
 
 ## Шаги
 

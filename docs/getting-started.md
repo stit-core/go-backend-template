@@ -19,38 +19,51 @@
 Скилл-оркестратор ведёт весь онбординг: чейнит проектирование доменов и стека, в конце
 запускает `/de-template`. Дальше шаги 2–5 — под его управлением.
 
-## 2. Спроектируй домены — `/domain-deep-dive`
+## 2. Спроектируй домены — в соседнем docs-репо
 
-- DDD-артефакты в `docs/domains/<context>/` — source of truth бизнес-смысла. См.
-  [domains/README.md](domains/README.md).
-- Reference-домены `auth` / `user` / `verification` — **учебные примеры**. Изучи их как
-  образец, свои проектируй рядом. Удаление reference — шаг 5.
-- Цель: `status: stable` + `validate-domain-doc.sh` зелёный.
+- Домены проектируются **не здесь**, а в форке `<org>/docs` (из `project-docs-template`),
+  склонированном рядом с этим репо (`../docs`). DDD-артефакты продукта живут там:
+  `docs/projects/<slug>/domains/<ctx>/`.
+- Открой docs-репо, заведи продукт (`/project-deep-dive`) и доведи домены до `status: stable`
+  его скиллом `/domain-deep-dive <slug> <ctx>`. Вернись сюда со стабильными артефактами.
+- Reference-домены `auth` / `user` / `verification` в **этом** репо — **code-only** учебные
+  примеры (артефактов в docs у них нет). Изучи как образец Go-раскладки; удаление — шаг 6.
 
 ## 3. Спроектируй стек — `/stack-deep-dive`
 
 - 8 артефактов в `docs/stack/` (service/runtime/config/persistence/messaging/auth/
   observability/dependencies). См. [stack/README.md](stack/README.md).
+- В `service.md` запиши `project-slug` + `docs-path` (дефолт `../docs`) — по ним `scaffold`
+  найдёт домены в docs-репо.
 - Цель: `status: stable` + `validate-stack-doc.sh` зелёный. Это вход для де-темплейтизации.
 
 ## 4. Разверни фундамент — `/de-template`
 
-- Читает stable-артефакты `docs/{domains,stack}` и разворачивает фундамент по секциям
+- Читает stable-артефакты `docs/stack` и разворачивает фундамент по секциям
   `Generates`: module path, README, `internal/platform/*`, `cmd/api` композиция, `go.mod`,
-  `.env.example`, нужные kit'ы golibinfra.
+  `.env.example`, нужные kit'ы golibinfra. Домены он не трогает — только платформу.
 - Гибрид: механика (module path, README, env, prune, strip шаблонной мета) —
   детерминирована; platform/main wiring — reviewable diff поверх скелета.
 
-## 5. Удали reference-домены
+## 5. Сгенерируй свои домены — `/scaffold` (вариант domain)
 
-Когда свои домены спроектированы и сгенерированы, убери учебные `auth`/`user`/`verification`:
-- `internal/domain/{auth,user,verification}/` + их `docs/domains/*`.
+По каждому stable-домену из docs-репо разверни Go-код: `/scaffold domain <name>` читает
+`../docs/projects/<slug>/domains/<ctx>/` (slug/docs-path из `docs/stack/service.md`) и
+разворачивает слои `internal/domain/<ctx>/`. Маппинг секций артефакта → код —
+[reference/domain-mapping.md](reference/domain-mapping.md). Делай это **до** удаления reference
+(шаг 6) — иначе теряешь живой Go-образец.
+
+## 6. Удали reference-домены
+
+Когда свои домены сгенерированы (шаг 5), убери учебные `auth`/`user`/`verification`:
+- `internal/domain/{auth,user,verification}/` (DDD-артефактов в docs у них нет — code-only).
 - блоки в `sqlc.yaml`, их `migrations/`, fx-wiring в `cmd/api`, depguard-правила в `.golangci.yml`.
 - их e2e-сценарии в `test/`.
 - `/de-template` подсказывает/выполняет этот чеклист.
 
-## 6. Готово
+## 7. Готово
 
-Проект больше ничего не помнит про шаблон: свой module path, README, домены, стек, deps.
-Дальше — обычный дневной флоу через `/smartdev` (см. `docs/contributing.md` про устройство
-`.claude`-системы). Релиз образов — `docs/reference/release.md`.
+Проект больше ничего не помнит про шаблон: свой module path, README, свои домены, стек, deps.
+Домены продукта остаются в соседнем docs-репо; этот репо — их потребитель. Дальше — обычный
+дневной флоу через `/smartdev` (см. `docs/contributing.md` про устройство `.claude`-системы).
+Релиз образов — `docs/reference/release.md`.

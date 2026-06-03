@@ -98,19 +98,8 @@ if [ -d migrations ]; then
     fi
 fi
 
-# draft-артефакты (плейсхолдеры _templates/README/MAPPING исключены)
-if [ -d docs/domains ]; then
-    drafts=$(grep -rl '^status: draft' docs/domains --include='*.md' 2>/dev/null \
-        | grep -vE '/_templates/|/(README|MAPPING)\.md$' \
-        | sed 's#docs/domains/##' | tr '\n' ' ')
-    if [ -z "$drafts" ]; then
-        echo "DRAFT-ARTIFACTS: none"
-    else
-        echo "DRAFT-ARTIFACTS:$drafts (/domain-deep-dive)"
-    fi
-fi
-
-# stack draft-артефакты (companion README/_templates исключены)
+# stack draft-артефакты (companion README/_templates исключены).
+# Домены — в соседнем docs-репо (../docs); их статус смотрят там.
 if [ -d docs/stack ]; then
     sdrafts=$(grep -rl '^status: draft' docs/stack --include='*.md' 2>/dev/null \
         | grep -vE '/_templates/|/README\.md$' \

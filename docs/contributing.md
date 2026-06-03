@@ -38,7 +38,7 @@ inline-секциями; done → секция удаляется (истори�
 
 | Механизм | Где | Сила |
 |---|---|---|
-| git-хуки | `scripts/git-hooks/` (ставятся `make setup`): commit-msg (Conventional Commits), pre-commit (gofumpt+vet+lint+validate-domain/stack/plan), pre-push (`make check`) | **детерминированно** |
+| git-хуки | `scripts/git-hooks/` (ставятся `make setup`): commit-msg (Conventional Commits), pre-commit (gofumpt+vet+lint+validate-stack/plan), pre-push (`make check`) | **детерминированно** |
 | permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-verify`, force-push, reset --hard, правка `*.pem`/`*.key`/generated) |
 | Path-scoped rules | `.claude/rules/*.md` | контекстная подсказка |
 | CLAUDE.md | repo root | always-on advisory |
@@ -74,4 +74,4 @@ string-replace edit.
 | CLAUDE.md игнорируется | длина >200 строк, либо конфликт инструкций между секциями |
 | Коммит reject'нут | `scripts/git-hooks/commit-msg` — type ∈ {feat,fix,refactor,docs,test,chore,meta} |
 | `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса |
-| `validate-plan` / `validate-stack` / `validate-domain` падает | структура артефакта — см. соответствующий `README`/skill |
+| `validate-plan` / `validate-stack` падает | структура артефакта — см. соответствующий `README`/skill |

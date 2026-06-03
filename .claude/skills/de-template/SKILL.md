@@ -1,13 +1,14 @@
 ---
 name: de-template
-description: Развернуть форк go-backend-template в самостоятельный проект по stable-артефактам docs/{domains,stack} — module path, README, .env.example, platform/cmd wiring, prune reference-доменов. Активируй когда юзер форкнул шаблон и говорит "/de-template", "разверни фундамент", "де-темплейтизируй", "убери шаблонную мету", "сделай из шаблона свой проект", или когда init-service дошёл до развёртывания (домены+стек спроектированы и stable). Движок skill-only: и механика, и wiring — reviewable edits под этой процедурой. НЕ запускать на каноническом репозитории шаблона.
+description: Развернуть форк go-backend-template в самостоятельный проект по stable-артефактам docs/stack (домены — в соседнем docs-репо) — module path, README, .env.example, platform/cmd wiring, prune reference-доменов. Активируй когда юзер форкнул шаблон и говорит "/de-template", "разверни фундамент", "де-темплейтизируй", "убери шаблонную мету", "сделай из шаблона свой проект", или когда init-service дошёл до развёртывания (стек спроектирован и stable). Движок skill-only: и механика, и wiring — reviewable edits под этой процедурой. НЕ запускать на каноническом репозитории шаблона.
 ---
 
 # Skill: de-template (движок развёртывания)
 
 Превращает форк шаблона в проект, который ничего не помнит про `go-backend-template`. Читает
-**stable** `docs/{domains,stack}` и разворачивает фундамент по секциям `Generates` восьми
-stack-артефактов. Движок **skill-only**: нет committed-скрипта — и детерминированная механика
+**stable** `docs/stack` и разворачивает фундамент по секциям `Generates` восьми
+stack-артефактов. Домены живут в соседнем docs-репо и разворачиваются отдельно (`scaffold`
+domain), не здесь. Движок **skill-only**: нет committed-скрипта — и детерминированная механика
 (rewrite/prune/env), и doc-driven wiring идут как **reviewable edits** под этой процедурой;
 механика — по точным командам ниже, wiring — диффом поверх скелета, который юзер ревьюит.
 
@@ -16,11 +17,11 @@ stack-артефактов. Движок **skill-only**: нет committed-скр
 ## Когда применять
 
 - "/de-template" / "разверни фундамент" / "сделай из шаблона свой проект"
-- `init-service` дошёл до шага 4 (домены и стек спроектированы, валидаторы зелёные)
+- `init-service` дошёл до развёртывания (стек спроектирован, валидатор зелёный; домены — в docs-репо)
 
 ## Когда НЕ применять
 
-- Домены/стек ещё не `stable` — сначала `domain-deep-dive` + `stack-deep-dive` (gate ниже).
+- Стек ещё не `stable` — сначала `stack-deep-dive` (gate ниже). Домены — в соседнем docs-репо.
 - Проект уже де-темплейтизирован (свой module path, reference-домены удалены) — обычный
   день-в-день через `/smartdev`.
 - **Канонический репозиторий шаблона** — никогда (guard ниже). Только форк/копия.
@@ -30,24 +31,25 @@ stack-артефактов. Движок **skill-only**: нет committed-скр
 1. **Не канонический шаблон.** `go.mod` module path всё ещё `git.stit.tech/stit-infra/go-backend-template`
    И каталог — не временная копия/форк → СТОП. Запуск на самом шаблоне его уничтожит. Спроси
    юзера явно подтвердить, что это форк/тест-копия, прежде чем продолжать.
-2. **Артефакты stable.** Оба зелёные, иначе СТОП → `domain-deep-dive`/`stack-deep-dive`.
+2. **Стек stable.** Валидатор зелёный, иначе СТОП → `stack-deep-dive`.
    Сначала проверь, что 8 stack-kind'ов существуют — на пустом `docs/stack` (только
    `_templates/`+README) валидатор даёт ложный `OK`, ему нечего проверять:
    ```bash
    for k in service runtime config persistence messaging auth observability dependencies; do
      test -f "docs/stack/$k.md" || echo "STOP: docs/stack/$k.md нет — стек не спроектирован (/stack-deep-dive)"
    done
-   scripts/tools/validate-domain-doc.sh docs/domains
-   scripts/tools/validate-stack-doc.sh  docs/stack
+   scripts/tools/validate-stack-doc.sh docs/stack
    ```
-   Все артефакты `status: stable`, секции `Generates` непусты — это вход движка.
-3. **State deep-dive скиллов чист.** Открытые `**blocker**`-вопросы у `domain-deep-dive`
-   / `stack-deep-dive` означают незакрытые проектные решения — артефакт мог попасть в
-   `stable` только если blocker'ов нет (это §5/§6 их `references/draft-stable.md`), но
-   защёлка: пробежаться по их state-каталогам (коммитятся вместе с репо) и убедиться.
+   Все 8 артефактов `status: stable`, секции `Generates` непусты — это вход движка. Домены
+   (соседний docs-репо) для de-template не нужны: движок разворачивает только платформу,
+   спроектированные домены скаффолдятся отдельно (`scaffold` domain) до prune reference (Phase A.5).
+3. **State stack-deep-dive чист.** Открытые `**blocker**`-вопросы у `stack-deep-dive`
+   означают незакрытые платформенные решения — артефакт мог попасть в `stable` только если
+   blocker'ов нет (§5/§6 его `references/draft-stable.md`), но защёлка: пробежаться по
+   state-каталогу (коммитится вместе с репо) и убедиться.
    ```bash
-   grep -RlE '\*\*blocker\*\*' .claude/skills/{domain,stack}-deep-dive/state/ 2>/dev/null \
-     && echo "STOP: есть открытые blocker'ы в state deep-dive — добей их сначала" \
+   grep -RlE '\*\*blocker\*\*' .claude/skills/stack-deep-dive/state/ 2>/dev/null \
+     && echo "STOP: есть открытые blocker'ы в state stack-deep-dive — добей их сначала" \
      || echo "OK: state чист"
    ```
 
@@ -92,9 +94,9 @@ go mod tidy
 ### A.5 Prune reference-доменов
 
 `auth`/`user`/`verification` — учебные. Удаляются по полному чеклисту (8 точек) —
-см. **`references/prune.md`**. Делай это **после** того как свои домены спроектированы и
-сгенерированы (иначе теряешь живой образец). Если свои домены ещё не скаффолжены — сначала
-`scaffold` (вариант domain) по stable-артефактам, потом prune.
+см. **`references/prune.md`**. Делай это **после** того как свои домены спроектированы (в
+соседнем docs-репо) и сгенерированы (иначе теряешь живой образец). Если свои домены ещё не
+скаффолжены — сначала `scaffold` (вариант domain) по stable-артефактам docs-репо, потом prune.
 
 ## Phase B — doc-driven wiring
 

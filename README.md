@@ -4,17 +4,18 @@
 [`golibinfra`](https://git.stit.tech/stit-infra/golibinfra) (telemetry, authn, outbox,
 brute-force, cache, NATS, audit, clock).
 
-Часть экосистемы из 4 репо: [`stit-infra/infra`](https://git.stit.tech/stit-infra/infra)
+Часть экосистемы из 5 репо: [`stit-infra/infra`](https://git.stit.tech/stit-infra/infra)
 (corp control plane) ←── **этот** (форк в `<org>/backend`, build+push) ──►
 [`project-infra-template-compose`](https://git.stit.tech/stit-infra/project-infra-template-compose)
-(форк в `<org>/infra`, deploy). Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
+(форк в `<org>/infra`, deploy). Домены продукта — в соседнем docs-репо (`<org>/docs`, форк
+`project-docs-template`). Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
 
 ## Использовать как шаблон
 
 В Gitea помечен `template: true`. **Полный пошаговый путь** от форка к своему проекту —
 [`docs/getting-started.md`](docs/getting-started.md): форк → `/init-service` →
-проектирование доменов (`docs/domains/`) и стека (`docs/stack/`) → `/de-template` → проект,
-который ничего не помнит про шаблон.
+проектирование доменов (в соседнем docs-репо) и стека (`docs/stack/`) → `/de-template` →
+scaffold → проект, который ничего не помнит про шаблон.
 
 Быстрый старт (чтобы собралось):
 
@@ -37,7 +38,7 @@ Module path, README, фундамент и удаление reference-домен
   `cmd/migrate` — отдельный image, init-контейнер.
 - **Платформа**: `golibinfra` — OTLP telemetry, JWT/session authn, outbox, brute-force,
   cache, NATS, audit, clock.
-- **DDD**: артефакты в `docs/domains/` — source of truth перед кодом.
+- **DDD**: артефакты доменов — в соседнем docs-репо; маппинг в Go-код — `docs/reference/domain-mapping.md`.
 - **Тесты**: unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
 - **Gate**: `make check` = fmt+vet+lint+test+build+gen-check (pre-push хук).
 
@@ -54,7 +55,7 @@ Module path, README, фундамент и удаление reference-домен
 - Reference — [architecture](docs/reference/architecture.md) ·
   [observability](docs/reference/observability.md) · [release](docs/reference/release.md) ·
   [ecosystem](docs/reference/ecosystem.md).
-- Design SoT — [`docs/domains/`](docs/domains/README.md) · [`docs/stack/`](docs/stack/README.md).
+- Design SoT — домены в соседнем docs-репо (`../docs`) · [`docs/stack/`](docs/stack/README.md) · маппинг [`domain-mapping`](docs/reference/domain-mapping.md).
 
 ## E2E
 

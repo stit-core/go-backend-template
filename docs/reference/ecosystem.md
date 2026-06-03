@@ -1,6 +1,7 @@
 # Ecosystem
 
-Место шаблона в экосистеме stit.tech из 4 репо. Канон — `stit-infra/infra/docs/ecosystem.md`.
+Место шаблона в экосистеме stit.tech из 5 репо (4 runtime/control-plane + design-time
+docs-репо). Канон — `stit-infra/infra/docs/ecosystem.md`.
 
 ## Роль
 
@@ -9,6 +10,9 @@
 `<client-org>/infra`.
 
 ```
+   <org>/docs (← project-docs-template)  ← design-time SoT: домены продукта
+        │ читается scaffold'ом при разработке (рантайм от него не зависит)
+        ▼
 stit-infra/infra (corp control plane)
         ▲ контракт (tenant, OTLP, registry)
         │
@@ -25,6 +29,9 @@ stit-infra/infra (corp control plane)
   endpoint, registry); `git.stit.tech` (push images).
 - **Используется:** `<client-org>/infra` (форк `project-infra-template-compose`) — пуллит
   образ через `vault kv patch …/meta backend_tag=<tag>` + `make ship` на проектной VPS.
+- **Зависит (design-time) от:** `<client-org>/docs` (форк `project-docs-template`) — DDD-артефакты
+  доменов продукта (`docs/projects/<slug>/domains/`). `scaffold` читает их при разработке кода;
+  рантайм-образ от docs-репо не зависит (это source-of-truth проектирования, не deploy-звено).
 
 ## Контракт со stit-инфрой
 

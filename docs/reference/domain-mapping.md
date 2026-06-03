@@ -1,13 +1,18 @@
 # DDD-артефакт → Go-код
 
-Маппинг секций артефактов на конкретные файлы и конструкции в `internal/domain/<context>/`.
+Маппинг секций доменных артефактов на конкретные файлы и конструкции в `internal/domain/<context>/`.
 Если у тебя есть сомнение «куда это положить в коде» — смотри сюда.
+
+Артефакты доменов живут **не в этом репо**, а в соседнем docs-репо орга (`<org>/docs`, форк
+`project-docs-template`): `../docs/projects/<slug>/domains/<context>/`, где `<slug>` —
+`project-slug` из `docs/stack/service.md`. Этот файл — **мост** от их формы к Go-коду именно
+этого бэкенда; его потребляет `scaffold` (вариант domain), разворачивая код по stable-артефактам.
 
 ## Bounded context
 
-`docs/domains/<context>/` ↔ `internal/domain/<context>/` — один Go-пакет, один FX-модуль (`module/module.go`).
+`../docs/projects/<slug>/domains/<context>/` ↔ `internal/domain/<context>/` — один Go-пакет, один FX-модуль (`module/module.go`).
 
-`docs/domains/_shared/<Name>.md` (kind=vo) ↔ `internal/platform/shared/` — платформенные cross-context VO в одном пакете. Не зависят от бизнес-доменов; бизнес-домены импортят их напрямую.
+`../docs/projects/<slug>/domains/_shared/<Name>.md` (kind=vo) ↔ `internal/platform/shared/` — платформенные cross-context VO в одном пакете. Не зависят от бизнес-доменов; бизнес-домены импортят их напрямую.
 
 ## Aggregate / Entity
 

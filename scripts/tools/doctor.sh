@@ -82,20 +82,8 @@ if [ -d migrations ]; then
     fi
 fi
 
-# 5. draft-артефакты DDD (не release-блокер, но видимый сигнал)
-if [ -d docs/domains ]; then
-    # _templates/ несёт status: draft как плейсхолдер; README/MAPPING — не артефакты.
-    drafts=$(grep -rl '^status: draft' docs/domains --include='*.md' 2>/dev/null \
-        | grep -vE '/_templates/|/(README|MAPPING)\.md$' \
-        | sed 's#docs/domains/##' | tr '\n' ' ')
-    if [ -z "$drafts" ]; then
-        ok "domain-artifacts: нет status: draft"
-    else
-        warn "domain-artifacts: draft —$drafts (углуби через /domain-deep-dive)"
-    fi
-fi
-
-# 6. draft-артефакты stack (companion README/_templates исключены)
+# 5. draft-артефакты stack (companion README/_templates исключены).
+# Домены живут в соседнем docs-репо (../docs); их draft-статус — забота того репо.
 if [ -d docs/stack ]; then
     sdrafts=$(grep -rl '^status: draft' docs/stack --include='*.md' 2>/dev/null \
         | grep -vE '/_templates/|/README\.md$' \

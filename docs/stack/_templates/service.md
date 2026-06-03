@@ -9,6 +9,9 @@ status: draft
 
 ## Identity
 <Имя сервиса, module path (`git.stit.tech/<org>/<service>`), одно-строчное описание роли.>
+<`project-slug`: slug продукта в соседнем docs-репо — `scaffold` читает домены из
+`<docs-path>/projects/<project-slug>/domains/`. `docs-path`: путь к форку `<org>/docs`
+(дефолт `../docs` — sibling-чекаут рядом с этим репо). На каноническом шаблоне не задан.>
 
 ## Versioning
 <Схема версий (semver `vX.Y.Z`). Как версия и commit попадают в бинарь (ldflags
@@ -24,3 +27,5 @@ status: draft
 - README-шапка
 - ldflags version/commit в Makefile/build
 - лог `"starting" service/version/commit`>
+<NB: `project-slug`/`docs-path` из § Identity — не код-вывод de-template, а указатель,
+по которому `scaffold` (вариант domain) находит домены в соседнем docs-репо.>

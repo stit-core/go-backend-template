@@ -1,10 +1,11 @@
 # Stack artifacts
 
 Дизайн платформы/стека сервиса — **первичный source of truth** и **вход для skill
-`de-template`**. Зеркалит `docs/domains/`: 8 singleton-артефактов (по одному на kind),
-заполняются через `/stack-deep-dive`, валидируются `scripts/tools/validate-stack-doc.sh`.
+`de-template`**. Зеркалит модель доменов (она живёт в соседнем docs-репо): 8 singleton-
+артефактов (по одному на kind), заполняются через `/stack-deep-dive`, валидируются
+`scripts/tools/validate-stack-doc.sh`.
 
-Где `docs/domains/` отвечает на «какая бизнес-логика», `docs/stack/` отвечает на «на
+Где домены (соседний docs-репо) отвечают на «какая бизнес-логика», `docs/stack/` отвечает на «на
 какой платформе она крутится»: какой runtime, какие env, какие kit'ы golibinfra, какие
 subjects, как версионируется и деплоится образ.
 
@@ -42,5 +43,6 @@ status: draft          # draft → stable (через валидатор)
 
 ## Gate
 
-`/de-template` не запускается, пока не все артефакты `stable` и валидатор не зелёный —
-зеркалит domain-gate. См. `docs/domains/README.md § Gate` (аналогичная дисциплина).
+`/de-template` не запускается, пока не все артефакты `stable` и валидатор не зелёный.
+Зеркалит дисциплину доменов (она в соседнем docs-репо): код разворачивается только из
+stable-артефактов, не из draft.

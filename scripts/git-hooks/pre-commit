@@ -23,16 +23,6 @@ else
   echo "golangci-lint not found, skipping (install from https://golangci-lint.run/usage/install/)"
 fi
 
-echo "pre-commit: validating DDD artifacts in docs/domains/..."
-CHANGED_DOCS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^docs/domains/.*\.md$' || true)
-if [ -n "$CHANGED_DOCS" ]; then
-    if [ -x scripts/tools/validate-domain-doc.sh ]; then
-        scripts/tools/validate-domain-doc.sh docs/domains
-    else
-        echo "WARN: validate-domain-doc.sh not found or not executable, skipping"
-    fi
-fi
-
 echo "pre-commit: validating stack artifacts in docs/stack/..."
 CHANGED_STACK=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^docs/stack/.*\.md$' || true)
 if [ -n "$CHANGED_STACK" ]; then
