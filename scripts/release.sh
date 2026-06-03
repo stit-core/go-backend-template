@@ -67,14 +67,43 @@ echo
 echo "=== INFRA HANDOFF · передай инфра-админу out-of-band ==="
 echo "backend_tag → $VERSION   (api + migrate, lockstep)"
 
-impacts=$(awk '/^## Infra impact/{f=1;next} /^## /{f=0} f' .claude/plans/*.md 2>/dev/null | sed '/^[[:space:]]*$/d' || true)
+# Single-file модель: единый roadmap.md. На каждую `### <slug>`-секцию под `## Active`
+# захватываем подсекцию `**Infra impact.**` (bold-лейбл) до следующего bold-лейбла /
+# `#### `-фазы / `### `/`## `-границы. Пустой маркер `—`/`|` пропускаем. Зеркалит
+# corp-impact агрегацию в <client-org>/infra scripts/ship.sh.
+roadmap=.claude/plans/roadmap.md
+impacts=""
+if [ -f "$roadmap" ]; then
+    impacts=$(awk '
+      function emit(s, line,   t) {
+        t = line; gsub(/^[[:space:]]+|[[:space:]]+$/, "", t)
+        if (t == "" || t == "—" || t == "|") return
+        if (!hdr[s]) { print "--- " s " ---"; hdr[s] = 1 }
+        print line
+      }
+      /^## Active/ { inact = 1; next }
+      /^## /       { inact = 0; slug = ""; cap = 0; next }
+      !inact       { next }
+      /^### /      { slug = $0; sub(/^### /, "", slug); sub(/ .*/, "", slug); cap = 0; next }
+      slug == ""   { next }
+      /^\*\*Infra impact\.\*\*/ {
+        cap = 1
+        rest = $0; sub(/^\*\*Infra impact\.\*\*[[:space:]]*/, "", rest)
+        emit(slug, rest)
+        next
+      }
+      cap && /^\*\*[^*]+\.\*\*/  { cap = 0; next }
+      cap && /^(#### |### |## )/ { cap = 0 }
+      cap                        { emit(slug, $0) }
+    ' "$roadmap")
+fi
 if [ -n "$impacts" ]; then
     echo
-    echo "Накопленные infra-изменения (.claude/plans/*.md → ## Infra impact):"
+    echo "Накопленные infra-изменения (roadmap.md → **Infra impact.** в активных планах):"
     echo "$impacts"
 else
     echo
-    echo "(нет записанных ## Infra impact — убедись, что всё инфра-затрагивающее"
+    echo "(нет записанных **Infra impact.** — убедись, что всё инфра-затрагивающее"
     echo " зафиксировано: .claude/rules/infra-impact.md / skill infra-handoff)"
 fi
 

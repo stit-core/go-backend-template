@@ -37,8 +37,8 @@ paths:
 ## Куда кладётся (чтобы доехало до релиза)
 
 1. **В чат** — блок юзеру с явным «передай инфра-админу out-of-band».
-2. **В активный план** — секция `## Infra impact` в `.claude/plans/roadmap.md`; `make release`
-   (`scripts/release.sh`) агрегирует её в финальный handoff. План forward-only и удаляется по
+2. **В активный план** — подсекция `**Infra impact.**` (bold-лейбл) в `### `-секции активного
+   плана `.claude/plans/roadmap.md`; `make release` (`scripts/release.sh`) агрегирует её в финальный handoff. План forward-only и удаляется по
    закрытии — infra-impact обязан переехать в release-handoff **до** закрытия (skill `plan`).
 
 Нет активного плана (мелкая правка) — блок только в чат, проследи, что юзер зафиксировал передачу.
@@ -57,4 +57,4 @@ paths:
 
 - `make status` → `== Infra-touch ==` не `none` (cockpit чейнит сюда).
 - Правишь файл под `paths:` этого правила (оно само в контексте).
-- `make release` напомнил, что `## Infra impact` пуст при инфра-изменениях.
+- `make release` напомнил, что `**Infra impact.**` пуст при инфра-изменениях.
