@@ -14,7 +14,7 @@ brute-force, cache, NATS, audit, clock).
 
 В Gitea помечен `template: true`. **Полный пошаговый путь** от форка к своему проекту —
 [`docs/getting-started.md`](docs/getting-started.md): форк → `/init-service` →
-проектирование доменов (в соседнем docs-репо) и стека (`docs/stack/`) → `/de-template` →
+проектирование стека (`docs/stack/`; домены уже готовы в соседнем docs-репо) → `/de-template` →
 scaffold → проект, который ничего не помнит про шаблон.
 
 Быстрый старт (чтобы собралось):
