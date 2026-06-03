@@ -12,7 +12,7 @@
 - **`/smartdev`** — cockpit сессии: сводка состояния (ветка, drift, активный план, TODO) +
   переключение в нужный режим. Запускай в начале / после `/clear`.
 - **Потребителю шаблона** — `docs/getting-started.md`: форк → `/init-service` → проектирование
-  доменов (в соседнем docs-репо) + стека → `/de-template` → scaffold → свой проект.
+  стека (домены уже готовы в соседнем docs-репо) → `/de-template` → scaffold → свой проект.
 - **Planning-first.** Любое содержательное изменение идёт через план — секцию в едином
   `.claude/plans/roadmap.md` (skill `/plan`). Прямая правка — только truly-atomic и багфиксы
   (`/triage-failure`, RED-first). План переживает `/clear`.
