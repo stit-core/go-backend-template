@@ -192,7 +192,7 @@ var Module = fx.Module(
 ### 12. Подключить в cmd/api/main.go
 
 ```go
-import <name>mod "git.stit.tech/stit-infra/go-backend-template/internal/domain/<name>/module"
+import <name>mod "git.stit.tech/stit-template/go-backend-template/internal/domain/<name>/module"
 
 domainModules = fx.Options(
     usermod.Module,
@@ -206,11 +206,11 @@ domainModules = fx.Options(
 
 В `.mockery.yml`:
 ```yaml
-git.stit.tech/stit-infra/go-backend-template/internal/domain/<name>:
+git.stit.tech/stit-template/go-backend-template/internal/domain/<name>:
   interfaces:
     Repository:
     # другие интерфейсы из usecase.go
-git.stit.tech/stit-infra/go-backend-template/internal/domain/<name>/delivery/http:
+git.stit.tech/stit-template/go-backend-template/internal/domain/<name>/delivery/http:
   interfaces:
     Usecase:
 ```
@@ -237,7 +237,7 @@ make gen
     - "**/internal/domain/<name>/**"
     - "!**/*_test.go"
   deny:
-    - pkg: "git.stit.tech/stit-infra/go-backend-template/internal/domain/<other>"
+    - pkg: "git.stit.tech/stit-template/go-backend-template/internal/domain/<other>"
       desc: "<name> domain must not import <other>"
 ```
 

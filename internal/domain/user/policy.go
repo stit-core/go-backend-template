@@ -3,8 +3,8 @@ package user
 import (
 	"context"
 
-	"git.stit.tech/stit-infra/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit-infra/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-template/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-template/go-backend-template/pkg/policy"
 )
 
 type Policy struct{}

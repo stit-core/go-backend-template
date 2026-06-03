@@ -1,4 +1,4 @@
-# Smoke otel-agent — клон конфига из stit-infra/project-infra-template-compose
+# Smoke otel-agent — клон конфига из stit-template/project-infra-template-compose
 # /configs/otel-agent/config.yaml без prometheus scraper (в smoke нет
 # cadvisor/node-exporter). Приём OTLP от backend, обогащение
 # service.namespace+tenant из env, форвард в corp otel.stit.tech.

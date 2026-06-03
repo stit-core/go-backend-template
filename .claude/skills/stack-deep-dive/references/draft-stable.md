@@ -95,7 +95,7 @@ scripts/tools/validate-stack-doc.sh docs/stack
 - ✅ `name=orders`, `module=git.stit.tech/foo/orders`, semver через
   ldflags `-X main.version/-X main.commit`, бинари: `cmd/api` +
   `cmd/migrate`, лог `"starting" service version commit`.
-- ❌ `name=service`, `module=git.stit.tech/stit-infra/go-backend-template`
+- ❌ `name=service`, `module=git.stit.tech/stit-template/go-backend-template`
   (не сменили), version=`dev` без ldflags.
 
 ### runtime

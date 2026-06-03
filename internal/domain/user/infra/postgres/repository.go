@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/user/infra/postgres/db"
 	"git.stit.tech/stit-infra/golibinfra/pgkit"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/user/infra/postgres/db"
 )
 
 type Repository struct {

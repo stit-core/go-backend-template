@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"git.stit.tech/stit-infra/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-template/go-backend-template/internal/platform/identity"
 )
 
 func TestWithFrom(t *testing.T) {

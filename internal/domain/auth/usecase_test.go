@@ -11,15 +11,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/auth"
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/auth/mocks"
-	"git.stit.tech/stit-infra/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit-infra/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-infra/golibinfra/clockkit"
 	"git.stit.tech/stit-infra/golibinfra/logkit"
 	"git.stit.tech/stit-infra/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-infra/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-infra/golibinfra/testkit/txkit"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/auth"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/auth/mocks"
+	"git.stit.tech/stit-template/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-template/go-backend-template/pkg/policy"
 )
 
 // memSessions — stateful in-memory SessionRepository для проверки сайд-эффектов.

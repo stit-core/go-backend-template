@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-infra/golibinfra/auditkit"
 	"git.stit.tech/stit-infra/golibinfra/logkit"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/verification"
 )
 
 type userReaderAdapter struct {

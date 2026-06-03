@@ -3,12 +3,12 @@ package module
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/auth"
-	authhttp "git.stit.tech/stit-infra/go-backend-template/internal/domain/auth/delivery/http"
-	authpg "git.stit.tech/stit-infra/go-backend-template/internal/domain/auth/infra/postgres"
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-infra/golibinfra/authnkit"
 	"git.stit.tech/stit-infra/golibinfra/bruteforcekit"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/auth"
+	authhttp "git.stit.tech/stit-template/go-backend-template/internal/domain/auth/delivery/http"
+	authpg "git.stit.tech/stit-template/go-backend-template/internal/domain/auth/infra/postgres"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/user"
 )
 
 var Module = fx.Module(

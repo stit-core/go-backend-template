@@ -56,7 +56,7 @@ type UsecaseDeps struct {
 ### 4. Добавить в `.mockery.yml`
 
 ```yaml
-git.stit.tech/stit-infra/go-backend-template/internal/domain/<consumer>:
+git.stit.tech/stit-template/go-backend-template/internal/domain/<consumer>:
   interfaces:
     <Provider>Reader:
 ```
@@ -71,8 +71,8 @@ package module
 import (
     "context"
 
-    "git.stit.tech/stit-infra/go-backend-template/internal/domain/<consumer>"
-    "git.stit.tech/stit-infra/go-backend-template/internal/domain/<provider>"
+    "git.stit.tech/stit-template/go-backend-template/internal/domain/<consumer>"
+    "git.stit.tech/stit-template/go-backend-template/internal/domain/<provider>"
 )
 
 type <provider>ReaderAdapter struct {

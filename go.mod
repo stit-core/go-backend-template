@@ -1,4 +1,4 @@
-module git.stit.tech/stit-infra/go-backend-template
+module git.stit.tech/stit-template/go-backend-template
 
 go 1.26
 

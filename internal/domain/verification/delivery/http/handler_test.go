@@ -8,10 +8,10 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/stretchr/testify/mock"
 
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/verification"
-	verifhttp "git.stit.tech/stit-infra/go-backend-template/internal/domain/verification/delivery/http"
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/verification/delivery/http/mocks"
 	"git.stit.tech/stit-infra/golibinfra/testkit/handlertest"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/verification"
+	verifhttp "git.stit.tech/stit-template/go-backend-template/internal/domain/verification/delivery/http"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/verification/delivery/http/mocks"
 )
 
 func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {

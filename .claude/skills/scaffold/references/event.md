@@ -137,7 +137,7 @@ func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
 
 ```go
 import (
-    natsdelivery "git.stit.tech/stit-infra/go-backend-template/internal/domain/<consumer>/delivery/nats"
+    natsdelivery "git.stit.tech/stit-template/go-backend-template/internal/domain/<consumer>/delivery/nats"
 )
 
 var Module = fx.Module(

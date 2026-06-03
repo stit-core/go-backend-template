@@ -7,8 +7,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"git.stit.tech/stit-infra/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-infra/golibinfra/httpkit"
+	"git.stit.tech/stit-template/go-backend-template/internal/domain/verification"
 )
 
 type Usecase interface {
