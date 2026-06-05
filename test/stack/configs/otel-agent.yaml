@@ -1,7 +1,7 @@
-# Smoke otel-agent — клон конфига из stit-template/project-infra-template-compose
+# Smoke otel-agent — клон конфига из sftbmb-core/project-infra-template-compose
 # /configs/otel-agent/config.yaml без prometheus scraper (в smoke нет
 # cadvisor/node-exporter). Приём OTLP от backend, обогащение
-# service.namespace+tenant из env, форвард в corp otel.stit.tech.
+# service.namespace+tenant из env, форвард в corp otel.sftbmb.ru.
 #
 # OTEL_TENANT и OTEL_TOKEN приходят из test/stack/up.sh (резолвится из
 # ./.env.local). Endpoint — корп-константа.
@@ -33,7 +33,7 @@ processors:
 
 exporters:
   otlphttp/corp:
-    endpoint: https://otel.stit.tech:443
+    endpoint: https://otel.sftbmb.ru:443
     headers:
       Authorization: "Bearer ${env:OTEL_TOKEN}"
     tls:

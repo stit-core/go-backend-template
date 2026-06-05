@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"git.stit.tech/stit-infra/golibinfra/testkit/handlertest"
-	"git.stit.tech/stit-template/go-backend-template/internal/domain/auth"
-	authhttp "git.stit.tech/stit-template/go-backend-template/internal/domain/auth/delivery/http"
-	"git.stit.tech/stit-template/go-backend-template/internal/domain/auth/delivery/http/mocks"
-	"git.stit.tech/stit-template/go-backend-template/internal/platform/authgate"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/auth"
+	authhttp "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/auth/delivery/http"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/auth/delivery/http/mocks"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/platform/authgate"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/testkit/handlertest"
 )
 
 func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {

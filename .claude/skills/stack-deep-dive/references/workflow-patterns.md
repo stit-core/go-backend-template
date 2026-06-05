@@ -51,7 +51,7 @@ manifest, заметки про env'ы, описание интеграций, �
 
    ```
    Из материала вижу:
-   - service: имя `orders`, module `git.stit.tech/foo/orders`,
+   - service: имя `orders`, module `git.sftbmb.ru/foo/orders`,
      версионирование semver через ldflags;
    - persistence: Postgres 16, миграции `migrate up`, пул 50;
    - messaging: пока без NATS, только outbox-drain;

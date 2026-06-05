@@ -1,13 +1,13 @@
 # go-backend-template
 
-Шаблон Go HTTP-бэкенда на стеке stit.tech: huma/v2 + chi + pgx/v5 + sqlc + uber/fx +
-[`golibinfra`](https://git.stit.tech/stit-infra/golibinfra) (telemetry, authn, outbox,
+Шаблон Go HTTP-бэкенда на стеке sftbmb: huma/v2 + chi + pgx/v5 + sqlc + uber/fx +
+[`golibinfra`](https://git.sftbmb.ru/sftbmb-core/golibinfra) (telemetry, authn, outbox,
 brute-force, cache, NATS, audit, clock).
 
-Часть экосистемы: 4 форкаемых шаблона `stit-template/` + корп control-plane
-[`stit-infra/infra`](https://git.stit.tech/stit-infra/infra) (corp control plane) ←── **этот**
+Часть экосистемы: 4 форкаемых шаблона `sftbmb-core/` + корп control-plane
+[`sftbmb-infra/infra`](https://git.sftbmb.ru/sftbmb-infra/infra) (corp control plane) ←── **этот**
 (форк в `<org>/backend`, build+push) ──►
-[`project-infra-template-compose`](https://git.stit.tech/stit-template/project-infra-template-compose)
+[`project-infra-template-compose`](https://git.sftbmb.ru/sftbmb-core/project-infra-template-compose)
 (форк в `<org>/infra`, deploy). Домены продукта — в соседнем docs-репо (`<org>/docs`, форк
 `project-docs-template`). Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
 
@@ -21,9 +21,9 @@ scaffold → проект, который ничего не помнит про 
 Быстрый старт (чтобы собралось):
 
 1. **Use this template** → `<org>/<service>`, склонировать.
-2. (Один раз на машину) доступ к приватным модулям `git.stit.tech`:
+2. (Один раз на машину) доступ к приватным модулям `git.sftbmb.ru`:
    ```bash
-   git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/
+   git config --global url.git@git.sftbmb.ru:.insteadOf https://git.sftbmb.ru/
    ```
 3. `make setup && make check` — зелёное.
 4. `cp .env.example .env`, заполнить. Запустить `claude` → `/init-service`.
@@ -69,10 +69,14 @@ make e2e          # весь набор: поднять стек → pytest → 
 make e2e-smoke    # только -m smoke (быстрый gate)
 ```
 
-Нужен Docker и `./.env.local` (`STIT_OBS_TOKEN` + `OTEL_TENANT`; шаблон — `.env.local.example`,
+Нужен Docker и `./.env.local` (`SFTBMB_OBS_TOKEN` + `OTEL_TENANT`; шаблон — `.env.local.example`,
 формат — `.claude/rules/env-local.md`). Детали — `test/README.md`.
 
 ## Release
 
 Зона репо: **код → image в registry, STOP.** Деплой — другие репо. Одна команда
 `make release VERSION=vX.Y.Z` (skill `/release`). Полностью — [`docs/reference/release.md`](docs/reference/release.md).
+
+## Лицензия
+
+Apache-2.0 — см. [`LICENSE`](LICENSE).

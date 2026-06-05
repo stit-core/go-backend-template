@@ -3,9 +3,9 @@ package module
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-template/go-backend-template/internal/domain/user"
-	userhttp "git.stit.tech/stit-template/go-backend-template/internal/domain/user/delivery/http"
-	userpg "git.stit.tech/stit-template/go-backend-template/internal/domain/user/infra/postgres"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user"
+	userhttp "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user/delivery/http"
+	userpg "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user/infra/postgres"
 )
 
 var Module = fx.Module(

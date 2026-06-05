@@ -9,17 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 
-	"git.stit.tech/stit-infra/golibinfra/clockkit"
-	"git.stit.tech/stit-infra/golibinfra/logkit"
-	"git.stit.tech/stit-infra/golibinfra/testkit/audittest"
-	"git.stit.tech/stit-infra/golibinfra/testkit/authntest"
-	"git.stit.tech/stit-infra/golibinfra/testkit/eventbus"
-	"git.stit.tech/stit-infra/golibinfra/testkit/txkit"
-	"git.stit.tech/stit-template/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit-template/go-backend-template/internal/domain/user/mocks"
-	"git.stit.tech/stit-template/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit-template/go-backend-template/internal/testkit/identitytest"
-	"git.stit.tech/stit-template/go-backend-template/pkg/policy"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user/mocks"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/platform/identity"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/testkit/identitytest"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/pkg/policy"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/clockkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/logkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/testkit/audittest"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/testkit/authntest"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/testkit/eventbus"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/testkit/txkit"
 )
 
 func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {

@@ -13,7 +13,7 @@ ARG GIT_SHA=unknown
 RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
     apk add --update-cache git openssh-client ca-certificates
 
-ENV GOPRIVATE=git.stit.tech/*
+ENV GOPRIVATE=git.sftbmb.ru/*
 
 # go-mod cache (/go/pkg/mod) и go-build cache (/root/.cache/go-build) через
 # --mount=type=cache: между билдами api/worker/migrate, между коммитами

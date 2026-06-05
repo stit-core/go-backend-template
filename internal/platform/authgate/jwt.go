@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"git.stit.tech/stit-infra/golibinfra/authnkit"
-	"git.stit.tech/stit-template/go-backend-template/internal/platform/identity"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/platform/identity"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/authnkit"
 )
 
 type Extractor struct {

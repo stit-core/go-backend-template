@@ -8,11 +8,11 @@
 #   scripts/tools/logs.sh watch   --service NAME [--match REGEX] --for 5m
 #
 # Токен берётся в этом порядке:
-#   1) env STIT_OBS_TOKEN
-#   2) строка `STIT_OBS_TOKEN=...` в ./.env.local
+#   1) env SFTBMB_OBS_TOKEN
+#   2) строка `SFTBMB_OBS_TOKEN=...` в ./.env.local
 #
 # Endpoint:
-#   STIT_LOKI_ADDR (default https://loki.stit.tech). Tenant зашит в токен — не передаётся отдельно.
+#   SFTBMB_LOKI_ADDR (default https://loki.sftbmb.ru). Tenant зашит в токен — не передаётся отдельно.
 #
 # Канонический status-line в конце: `OK` / `FAIL: <reason>`.
 
@@ -56,21 +56,21 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # === Token resolution (НЕ логируем токен, НЕ возвращаем его наружу) ===
 TOKEN=""
-if [ -n "${STIT_OBS_TOKEN:-}" ]; then
-    TOKEN="$STIT_OBS_TOKEN"
+if [ -n "${SFTBMB_OBS_TOKEN:-}" ]; then
+    TOKEN="$SFTBMB_OBS_TOKEN"
 elif [ -f .env.local ]; then
-    line=$(grep -E '^[[:space:]]*(export[[:space:]]+)?STIT_OBS_TOKEN=' .env.local 2>/dev/null | tail -1)
+    line=$(grep -E '^[[:space:]]*(export[[:space:]]+)?SFTBMB_OBS_TOKEN=' .env.local 2>/dev/null | tail -1)
     TOKEN="${line#*=}"
     TOKEN="${TOKEN%\"}"; TOKEN="${TOKEN#\"}"
     TOKEN="${TOKEN%\'}"; TOKEN="${TOKEN#\'}"
 fi
 if [ -z "$TOKEN" ]; then
-    echo "FAIL: no STIT_OBS_TOKEN. Set env or add line 'STIT_OBS_TOKEN=<token>' to ./.env.local" >&2
+    echo "FAIL: no SFTBMB_OBS_TOKEN. Set env or add line 'SFTBMB_OBS_TOKEN=<token>' to ./.env.local" >&2
     exit 1
 fi
 
 # === Endpoint ===
-LOKI_ADDR="${STIT_LOKI_ADDR:-https://loki.stit.tech}"
+LOKI_ADDR="${SFTBMB_LOKI_ADDR:-https://loki.sftbmb.ru}"
 export LOKI_ADDR LOKI_BEARER_TOKEN="$TOKEN"
 
 # === Tool check ===

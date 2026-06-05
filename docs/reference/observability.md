@@ -1,6 +1,6 @@
 # Observability
 
-Шаблон эмитит **метрики, логи, трейсы** через OTel в `otel.stit.tech` (auth bearer =
+Шаблон эмитит **метрики, логи, трейсы** через OTel в `otel.sftbmb.ru` (auth bearer =
 `OTEL_TOKEN`). Все три сигнала коррелируются через `trace_id`. Telemetry-режим задаётся
 артефактом `docs/stack/observability.md`.
 
@@ -13,7 +13,7 @@
   на каждый OTLP-запрос. Resource attrs приложения: `service.name`, `service.version`,
   `deployment.environment.name`. `tenant` и `service.namespace` ставит/перезатирает
   корп-otel-collector на edge (Bearer→`X-Scope-OrgID`→`resource/service_namespace`;
-  инвариант `service_namespace == tenant`, см. `stit-infra/infra` ADR-0004 §2).
+  инвариант `service_namespace == tenant`, см. `sftbmb-infra/infra` ADR-0004 §2).
 
 Корп-сторона маршрутизирует по `X-Scope-OrgID` (не по `service.namespace`), но
 логи/метрики/трейсы получают `service_namespace=<tenant>` автоматически — фильтр в Loki
@@ -72,16 +72,16 @@ Production-значения в репо не попадают — их выда�
 
 ## Где смотреть (Grafana)
 
-Корп-Grafana (`grafana.stit.tech`), папка **Apps/** — общие дашборды для всех
+Корп-Grafana (`grafana.sftbmb.ru`), папка **Apps/** — общие дашборды для всех
 golibinfra-сервисов, фильтр по `$tenant`/`$service`/`$env`: Service Overview, HTTP, Database,
 Bus, Outbox, Logs, Traces, Business, Auth. В шапке: `tenant=<project>`, `service=backend`,
 `env=<env>`.
 
-Retention: logs/traces — 7 дней, metrics — 90 дней (`stit-infra/infra` ADR-0004).
+Retention: logs/traces — 7 дней, metrics — 90 дней (`sftbmb-infra/infra` ADR-0004).
 
 ## Project-specific дашборды (опц.)
 
-Domain-specific funnel'и, не покрытые `Apps · Business` — **PR в `stit-infra/infra`** под
+Domain-specific funnel'и, не покрытые `Apps · Business` — **PR в `sftbmb-infra/infra`** под
 `configs/grafana/dashboards/Tenants/<project>/` (не в этот репо). Скопировать
 `_skeleton.json.example`, заменить `<PROJECT>`/`<TOPIC>`, добавить panels; provisioner
-подхватит ≤60 сек. Гайд — `stit-infra/infra/docs/observability-app-guide.md § 8`.
+подхватит ≤60 сек. Гайд — `sftbmb-infra/infra/docs/observability-app-guide.md § 8`.

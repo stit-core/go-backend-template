@@ -1,7 +1,7 @@
 package http
 
 import (
-	"git.stit.tech/stit-template/go-backend-template/internal/domain/auth"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/auth"
 )
 
 type AuthUserView struct {

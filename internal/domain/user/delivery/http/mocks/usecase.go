@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"git.stit.tech/stit-template/go-backend-template/internal/domain/user"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user"
 	mock "github.com/stretchr/testify/mock"
 )
 

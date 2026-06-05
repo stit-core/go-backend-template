@@ -6,16 +6,16 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-infra/golibinfra/auditkit"
-	"git.stit.tech/stit-infra/golibinfra/authnkit"
-	"git.stit.tech/stit-infra/golibinfra/clockkit"
-	"git.stit.tech/stit-infra/golibinfra/httpkit"
-	"git.stit.tech/stit-infra/golibinfra/logkit"
-	"git.stit.tech/stit-infra/golibinfra/outboxkit"
-	"git.stit.tech/stit-infra/golibinfra/pgkit"
-	"git.stit.tech/stit-infra/golibinfra/telemetry"
-	"git.stit.tech/stit-template/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit-template/go-backend-template/pkg/policy"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/platform/identity"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/pkg/policy"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/auditkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/authnkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/clockkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/httpkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/logkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/outboxkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/pgkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/telemetry"
 )
 
 const minPasswordLen = 8

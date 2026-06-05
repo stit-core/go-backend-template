@@ -5,11 +5,11 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-infra/golibinfra/config"
-	"git.stit.tech/stit-infra/golibinfra/httpkit"
-	"git.stit.tech/stit-infra/golibinfra/pgkit"
-	"git.stit.tech/stit-infra/golibinfra/telemetry"
-	"git.stit.tech/stit-template/go-backend-template/internal/platform/authgate"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/platform/authgate"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/config"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/httpkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/pgkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/telemetry"
 )
 
 type App struct {

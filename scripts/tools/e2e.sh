@@ -7,7 +7,7 @@
 #   scripts/tools/e2e.sh --format=detailed
 #
 # Поднимает стек через test/stack/up.sh (нужен Docker + ./.env.local с
-# STIT_OBS_TOKEN+OTEL_TENANT), гоняет pytest, сносит стек. venv в test/.venv
+# SFTBMB_OBS_TOKEN+OTEL_TENANT), гоняет pytest, сносит стек. venv в test/.venv
 # создаётся/обновляется из test/requirements.txt автоматически.
 #
 # Канонический status-line в конце: `OK` / `FAIL: <reason>`.

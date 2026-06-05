@@ -88,14 +88,14 @@ scripts/tools/validate-stack-doc.sh docs/stack
 
 ### service
 
-> Идентичность сервиса полная: имя, module path (`git.stit.tech/<org>/<svc>`),
+> Идентичность сервиса полная: имя, module path (`git.sftbmb.ru/<org>/<svc>`),
 > схема версионирования, какие бинари собираются. На старте логируется
 > service+version+commit?
 
-- ✅ `name=orders`, `module=git.stit.tech/foo/orders`, semver через
+- ✅ `name=orders`, `module=git.sftbmb.ru/foo/orders`, semver через
   ldflags `-X main.version/-X main.commit`, бинари: `cmd/api` +
   `cmd/migrate`, лог `"starting" service version commit`.
-- ❌ `name=service`, `module=git.stit.tech/stit-template/go-backend-template`
+- ❌ `name=service`, `module=git.sftbmb.ru/sftbmb-core/go-backend-template`
   (не сменили), version=`dev` без ldflags.
 
 ### runtime

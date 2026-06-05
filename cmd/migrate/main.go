@@ -8,12 +8,12 @@ import (
 
 	"github.com/kelseyhightower/envconfig"
 
-	auditpg "git.stit.tech/stit-infra/golibinfra/auditkit/pgstore"
-	bruteforcepg "git.stit.tech/stit-infra/golibinfra/bruteforcekit/pgstore"
-	"git.stit.tech/stit-infra/golibinfra/logkit"
-	outboxpg "git.stit.tech/stit-infra/golibinfra/outboxkit/pgstore"
-	"git.stit.tech/stit-infra/golibinfra/pgkit"
-	"git.stit.tech/stit-infra/golibinfra/telemetry"
+	auditpg "git.sftbmb.ru/sftbmb-core/golibinfra/auditkit/pgstore"
+	bruteforcepg "git.sftbmb.ru/sftbmb-core/golibinfra/bruteforcekit/pgstore"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/logkit"
+	outboxpg "git.sftbmb.ru/sftbmb-core/golibinfra/outboxkit/pgstore"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/pgkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/telemetry"
 )
 
 var (

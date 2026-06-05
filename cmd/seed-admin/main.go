@@ -16,9 +16,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/kelseyhightower/envconfig"
 
-	"git.stit.tech/stit-infra/golibinfra/authnkit"
-	"git.stit.tech/stit-infra/golibinfra/logkit"
-	"git.stit.tech/stit-infra/golibinfra/telemetry"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/authnkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/logkit"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/telemetry"
 )
 
 var (

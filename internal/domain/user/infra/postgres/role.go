@@ -1,6 +1,6 @@
 package postgres
 
-import "git.stit.tech/stit-template/go-backend-template/internal/platform/identity"
+import "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/platform/identity"
 
 func identityRole(s string) identity.Role {
 	switch s {

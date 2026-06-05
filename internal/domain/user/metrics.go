@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"git.stit.tech/stit-infra/golibinfra/bizmetric"
+	"git.sftbmb.ru/sftbmb-core/golibinfra/bizmetric"
 )
 
 // Metrics — domain-уровень счётчики user (register/update/delete).

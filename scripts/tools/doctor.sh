@@ -40,7 +40,7 @@ fi
 
 # 2. .env.local ключи (имя ключа, без значения — см. .claude/rules/env-local.md)
 if [ -f .env.local ]; then
-    for k in STIT_OBS_TOKEN OTEL_TENANT E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD; do
+    for k in SFTBMB_OBS_TOKEN OTEL_TENANT E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD; do
         if grep -qE "^(export +)?$k=" .env.local; then
             ok ".env.local: $k задан"
         else

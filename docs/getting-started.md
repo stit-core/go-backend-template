@@ -9,9 +9,9 @@
 ## 0. Форк
 
 1. Gitea → `go-backend-template` → **Use this template** → `<org>/<service>`.
-2. `git clone git@git.stit.tech:<org>/<service>.git && cd <service>`.
-3. Один раз на машину — доступ к приватным модулям `git.stit.tech`:
-   `git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/`.
+2. `git clone git@git.sftbmb.ru:<org>/<service>.git && cd <service>`.
+3. Один раз на машину — доступ к приватным модулям `git.sftbmb.ru`:
+   `git config --global url.git@git.sftbmb.ru:.insteadOf https://git.sftbmb.ru/`.
 4. `make setup` — pinned dev-tools + git-хуки.
 
 ## 1. `/init-service`

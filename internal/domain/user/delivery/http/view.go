@@ -3,7 +3,7 @@ package http
 import (
 	"time"
 
-	"git.stit.tech/stit-template/go-backend-template/internal/domain/user"
+	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user"
 )
 
 type UserView struct {

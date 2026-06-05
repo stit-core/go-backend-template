@@ -40,6 +40,6 @@ paths:
 
 | Ключ | Используется | Документация |
 |---|---|---|
-| `STIT_OBS_TOKEN` | `scripts/tools/logs.sh`, `test/stack/up.sh` | `.claude/skills/query-logs/SKILL.md` + infra-repo `docs/project-secrets.md` |
-| `OTEL_TENANT` | `test/stack/up.sh` (e2e otel-agent) | `test/stack/compose.yml`, stit-infra/infra ADR-0004 §2 |
+| `SFTBMB_OBS_TOKEN` | `scripts/tools/logs.sh`, `test/stack/up.sh` | `.claude/skills/query-logs/SKILL.md` + infra-repo `docs/project-secrets.md` |
+| `OTEL_TENANT` | `test/stack/up.sh` (e2e otel-agent) | `test/stack/compose.yml`, sftbmb-infra/infra ADR-0004 §2 |
 | `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` | `test/stack/up.sh` → `cmd/seed-admin` | `test/conftest.py` (`admin`-фикстура). Не прод-секрет — admin эфемерного e2e-стека; дефолты в up.sh |

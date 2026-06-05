@@ -7,18 +7,18 @@ GOFUMPT_VERSION="${GOFUMPT_VERSION:-v0.10.0}"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.12.2}"
 SQLC_VERSION="${SQLC_VERSION:-v1.31.1}"
 MOCKERY_VERSION="${MOCKERY_VERSION:-v3.7.0}"
-# logcli pinned to match Loki server version in stit-infra/infra (compose/loki.yml).
+# logcli pinned to match Loki server version in sftbmb-infra/infra (compose/loki.yml).
 LOGCLI_VERSION="${LOGCLI_VERSION:-v3.7.1}"
 
 GOBIN="$(go env GOPATH)/bin"
 mkdir -p "$GOBIN"
 
-# golibinfra (и прочие stit-private deps) хостятся на git.stit.tech, который не
+# golibinfra (и прочие приватные deps) хостятся на git.sftbmb.ru, который не
 # зарегистрирован в sum.golang.org / proxy.golang.org. Без GOPRIVATE Go идёт
 # через proxy → 404 → direct VCS → запрос пароля → fail. SSH-rewrite для
-# git.stit.tech ставится разово вручную: `git config --global url.git@git.stit.
-# tech:.insteadOf https://git.stit.tech/` (см. README setup).
-GOPRIVATE_PIN='git.stit.tech/*'
+# git.sftbmb.ru ставится разово вручную: `git config --global
+# url.git@git.sftbmb.ru:.insteadOf https://git.sftbmb.ru/` (см. README setup).
+GOPRIVATE_PIN='git.sftbmb.ru/*'
 CURRENT_GOPRIVATE="$(go env GOPRIVATE)"
 if [ "$CURRENT_GOPRIVATE" != "$GOPRIVATE_PIN" ]; then
   echo "→ go env -w GOPRIVATE=$GOPRIVATE_PIN (было: '$CURRENT_GOPRIVATE')"
@@ -28,14 +28,14 @@ else
 fi
 
 # Без insteadOf-rewrite Go (с уже выставленным GOPRIVATE) попробует
-# direct HTTPS на git.stit.tech, упрётся в auth-prompt и упадёт.
+# direct HTTPS на git.sftbmb.ru, упрётся в auth-prompt и упадёт.
 # git config --global здесь не правим (one-time per-developer setup);
 # только warn если ещё не настроено.
 if ! git config --global --get-regexp '^url\..*\.insteadof$' 2>/dev/null \
-    | grep -q 'git.stit.tech'; then
-  echo "⚠ git config: SSH-rewrite для git.stit.tech не настроен."
+    | grep -q 'git.sftbmb.ru'; then
+  echo "⚠ git config: SSH-rewrite для git.sftbmb.ru не настроен."
   echo "  Без него go mod download для приватных deps упадёт. Выполни один раз:"
-  echo "    git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/"
+  echo "    git config --global url.git@git.sftbmb.ru:.insteadOf https://git.sftbmb.ru/"
 fi
 
 go_install() {

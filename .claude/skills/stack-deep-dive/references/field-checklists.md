@@ -27,7 +27,7 @@
 Resource attributes`.
 
 **Anti-patterns**:
-- module path остался шаблонным (`git.stit.tech/stit-template/go-backend-template`).
+- module path остался шаблонным (`git.sftbmb.ru/sftbmb-core/go-backend-template`).
 - `Versioning: semver` без указания как версия попадает в бинарь
   (ldflags? VERSION-файл?).
 - Image-теги `:latest`/`:edge` (CLAUDE.md § Не делать никогда).

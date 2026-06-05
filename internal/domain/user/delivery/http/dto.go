@@ -1,6 +1,6 @@
 package http
 
-import "git.stit.tech/stit-template/go-backend-template/internal/domain/user"
+import "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user"
 
 type RegisterInput struct {
 	Body struct {
