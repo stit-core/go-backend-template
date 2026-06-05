@@ -1,58 +1,95 @@
+<div align="center">
+
 # go-backend-template
 
-Шаблон Go HTTP-бэкенда на стеке sftbmb: huma/v2 + chi + pgx/v5 + sqlc + uber/fx +
-[`golibinfra`](https://git.sftbmb.ru/sftbmb-core/golibinfra) (telemetry, authn, outbox,
-brute-force, cache, NATS, audit, clock).
+### Go HTTP-бэкенд со стандартами из коробки
 
-Часть экосистемы: 4 форкаемых шаблона `sftbmb-core/` + корп control-plane
-[`sftbmb-infra/infra`](https://git.sftbmb.ru/sftbmb-infra/infra) (corp control plane) ←── **этот**
-(форк в `<org>/backend`, build+push) ──►
-[`project-infra-template-compose`](https://git.sftbmb.ru/sftbmb-core/project-infra-template-compose)
-(форк в `<org>/infra`, deploy). Домены продукта — в соседнем docs-репо (`<org>/docs`, форк
-`project-docs-template`). Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
+Шаблон Go-бэкенда экосистемы sftbmb: huma/v2 + chi + pgx/v5 + sqlc + uber/fx,
+поверх [`golibinfra`](https://git.sftbmb.ru/sftbmb-core/golibinfra) (telemetry,
+authn, outbox, cache, NATS, audit). Observability, тесты и релиз — встроены;
+вы пишете домены, не обвязку.
 
-**Два пути — без вендор-лока.** Зависимости от control-plane (registry образов, OTLP-ingest,
-Vault) указывают либо на наш **managed** (`git.sftbmb.ru` / `otel.sftbmb.ru`), либо на **ваш
-self-hosted** — поднятый из
-[`corp-infra-template`](https://git.sftbmb.ru/sftbmb-core/corp-infra-template). Эндпоинты
-конфигурируются через env/Vault, не зашиты; архитектура одинакова.
+[![License](https://img.shields.io/badge/license-Apache--2.0-2563eb)](LICENSE)
+[![Часть sftbmb](https://img.shields.io/badge/sftbmb-открытые_шаблоны-6366f1)](https://git.sftbmb.ru/sftbmb-core/sftbmb-public)
+[![Go](https://img.shields.io/badge/Go-00ADD8)](#что-внутри)
+[![API](https://img.shields.io/badge/API-huma%2Fv2_%2B_OpenAPI_3.1-0ea5e9)](#что-внутри)
+[![DB](https://img.shields.io/badge/DB-pgx_%2B_sqlc-22c55e)](#что-внутри)
+[![Observability](https://img.shields.io/badge/observability-OTel_by_default-8b5cf6)](#что-внутри)
+
+</div>
+
+---
+
+## Место в экосистеме
+
+```
+project-docs-template (<org>/docs)   ← домены проектируются здесь
+        │  scaffold доменов в Go по stable-артефактам
+        ▼
+go-backend-template (<org>/backend)  ← вы здесь   ──► sftbmb-core/golibinfra
+        │  build + push image
+        ▼
+project-infra-template-compose (<org>/infra)   ← деплой образа
+```
+
+Корп control-plane (registry, OTLP-ingest, Vault) —
+[`corp-infra-template`](https://git.sftbmb.ru/sftbmb-core/corp-infra-template).
+Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
+
+**Два пути — без вендор-лока.** Зависимости от control-plane (registry,
+OTLP-ingest, Vault) указывают либо на наш **managed** (`git.sftbmb.ru` /
+`otel.sftbmb.ru`), либо на **ваш self-hosted** из
+[`corp-infra-template`](https://git.sftbmb.ru/sftbmb-core/corp-infra-template).
+Эндпоинты конфигурируются через env/Vault, не зашиты; архитектура одинакова.
 
 ## Использовать как шаблон
 
-В Gitea помечен `template: true`. **Полный пошаговый путь** от форка к своему проекту —
+В Gitea помечен `template: true`. **Полный путь** от форка к своему проекту —
 [`docs/getting-started.md`](docs/getting-started.md): форк → `/init-service` →
-проектирование стека (`docs/stack/`; домены уже готовы в соседнем docs-репо) → `/de-template` →
-scaffold → проект, который ничего не помнит про шаблон.
+проектирование стека (`docs/stack/`; домены — в соседнем docs-репо) →
+`/de-template` → scaffold → проект, который ничего не помнит про шаблон.
 
 Быстрый старт (чтобы собралось):
 
-1. **Use this template** → `<org>/<service>`, склонировать.
-2. (Один раз на машину) доступ к приватным модулям `git.sftbmb.ru`:
-   ```bash
-   git config --global url.git@git.sftbmb.ru:.insteadOf https://git.sftbmb.ru/
-   ```
-3. `make setup && make check` — зелёное.
-4. `cp .env.example .env`, заполнить. Запустить `claude` → `/init-service`.
+```bash
+# 1. Use this template → <org>/<service>, склонировать
+# 2. (один раз на машину) доступ к приватным модулям той же Gitea:
+git config --global url.git@git.sftbmb.ru:.insteadOf https://git.sftbmb.ru/
+# 3. зелёный gate (make setup выводит хост из go.mod):
+make setup && make check
+# 4. запустить онбординг:
+cp .env.example .env   # заполнить
+claude                 # → /init-service
+```
 
-Module path, README, фундамент и удаление reference-доменов — делает флоу `/init-service`
-→ `/de-template` по заполненным `docs/`. Не правь фундамент руками до этого.
+Module path, README, фундамент и удаление reference-доменов делает флоу
+`/init-service` → `/de-template` по заполненным `docs/`. Не правьте фундамент
+руками до этого.
 
 ## Что внутри
 
-- **HTTP**: huma/v2 поверх chi, OpenAPI 3.1, structured errors.
-- **БД**: pgx/v5 + sqlc (typed queries), golang-migrate.
-- **DI**: uber/fx. Один runtime-бинарь `cmd/api` (HTTP + outbox-drain + NATS-subs + jobs);
-  `cmd/migrate` — отдельный image, init-контейнер.
-- **Платформа**: `golibinfra` — OTLP telemetry, JWT/session authn, outbox, brute-force,
-  cache, NATS, audit, clock.
-- **DDD**: артефакты доменов — в соседнем docs-репо; маппинг в Go-код — `docs/reference/domain-mapping.md`.
-- **Тесты**: unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
-- **Gate**: `make check` = fmt+vet+lint+test+build+gen-check (pre-push хук).
+- **HTTP** — huma/v2 поверх chi, OpenAPI 3.1, structured errors.
+- **БД** — pgx/v5 + sqlc (typed queries), golang-migrate.
+- **DI** — uber/fx. Один runtime-бинарь `cmd/api` (HTTP + outbox-drain + NATS-subs
+  + jobs); `cmd/migrate` — отдельный image, init-контейнер.
+- **Платформа** — [`golibinfra`](https://git.sftbmb.ru/sftbmb-core/golibinfra):
+  OTLP telemetry, JWT/session authn, outbox, brute-force, cache, NATS, audit, clock.
+- **DDD** — артефакты доменов в соседнем docs-репо; маппинг в Go —
+  [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
+- **Тесты** — unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
+- **Gate** — `make check` = fmt + vet + lint + test + build + gen-check (pre-push хук).
 
 ## Команды
 
-`make help` — полный список; concise-by-default. Канонический gate — `make check`. Полный
-гайд агента — [`CLAUDE.md`](CLAUDE.md); точка входа в сессию — `/smartdev`.
+`make help` — полный список; concise-by-default. Канонический gate — **`make check`**.
+Полный гайд агента — [`CLAUDE.md`](CLAUDE.md); точка входа в сессию — `/smartdev`.
+
+```bash
+make check        # fmt + vet + lint + test + build + gen-check (gate перед push)
+make gen          # регенерация sqlc + mockery
+make e2e          # поднять docker-стек → pytest → снести
+make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /release)
+```
 
 ## Документация
 
@@ -60,29 +97,35 @@ Module path, README, фундамент и удаление reference-домен
 - Потребителю — [`getting-started.md`](docs/getting-started.md); контрибьютору —
   [`contributing.md`](docs/contributing.md).
 - Reference — [architecture](docs/reference/architecture.md) ·
-  [observability](docs/reference/observability.md) · [release](docs/reference/release.md) ·
-  [ecosystem](docs/reference/ecosystem.md).
-- Design SoT — домены в соседнем docs-репо (`../docs`) · [`docs/stack/`](docs/stack/README.md) · маппинг [`domain-mapping`](docs/reference/domain-mapping.md).
+  [observability](docs/reference/observability.md) ·
+  [release](docs/reference/release.md) · [ecosystem](docs/reference/ecosystem.md).
+- Design SoT — домены в соседнем docs-репо · [`docs/stack/`](docs/stack/README.md).
 
 ## E2E
 
 Типизированный pytest-харнес `test/` поверх docker-compose стека
-(postgres/nats/redis/otel-agent/migrate/api): `test/stack/` (docker+bash), `test/client/`
-(httpx+pydantic), `test/scenarios/`, `test/infra/` (side-effect ассерты), `test/{smoke,e2e}/`.
+(postgres/nats/redis/otel-agent/migrate/api). Нужен Docker и `./.env.local`
+(`SFTBMB_OBS_TOKEN` + `OTEL_TENANT`; шаблон — `.env.local.example`). Детали —
+`test/README.md`.
 
-```
-make e2e          # весь набор: поднять стек → pytest → снести
+```bash
+make e2e          # весь набор
 make e2e-smoke    # только -m smoke (быстрый gate)
 ```
-
-Нужен Docker и `./.env.local` (`SFTBMB_OBS_TOKEN` + `OTEL_TENANT`; шаблон — `.env.local.example`,
-формат — `.claude/rules/env-local.md`). Детали — `test/README.md`.
 
 ## Release
 
 Зона репо: **код → image в registry, STOP.** Деплой — другие репо. Одна команда
-`make release VERSION=vX.Y.Z` (skill `/release`). Полностью — [`docs/reference/release.md`](docs/reference/release.md).
+`make release VERSION=vX.Y.Z` (skill `/release`). Полностью —
+[`docs/reference/release.md`](docs/reference/release.md).
+
+## Часть экосистемы sftbmb
+
+Это один из открытых шаблонов sftbmb (Apache-2.0) — фундамент «-1 уровня»,
+берите бесплатно и владейте. Карта всех шаблонов и точка входа —
+**[витрина sftbmb](https://git.sftbmb.ru/sftbmb-core/sftbmb-public)**. Нужна
+команда, стандарт или поддержка — **[наш подход и контакты (vision)](https://git.sftbmb.ru/sftbmb/vision)**.
 
 ## Лицензия
 
-Apache-2.0 — см. [`LICENSE`](LICENSE).
+**Apache-2.0** — см. [`LICENSE`](LICENSE).
