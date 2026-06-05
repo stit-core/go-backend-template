@@ -11,6 +11,12 @@ brute-force, cache, NATS, audit, clock).
 (форк в `<org>/infra`, deploy). Домены продукта — в соседнем docs-репо (`<org>/docs`, форк
 `project-docs-template`). Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
 
+**Два пути — без вендор-лока.** Зависимости от control-plane (registry образов, OTLP-ingest,
+Vault) указывают либо на наш **managed** (`git.sftbmb.ru` / `otel.sftbmb.ru`), либо на **ваш
+self-hosted** — поднятый из
+[`corp-infra-template`](https://git.sftbmb.ru/sftbmb-core/corp-infra-template). Эндпоинты
+конфигурируются через env/Vault, не зашиты; архитектура одинакова.
+
 ## Использовать как шаблон
 
 В Gitea помечен `template: true`. **Полный пошаговый путь** от форка к своему проекту —
