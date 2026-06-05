@@ -114,7 +114,7 @@ make gen
 ### 7. Проверка компиляции
 
 ```bash
-scripts/tools/build.sh
+make build
 ```
 
 Если падает — обычно потому что `repository.go` использует старую сигнатуру sqlc-метода. Поправь.
@@ -124,7 +124,7 @@ scripts/tools/build.sh
 Если миграция семантически меняет поведение — добавь тест.
 
 ```bash
-scripts/tools/test.sh
+make test
 ```
 
 Integration-тесты используют `testkit/pgseed`, который накатывает все миграции — твоя свежая попадёт автоматически.

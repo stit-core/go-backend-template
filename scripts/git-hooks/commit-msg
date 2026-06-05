@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # SSOT по разрешённым типам — CLAUDE.md §5 "Git workflow".
 # При смене списка править оба места одним коммитом.
-set -e
+set -euo pipefail
 COMMIT_MSG_FILE="$1"
-PATTERN='^(feat|fix|refactor|docs|test|chore|meta)(\([a-z0-9_/-]+\))?(!)?: .{1,72}'
+PATTERN='^(feat|fix|refactor|docs|test|chore|meta)(\([a-z0-9_/-]+\))?(!)?: .{1,72}$'
 HEAD_LINE="$(head -n 1 "$COMMIT_MSG_FILE" | sed 's/[[:space:]]*$//')"
 if ! [[ "$HEAD_LINE" =~ $PATTERN ]]; then
   echo "ERROR: первая строка коммита должна быть Conventional Commit"

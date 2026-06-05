@@ -4,6 +4,9 @@
 
 См. `.claude/rules/events-and-messaging.md` (бэкграунд — автогрузится при правке `events.go` / `delivery/nats/` / `internal/jobs/`) и `docs/reference/architecture.md § События и messaging`.
 
+> `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
+> `git.sftbmb.ru/<org>/backend`). Подставляй фактический, не копируй буквально.
+
 ## Когда применять
 
 - "После регистрации юзера слать welcome-email"
@@ -137,7 +140,7 @@ func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
 
 ```go
 import (
-    natsdelivery "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/<consumer>/delivery/nats"
+    natsdelivery "<module-path>/internal/domain/<consumer>/delivery/nats"
 )
 
 var Module = fx.Module(
@@ -171,8 +174,8 @@ Subscriber должен переживать повторную доставку
 ### 8. Верификация
 
 ```bash
-scripts/tools/test.sh
-scripts/tools/lint.sh
+make test
+make lint
 make gen-check  # если добавил интерфейс из .mockery.yml
 ```
 

@@ -78,7 +78,7 @@ enum'ы из канона — даёт как опции; имена env, subjec
 2. Для каждого присутствующего файла: прочитать frontmatter (`status`,
    `kind`) и H2-заголовки; считать заполненность обязательных секций
    (см. `references/field-checklists.md`).
-3. Прогнать `scripts/tools/validate-stack-doc.sh docs/stack`. Если
+3. Прогнать `make validate-stack-docs`. Если
    зелёный + все 8 stable — выйти: «стек спроектирован, делать нечего».
 
    ⚠️ Перед валидатором проверить, что 8 kind-файлов **существуют**:
@@ -201,7 +201,7 @@ State лежит рядом со скиллом
    shutdown-хуки). Если auth добавил `JWT_PUBLIC_KEY` — он есть в
    `config.md § Required env`. См. `references/draft-stable.md § Cross-kind
    sync`.
-4. **Валидатор зелёный** — `scripts/tools/validate-stack-doc.sh
+4. **Валидатор зелёный** — `make validate-stack-docs
    docs/stack` без ошибок.
 5. **Тест-критерий kind'а явно подтверждён** в этой сессии. См.
    `references/draft-stable.md § Тест-критерий по kind`.
@@ -248,7 +248,7 @@ stable`. **Скилл не повышает сам.**
 
 1. Перечислить затронутые артефакты (заведены / углублены / промоутнуты).
 2. Перечислить нерешённые `**blocker**`-вопросы (читая `state/`).
-3. Прогнать `scripts/tools/validate-stack-doc.sh docs/stack` —
+3. Прогнать `make validate-stack-docs` —
    подтвердить зелёный.
 4. Предложить следующий шаг:
    - **Онбординг** (пришёл из `/init-service`): 8/8 stable → дальше

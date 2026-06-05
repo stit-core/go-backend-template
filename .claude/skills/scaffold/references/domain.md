@@ -2,6 +2,10 @@
 
 Создаёт новый домен по конвенции этого шаблона. Соответствует `.claude/rules/domain-architecture.md` — открой его если ещё не загружено.
 
+> `<module-path>` в примерах ниже — module path репо из `go.mod` (строка `module`).
+> В форке после `/de-template` это уже свой путь (`git.sftbmb.ru/<org>/backend`),
+> не путь шаблона. Подставляй фактический — не копируй буквально.
+
 **Gate (soft).** Домены проектируются **не в этом репо**, а в соседнем docs-репо орга
 (`<org>/docs`, форк `project-docs-template`). Скаффолдь по **stable**-артефактам оттуда:
 `<docs-path>/projects/<slug>/domains/<ctx>/`, где `<slug>` / `<docs-path>` — это
@@ -192,7 +196,7 @@ var Module = fx.Module(
 ### 12. Подключить в cmd/api/main.go
 
 ```go
-import <name>mod "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/<name>/module"
+import <name>mod "<module-path>/internal/domain/<name>/module"
 
 domainModules = fx.Options(
     usermod.Module,
@@ -206,11 +210,11 @@ domainModules = fx.Options(
 
 В `.mockery.yml`:
 ```yaml
-git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/<name>:
+<module-path>/internal/domain/<name>:
   interfaces:
     Repository:
     # другие интерфейсы из usecase.go
-git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/<name>/delivery/http:
+<module-path>/internal/domain/<name>/delivery/http:
   interfaces:
     Usecase:
 ```
@@ -237,7 +241,7 @@ make gen
     - "**/internal/domain/<name>/**"
     - "!**/*_test.go"
   deny:
-    - pkg: "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/<other>"
+    - pkg: "<module-path>/internal/domain/<other>"
       desc: "<name> domain must not import <other>"
 ```
 

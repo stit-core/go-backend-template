@@ -12,7 +12,8 @@
 #   2) строка `SFTBMB_OBS_TOKEN=...` в ./.env.local
 #
 # Endpoint:
-#   SFTBMB_LOKI_ADDR (default https://loki.sftbmb.ru). Tenant зашит в токен — не передаётся отдельно.
+#   SFTBMB_LOKI_ADDR — обязателен (FAIL при пустом, не уходим молча на managed).
+#   managed: https://loki.sftbmb.ru; self-hosted: свой Loki. Tenant зашит в токен — не передаётся отдельно.
 #
 # Канонический status-line в конце: `OK` / `FAIL: <reason>`.
 
@@ -70,7 +71,14 @@ if [ -z "$TOKEN" ]; then
 fi
 
 # === Endpoint ===
-LOKI_ADDR="${SFTBMB_LOKI_ADDR:-https://loki.sftbmb.ru}"
+# FAIL-fast при пустом: без явного адреса не уходим молча на managed-хост sftbmb
+# (self-hosted форк иначе утёк бы свои запросы на чужой control-plane). Managed —
+# выставь SFTBMB_LOKI_ADDR=https://loki.sftbmb.ru; self-hosted — адрес своего Loki.
+if [ -z "${SFTBMB_LOKI_ADDR:-}" ]; then
+    echo "FAIL: no SFTBMB_LOKI_ADDR. Set env or add 'SFTBMB_LOKI_ADDR=<loki-url>' to ./.env.local (managed: https://loki.sftbmb.ru; self-hosted: свой Loki из corp-infra-template)" >&2
+    exit 1
+fi
+LOKI_ADDR="$SFTBMB_LOKI_ADDR"
 export LOKI_ADDR LOKI_BEARER_TOKEN="$TOKEN"
 
 # === Tool check ===

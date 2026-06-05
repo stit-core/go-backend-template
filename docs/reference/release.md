@@ -34,7 +34,7 @@ patch` / `make ship` / `ssh` **не выполняет**.
 
 | Зона | Где | Что делает |
 |---|---|---|
-| Корп | `sftbmb-infra/infra` (root-Vault) | `vault kv patch kv/projects/<p>/<env>/meta backend_tag=vX.Y.Z` |
+| Корп | корп control-plane (`corp-infra-template`, root-Vault) | `vault kv patch kv/projects/<p>/<env>/meta backend_tag=vX.Y.Z` |
 | Проект | `<org>/infra` (← project-infra-template-compose) | `make ship` → ssh-deploy → vault-agent рендерит `BACKEND_TAG` → force-recreate |
 | Verify | там же | `make ps`, лог `"starting" service=api version=vX.Y.Z commit=<sha>` |
 

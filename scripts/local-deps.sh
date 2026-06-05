@@ -17,26 +17,40 @@ up() {
 
   echo "Starting local dependencies..."
 
-  docker run -d \
-    --name "$POSTGRES_CONTAINER" \
-    --restart unless-stopped \
-    -e POSTGRES_DB=app \
-    -e POSTGRES_USER=app \
-    -e POSTGRES_PASSWORD=app \
-    -p 5432:5432 \
-    postgres:17-alpine
+  # Идемпотентность: повторный up не падает на уже существующих контейнерах
+  # (docker run --name на занятое имя возвращает ошибку).
+  if ! docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
+    docker run -d \
+      --name "$POSTGRES_CONTAINER" \
+      --restart unless-stopped \
+      -e POSTGRES_DB=app \
+      -e POSTGRES_USER=app \
+      -e POSTGRES_PASSWORD=app \
+      -p 5432:5432 \
+      postgres:17-alpine
+  else
+    echo "✓ $POSTGRES_CONTAINER уже запущен"
+  fi
 
-  docker run -d \
-    --name "$NATS_CONTAINER" \
-    --restart unless-stopped \
-    -p 4222:4222 \
-    nats:latest
+  if ! docker inspect "$NATS_CONTAINER" >/dev/null 2>&1; then
+    docker run -d \
+      --name "$NATS_CONTAINER" \
+      --restart unless-stopped \
+      -p 4222:4222 \
+      nats:2.10-alpine
+  else
+    echo "✓ $NATS_CONTAINER уже запущен"
+  fi
 
-  docker run -d \
-    --name "$REDIS_CONTAINER" \
-    --restart unless-stopped \
-    -p 6379:6379 \
-    redis:7-alpine
+  if ! docker inspect "$REDIS_CONTAINER" >/dev/null 2>&1; then
+    docker run -d \
+      --name "$REDIS_CONTAINER" \
+      --restart unless-stopped \
+      -p 6379:6379 \
+      redis:7-alpine
+  else
+    echo "✓ $REDIS_CONTAINER уже запущен"
+  fi
 
   echo ""
   echo "All containers started. Recommended environment variables:"

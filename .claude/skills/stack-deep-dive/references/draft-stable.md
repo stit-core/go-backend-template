@@ -53,7 +53,7 @@ Cross-kind sync — там полная матрица.
 ### 4. Валидатор зелёный
 
 ```bash
-scripts/tools/validate-stack-doc.sh docs/stack
+make validate-stack-docs
 ```
 
 Проверяет:

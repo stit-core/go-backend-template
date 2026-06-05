@@ -1,4 +1,4 @@
-.PHONY: help test lint build fmt check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search logs release setup doctor plan-check test-int test-fuzz test-bench test-cover tidy
+.PHONY: help test lint build fmt check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search logs release setup doctor plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench test-cover tidy
 
 # Release-вычисления (image-path host/org, lockstep tag) self-contained в
 # scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
@@ -124,6 +124,16 @@ doctor: ## Fail-fast preflight: auth/env/drift
 ##@ META
 plan-check: ## Валидатор структуры планов
 	@bash scripts/tools/validate-plan.sh $(A)
+
+validate-stack-docs: ## Валидатор stack-артефактов docs/stack (8 kinds, status/frontmatter)
+	@bash scripts/tools/validate-stack-doc.sh docs/stack
+
+##@ DEV
+local-deps-up: ## Поднять локальные зависимости (postgres/nats/redis) для go run
+	@bash scripts/local-deps.sh up
+
+local-deps-down: ## Снести локальные зависимости
+	@bash scripts/local-deps.sh down
 
 ##@ EXTRA
 test-int: ## Только integration (testcontainers); требует docker

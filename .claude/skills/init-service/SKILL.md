@@ -59,12 +59,12 @@ description: Оркестратор онбординга потребителя 
   `.claude/skills/stack-deep-dive/references/draft-stable.md`.
 - В `service.md § Identity` зафиксируй `project-slug` + `docs-path` (по ним `scaffold` найдёт
   домены в соседнем docs-репо — этап 4).
-- Gate: `scripts/tools/validate-stack-doc.sh docs/stack` зелёный + у всех 8 `status: stable`
+- Gate: `make validate-stack-docs` зелёный + у всех 8 `status: stable`
   + state-каталог `.claude/skills/stack-deep-dive/state/` чист по `**blocker**`-вопросам.
 
 ### 3. Развернуть фундамент → `de-template`
 
-- Gate перед запуском: стек `stable`, `validate-stack-doc.sh` зелёный, state `stack-deep-dive`
+- Gate перед запуском: стек `stable`, `make validate-stack-docs` зелёный, state `stack-deep-dive`
   чист по `**blocker**`-вопросам. Домены — в docs-репо, для de-template не требуются (он
   разворачивает только платформу).
 - **Чейнь в `de-template`**: читает stable-артефакты `docs/stack`, разворачивает по
@@ -103,7 +103,7 @@ description: Оркестратор онбординга потребителя 
 - ❌ Не лезет в `state/` чейненных скиллов — это их рабочая память, оркестратор её только
   проверяет на чистоту `**blocker**`-вопросов как gate-условие.
 - ❌ Не правит фундамент руками и не де-темплейтит — это `de-template` (по stable docs/stack).
-- ❌ Не запускает `de-template` до зелёного `validate-stack-doc.sh` (gate).
+- ❌ Не запускает `de-template` до зелёного `make validate-stack-docs` (gate).
 - ❌ Не пропускает проектирование ради «быстро сгенерить» — docs первичны, иначе движку не из чего разворачивать.
 
 ## Anti-patterns

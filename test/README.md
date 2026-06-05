@@ -80,7 +80,7 @@ point форка.
 
 Телеметрия в скоуп изоляции не входит: параллельные форки с одинаковым
 `OTEL_TENANT` смешивают traces/logs в корп-obs по `service.namespace`.
-Разводка tenant'ов — корп-сторона, см. `sftbmb-infra/infra` ADR-0004 §2.
+Разводка tenant'ов — корп-сторона, см. `corp-infra-template/docs/ecosystem.md` § Tenant identity.
 
 ## Запуск
 

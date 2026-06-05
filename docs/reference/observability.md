@@ -1,8 +1,9 @@
 # Observability
 
-Шаблон эмитит **метрики, логи, трейсы** через OTel в `otel.sftbmb.ru` (auth bearer =
-`OTEL_TOKEN`). Все три сигнала коррелируются через `trace_id`. Telemetry-режим задаётся
-артефактом `docs/stack/observability.md`.
+Шаблон эмитит **метрики, логи, трейсы** через OTel в корп OTLP-ingest (auth bearer =
+`OTEL_TOKEN`; managed-адрес `otel.sftbmb.ru`, self-hosted — свой через
+`OTEL_EXPORTER_OTLP_ENDPOINT`). Все три сигнала коррелируются через `trace_id`.
+Telemetry-режим задаётся артефактом `docs/stack/observability.md`.
 
 ## Режимы telemetry
 
@@ -12,8 +13,9 @@
 - **Production**: `OTEL_TENANT` + `OTEL_TOKEN` непустые → `Authorization: Bearer <token>`
   на каждый OTLP-запрос. Resource attrs приложения: `service.name`, `service.version`,
   `deployment.environment.name`. `tenant` и `service.namespace` ставит/перезатирает
-  корп-otel-collector на edge (Bearer→`X-Scope-OrgID`→`resource/service_namespace`;
-  инвариант `service_namespace == tenant`, см. `sftbmb-infra/infra` ADR-0004 §2).
+  корп-сторона (edge `tenant-auth` мапит Bearer→`X-Scope-OrgID`, otel-collector →
+  `resource/service_namespace`; инвариант `service_namespace == tenant`, см.
+  `corp-infra-template/docs/ecosystem.md` § Tenant identity).
 
 Корп-сторона маршрутизирует по `X-Scope-OrgID` (не по `service.namespace`), но
 логи/метрики/трейсы получают `service_namespace=<tenant>` автоматически — фильтр в Loki
@@ -77,11 +79,13 @@ golibinfra-сервисов, фильтр по `$tenant`/`$service`/`$env`: Serv
 Bus, Outbox, Logs, Traces, Business, Auth. В шапке: `tenant=<project>`, `service=backend`,
 `env=<env>`.
 
-Retention: logs/traces — 7 дней, metrics — 90 дней (`sftbmb-infra/infra` ADR-0004).
+Retention: logs/traces — 7 дней, metrics — 90 дней (задаётся на корп control-plane
+`corp-infra-template`).
 
 ## Project-specific дашборды (опц.)
 
-Domain-specific funnel'и, не покрытые `Apps · Business` — **PR в `sftbmb-infra/infra`** под
-`configs/grafana/dashboards/Tenants/<project>/` (не в этот репо). Скопировать
-`_skeleton.json.example`, заменить `<PROJECT>`/`<TOPIC>`, добавить panels; provisioner
-подхватит ≤60 сек. Гайд — `sftbmb-infra/infra/docs/observability-app-guide.md § 8`.
+Domain-specific funnel'и, не покрытые `Apps · Business` — **PR в корп control-plane
+(`corp-infra-template`)** под `configs/grafana/dashboards/Tenants/<project>/` (не в этот
+репо). Скопировать `_skeleton.json.example`, заменить `<PROJECT>`/`<TOPIC>`, добавить
+panels; provisioner подхватит ≤60 сек. Гайд —
+`corp-infra-template/docs/observability-app-guide.md § 8`.

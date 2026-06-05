@@ -6,9 +6,10 @@
 #   scripts/tools/e2e.sh --smoke         # только -m smoke
 #   scripts/tools/e2e.sh --format=detailed
 #
-# Поднимает стек через test/stack/up.sh (нужен Docker + ./.env.local с
-# SFTBMB_OBS_TOKEN+OTEL_TENANT), гоняет pytest, сносит стек. venv в test/.venv
-# создаётся/обновляется из test/requirements.txt автоматически.
+# Гоняет pytest; стек поднимает/сносит pytest session-фикстура (test/conftest.py
+# shell-out'ит в test/stack/{up,down}.sh — нужен Docker + ./.env.local с
+# SFTBMB_OBS_TOKEN+OTEL_TENANT). venv в test/.venv создаётся/обновляется из
+# test/requirements.txt автоматически.
 #
 # Канонический status-line в конце: `OK` / `FAIL: <reason>`.
 

@@ -10,9 +10,14 @@
 
 1. Gitea → `go-backend-template` → **Use this template** → `<org>/<service>`.
 2. `git clone git@git.sftbmb.ru:<org>/<service>.git && cd <service>`.
-3. Один раз на машину — доступ к приватным модулям `git.sftbmb.ru`:
+3. Один раз на машину — доступ к приватным модулям той же Gitea:
    `git config --global url.git@git.sftbmb.ru:.insteadOf https://git.sftbmb.ru/`.
 4. `make setup` — pinned dev-tools + git-хуки.
+
+> `git.sftbmb.ru` здесь — managed-хост Gitea. Self-hosted форк живёт на своей Gitea:
+> подставь её хост в clone-URL и в `insteadOf`-rewrite (это тот же хост, что в module
+> path `go.mod`). `make setup` выводит хост из `go.mod` автоматически и предупредит,
+> если rewrite не настроен.
 
 ## 1. `/init-service`
 
@@ -36,7 +41,7 @@
   observability/dependencies). См. [stack/README.md](stack/README.md).
 - В `service.md` запиши `project-slug` + `docs-path` (дефолт `../docs`) — по ним `scaffold`
   найдёт домены в docs-репо.
-- Цель: `status: stable` + `validate-stack-doc.sh` зелёный. Это вход для де-темплейтизации.
+- Цель: `status: stable` + `make validate-stack-docs` зелёный. Это вход для де-темплейтизации.
 
 ## 4. Разверни фундамент — `/de-template`
 

@@ -4,6 +4,9 @@
 
 См. `.claude/rules/domain-architecture.md` для бэкграунда (автогрузится при работе с `internal/domain/`).
 
+> `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
+> `git.sftbmb.ru/<org>/backend`). Подставляй фактический, не копируй буквально.
+
 ## Когда применять
 
 - "auth-домену нужно прочитать user.Email"
@@ -56,7 +59,7 @@ type UsecaseDeps struct {
 ### 4. Добавить в `.mockery.yml`
 
 ```yaml
-git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/<consumer>:
+<module-path>/internal/domain/<consumer>:
   interfaces:
     <Provider>Reader:
 ```
@@ -71,8 +74,8 @@ package module
 import (
     "context"
 
-    "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/<consumer>"
-    "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/<provider>"
+    "<module-path>/internal/domain/<consumer>"
+    "<module-path>/internal/domain/<provider>"
 )
 
 type <provider>ReaderAdapter struct {
@@ -118,7 +121,7 @@ var Module = fx.Module(
 ### 7. Проверить depguard
 
 ```bash
-scripts/tools/lint.sh ./internal/domain/<consumer>/...
+make lint PKG=./internal/domain/<consumer>/...
 ```
 
 Если ругается — значит ты импортировал провайдер не из `module/`, а из самого домена. Перенеси код.
@@ -135,9 +138,9 @@ scripts/tools/lint.sh ./internal/domain/<consumer>/...
 ### 9. Верификация
 
 ```bash
-scripts/tools/lint.sh
-scripts/tools/test.sh
-scripts/tools/build.sh
+make lint
+make test
+make build
 make gen-check
 ```
 

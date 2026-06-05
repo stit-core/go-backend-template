@@ -38,7 +38,7 @@ domain), не здесь. Движок **skill-only**: нет committed-скри
    for k in service runtime config persistence messaging auth observability dependencies; do
      test -f "docs/stack/$k.md" || echo "STOP: docs/stack/$k.md нет — стек не спроектирован (/stack-deep-dive)"
    done
-   scripts/tools/validate-stack-doc.sh docs/stack
+   make validate-stack-docs
    ```
    Все 8 артефактов `status: stable`, секции `Generates` непусты — это вход движка. Домены
    (соседний docs-репо) для de-template не нужны: движок разворачивает только платформу,

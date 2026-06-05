@@ -6,7 +6,7 @@
 # --no-verify запрещён политикой проекта (pre-bash-no-verify hook у Claude
 # тоже это блокирует). Если действительно нужно — пользователь руками
 # выставляет SKIP_PREPUSH=1 git push.
-set -e
+set -euo pipefail
 
 if [ "${SKIP_PREPUSH:-}" = "1" ]; then
     echo "pre-push: SKIP_PREPUSH=1 — пропускаю проверки"

@@ -1,11 +1,11 @@
 ---
 name: query-logs
-description: Прочитать или последить логи задеплоенного бэка через корп-Loki (`loki.sftbmb.ru`) под bearer-токеном из `./.env.local`. Активируй когда юзер просит "посмотри логи", "что в логах", "следи за деплоем", "почему упало в проде", "/query-logs".
+description: Прочитать или последить логи задеплоенного бэка через корп-Loki (адрес из `SFTBMB_LOKI_ADDR`) под bearer-токеном из `./.env.local`. Активируй когда юзер просит "посмотри логи", "что в логах", "следи за деплоем", "почему упало в проде", "/query-logs".
 ---
 
 # Skill: query-logs
 
-Чтение логов через корп-Loki read API (`https://loki.sftbmb.ru`). Tenant-изоляция — на стороне `tenant-auth` ForwardAuth (см. infra-repo `docs/project-secrets.md`). Этот repo даёт обёртку `scripts/tools/logs.sh` + правила, ничего к корпу не патчит.
+Чтение логов через корп-Loki read API. Адрес берётся из `SFTBMB_LOKI_ADDR` (managed: `https://loki.sftbmb.ru`; self-hosted: свой Loki из форка `corp-infra-template`) — без переменной `logs.sh` падает с понятным `FAIL`, не уходит молча на managed-хост. Tenant-изоляция — на стороне `tenant-auth` ForwardAuth (см. infra-repo `docs/project-secrets.md`). Этот repo даёт обёртку `scripts/tools/logs.sh` + правила, ничего к корпу не патчит.
 
 **Инструмент один:** `scripts/tools/logs.sh` (три режима). Tempo (trace API) — отдельно через `curl`, в этот skill пока не входит.
 
@@ -20,12 +20,13 @@ description: Прочитать или последить логи задепл�
 
 - **Локальный dev.** `OTEL_STDOUT_ONLY=true` (дефолт в `.env.example`) — логи идут в stdout, в Loki ничего не попадает. Смотри прямо в терминал/stderr контейнера.
 - **Юзер хочет метрики (latency / RPS / errors-per-second)** — это VictoriaMetrics, наружу не опубликована. Скажи юзеру смотреть в Grafana.
-- **Юзер хочет трейсы по trace-id** — Tempo read API существует (`tempo.sftbmb.ru/api/traces/<id>`), но в этом skill'е не покрыт. Сделай `curl -H "Authorization: Bearer $(grep -oE 'SFTBMB_OBS_TOKEN=[^[:space:]]+' .env.local | cut -d= -f2-)" https://tempo.sftbmb.ru/api/traces/<id>` либо подними отдельный agent-tool позже.
+- **Юзер хочет трейсы по trace-id** — Tempo read API существует (`https://tempo.sftbmb.ru/api/traces/<id>`), но в этом skill'е не покрыт, и обёртки-инструмента под него нет. **Не** дёргай `curl` с inline-подстановкой токена из `.env.local` (`grep ... .env.local`) — значение утечёт в transcript (см. Anti-patterns ниже). Нужны трейсы — заведи agent-tool по образцу `scripts/tools/logs.sh` (читает токен в bash-процессе, не эхо-ит), затем зови его.
 
 ## Pre-flight
 
 - [ ] `command -v logcli` — установлен? Если нет → `make setup` (или скажи юзеру).
 - [ ] `./.env.local` существует и содержит строку `SFTBMB_OBS_TOKEN=...`? Сам файл читать не нужно — запусти `logs.sh`, он прочитает токен через bash (значение не попадёт в чат), или вернёт `FAIL: no SFTBMB_OBS_TOKEN` с инструкцией.
+- [ ] `SFTBMB_LOKI_ADDR` задан (env или строка в `./.env.local`)? Обязателен — managed `https://loki.sftbmb.ru`, self-hosted — свой Loki. Без него `logs.sh` вернёт `FAIL: no SFTBMB_LOKI_ADDR` (Tempo trace API — тот же принцип: свой endpoint, когда под него появится обёртка-инструмент).
 - [ ] Знаешь `service` label? Дефолт в шаблоне — имя бинаря (`api` для runtime, `migrate` для init-контейнера миграций); маппинг — `OTEL_SERVICE_NAME` env при деплое.
 - [ ] Для `watch` — оценил длительность? Не больше 10m по дефолту, юзер может расширить.
 

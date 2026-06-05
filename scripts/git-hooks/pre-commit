@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure this script is executable
-chmod +x "$0"
-
 echo "pre-commit: checking formatting with gofumpt..."
 unformatted=$(gofumpt -l .)
 if [ -n "$unformatted" ]; then

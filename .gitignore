@@ -7,6 +7,11 @@ bin/
 *.out
 coverage.*
 
+# Секреты / TLS-артефакты — в репо не хранятся
+*.pem
+*.key
+credentials.md
+
 # Python e2e-харнес (test/)
 test/stack/.e2e-endpoints.env
 test/.venv/

@@ -3,7 +3,7 @@
 Дизайн платформы/стека сервиса — **первичный source of truth** и **вход для skill
 `de-template`**. Зеркалит модель доменов (она живёт в соседнем docs-репо): 8 singleton-
 артефактов (по одному на kind), заполняются через `/stack-deep-dive`, валидируются
-`scripts/tools/validate-stack-doc.sh`.
+`make validate-stack-docs`.
 
 Где домены (соседний docs-репо) отвечают на «какая бизнес-логика», `docs/stack/` отвечает на «на
 какой платформе она крутится»: какой runtime, какие env, какие kit'ы golibinfra, какие
@@ -38,7 +38,7 @@ status: draft          # draft → stable (через валидатор)
 
 1. Скопировать `_templates/<kind>.md` → `docs/stack/<kind>.md` (8 штук).
 2. `/stack-deep-dive` — заполнить волнами вопросов inside-out.
-3. `scripts/tools/validate-stack-doc.sh docs/stack` зелёный → промоушн `status: draft → stable`.
+3. `make validate-stack-docs` зелёный → промоушн `status: draft → stable`.
 4. `/de-template` читает stable-артефакты и разворачивает фундамент проекта по секциям `Generates`.
 
 ## Gate
