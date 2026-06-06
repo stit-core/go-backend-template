@@ -43,7 +43,6 @@ mkdir -p "$DOMAIN_DIR/delivery/http"
 mkdir -p "$DOMAIN_DIR/infra/postgres/queries"
 mkdir -p "$DOMAIN_DIR/module"
 
-# entity.go
 cat >"$DOMAIN_DIR/entity.go" <<EOF
 package $NAME
 
@@ -58,7 +57,6 @@ type $TITLE struct {
 }
 EOF
 
-# dto.go
 cat >"$DOMAIN_DIR/dto.go" <<EOF
 package $NAME
 
@@ -71,7 +69,6 @@ type Create${TITLE}Output struct {
 }
 EOF
 
-# errors.go
 cat >"$DOMAIN_DIR/errors.go" <<EOF
 package $NAME
 
@@ -83,7 +80,6 @@ var (
 )
 EOF
 
-# events.go
 cat >"$DOMAIN_DIR/events.go" <<EOF
 package $NAME
 
@@ -98,7 +94,6 @@ type ${TITLE}Created struct {
 }
 EOF
 
-# policy.go
 cat >"$DOMAIN_DIR/policy.go" <<EOF
 package $NAME
 
@@ -114,7 +109,6 @@ func (p *Policy) CanCreate(_ context.Context) error {
 }
 EOF
 
-# policy_test.go
 cat >"$DOMAIN_DIR/policy_test.go" <<EOF
 package ${NAME}_test
 
@@ -133,7 +127,6 @@ func TestPolicy_CanCreate(t *testing.T) {
 }
 EOF
 
-# usecase.go
 cat >"$DOMAIN_DIR/usecase.go" <<EOF
 package $NAME
 
@@ -161,7 +154,6 @@ func NewUsecase(repo Repository, auth Authorizer) *Usecase {
 }
 EOF
 
-# usecase_test.go
 cat >"$DOMAIN_DIR/usecase_test.go" <<EOF
 package ${NAME}_test
 
@@ -179,7 +171,6 @@ func TestUsecase_New(t *testing.T) {
 }
 EOF
 
-# delivery/http/handler.go
 cat >"$DOMAIN_DIR/delivery/http/handler.go" <<EOF
 package http
 
@@ -206,17 +197,14 @@ func Register(api huma.API, h *Handler) {
 }
 EOF
 
-# delivery/http/dto.go
 cat >"$DOMAIN_DIR/delivery/http/dto.go" <<EOF
 package http
 EOF
 
-# delivery/http/view.go
 cat >"$DOMAIN_DIR/delivery/http/view.go" <<EOF
 package http
 EOF
 
-# delivery/http/handler_test.go
 cat >"$DOMAIN_DIR/delivery/http/handler_test.go" <<EOF
 package http_test
 
@@ -233,7 +221,6 @@ func TestNewHandler(t *testing.T) {
 }
 EOF
 
-# infra/postgres/repository.go
 cat >"$DOMAIN_DIR/infra/postgres/repository.go" <<EOF
 package postgres
 
@@ -276,7 +263,6 @@ cat >"$DOMAIN_DIR/infra/postgres/queries/$NAME.sql" <<EOF
 -- SELECT * FROM ${NAME}s WHERE id = \$1;
 EOF
 
-# module/module.go
 cat >"$DOMAIN_DIR/module/module.go" <<EOF
 package module
 
@@ -302,7 +288,6 @@ var Module = fx.Module(
 )
 EOF
 
-# module/adapters.go
 cat >"$DOMAIN_DIR/module/adapters.go" <<EOF
 package module
 

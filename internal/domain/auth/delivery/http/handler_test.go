@@ -33,8 +33,6 @@ func setCookieNames(resp http.Header) []string {
 	return out
 }
 
-// --- Login ---
-
 func TestLogin_HappyPath(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
@@ -67,8 +65,6 @@ func TestLogin_AccountLocked(t *testing.T) {
 	resp := api.Post("/api/auth/login", strings.NewReader(`{"email":"a@b.com","password":"x"}`))
 	handlertest.AssertStatus(t, resp, http.StatusTooManyRequests)
 }
-
-// --- Refresh ---
 
 func TestRefresh_HappyPath(t *testing.T) {
 	t.Parallel()
@@ -110,8 +106,6 @@ func TestRefresh_Reused(t *testing.T) {
 	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=reused.jwt")
 	handlertest.AssertAPIError(t, resp, http.StatusUnauthorized, "AUTH_REFRESH_REUSED")
 }
-
-// --- Logout ---
 
 func TestLogout_WithCookie(t *testing.T) {
 	t.Parallel()
