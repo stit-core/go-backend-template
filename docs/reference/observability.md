@@ -1,7 +1,7 @@
 # Observability
 
 Шаблон эмитит **метрики, логи, трейсы** через OTel в корп OTLP-ingest (auth bearer =
-`OTEL_TOKEN`; managed-адрес `otel.sftbmb.ru`, self-hosted — свой через
+`OTEL_TOKEN`; managed-адрес `otel.stit.tech`, self-hosted — свой через
 `OTEL_EXPORTER_OTLP_ENDPOINT`). Все три сигнала коррелируются через `trace_id`.
 Telemetry-режим задаётся артефактом `docs/stack/observability.md`.
 
@@ -74,7 +74,7 @@ Production-значения в репо не попадают — их выда�
 
 ## Где смотреть (Grafana)
 
-Корп-Grafana (`grafana.sftbmb.ru`), папка **Apps/** — общие дашборды для всех
+Корп-Grafana (`grafana.stit.tech`), папка **Apps/** — общие дашборды для всех
 golibinfra-сервисов, фильтр по `$tenant`/`$service`/`$env`: Service Overview, HTTP, Database,
 Bus, Outbox, Logs, Traces, Business, Auth. В шапке: `tenant=<project>`, `service=backend`,
 `env=<env>`.

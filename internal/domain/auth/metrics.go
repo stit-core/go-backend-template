@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"git.sftbmb.ru/sftbmb-core/golibinfra/bizmetric"
+	"git.stit.tech/stit-core/golibinfra/bizmetric"
 )
 
 // Metrics — security-relevant counters auth-домена. Имена строятся

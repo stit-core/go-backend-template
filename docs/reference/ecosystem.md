@@ -1,11 +1,11 @@
 # Ecosystem
 
-Место шаблона в экосистеме sftbmb: **5 форкаемых шаблонов** `sftbmb-core/`
+Место шаблона в экосистеме sftbmb: **5 форкаемых шаблонов** `stit-core/`
 (`corp-infra-template`, `project-infra-template-compose`, `go-backend-template`,
 `spa-frontend-template`, `project-docs-template`) + 2 общие библиотеки
-`sftbmb-core/golibinfra` (Go-kits) и `sftbmb-core/ui-lib` (`@sftbmb/ui`,
+`stit-core/golibinfra` (Go-kits) и `stit-core/ui-lib` (`@stit-design/ui`,
 frontend design-system). Корп control-plane — это репо `corp-infra-template`
-(managed = инстанс на `*.sftbmb.ru`; self-hosted = форк `<org>/infra`). Канон
+(managed = инстанс на `*.stit.tech`; self-hosted = форк `<org>/infra`). Канон
 контрактов — `corp-infra-template/docs/ecosystem.md`.
 
 ## Роль
@@ -27,7 +27,7 @@ frontend design-system). Корп control-plane — это репо `corp-infra-
 
 ## Зависит от / используется
 
-- **Зависит от:** `sftbmb-core/golibinfra` (kit'ы: telemetry, httpkit, pgkit, authnkit,
+- **Зависит от:** `stit-core/golibinfra` (kit'ы: telemetry, httpkit, pgkit, authnkit,
   outboxkit, natskit, …); `corp-infra-template` (контракт `service_namespace == tenant`, OTLP
   endpoint, registry); `git.${DOMAIN}` (push images).
 - **Используется:** `<client-org>/infra` (форк `project-infra-template-compose`) — пуллит
@@ -53,7 +53,7 @@ frontend design-system). Корп control-plane — это репо `corp-infra-
 ## Self-hosted путь
 
 Эндпоинты выше (`vault.${DOMAIN}`, `otel.${DOMAIN}`, `git.${DOMAIN}`) на managed-пути
-указывают на хостинг sftbmb (`*.sftbmb.ru`); на self-hosted — на ваш форк
+указывают на хостинг sftbmb (`*.stit.tech`); на self-hosted — на ваш форк
 `corp-infra-template`. Адреса задаются через `OTEL_EXPORTER_OTLP_ENDPOINT`, `VAULT_ADDR`,
 `REGISTRY_HOST` в `.env` (см. `.env.example`) — архитектура кода при этом не меняется,
 меняется только хост. Вендор-лока нет.

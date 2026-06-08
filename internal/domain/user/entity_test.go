@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user"
-	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 )
 
 func TestNewUser(t *testing.T) {

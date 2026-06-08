@@ -21,7 +21,7 @@ paths:
 
 ## Как вместо этого
 
-✅ Утверждение в настоящем времени: «module path — `git.sftbmb.ru/sftbmb-core/go-backend-template`».
+✅ Утверждение в настоящем времени: «module path — `git.stit.tech/stit-core/go-backend-template`».
 ✅ Условие эмиссии/применимости вместо ссылки на прошлый замер: «`outbox_lag_seconds` эмитится, если приложение подключило `LagReporter`», а не «в snapshot'е 2026-05-14 не появилось».
 ✅ Триггер пересмотра как forward-факт: «пересмотр — при необходимости через обсуждение с владельцем», а не «пока не делаем».
 ✅ Незакрытая работа — отдельной forward-строкой в `.claude/plans/roadmap.md → ## Active` (или `## Backlog`), не комментарием в done-артефакте.

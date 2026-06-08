@@ -28,7 +28,7 @@ domain), не здесь. Движок **skill-only**: нет committed-скри
 
 ## Gate (проверить ДО любых правок)
 
-1. **Не канонический шаблон.** `go.mod` module path всё ещё `git.sftbmb.ru/sftbmb-core/go-backend-template`
+1. **Не канонический шаблон.** `go.mod` module path всё ещё `git.stit.tech/stit-core/go-backend-template`
    И каталог — не временная копия/форк → СТОП. Запуск на самом шаблоне его уничтожит. Спроси
    юзера явно подтвердить, что это форк/тест-копия, прежде чем продолжать.
 2. **Стек stable.** Валидатор зелёный, иначе СТОП → `stack-deep-dive`.
@@ -63,7 +63,7 @@ domain), не здесь. Движок **skill-only**: нет committed-скри
 (go.mod + все импорты) одной заменой:
 
 ```bash
-OLD=git.sftbmb.ru/sftbmb-core/go-backend-template
+OLD=git.stit.tech/stit-core/go-backend-template
 NEW=<module path из docs/stack/service.md>
 git grep -lF "$OLD" | xargs sed -i "s#$OLD#$NEW#g"
 go mod tidy

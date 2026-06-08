@@ -8,11 +8,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user"
-	userpg "git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user/infra/postgres"
-	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/platform/identity"
-	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/testkit/pgseed"
-	"git.sftbmb.ru/sftbmb-core/golibinfra/testkit"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
+	userpg "git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/postgres"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/go-backend-template/internal/testkit/pgseed"
+	"git.stit.tech/stit-core/golibinfra/testkit"
 )
 
 func setup(t *testing.T) *userpg.Repository {

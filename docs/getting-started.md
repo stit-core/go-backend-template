@@ -9,12 +9,12 @@
 ## 0. Форк
 
 1. Gitea → `go-backend-template` → **Use this template** → `<org>/<service>`.
-2. `git clone git@git.sftbmb.ru:<org>/<service>.git && cd <service>`.
+2. `git clone git@git.stit.tech:<org>/<service>.git && cd <service>`.
 3. Один раз на машину — доступ к приватным модулям той же Gitea:
-   `git config --global url.git@git.sftbmb.ru:.insteadOf https://git.sftbmb.ru/`.
+   `git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/`.
 4. `make setup` — pinned dev-tools + git-хуки.
 
-> `git.sftbmb.ru` здесь — managed-хост Gitea. Self-hosted форк живёт на своей Gitea:
+> `git.stit.tech` здесь — managed-хост Gitea. Self-hosted форк живёт на своей Gitea:
 > подставь её хост в clone-URL и в `insteadOf`-rewrite (это тот же хост, что в module
 > path `go.mod`). `make setup` выводит хост из `go.mod` автоматически и предупредит,
 > если rewrite не настроен.

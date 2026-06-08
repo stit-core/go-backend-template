@@ -7,11 +7,11 @@ formatter: goimports
 force-file-write: true
 template: testify
 packages:
-  git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user:
+  git.stit.tech/stit-core/go-backend-template/internal/domain/user:
     interfaces:
       Repository:
       Authorizer:
-  git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/auth:
+  git.stit.tech/stit-core/go-backend-template/internal/domain/auth:
     interfaces:
       UserReader:
       PasswordVerifier:
@@ -21,19 +21,19 @@ packages:
       SessionRepository:
       Authorizer:
       LoginGuard:
-  git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/verification:
+  git.stit.tech/stit-core/go-backend-template/internal/domain/verification:
     interfaces:
       UserReader:
       PasswordSetter:
       EmailVerificationSetter:
       Repository:
       Mailer:
-  git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/user/delivery/http:
+  git.stit.tech/stit-core/go-backend-template/internal/domain/user/delivery/http:
     interfaces:
       Usecase:
-  git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/auth/delivery/http:
+  git.stit.tech/stit-core/go-backend-template/internal/domain/auth/delivery/http:
     interfaces:
       Usecase:
-  git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/verification/delivery/http:
+  git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/http:
     interfaces:
       Usecase:

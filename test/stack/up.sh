@@ -2,7 +2,7 @@
 # test/stack/up.sh — собрать бинари локально и поднять стек.
 #
 # Резолв секретов (НЕ логируем, НЕ возвращаем наружу):
-#   SFTBMB_OBS_TOKEN: env > ./.env.local
+#   STIT_OBS_TOKEN: env > ./.env.local
 #   OTEL_TENANT:    env > ./.env.local
 #
 # Шаги:
@@ -36,11 +36,11 @@ resolve_kv() {
     printf '%s' "$v"
 }
 
-TOKEN=$(resolve_kv SFTBMB_OBS_TOKEN "${SFTBMB_OBS_TOKEN:-}") || true
+TOKEN=$(resolve_kv STIT_OBS_TOKEN "${STIT_OBS_TOKEN:-}") || true
 TENANT=$(resolve_kv OTEL_TENANT "${OTEL_TENANT:-}") || true
 
 if [ -z "${TOKEN:-}" ]; then
-    echo "FAIL: no SFTBMB_OBS_TOKEN. Add line 'SFTBMB_OBS_TOKEN=<token>' to ./.env.local (or set env)." >&2
+    echo "FAIL: no STIT_OBS_TOKEN. Add line 'STIT_OBS_TOKEN=<token>' to ./.env.local (or set env)." >&2
     exit 1
 fi
 if [ -z "${TENANT:-}" ]; then
@@ -48,7 +48,7 @@ if [ -z "${TENANT:-}" ]; then
     exit 1
 fi
 
-export SFTBMB_OBS_TOKEN="$TOKEN"
+export STIT_OBS_TOKEN="$TOKEN"
 export OTEL_TENANT="$TENANT"
 
 # Креды seed-admin (one-off bootstrap первого admin). Не прод-секрет —

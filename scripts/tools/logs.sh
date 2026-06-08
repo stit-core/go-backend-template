@@ -8,12 +8,12 @@
 #   scripts/tools/logs.sh watch   --service NAME [--match REGEX] --for 5m
 #
 # Токен берётся в этом порядке:
-#   1) env SFTBMB_OBS_TOKEN
-#   2) строка `SFTBMB_OBS_TOKEN=...` в ./.env.local
+#   1) env STIT_OBS_TOKEN
+#   2) строка `STIT_OBS_TOKEN=...` в ./.env.local
 #
 # Endpoint:
-#   SFTBMB_LOKI_ADDR — обязателен (FAIL при пустом, не уходим молча на managed).
-#   managed: https://loki.sftbmb.ru; self-hosted: свой Loki. Tenant зашит в токен — не передаётся отдельно.
+#   STIT_LOKI_ADDR — обязателен (FAIL при пустом, не уходим молча на managed).
+#   managed: https://loki.stit.tech; self-hosted: свой Loki. Tenant зашит в токен — не передаётся отдельно.
 #
 # Канонический status-line в конце: `OK` / `FAIL: <reason>`.
 
@@ -57,28 +57,28 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # === Token resolution (НЕ логируем токен, НЕ возвращаем его наружу) ===
 TOKEN=""
-if [ -n "${SFTBMB_OBS_TOKEN:-}" ]; then
-    TOKEN="$SFTBMB_OBS_TOKEN"
+if [ -n "${STIT_OBS_TOKEN:-}" ]; then
+    TOKEN="$STIT_OBS_TOKEN"
 elif [ -f .env.local ]; then
-    line=$(grep -E '^[[:space:]]*(export[[:space:]]+)?SFTBMB_OBS_TOKEN=' .env.local 2>/dev/null | tail -1)
+    line=$(grep -E '^[[:space:]]*(export[[:space:]]+)?STIT_OBS_TOKEN=' .env.local 2>/dev/null | tail -1)
     TOKEN="${line#*=}"
     TOKEN="${TOKEN%\"}"; TOKEN="${TOKEN#\"}"
     TOKEN="${TOKEN%\'}"; TOKEN="${TOKEN#\'}"
 fi
 if [ -z "$TOKEN" ]; then
-    echo "FAIL: no SFTBMB_OBS_TOKEN. Set env or add line 'SFTBMB_OBS_TOKEN=<token>' to ./.env.local" >&2
+    echo "FAIL: no STIT_OBS_TOKEN. Set env or add line 'STIT_OBS_TOKEN=<token>' to ./.env.local" >&2
     exit 1
 fi
 
 # === Endpoint ===
 # FAIL-fast при пустом: без явного адреса не уходим молча на managed-хост sftbmb
 # (self-hosted форк иначе утёк бы свои запросы на чужой control-plane). Managed —
-# выставь SFTBMB_LOKI_ADDR=https://loki.sftbmb.ru; self-hosted — адрес своего Loki.
-if [ -z "${SFTBMB_LOKI_ADDR:-}" ]; then
-    echo "FAIL: no SFTBMB_LOKI_ADDR. Set env or add 'SFTBMB_LOKI_ADDR=<loki-url>' to ./.env.local (managed: https://loki.sftbmb.ru; self-hosted: свой Loki из corp-infra-template)" >&2
+# выставь STIT_LOKI_ADDR=https://loki.stit.tech; self-hosted — адрес своего Loki.
+if [ -z "${STIT_LOKI_ADDR:-}" ]; then
+    echo "FAIL: no STIT_LOKI_ADDR. Set env or add 'STIT_LOKI_ADDR=<loki-url>' to ./.env.local (managed: https://loki.stit.tech; self-hosted: свой Loki из corp-infra-template)" >&2
     exit 1
 fi
-LOKI_ADDR="$SFTBMB_LOKI_ADDR"
+LOKI_ADDR="$STIT_LOKI_ADDR"
 export LOKI_ADDR LOKI_BEARER_TOKEN="$TOKEN"
 
 # === Tool check ===

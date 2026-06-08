@@ -6,8 +6,8 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.sftbmb.ru/sftbmb-core/golibinfra/logkit"
-	"git.sftbmb.ru/sftbmb-core/golibinfra/natskit"
+	"git.stit.tech/stit-core/golibinfra/logkit"
+	"git.stit.tech/stit-core/golibinfra/natskit"
 )
 
 type Usecase interface {

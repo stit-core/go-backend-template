@@ -8,7 +8,7 @@ status: draft
 # Service — идентичность сервиса
 
 ## Identity
-<Имя сервиса, module path (`git.sftbmb.ru/<org>/<service>`), одно-строчное описание роли.>
+<Имя сервиса, module path (`git.stit.tech/<org>/<service>`), одно-строчное описание роли.>
 <`project-slug`: slug продукта в соседнем docs-репо — `scaffold` читает домены из
 `<docs-path>/projects/<project-slug>/domains/`. `docs-path`: путь к форку `<org>/docs`
 (дефолт `../docs` — sibling-чекаут рядом с этим репо). На каноническом шаблоне не задан.>

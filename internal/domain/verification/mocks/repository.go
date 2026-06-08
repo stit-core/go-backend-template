@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/verification"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	mock "github.com/stretchr/testify/mock"
 )
 

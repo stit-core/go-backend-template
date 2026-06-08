@@ -5,7 +5,7 @@
 См. `.claude/rules/domain-architecture.md` для бэкграунда (автогрузится при работе с `internal/domain/`).
 
 > `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
-> `git.sftbmb.ru/<org>/backend`). Подставляй фактический, не копируй буквально.
+> `git.stit.tech/<org>/backend`). Подставляй фактический, не копируй буквально.
 
 ## Когда применять
 

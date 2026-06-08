@@ -8,13 +8,13 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 
-	"git.sftbmb.ru/sftbmb-core/go-backend-template/pkg/tokens"
-	"git.sftbmb.ru/sftbmb-core/golibinfra/authnkit"
-	"git.sftbmb.ru/sftbmb-core/golibinfra/clockkit"
-	"git.sftbmb.ru/sftbmb-core/golibinfra/logkit"
-	"git.sftbmb.ru/sftbmb-core/golibinfra/outboxkit"
-	"git.sftbmb.ru/sftbmb-core/golibinfra/pgkit"
-	"git.sftbmb.ru/sftbmb-core/golibinfra/telemetry"
+	"git.stit.tech/stit-core/go-backend-template/pkg/tokens"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/logkit"
+	"git.stit.tech/stit-core/golibinfra/outboxkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
+	"git.stit.tech/stit-core/golibinfra/telemetry"
 )
 
 const minPasswordLen = 8

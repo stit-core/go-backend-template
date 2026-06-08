@@ -84,7 +84,7 @@ point форка.
 
 ## Запуск
 
-Нужен Docker и `./.env.local` с `SFTBMB_OBS_TOKEN` + `OTEL_TENANT`
+Нужен Docker и `./.env.local` с `STIT_OBS_TOKEN` + `OTEL_TENANT`
 (шаблон — `.env.local.example`; формат — `.claude/rules/env-local.md`).
 
 ```

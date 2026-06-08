@@ -14,13 +14,13 @@ GOBIN="$(go env GOPATH)/bin"
 mkdir -p "$GOBIN"
 
 # Хост приватных deps берём из module path в go.mod — после /de-template форк
-# может жить на своей Gitea, а не на git.sftbmb.ru. golibinfra и прочие приватные
+# может жить на своей Gitea, а не на git.stit.tech. golibinfra и прочие приватные
 # модули с этого хоста не зарегистрированы в sum/proxy.golang.org: без GOPRIVATE
 # Go идёт через proxy → 404 → direct VCS → запрос пароля → fail.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODULE_PATH="$(awk '/^module /{print $2; exit}' "$ROOT/go.mod" 2>/dev/null || true)"
 MODULE_HOST="${MODULE_PATH%%/*}"
-: "${MODULE_HOST:=git.sftbmb.ru}"   # fallback, если go.mod ещё не прочитан
+: "${MODULE_HOST:=git.stit.tech}"   # fallback, если go.mod ещё не прочитан
 
 # Append, не overwrite: сохраняем существующий GOPRIVATE (у разработчика могут
 # быть другие приватные модули), добавляем свой хост только если его там нет.

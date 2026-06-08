@@ -5,12 +5,12 @@
 ### Go HTTP-бэкенд со стандартами из коробки
 
 Шаблон Go-бэкенда экосистемы sftbmb: huma/v2 + chi + pgx/v5 + sqlc + uber/fx,
-поверх [`golibinfra`](https://git.sftbmb.ru/sftbmb-core/golibinfra) (telemetry,
+поверх [`golibinfra`](https://git.stit.tech/stit-core/golibinfra) (telemetry,
 authn, outbox, cache, NATS, audit). Observability, тесты и релиз — встроены;
 вы пишете домены, не обвязку.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2563eb)](LICENSE)
-[![Часть sftbmb](https://img.shields.io/badge/sftbmb-открытые_шаблоны-6366f1)](https://git.sftbmb.ru/sftbmb-core/sftbmb-public)
+[![Часть sftbmb](https://img.shields.io/badge/sftbmb-открытые_шаблоны-6366f1)](https://git.stit.tech/stit-core/sftbmb-public)
 [![Go](https://img.shields.io/badge/Go-00ADD8)](#что-внутри)
 [![API](https://img.shields.io/badge/API-huma%2Fv2_%2B_OpenAPI_3.1-0ea5e9)](#что-внутри)
 [![DB](https://img.shields.io/badge/DB-pgx_%2B_sqlc-22c55e)](#что-внутри)
@@ -26,20 +26,20 @@ authn, outbox, cache, NATS, audit). Observability, тесты и релиз — 
 project-docs-template (<org>/docs)   ← домены проектируются здесь
         │  scaffold доменов в Go по stable-артефактам
         ▼
-go-backend-template (<org>/backend)  ← вы здесь   ──► sftbmb-core/golibinfra
+go-backend-template (<org>/backend)  ← вы здесь   ──► stit-core/golibinfra
         │  build + push image
         ▼
 project-infra-template-compose (<org>/infra)   ← деплой образа
 ```
 
 Корп control-plane (registry, OTLP-ingest, Vault) —
-[`corp-infra-template`](https://git.sftbmb.ru/sftbmb-core/corp-infra-template).
+[`corp-infra-template`](https://git.stit.tech/stit-core/corp-infra-template).
 Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
 
 **Два пути — без вендор-лока.** Зависимости от control-plane (registry,
-OTLP-ingest, Vault) указывают либо на наш **managed** (`git.sftbmb.ru` /
-`otel.sftbmb.ru`), либо на **ваш self-hosted** из
-[`corp-infra-template`](https://git.sftbmb.ru/sftbmb-core/corp-infra-template).
+OTLP-ingest, Vault) указывают либо на наш **managed** (`git.stit.tech` /
+`otel.stit.tech`), либо на **ваш self-hosted** из
+[`corp-infra-template`](https://git.stit.tech/stit-core/corp-infra-template).
 Эндпоинты конфигурируются через env/Vault, не зашиты; архитектура одинакова.
 
 ## Использовать как шаблон
@@ -54,7 +54,7 @@ OTLP-ingest, Vault) указывают либо на наш **managed** (`git.sf
 ```bash
 # 1. Use this template → <org>/<service>, склонировать
 # 2. (один раз на машину) доступ к приватным модулям той же Gitea:
-git config --global url.git@git.sftbmb.ru:.insteadOf https://git.sftbmb.ru/
+git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/
 # 3. зелёный gate (make setup выводит хост из go.mod):
 make setup && make check
 # 4. запустить онбординг:
@@ -72,7 +72,7 @@ Module path, README, фундамент и удаление reference-домен
 - **БД** — pgx/v5 + sqlc (typed queries), golang-migrate.
 - **DI** — uber/fx. Один runtime-бинарь `cmd/api` (HTTP + outbox-drain + NATS-subs
   + jobs); `cmd/migrate` — отдельный image, init-контейнер.
-- **Платформа** — [`golibinfra`](https://git.sftbmb.ru/sftbmb-core/golibinfra):
+- **Платформа** — [`golibinfra`](https://git.stit.tech/stit-core/golibinfra):
   OTLP telemetry, JWT/session authn, outbox, brute-force, cache, NATS, audit, clock.
 - **DDD** — артефакты доменов в соседнем docs-репо; маппинг в Go —
   [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
@@ -105,7 +105,7 @@ make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /r
 
 Типизированный pytest-харнес `test/` поверх docker-compose стека
 (postgres/nats/redis/otel-agent/migrate/api). Нужен Docker и `./.env.local`
-(`SFTBMB_OBS_TOKEN` + `OTEL_TENANT`; шаблон — `.env.local.example`). Детали —
+(`STIT_OBS_TOKEN` + `OTEL_TENANT`; шаблон — `.env.local.example`). Детали —
 `test/README.md`.
 
 ```bash
@@ -123,8 +123,8 @@ make e2e-smoke    # только -m smoke (быстрый gate)
 
 Это один из открытых шаблонов sftbmb (Apache-2.0) — фундамент «-1 уровня»,
 берите бесплатно и владейте. Карта всех шаблонов и точка входа —
-**[витрина sftbmb](https://git.sftbmb.ru/sftbmb-core/sftbmb-public)**. Нужна
-команда, стандарт или поддержка — **[наш подход и контакты (vision)](https://git.sftbmb.ru/sftbmb/vision)**.
+**[витрина sftbmb](https://git.stit.tech/stit-core/sftbmb-public)**. Нужна
+команда, стандарт или поддержка — **[наш подход и контакты (vision)](https://git.stit.tech/sftbmb/vision)**.
 
 ## Лицензия
 

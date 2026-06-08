@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/domain/auth"
-	"git.sftbmb.ru/sftbmb-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 )
 
 func TestPolicy_CanChangePassword(t *testing.T) {

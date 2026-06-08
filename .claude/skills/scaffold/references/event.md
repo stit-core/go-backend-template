@@ -5,7 +5,7 @@
 См. `.claude/rules/events-and-messaging.md` (бэкграунд — автогрузится при правке `events.go` / `delivery/nats/` / `internal/jobs/`) и `docs/reference/architecture.md § События и messaging`.
 
 > `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
-> `git.sftbmb.ru/<org>/backend`). Подставляй фактический, не копируй буквально.
+> `git.stit.tech/<org>/backend`). Подставляй фактический, не копируй буквально.
 
 ## Когда применять
 
@@ -99,8 +99,8 @@ import (
 
     "go.uber.org/fx"
 
-    "git.sftbmb.ru/sftbmb-core/golibinfra/logkit"
-    "git.sftbmb.ru/sftbmb-core/golibinfra/natskit"
+    "git.stit.tech/stit-core/golibinfra/logkit"
+    "git.stit.tech/stit-core/golibinfra/natskit"
 )
 
 type Usecase interface {

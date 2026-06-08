@@ -92,7 +92,7 @@ services:
     environment:
       # Резолвится в up.sh из ./.env.local.
       OTEL_TENANT: ${OTEL_TENANT}
-      OTEL_TOKEN: ${SFTBMB_OBS_TOKEN}
+      OTEL_TOKEN: ${STIT_OBS_TOKEN}
     healthcheck:
       # Образ otel-collector-contrib distroless: внутри ничего кроме бинаря.
       # validate проверяет что конфиг разобран — это самый дешёвый probe.

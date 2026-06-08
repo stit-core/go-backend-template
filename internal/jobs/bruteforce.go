@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"git.sftbmb.ru/sftbmb-core/golibinfra/bruteforcekit"
-	"git.sftbmb.ru/sftbmb-core/golibinfra/timerkit"
+	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
+	"git.stit.tech/stit-core/golibinfra/timerkit"
 )
 
 func NewBruteforceCleanup(g bruteforcekit.Guard) timerkit.Job {

@@ -11,7 +11,7 @@ ARG GIT_SHA=unknown
 RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
     apk add --update-cache git openssh-client ca-certificates
 
-ENV GOPRIVATE=git.sftbmb.ru/*
+ENV GOPRIVATE=git.stit.tech/*
 
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/.cache/go-build \
