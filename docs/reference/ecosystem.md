@@ -3,7 +3,7 @@
 Место шаблона в экосистеме stit: **5 форкаемых шаблонов** `stit-core/`
 (`corp-infra-template`, `project-infra-template-compose`, `go-backend-template`,
 `spa-frontend-template`, `project-docs-template`) + 2 общие библиотеки
-`stit-core/golibinfra` (Go-kits) и `stit-core/ui-lib` (`@stit-design/ui`,
+`stit-core/golibinfra` (Go-kits) и `stit-core/ui-lib` (`@stit/ui`,
 frontend design-system). Корп control-plane — это репо `corp-infra-template`
 (managed = инстанс на `*.stit.tech`; self-hosted = форк `<org>/infra`). Канон
 контрактов — `corp-infra-template/docs/ecosystem.md`.
