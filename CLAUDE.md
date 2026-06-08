@@ -1,6 +1,6 @@
 # go-backend-template — гайд для агентов
 
-Шаблон Go HTTP-бэкенда sftbmb: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + `golibinfra`
+Шаблон Go HTTP-бэкенда stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + `golibinfra`
 (telemetry, authn, outbox, brute-force, cache, NATS, audit, clock).
 
 Этот файл — **ядро (always-on) + роутер**. Детали — в `docs/`, контекстные правила — в
@@ -39,7 +39,7 @@ claim «готово» / push — **`make check`** (fmt+vet+lint+test+build+gen-
 | Архитектура, слои, ports/adapters, события, non-goals | `docs/reference/architecture.md` + rule `domain-architecture` |
 | Observability (метрики/логи/трейсы, Grafana) | `docs/reference/observability.md` + skill `/query-logs` (чтение прод-логов) + rule `env-local` (где токен) |
 | Release (образы, handoff, откат) | `docs/reference/release.md` + skill `/release` |
-| Экосистема, контракт со sftbmb-инфрой | `docs/reference/ecosystem.md` |
+| Экосистема, контракт со stit-инфрой | `docs/reference/ecosystem.md` |
 | Тесты, моки, TDD, e2e | rule `tests-pipeline` + `test/README.md` |
 | Миграции, sqlc | rule `sqlc-and-migrations` + skill `/scaffold` (вариант migration) |
 | Outbox / NATS / jobs | rule `events-and-messaging` |

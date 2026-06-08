@@ -71,7 +71,7 @@ if [ -z "$TOKEN" ]; then
 fi
 
 # === Endpoint ===
-# FAIL-fast при пустом: без явного адреса не уходим молча на managed-хост sftbmb
+# FAIL-fast при пустом: без явного адреса не уходим молча на managed-хост stit
 # (self-hosted форк иначе утёк бы свои запросы на чужой control-plane). Managed —
 # выставь STIT_LOKI_ADDR=https://loki.stit.tech; self-hosted — адрес своего Loki.
 if [ -z "${STIT_LOKI_ADDR:-}" ]; then

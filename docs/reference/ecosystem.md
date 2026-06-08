@@ -1,6 +1,6 @@
 # Ecosystem
 
-Место шаблона в экосистеме sftbmb: **5 форкаемых шаблонов** `stit-core/`
+Место шаблона в экосистеме stit: **5 форкаемых шаблонов** `stit-core/`
 (`corp-infra-template`, `project-infra-template-compose`, `go-backend-template`,
 `spa-frontend-template`, `project-docs-template`) + 2 общие библиотеки
 `stit-core/golibinfra` (Go-kits) и `stit-core/ui-lib` (`@stit-design/ui`,
@@ -53,7 +53,7 @@ frontend design-system). Корп control-plane — это репо `corp-infra-
 ## Self-hosted путь
 
 Эндпоинты выше (`vault.${DOMAIN}`, `otel.${DOMAIN}`, `git.${DOMAIN}`) на managed-пути
-указывают на хостинг sftbmb (`*.stit.tech`); на self-hosted — на ваш форк
+указывают на хостинг stit (`*.stit.tech`); на self-hosted — на ваш форк
 `corp-infra-template`. Адреса задаются через `OTEL_EXPORTER_OTLP_ENDPOINT`, `VAULT_ADDR`,
 `REGISTRY_HOST` в `.env` (см. `.env.example`) — архитектура кода при этом не меняется,
 меняется только хост. Вендор-лока нет.
