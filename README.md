@@ -23,7 +23,7 @@ authn, outbox, cache, NATS, audit). Observability, тесты и релиз — 
 ## Место в экосистеме
 
 ```
-project-docs-template (<org>/docs)   ← домены проектируются здесь
+business-strategy-template (<org>/strategy)   ← стратегия; домены продукта — опц. слой
         │  scaffold доменов в Go по stable-артефактам
         ▼
 go-backend-template (<org>/backend)  ← вы здесь   ──► stit-core/golibinfra
@@ -46,7 +46,7 @@ OTLP-ingest, Vault) указывают либо на наш **managed** (`git.st
 
 В Gitea помечен `template: true`. **Полный путь** от форка к своему проекту —
 [`docs/getting-started.md`](docs/getting-started.md): форк → `/init-service` →
-проектирование стека (`docs/stack/`; домены — в соседнем docs-репо) →
+проектирование стека (`docs/stack/`; домены — в соседнем strategy-репо) →
 `/de-template` → scaffold → проект, который ничего не помнит про шаблон.
 
 Быстрый старт (чтобы собралось):
@@ -74,7 +74,7 @@ Module path, README, фундамент и удаление reference-домен
   + jobs); `cmd/migrate` — отдельный image, init-контейнер.
 - **Платформа** — [`golibinfra`](https://git.stit.tech/stit-core/golibinfra):
   OTLP telemetry, JWT/session authn, outbox, brute-force, cache, NATS, audit, clock.
-- **DDD** — артефакты доменов в соседнем docs-репо; маппинг в Go —
+- **DDD** — артефакты доменов в соседнем strategy-репо; маппинг в Go —
   [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
 - **Тесты** — unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
 - **Gate** — `make check` = fmt + vet + lint + test + build + gen-check (pre-push хук).
@@ -99,7 +99,7 @@ make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /r
 - Reference — [architecture](docs/reference/architecture.md) ·
   [observability](docs/reference/observability.md) ·
   [release](docs/reference/release.md) · [ecosystem](docs/reference/ecosystem.md).
-- Design SoT — домены в соседнем docs-репо · [`docs/stack/`](docs/stack/README.md).
+- Design SoT — домены в соседнем strategy-репо · [`docs/stack/`](docs/stack/README.md).
 
 ## E2E
 

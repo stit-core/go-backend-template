@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tools/validate-stack-doc.sh — детерминированный валидатор stack-артефактов docs/stack/.
 #
-# Модель зеркалит доменные артефакты (живут в соседнем docs-репо): 8 singleton-
+# Модель зеркалит доменные артефакты (живут в соседнем strategy-репо): 8 singleton-
 # артефактов (по одному на kind),
 # frontmatter + обязательные H2-секции; при status: stable секции непусты.
 # stack-артефакты — вход для skill `de-template` (секция `Generates` каждого

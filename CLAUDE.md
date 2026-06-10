@@ -12,15 +12,16 @@
 - **`/smartdev`** — cockpit сессии: сводка состояния (ветка, drift, активный план, TODO) +
   переключение в нужный режим. Запускай в начале / после `/clear`.
 - **Потребителю шаблона** — `docs/getting-started.md`: форк → `/init-service` → проектирование
-  стека (домены уже готовы в соседнем docs-репо) → `/de-template` → scaffold → свой проект.
+  стека (домены уже готовы в соседнем strategy-репо) → `/de-template` → scaffold → свой проект.
 - **Planning-first.** Любое содержательное изменение идёт через план — секцию в едином
   `.claude/plans/roadmap.md` (skill `/plan`). Прямая правка — только truly-atomic и багфиксы
   (`/triage-failure`, RED-first). План переживает `/clear`.
 
 ## Проектирование первично, код вторичен
 
-DDD-артефакты доменов — в **соседнем docs-репо** орга (`../docs/projects/<slug>/domains/`, форк
-`project-docs-template`); артефакты платформы/стека — локально `docs/stack/`. Это
+DDD-артефакты доменов — опциональный продуктовый слой **соседнего strategy-репо** орга
+(`../strategy/docs/projects/<slug>/domains/`, форк `business-strategy-template`); артефакты
+платформы/стека — локально `docs/stack/`. Это
 **source of truth**; код пишется/генерируется по ним, не наоборот. `auth`/`user`/`verification`
 — code-only референс-примеры (изучить, потом удалить под свой проект). Роль репо в экосистеме
 (build+push image, деплой — в `<org>/infra`) — `docs/reference/ecosystem.md`.
@@ -43,7 +44,7 @@ claim «готово» / push — **`make check`** (fmt+vet+lint+test+build+gen-
 | Тесты, моки, TDD, e2e | rule `tests-pipeline` + `test/README.md` |
 | Миграции, sqlc | rule `sqlc-and-migrations` + skill `/scaffold` (вариант migration) |
 | Outbox / NATS / jobs | rule `events-and-messaging` |
-| DDD-домены (проектирование) | соседний docs-репо `../docs` (skill `/domain-deep-dive` там); маппинг DDD→Go-код — `docs/reference/domain-mapping.md` |
+| DDD-домены (проектирование) | соседний strategy-репо `../strategy` (skill `/domain-deep-dive` там); маппинг DDD→Go-код — `docs/reference/domain-mapping.md` |
 | Stack-артефакты (8 kinds, вход de-template) | `docs/stack/README.md` + skill `/stack-deep-dive` |
 | Устройство `.claude`-системы, troubleshooting | `docs/contributing.md` |
 

@@ -21,17 +21,18 @@
 
 ## 1. `/init-service`
 
-Скилл-оркестратор ведёт весь онбординг: домены — **готовый вход** из соседнего docs-репо;
+Скилл-оркестратор ведёт весь онбординг: домены — **готовый вход** из соседнего strategy-репо;
 он проектирует стек, скаффолдит домены в код и в конце де-темплейтит + прунит reference.
 Дальше шаги 2–7 — под его управлением.
 
-## 2. Домены — уже спроектированы (в соседнем docs-репо)
+## 2. Домены — уже спроектированы (в соседнем strategy-репо)
 
 - Домены продукта проектируются **не здесь и не на этом шаге** — они уже готовы к моменту форка
-  бэкенда. DDD-артефакты живут в форке `<org>/docs` (из `project-docs-template`), склонированном
-  рядом (`../docs`): `docs/projects/<slug>/domains/<ctx>/`.
+  бэкенда. DDD-артефакты — опциональный продуктовый слой форка `<org>/strategy` (из
+  `business-strategy-template`), склонированного рядом (`../strategy`):
+  `docs/projects/<slug>/domains/<ctx>/`.
 - Тебе нужны они в `status: stable` как **вход**. Если какой-то домен ещё не доведён — это
-  делается в docs-репо (`/domain-deep-dive <slug> <ctx>`) до онбординга бэка, не здесь.
+  делается в strategy-репо (`/domain-deep-dive <slug> <ctx>`) до онбординга бэка, не здесь.
 - Reference-домены `auth` / `user` / `verification` в **этом** репо — **code-only** учебные
   примеры (артефактов в docs у них нет). Изучи как образец Go-раскладки; удаление — шаг 6.
 
@@ -39,8 +40,8 @@
 
 - 8 артефактов в `docs/stack/` (service/runtime/config/persistence/messaging/auth/
   observability/dependencies). См. [stack/README.md](stack/README.md).
-- В `service.md` запиши `project-slug` + `docs-path` (дефолт `../docs`) — по ним `scaffold`
-  найдёт домены в docs-репо.
+- В `service.md` запиши `project-slug` + `strategy-path` (дефолт `../strategy`) — по ним `scaffold`
+  найдёт домены в strategy-репо.
 - Цель: `status: stable` + `make validate-stack-docs` зелёный. Это вход для де-темплейтизации.
 
 ## 4. Разверни фундамент — `/de-template`
@@ -53,8 +54,8 @@
 
 ## 5. Сгенерируй свои домены — `/scaffold` (вариант domain)
 
-По каждому stable-домену из docs-репо разверни Go-код: `/scaffold domain <name>` читает
-`../docs/projects/<slug>/domains/<ctx>/` (slug/docs-path из `docs/stack/service.md`) и
+По каждому stable-домену из strategy-репо разверни Go-код: `/scaffold domain <name>` читает
+`../strategy/docs/projects/<slug>/domains/<ctx>/` (slug/strategy-path из `docs/stack/service.md`) и
 разворачивает слои `internal/domain/<ctx>/`. Маппинг секций артефакта → код —
 [reference/domain-mapping.md](reference/domain-mapping.md). Делай это **до** удаления reference
 (шаг 6) — иначе теряешь живой Go-образец.
@@ -70,6 +71,6 @@
 ## 7. Готово
 
 Проект больше ничего не помнит про шаблон: свой module path, README, свои домены, стек, deps.
-Домены продукта остаются в соседнем docs-репо; этот репо — их потребитель. Дальше — обычный
+Домены продукта остаются в соседнем strategy-репо; этот репо — их потребитель. Дальше — обычный
 дневной флоу через `/smartdev` (см. `docs/contributing.md` про устройство `.claude`-системы).
 Релиз образов — `docs/reference/release.md`.

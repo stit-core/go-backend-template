@@ -83,7 +83,7 @@ if [ -d migrations ]; then
 fi
 
 # 5. draft-артефакты stack (companion README/_templates исключены).
-# Домены живут в соседнем docs-репо (../docs); их draft-статус — забота того репо.
+# Домены живут в соседнем strategy-репо (../strategy); их draft-статус — забота того репо.
 if [ -d docs/stack ]; then
     sdrafts=$(grep -rl '^status: draft' docs/stack --include='*.md' 2>/dev/null \
         | grep -vE '/_templates/|/README\.md$' \

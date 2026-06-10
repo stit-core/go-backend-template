@@ -92,5 +92,5 @@ polish-нити (`dependencies.md:26` хвостовой `>`, latin-`a` в `comm
 - —
 
 ## Backlog (idea state)
-- Description-оптимизация (run_loop из skill-creator) для новых/слитых скиллов (`init-service`, `domain-deep-dive`, `stack-deep-dive`, `scaffold`, `de-template`) — эмпирический тюнинг триггеров через `claude -p`. Опционально: descriptions уже канон-pushy; запускать отдельным заходом (тяжёлый), приоритетно `scaffold` (одно description на 5 интентов).
+- Description-оптимизация (run_loop из skill-creator) для новых/слитых скиллов (`init-service`, `stack-deep-dive`, `scaffold`, `de-template`) — эмпирический тюнинг триггеров через `claude -p`. Опционально: descriptions уже канон-pushy; запускать отдельным заходом (тяжёлый), приоритетно `scaffold` (одно description на 5 интентов).
 - MinIO-примитив (`test/infra/objstore.py` + minio-сервис в compose) — завести когда форк добавит реального потребителя объектного хранилища (сейчас потребителя нет).

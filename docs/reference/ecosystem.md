@@ -2,7 +2,7 @@
 
 Место шаблона в экосистеме stit: **5 форкаемых шаблонов** `stit-core/`
 (`corp-infra-template`, `project-infra-template-compose`, `go-backend-template`,
-`spa-frontend-template`, `project-docs-template`) + 2 общие библиотеки
+`spa-frontend-template`, `business-strategy-template`) + 2 общие библиотеки
 `stit-core/golibinfra` (Go-kits) и `stit-core/ui-lib` (`@stit/ui`,
 frontend design-system). Корп control-plane — это репо `corp-infra-template`
 (managed = инстанс на `*.stit.tech`; self-hosted = форк `<org>/infra`). Канон
@@ -15,7 +15,8 @@ frontend design-system). Корп control-plane — это репо `corp-infra-
 `<client-org>/infra`.
 
 ```
-   <org>/docs (← project-docs-template)  — design-time SoT: домены продукта
+   <org>/strategy (← business-strategy-template)  — design-time SoT: бизнес-стратегия;
+        │ домены продукта (опц.) — её downstream под docs/projects/<slug>/
         │ side-input: читается scaffold'ом при разработке (рантайм не зависит)
         ▼
    ЭТОТ РЕПО ◄──контракт (tenant, OTLP, registry)── corp-infra-template (corp control plane)
@@ -32,9 +33,10 @@ frontend design-system). Корп control-plane — это репо `corp-infra-
   endpoint, registry); `git.${DOMAIN}` (push images).
 - **Используется:** `<client-org>/infra` (форк `project-infra-template-compose`) — пуллит
   образ через `vault kv patch …/meta backend_tag=<tag>` + `make ship` на проектной VPS.
-- **Зависит (design-time) от:** `<client-org>/docs` (форк `project-docs-template`) — DDD-артефакты
-  доменов продукта (`docs/projects/<slug>/domains/`). `scaffold` читает их при разработке кода;
-  рантайм-образ от docs-репо не зависит (это source-of-truth проектирования, не deploy-звено).
+- **Зависит (design-time) от:** `<client-org>/strategy` (форк `business-strategy-template`) —
+  design-time SoT бизнес-стратегии; когда стратегия рождает продукт, его DDD-артефакты доменов
+  живут под `docs/projects/<slug>/domains/`. `scaffold` читает их при разработке кода; рантайм-образ
+  от strategy-репо не зависит (это source-of-truth проектирования, не deploy-звено).
 
 ## Контракт с корп-инфрой
 

@@ -1,6 +1,6 @@
 ---
 name: init-service
-description: Оркестратор онбординга потребителя шаблона — ведёт путь форк → проектирование стека (stack-deep-dive) по уже-готовым доменам соседнего docs-репо → de-template → scaffold доменов в код → удаление reference-доменов, пока проект не перестанет помнить про шаблон. Активируй когда юзер форкнул go-backend-template и говорит "/init-service", "онбординг", "развернуть свой сервис из шаблона", "с чего начать новый проект из шаблона", или когда видишь свежий форк (module path всё ещё go-backend-template, reference-домены auth/user/verification на месте). Сам не проектирует и не де-темплейтит — чейнит специализированные скиллы по порядку.
+description: Оркестратор онбординга потребителя шаблона — ведёт путь форк → проектирование стека (stack-deep-dive) по уже-готовым доменам соседнего strategy-репо → de-template → scaffold доменов в код → удаление reference-доменов, пока проект не перестанет помнить про шаблон. Активируй когда юзер форкнул go-backend-template и говорит "/init-service", "онбординг", "развернуть свой сервис из шаблона", "с чего начать новый проект из шаблона", или когда видишь свежий форк (module path всё ещё go-backend-template, reference-домены auth/user/verification на месте). Сам не проектирует и не де-темплейтит — чейнит специализированные скиллы по порядку.
 ---
 
 # Skill: init-service (онбординг-оркестратор)
@@ -27,23 +27,24 @@ description: Оркестратор онбординга потребителя 
 
 - [ ] Форк создан, репозиторий склонирован (Gitea → **Use this template** → `<org>/<service>`).
 - [ ] `make setup` прогнан (pinned dev-tools + git-хуки).
-- [ ] Домены продукта в соседнем `<org>/docs` (`../docs/projects/<slug>/domains/`) уже `stable` —
+- [ ] Домены продукта в соседнем `<org>/strategy` (`../strategy/docs/projects/<slug>/domains/`) уже `stable` —
       это **вход** онбординга, не его шаг (см. этап 1).
 - [ ] Если нет — подскажи шаги 0 из `docs/getting-started.md`, дальше не иди.
 
 ## Этапы (чейнить по порядку, не делать самому)
 
-### 1. Домены — вход (уже спроектированы в docs-репо)
+### 1. Домены — вход (уже спроектированы в strategy-репо)
 
 Домены проектируются **не в этом репо и не на этом шаге** — они уже готовы к моменту онбординга
-бэка. Бизнес-аналитика и DDD продукта прорабатываются в соседнем `<org>/docs` (форк
-`project-docs-template`) **до** форка бэкенда; артефакты живут там —
-`docs/projects/<slug>/domains/<ctx>/`. init-service берёт их как **готовый вход**:
+бэка. Бизнес-аналитика и DDD продукта прорабатываются в соседнем `<org>/strategy` (форк
+`business-strategy-template`) **до** форка бэкенда; артефакты живут там как опциональный
+продуктовый слой стратегии — `docs/projects/<slug>/domains/<ctx>/`. init-service берёт их как
+**готовый вход**:
 
-- **Предусловие**: нужные домены продукта в `<org>/docs` (рядом, по конвенции `../docs`) уже
-  `status: stable` (собственный валидатор docs-репо зелёный, state без `**blocker**`). Бэкенд это
-  сам не проверяет — доверяет docs-репо. Если домен ещё не доведён — это **не шаг онбординга бэка**:
-  доводишь его в docs-репо скиллом `/domain-deep-dive <slug> <ctx>` и возвращаешься.
+- **Предусловие**: нужные домены продукта в `<org>/strategy` (рядом, по конвенции `../strategy`) уже
+  `status: stable` (собственный валидатор strategy-репо зелёный, state без `**blocker**`). Бэкенд это
+  сам не проверяет — доверяет strategy-репо. Если домен ещё не доведён — это **не шаг онбординга бэка**:
+  доводишь его в strategy-репо скиллом `/domain-deep-dive <slug> <ctx>` и возвращаешься.
 - Reference-домены `auth`/`user`/`verification` в этом backend-репо — **code-only** учебные
   образцы (артефактов в docs у них нет): изучить как образец Go-раскладки, удаление — этап 5.
 - Зафиксируй, какой `<slug>` обслуживает этот бэкенд — он уйдёт в `docs/stack/service.md` на
@@ -57,15 +58,15 @@ description: Оркестратор онбординга потребителя 
   до `status: stable` всех 8 артефактов с **непустой `Generates`** в каждом — это контракт
   входа для `de-template`. Полный чек-лист промоушна (включая cross-kind sync) —
   `.claude/skills/stack-deep-dive/references/draft-stable.md`.
-- В `service.md § Identity` зафиксируй `project-slug` + `docs-path` (по ним `scaffold` найдёт
-  домены в соседнем docs-репо — этап 4).
+- В `service.md § Identity` зафиксируй `project-slug` + `strategy-path` (по ним `scaffold` найдёт
+  домены в соседнем strategy-репо — этап 4).
 - Gate: `make validate-stack-docs` зелёный + у всех 8 `status: stable`
   + state-каталог `.claude/skills/stack-deep-dive/state/` чист по `**blocker**`-вопросам.
 
 ### 3. Развернуть фундамент → `de-template`
 
 - Gate перед запуском: стек `stable`, `make validate-stack-docs` зелёный, state `stack-deep-dive`
-  чист по `**blocker**`-вопросам. Домены — в docs-репо, для de-template не требуются (он
+  чист по `**blocker**`-вопросам. Домены — в strategy-репо, для de-template не требуются (он
   разворачивает только платформу).
 - **Чейнь в `de-template`**: читает stable-артефакты `docs/stack`, разворачивает по
   секциям `Generates` — module path, README, `internal/platform/*`, `cmd/api`-композиция,
@@ -74,17 +75,17 @@ description: Оркестратор онбординга потребителя 
 
 ### 4. Scaffold спроектированных доменов → `scaffold` (вариант domain)
 
-Платформа развёрнута — теперь по каждому **stable**-домену из docs-репо разверни Go-код:
+Платформа развёрнута — теперь по каждому **stable**-домену из strategy-репо разверни Go-код:
 
-- **Чейнь в `scaffold` (domain)** per домен: читает `<docs-path>/projects/<slug>/domains/<ctx>/`
-  (slug/docs-path из `docs/stack/service.md`), разворачивает слои `internal/domain/<ctx>/`.
+- **Чейнь в `scaffold` (domain)** per домен: читает `<strategy-path>/docs/projects/<slug>/domains/<ctx>/`
+  (slug/strategy-path из `docs/stack/service.md`), разворачивает слои `internal/domain/<ctx>/`.
   Маппинг секций → код — `docs/reference/domain-mapping.md`.
 - **Инвариант порядка**: scaffold своих доменов идёт **до** удаления reference (этап 5) — иначе
   потеряешь живой Go-образец.
 
 ### 5. Удалить reference-домены
 
-Когда свои домены спроектированы (в docs-репо) и сгенерированы (этап 4) — убрать учебные
+Когда свои домены спроектированы (в strategy-репо) и сгенерированы (этап 4) — убрать учебные
 `auth`/`user`/`verification` (чеклист подсказывает/выполняет `de-template`):
 `internal/domain/{auth,user,verification}/`, блоки в `sqlc.yaml`, их `migrations/`, fx-wiring в
 `cmd/api`, depguard-правила в `.golangci.yml`, их e2e в `test/`. DDD-артефактов в docs у них нет
@@ -98,7 +99,7 @@ description: Оркестратор онбординга потребителя 
 
 ## Что init-service НЕ делает
 
-- ❌ Не интервьюирует по доменам сам — это `/domain-deep-dive` в соседнем docs-репо; по стеку —
+- ❌ Не интервьюирует по доменам сам — это `/domain-deep-dive` в соседнем strategy-репо; по стеку —
   `stack-deep-dive` здесь (3 режима A/B/C, дисциплина опции-vs-Other, 5-пунктный draft→stable gate).
 - ❌ Не лезет в `state/` чейненных скиллов — это их рабочая память, оркестратор её только
   проверяет на чистоту `**blocker**`-вопросов как gate-условие.

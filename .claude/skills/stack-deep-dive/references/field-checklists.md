@@ -35,9 +35,9 @@ Resource attributes`.
 **Порядок копания**:
 
 1. `Identity`: имя сервиса (Other), module path (Other), одно-фразовое
-   назначение (Other), `project-slug` — папка продукта в соседнем docs-репо,
-   откуда `scaffold` берёт домены (Other), `docs-path` — путь к форку
-   `<org>/docs` (дефолт `../docs`; Other для иной раскладки).
+   назначение (Other), `project-slug` — папка продукта в соседнем strategy-репо,
+   откуда `scaffold` берёт домены (Other), `strategy-path` — путь к форку
+   `<org>/strategy` (дефолт `../strategy`; Other для иной раскладки).
 2. `Versioning`: схема (semver `vX.Y.Z` — стандарт; Other для отклонения),
    как попадает в бинарь (ldflags — Other), что логируется (обычно
    `service/version/commit`).
@@ -179,7 +179,7 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 **Порядок копания**:
 
 1. `Published subjects` (таблица). Source-aggregate — выбор из
-   aggregate'ов соседнего docs-репо (`../docs/projects/<slug>/domains/`) + Other.
+   aggregate'ов соседнего strategy-репо (`../strategy/docs/projects/<slug>/domains/`) + Other.
 2. `Consumed subjects` (таблица). Source-context — выбор + Other.
 3. `Delivery semantics`:
    - `Delivery`: enum at-least-once / at-most-once / exactly-once-effective;
