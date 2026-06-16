@@ -12,8 +12,9 @@ domain) — иначе теряешь живой образец. Удаляй в
    доменов в этом репо нет; домены живут в соседнем strategy-репо). Точка остаётся для симметрии
    чеклиста — просто отметь «N/A».
 3. **sqlc.yaml** — три блока `engine` с `queries/out` на `internal/domain/{user,verification,auth}/...`.
-4. **Миграции** — `migrations/*` этих доменов (их таблицы: users, sessions, verification_*…).
-   Удаляй и `.up.sql`, и `.down.sql`. Нумерация остальных не трогается.
+4. **Миграции** — `migrations/*` этих доменов: `0001_users.*` (таблицы `users`,
+   `password_resets`, `email_verifications` — user+verification) и `0002_auth.*`
+   (`refresh_sessions`). Удаляй и `.up.sql`, и `.down.sql`. Нумерация остальных не трогается.
 5. **fx-wiring** — `cmd/api/main.go`: убери `usermod`/`authmod`/`verifmod` из `domainModules`
    (импорты + строки в `fx.Options`).
 6. **depguard** — `.golangci.yml`: правила `user-domain-isolation`, `auth-domain-isolation` и

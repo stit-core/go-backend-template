@@ -186,7 +186,7 @@ State лежит рядом со скиллом
 
 ## Контракт `draft → stable`
 
-См. `references/draft-stable.md`. Чек-лист после каждой правки (все 5
+См. `references/draft-stable.md`. Чек-лист после каждой правки (все 6
 ✅ → предложить промоушн):
 
 1. **Обязательные H2 заполнены** (см. `references/field-checklists.md`
@@ -201,8 +201,7 @@ State лежит рядом со скиллом
    shutdown-хуки). Если auth добавил `JWT_PUBLIC_KEY` — он есть в
    `config.md § Required env`. См. `references/draft-stable.md § Cross-kind
    sync`.
-4. **Валидатор зелёный** — `make validate-stack-docs
-   docs/stack` без ошибок.
+4. **Валидатор зелёный** — `make validate-stack-docs` без ошибок.
 5. **Тест-критерий kind'а явно подтверждён** в этой сессии. См.
    `references/draft-stable.md § Тест-критерий по kind`.
 6. **State чист по `**blocker**`-вопросам.**

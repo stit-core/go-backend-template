@@ -11,7 +11,7 @@ description: Always-on cockpit дневного флоу. Запускай в н
 
 - Начало сессии, после `/clear`, возврат после паузы: "/smartdev", "что у нас", "с чего начать"
 - Юзер дал задачу, но непонятно насколько большая
-- Не уверен, какой режim сейчас правильный
+- Не уверен, какой режим сейчас правильный
 
 ## Когда НЕ применять
 
@@ -28,7 +28,7 @@ make status
 
 (`make status A=--full` — добавит lint count, +~10s; только если нужен lint-обзор.)
 
-Парси секции: `== Branch ==`, `== Working tree ==`, `== Critical ==` (BUILD/SQLC/MIGRATIONS/DRAFT-ARTIFACTS), `== Infra-touch ==`, `== Plan ==` (roadmap Active + статус активного плана + **следующий открытый атом**), `== Domains ==`, `== Recent commits ==`, `== TODOs ==`. Последняя строка — `OK` или `ATTENTION:<что>`: это твой сигнал ветвления.
+Парси секции: `== Branch ==`, `== Working tree ==`, `== Critical ==` (BUILD/SQLC/MIGRATIONS/STACK-DRAFTS), `== Infra-touch ==`, `== Plan ==` (roadmap Active + статус активного плана + **следующий открытый атом**), `== Domains ==`, `== Recent commits ==`, `== TODOs in changed files ==`. Последняя строка — `OK` или `ATTENTION:<что>`: это твой сигнал ветвления.
 
 ### 2. Поднять контекст (фикс «не помнит») — читай сам, не жди скрипта
 
@@ -78,7 +78,7 @@ make status
 ```
 ## Состояние
 **Ветка:** `<branch>` <ahead/behind>
-**Critical:** BUILD ok · SQLC ok · MIGRATIONS ok · DRAFT none   (или ATTENTION:<...>)
+**Critical:** BUILD ok · SQLC ok · MIGRATIONS ok · STACK-DRAFTS none   (или ATTENTION:<...>)
 **Infra-touch:** none / <файлы>
 **План:** `<slug>` in-progress → next A#  (или —)
 

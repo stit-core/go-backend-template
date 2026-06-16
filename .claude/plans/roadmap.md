@@ -89,7 +89,14 @@ polish-нити (`dependencies.md:26` хвостовой `>`, latin-`a` в `comm
 - **A12 — image-path derivation (cross-service contract).** WHAT: `release.sh` перестаёт хардкодить repo-сегмент `backend`, выводит его из `git remote` → образ `<host>/<org>/<service>{,-migrate}`. WHY: `getting-started`/`README` обещают форк `<org>/<service>`, а образ собирался как `<org>/backend` — рассинхрон image-path между build (этот репо) и pull (deploy-репо `<org>/infra`). ACTION: владельцу `<org>/infra` — сверить deploy-конфиги/Vault-пути на новый image-path `<org>/<service>` вместо `<org>/backend`. WHO: infra-админ. DECIDE: до `make release` следующей версии. RISK: deploy тянет несуществующий тег, если image-path в build и infra разойдутся.
 
 **Чекпоинты.**
-- —
+- **2026-06-16 · Частичная pre-work закоммичена (этим docs-коммитом) до approve.**
+  - Залетели правки с диска (от 2026-06-10, висели uncommitted): `prune.md` — имена таблиц
+    (`0001_users`: users/password_resets/email_verifications; `0002_auth`: refresh_sessions) =
+    **часть A5**; `release.md` — doc-описание INFRA-HANDOFF под формат `**Infra impact.**` =
+    **doc-часть A4**; опечатки `comments.md`(latin-`a`)/`domain.md`(`sgenerated`)/`triage-failure`/
+    `smartdev`(+`STACK-DRAFTS`/`TODOs in changed files`)/`stack-deep-dive`(чек-лист «6», убран арг) = часть polish.
+  - НЕ закрыто: **A4** — сама логика `scripts/release.sh` (не только doc); **A5** — «частичный
+    prune = EDIT файла, не delete» + остальной текст. Атомы A4/A5 остаются `[ ]`.
 
 ### migrate-events-jetstream — outbox/NATS на JetStream (golibinfra v0.34.0, per-domain)
 **Создан:** 2026-06-16 · **Статус:** blocked (blocked by: `**Infra impact.**` не сдан — секцию нельзя удалять, пока `make release` не сагрегирует handoff; код-часть done, все атомы [x])

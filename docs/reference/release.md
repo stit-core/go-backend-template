@@ -26,8 +26,8 @@ fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвер�
 
 ## INFRA-HANDOFF
 
-`make release` печатает агрегированный блок (накопленные `## Infra impact` из плана +
-vault/ship-подсказки) — кому что передать инфра-админу out-of-band. Сам репо `vault kv
+`make release` печатает агрегированный блок (накопленные подсекции `**Infra impact.**`
+из активных секций `.claude/plans/roadmap.md` + vault/ship-подсказки) — кому что передать инфра-админу out-of-band. Сам репо `vault kv
 patch` / `make ship` / `ssh` **не выполняет**.
 
 ## Handoff (другие репо)
