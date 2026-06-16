@@ -1,6 +1,6 @@
 # scaffold › event — outbox-эвент + subscriber
 
-Эвент-флоу: usecase домена-источника пишет событие в outbox в той же транзакции, что и основное изменение → `outboxkit.Publisher` (поднимается fx.Lifecycle того же `cmd/api`) публикует в NATS → subscriber потребляющего домена (`internal/domain/<consumer>/delivery/nats/`) обрабатывает. Отдельного worker-процесса нет — всё в одном бинаре.
+Эвент-флоу: usecase домена-источника пишет событие в **per-domain outbox** (`outbox_<source>`) в той же транзакции, что и основное изменение → drain этого инстанса (поднимается fx.Lifecycle того же `cmd/api`) публикует в **JetStream** через `natskit.StreamBus` → durable-subscriber потребляющего домена (`internal/domain/<consumer>/delivery/nats/`) обрабатывает. Отдельного worker-процесса нет — всё в одном бинаре.
 
 См. `.claude/rules/events-and-messaging.md` (бэкграунд — автогрузится при правке `events.go` / `delivery/nats/` / `internal/jobs/`) и `docs/reference/architecture.md § События и messaging`.
 
@@ -71,7 +71,9 @@ err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
 })
 ```
 
-`uc.events` — это `outboxkit.Publisher` (`Publish(ctx, subject, payload) error`), уже инжектится в `UsecaseDeps`. Сериализация в JSON — внутри `outboxkit/pgstore.Insert`.
+`uc.events` — это `outboxkit.Publisher` (`Publish(ctx, subject, payload) error`), инжектится в `UsecaseDeps`. Сериализация в JSON — внутри `outboxkit/pgstore.Insert`.
+
+Если домен-источник **ещё не публикует** события — заведи ему per-domain outbox: `internal/domain/<source>/infra/outbox/outbox.go` с `const Table = "outbox_<source>"` + `var Providers = events.OutboxFor("<source>", Table)`; включи `Providers` в `<source>/module/module.go` (даёт приватный `outboxkit.Publisher`); добавь таблицу `outbox_<source>` в миграцию (DDL зеркалит `outboxkit/pgstore.SchemaSQL` — см. `migrations/0003_outbox_domains.up.sql`); если subject-префикс новый — добавь стрим в `NATS_JS_STREAM_NAMES` (инфра-handoff).
 
 ### 4. Subscriber in-domain (`internal/domain/<consumer>/delivery/nats/`)
 
@@ -86,7 +88,11 @@ type <Event>Payload struct {
     // …поля 1:1 с <source>.<Event>, но локальный тип
 }
 
-const Subject<Event> = "<source>.events.<event>"
+const (
+    Subject<Event> = "<source>.events.<event>"
+    stream<Event>  = "<source>"                  // стрим покрывает <source>.>
+    durable<Event> = "<consumer>-<event>"        // уникальное имя durable-консьюмера
+)
 ```
 
 ```go
@@ -95,6 +101,7 @@ package nats
 
 import (
     "context"
+    "errors"
     "fmt"
 
     "go.uber.org/fx"
@@ -125,11 +132,16 @@ func (h *Handler) on<Event>(ctx context.Context, e <Event>Payload) error {
     return nil
 }
 
-func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
+func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
     ctx, cancel := context.WithCancel(context.Background())
     lc.Append(fx.Hook{
         OnStart: func(_ context.Context) error {
-            return natskit.SubscribeJSON(bus, ctx, Subject<Event>, h.on<Event>)
+            err := natskit.SubscribeStreamJSON(bus, ctx, stream<Event>, Subject<Event>, durable<Event>, h.on<Event>)
+            if errors.Is(err, natskit.ErrJetStreamDisabled) {
+                h.log.Warn(ctx, "jetstream disabled: <event> intake off", "subject", Subject<Event>)
+                return nil // local-dev без -js: сервис стартует, событие не потребляется
+            }
+            return err
         },
         OnStop: func(_ context.Context) error { cancel(); return nil },
     })

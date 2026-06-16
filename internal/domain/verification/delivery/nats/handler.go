@@ -2,12 +2,19 @@ package nats
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/natskit"
+)
+
+const (
+	// streamUser — JetStream-стрим, покрывающий user.> (источник user.events.registered).
+	streamUser  = "user"
+	durableName = "verification-user-registered"
 )
 
 type Usecase interface {
@@ -34,11 +41,18 @@ func (h *Handler) onUserRegistered(ctx context.Context, e UserRegisteredEvent) e
 	return nil
 }
 
-func Register(lc fx.Lifecycle, bus natskit.Bus, h *Handler) {
+func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
 	ctx, cancel := context.WithCancel(context.Background())
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
-			if err := natskit.SubscribeJSON(bus, ctx, SubjectUserRegistered, h.onUserRegistered); err != nil {
+			err := natskit.SubscribeStreamJSON(bus, ctx, streamUser, SubjectUserRegistered, durableName, h.onUserRegistered)
+			// JetStream выключен (local-dev без -js) → лог + skip: сервис стартует,
+			// событие просто не потребляется (для приёма нужен NATS_JETSTREAM_ENABLED).
+			if errors.Is(err, natskit.ErrJetStreamDisabled) {
+				h.log.Warn(ctx, "jetstream disabled: user-registered intake off", "subject", SubjectUserRegistered)
+				return nil
+			}
+			if err != nil {
 				return fmt.Errorf("subscribe %s: %w", SubjectUserRegistered, err)
 			}
 			return nil

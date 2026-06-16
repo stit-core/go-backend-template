@@ -44,8 +44,9 @@ Production-значения в репо не попадают — их выда�
 с W3C trace-propagation через `nats.Header`.
 
 **Outbox** (`outboxkit`): `outbox_events_{inserted,processed}_total{subject,status}`,
-`outbox_batch_{size,duration_seconds}`, `outbox_publish_duration_seconds{subject}`,
-`outbox_lag_seconds{subject}` (если приложение подключило `LagReporter`).
+`outbox_events_dead_total{subject}`, `outbox_batch_{size,duration_seconds}`,
+`outbox_publish_duration_seconds`; `outbox_lag_seconds{subject}` и
+`outbox_pending_count{subject}` — opt-in (если приложение подключило `BacklogReporter`).
 
 **Auth** (`authnkit`): `jwt_verifications_total{result}`, `password_hash_duration_seconds`,
 `password_verify_duration_seconds`, `totp_verifications_total{result}`.

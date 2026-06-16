@@ -16,7 +16,6 @@ import (
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/natskit"
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
-	outboxpg "git.stit.tech/stit-core/golibinfra/outboxkit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/telemetry"
 	"git.stit.tech/stit-core/golibinfra/timerkit"
@@ -29,6 +28,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/jobs"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
+	appevents "git.stit.tech/stit-core/go-backend-template/internal/platform/events"
 )
 
 var kitConfigs = fx.Options(
@@ -69,10 +69,8 @@ var (
 		bruteforcepg.Module,
 		auditpg.Module,
 		clockkit.Module,
-		outboxkit.Module,
-		outboxpg.Module,
+		appevents.Module,
 		fx.Provide(
-			func(s *outboxpg.Store) outboxkit.LagReporter { return s },
 			fx.Annotate(pgkit.DBProbe, fx.ResultTags(`group:"health"`)),
 			fx.Annotate(natskit.Probe, fx.ResultTags(`group:"health"`)),
 			fx.Annotate(cachekit.Probe, fx.ResultTags(`group:"health"`)),

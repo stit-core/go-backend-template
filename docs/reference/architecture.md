@@ -53,20 +53,32 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 Отдельного worker-процесса нет: HTTP, outbox-drain, NATS-subscribers, background jobs —
 в одном бинаре `cmd/api` через одну fx.Lifecycle.
 
-- **Outbox.** Событие пишется в БД в одной транзакции с основным изменением
-  (`pgkit.Transactor.WithTx` → `outboxkit.Publisher.Publish(txCtx, subject, payload)`).
-  Drain публикует в NATS; падение между commit и publish → ретрай из `outbox`-таблицы.
-  Subject — литерал `<domain>.events.<event>`; источник его не экспортит.
-- **Subscriber'ы in-domain.** Лежат в `<consumer>/delivery/nats/` рядом с `delivery/http/`
-  — равноправные «входы» в usecase. Объявляют **локальный** payload-DTO (depguard
-  запрещает импорт домена-источника). Регистрируются в `module/module.go` consumer'а.
-- **Idempotency.** NATS = at-least-once → subscriber обязан быть идемпотентен (`ON CONFLICT
-  DO NOTHING`, `UPDATE … WHERE status='pending'`, idempotency-key). Не «вряд ли задвоится».
+- **Outbox (per-domain).** Событие пишется в БД в одной транзакции с основным изменением
+  (`pgkit.Transactor.WithTx` → `outboxkit.Publisher.Publish(txCtx, subject, payload)`). Каждый
+  домен-публикатор держит свой transactional-outbox (таблица `outbox_<domain>`,
+  Outbox+Publisher+drain) через `events.OutboxFor` (`internal/platform/events`), включённый в
+  его `module.Module` (`fx.Private` скоупит publisher доменом). Drain батчами публикует в
+  JetStream через `natskit.StreamBus` (PubAck-гарантия; id строки уходит как `Nats-Msg-Id` →
+  переотправка на ретрае дедуплицируется стримом); published метятся только подтверждённые.
+  Subject — литерал `<domain>.events.<event>`; источник его не экспортит. Poison-строка
+  (исчерпан `OUTBOX_MAX_ATTEMPTS`) метится dead и больше не вычитывается.
+- **Subscriber'ы in-domain.** Durable JetStream-консьюмеры в `<consumer>/delivery/nats/`
+  рядом с `delivery/http/` — равноправные «входы» в usecase (`natskit.SubscribeStreamJSON`,
+  стрим+durable; `ErrJetStreamDisabled` → graceful-skip для local-dev без `-js`). Объявляют
+  **локальный** payload-DTO (depguard запрещает импорт домена-источника). Регистрируются в
+  `module/module.go` consumer'а.
+- **Idempotency.** JetStream = at-least-once → subscriber обязан быть идемпотентен (`ON
+  CONFLICT DO NOTHING`, `UPDATE … WHERE status='pending'`, idempotency-key). Не «вряд ли
+  задвоится». Poison у consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - **Jobs.** Периодические задачи без события-триггера — `internal/jobs/<name>.go`,
   поднимаются той же fx.Lifecycle. Если job чистит таблицу kit'а — зовёт метод kit'а, не
   сырой SQL.
-- **Kit-owned таблицы** (`outbox`/`audit_log`/`bruteforce_*`) — схему держит golibinfra-kit
-  (`MigrationsFS`), не `migrations/` этого репо.
+- **JetStream-стримы.** drain и subscriber'ы требуют включённого JetStream
+  (`NATS_JETSTREAM_ENABLED=true`) и стримов, покрывающих subject-префиксы доменов
+  (`NATS_JS_STREAM_NAMES`, напр. `user,verification` → `user.>`/`verification.>`).
+- **Таблицы.** `audit_log`/`bruteforce_*`/default `outbox` — схему держит golibinfra-kit
+  (`MigrationsFS`). Per-domain `outbox_<domain>` заводит миграция этого репо (`migrations/`,
+  DDL зеркалит `outboxkit/pgstore.SchemaSQL`); default-таблица `outbox` не используется.
 
 Terse-инварианты — `.claude/rules/{events-and-messaging,domain-architecture,sqlc-and-migrations}.md`.
 

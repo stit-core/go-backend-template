@@ -5,11 +5,13 @@ import (
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	userhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/user/delivery/http"
+	useroutbox "git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/outbox"
 	userpg "git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/postgres"
 )
 
 var Module = fx.Module(
 	"user",
+	useroutbox.Providers,
 	fx.Provide(
 		userpg.NewRepository,
 		fx.Annotate(user.NewPolicy, fx.As(new(user.Authorizer))),

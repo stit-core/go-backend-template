@@ -12,7 +12,7 @@
 задачи удаляется целиком — история остаётся в `git log`. Незакрытый follow-up
 переезжает в backlog или новой Active-секцией, а не хвостом в удаляемой.
 
-**Current focus:** `fix-audit-findings` (planning — ожидает approve)
+**Current focus:** `migrate-events-jetstream` (код done A1–A10; blocked — ждёт infra-handoff/`make release`) · отложен `fix-audit-findings` (planning)
 
 ## Active
 
@@ -90,6 +90,88 @@ polish-нити (`dependencies.md:26` хвостовой `>`, latin-`a` в `comm
 
 **Чекпоинты.**
 - —
+
+### migrate-events-jetstream — outbox/NATS на JetStream (golibinfra v0.34.0, per-domain)
+**Создан:** 2026-06-16 · **Статус:** blocked (blocked by: `**Infra impact.**` не сдан — секцию нельзя удалять, пока `make release` не сагрегирует handoff; код-часть done, все атомы [x])
+
+**Контекст.** golibinfra v0.24.0→v0.34.0 несёт 4 breaking-изменения в messaging-слое
+(`golibinfra` git log `v0.24.0..v0.34.0`): outboxkit drain теперь публикует через
+**JetStream** (`natskit.StreamBus`, PubAck-гарантия, дедуп по `Nats-Msg-Id`), а не Core
+NATS; добавлены poison/dead-обработка, партиции+retention, `BacklogReporter` (бывш.
+`LagReporter`); natskit получил `StreamBus` (batch-publish + durable-консьюмеры с
+DLQ/MaxDeliver/NAK-backoff). Эталон миграции — соседний `amocrm-gateway-template`
+(`internal/platform/events/{outbox,publisher}.go`, `dispatch/delivery/nats/subscriber.go`,
+`migrations/0007_outbox_domains.up.sql`, `cmd/api/main_test.go`). Решения юзера: **(1)
+per-domain outbox** (паттерн `OutboxFor` как в amocrm: таблица+Outbox+Publisher на домен,
+`NewStreamTransportFor` с namespace, стрим на префикс) и **(2) durable JetStream
+subscriber** (verification слушает `user.events.registered`). Текущее: single-instance
+`outboxkit.Module`+`outboxpg.Module`+`LagReporter` (`cmd/api/main.go:72-80`), Core-NATS
+subscriber (`verification/delivery/nats/handler.go:37-51`), publish'ат только домены
+`user` (`usecase.go:108`) и `verification` (`usecase.go:110,155`). golibinfra v0.34.0 уже
+в module-кэше — бамп выполним офлайн.
+
+**Не входит в скоуп.** Envelope/Fact-абстракция из amocrm (`events.Publisher`-обёртка) —
+наши домены зовут `outboxkit.Publisher.Publish(subject, payload)` напрямую, обёртка не
+нужна. Retention-job per-domain (amocrm его не заводит; `OUTBOX_RETENTION_MONTHS` default
+0 = не дропать) — оставляем только partition-keeper. Удаление embedded `outboxpg`-миграции
+из `cmd/migrate` (default-таблица `outbox` остаётся неиспользуемой, как в amocrm —
+append-only стабильность source-порядка). Перевод доменов на JetStream-publish в обход
+outbox (нет транзакционной гарантии — запрещено правилом).
+
+**Открытые вопросы.**
+- [x] Q1: топология outbox — single-instance или per-domain? → **per-domain (OutboxFor как amocrm)**. → A2,A3
+- [x] Q2: subscriber — Core NATS или durable JetStream? → **durable JetStream (SubscribeStreamJSON)**. → A5
+- [x] Q3: имена стримов под subject-префиксы `user.>`/`verification.>`? → **`user,verification`** (natskit `<name>`→`<name>.>`). → A7
+
+**Атомы.**
+
+#### Phase 1 — bump + per-domain outbox wiring
+- [x] **A1:** Бамп `git.stit.tech/stit-core/golibinfra` v0.24.0→v0.34.0 в `go.mod`/`go.sum` (`go get …@v0.34.0` + `go mod tidy`). Сборка ещё красная (LagReporter/Module меняются дальше) — это ожидаемо.
+  - Verify: `grep golibinfra go.mod` → v0.34.0; `go mod verify` → ok · Зависит от: —
+  - **Done:** go.mod/go.sum → v0.34.0; `go mod tidy` exit 0. Note: v0.24.0 в кэше объявлял старый путь `git.sftbmb.ru/...` (ребрендинг ~v0.32) → правил require+go.sum напрямую, не `go get`. grpc 1.81.0→1.81.1 (транзитив).
+- [x] **A2:** `internal/platform/events/outbox.go` (новый) — `OutboxFor(name, table)` по образцу amocrm, но провайдит `outboxkit.Publisher` напрямую (без Envelope): private Store (`NewStoreFor(db, table)`) + Outbox (`outboxkit.New(name, store, NewStreamTransportFor(sb, name), cfg)`) + Publisher; экспорт в группы `timer.job` (drain + partition-keeper) и `outbox.backlog` (BacklogReporter); `registerOutboxBacklog` + `events.Module`.
+  - Verify: `go vet ./internal/platform/events/...` → compiles · Зависит от: A1
+  - **Done:** `internal/platform/events/outbox.go`; `go vet` exit 0.
+- [x] **A3:** Per-domain провайдеры: `internal/domain/user/infra/outbox/outbox.go` (`Table="outbox_user"`, `Providers=events.OutboxFor("user",Table)`) и `…/verification/infra/outbox/outbox.go` (`outbox_verification`); включить `Providers` в `user/module/module.go` и `verification/module/module.go` (fx.Private скоупится доменным Module).
+  - Verify: `go vet ./internal/domain/user/... ./internal/domain/verification/...` → compiles · Зависит от: A2
+  - **Done:** 2 outbox-файла + `Providers` в обоих module.go; `go vet` exit 0.
+- [x] **A4:** `cmd/api/main.go` — убрать `outboxkit.Module`, `outboxpg.Module`, provide `func(*outboxpg.Store) outboxkit.LagReporter` и импорт `outboxpg`; добавить `appevents.Module` в `platformModules`; `outboxkit.NewConfig`/`natskit.Module` остаются.
+  - Verify: `make build` → OK (граф собирается) · Зависит от: A3
+  - **Done:** `make build` → `OK: build bin/api`.
+
+#### Phase 2 — JetStream subscriber + миграции + ENV
+- [x] **A5:** `verification/delivery/nats/handler.go` — `Register(lc, bus natskit.StreamBus, h)`; `SubscribeStreamJSON(bus, ctx, "user", SubjectUserRegistered, "verification-user-registered", h.onUserRegistered)` с graceful-skip на `natskit.ErrJetStreamDisabled` (как dispatch в amocrm); консты `streamName`/`durableName`.
+  - Verify: `make build` → OK · Зависит от: A4
+  - **Done:** `Register` на `natskit.StreamBus`+`SubscribeStreamJSON`+graceful-skip; `go build ./...` exit 0.
+- [x] **A6:** `migrations/0003_outbox_domains.{up,down}.sql` (новые) — создать `outbox_user` + `outbox_verification` (партиц. по `created_at`, `*_unpublished_idx`, 4 мес. партиций), зеркаля DDL `outboxpg.SchemaSQL`/amocrm `0007`.
+  - Verify: smoke-стек `migrate up` зелёный (`outbox_user`/`outbox_verification` созданы) · Зависит от: —
+  - **Done:** На throwaway-pg `make migrate-up` → ok; `\d outbox_user` = партиц. таблица (4 партиции, attempts/last_error/dead_at, unpublished_idx); `make migrate-down` откатывает 0003 чисто.
+- [x] **A7:** ENV — `test/stack/compose.yml` `NATS_JS_STREAM_NAMES: "user,verification"` (было `""`); `.env.example` — закомментированный блок-гайд NATS JetStream (drain требует `NATS_JETSTREAM_ENABLED=true` + стримы).
+  - Verify: `grep NATS_JS_STREAM_NAMES test/stack/compose.yml` → `user,verification` · Зависит от: —
+  - **Done:** compose `NATS_JS_STREAM_NAMES: "user,verification"`; `.env.example` блок «Messaging / outbox (JetStream)».
+
+#### Phase 3 — тесты + forward-only доки
+- [x] **A8:** Заменить `internal/domain/user/module/module_test.go` (fxtest+мок `outboxkit.Publisher` конфликтует с приватным publisher из OutboxFor) на `cmd/api/main_test.go` `TestFxGraphValidates` (`fx.ValidateApp` над infra+platform+domain, как amocrm — без lifecycle/pg/nats).
+  - Verify: `make test PKG=./cmd/...` → PASS; `ls internal/domain/user/module/module_test.go` → отсутствует · Зависит от: A5
+  - **Done:** module_test.go удалён; `cmd/api/main_test.go` `TestFxGraphValidates` → ok; весь `go test ./...` зелёный.
+- [x] **A9:** Forward-only доки: `docs/reference/architecture.md §События` (drain→JetStream/PubAck/dedup, durable subscriber, per-domain таблицы, poison/DLQ); `.claude/rules/events-and-messaging.md` (per-domain app-owned таблицы вместо kit-owned single `outbox`; subscriber=durable JetStream); `.claude/skills/scaffold/references/event.md` (`SubscribeStreamJSON` + `OutboxFor`-wiring вместо `SubscribeJSON`); `.claude/rules/forward-only.md` `LagReporter`→`BacklogReporter`; `docs/stack/_templates/messaging.md` (JetStream-ноты).
+  - Verify: `grep -rn 'SubscribeJSON\|LagReporter\|Drain публикует в NATS' docs .claude` → пусто (кроме git-истории) · Зависит от: A5,A6
+  - **Done:** обновлены architecture.md, events-and-messaging.md, scaffold/event.md, forward-only.md, messaging.md, observability.md (outbox dead/pending + BacklogReporter); grep по docs/.claude чист (кроме самого плана).
+- [x] **A10:** Финальный гейт — `make check` (fmt+vet+lint+test+build+gen-check) зелёный; smoke e2e если доступен (`make e2e`/`test/stack`).
+  - Verify: `make check` → green · Зависит от: A8,A9
+  - **Done:** `make check` → `✓ check clean` (gen-check без дрейфа). Канонический smoke недоступен (нужен `STIT_OBS_TOKEN`), вместо него — фокусный end-to-end на postgres+nats(-js)+redis: `POST /api/auth/register` → 201; `outbox_user.user.events.registered` published=t (drain→JetStream PubAck); durable consumer (`SubscribeStreamJSON`, стрим `user`) создал `email_verifications`; `outbox_verification.…email_verification_requested` published=t; лог = 1×«user registered» + 1×«email verification issued», ноль ошибок в steady-state.
+
+**Infra impact.**
+- **A4+A7 — JetStream обязателен для доставки (required env + runtime-dep).** WHAT: outbox-drain v0.34.0 публикует через JetStream; нужны `NATS_JETSTREAM_ENABLED=true` и `NATS_JS_STREAM_NAMES=user,verification` (стримы покрывают `user.>`/`verification.>`), плюс NATS-сервер с JetStream (`-js`) и file-storage. WHY: без включённого JS и стримов `PublishStream` падает (`ErrJetStreamDisabled`/no-stream) — события копятся unpublished, доставки нет. ACTION: `<org>/infra` — выставить env в backend.env/compose и подтвердить, что корп-NATS поднят с JetStream + ёмкостью под file-storage. WHO: инфра-админ (корп-NATS) + проектная инфра (compose env). DECIDE: до деплоя этой версии. RISK: тихая потеря событий / рост outbox-бэклога при выключенном JS или отсутствующих стримах.
+- **A6 — per-domain outbox-таблицы (миграция-с-эффектом).** WHAT: `0003_outbox_domains` создаёт партиц. `outbox_user`/`outbox_verification`; сервис уходит с default-таблицы `outbox`. WHY: аддитивный `CREATE TABLE`, но pending-строки в старой `outbox` после катовера осиротеют (их дренил только старый код). ACTION: на существующих деплоях — дренировать/проверить пустоту старой `outbox` до выката новой версии. WHO: проектная инфра. DECIDE: на деплое. RISK: in-flight события в старой `outbox` не опубликуются после катовера. (На каноническом форке/fresh-DB — N/A.)
+- **A5 — durable JetStream consumer + опц. DLQ-тюнинг (cross-service/capacity).** WHAT: durable `verification-user-registered` на стриме `user`; опц. `NATS_JS_MAX_DELIVER`/`NATS_JS_NAK_BACKOFF`/`NATS_JS_DLQ_SUBJECT` для poison-handling. WHY: durable-консьюмер держит позицию в стриме (replay при простое) — ёмкость стрима/консьюмера на стороне NATS. WHO: инфра-админ (корп-NATS). DECIDE: при настройке retention/DLQ. RISK: дефолты (`MaxDeliver=0`) = бесконечный ределивери poison-сообщения без DLQ.
+
+**Чекпоинты.**
+- **2026-06-16 · Код-часть закрыта, ждёт infra-handoff/release.**
+  - Закрыто: A1–A10 ✓ (бамп, per-domain OutboxFor, durable JetStream subscriber, миграция 0003, ENV, fx-graph-test, доки, `make check`).
+  - Верифицировано end-to-end: register → JetStream-каскад через оба per-domain outbox + durable consumer, ноль ошибок (см. A10 Done).
+  - Обнаружено: v0.24.0 в кэше держал старый module-path (`git.sftbmb.ru/...`) — бамп правкой require+go.sum, не `go get`. `make build` собирает только `bin/api`; полная проверка — `go build ./...`.
+  - Следующий шаг: юзер передаёт INFRA-HANDOFF (3 айтема выше) инфра-админу out-of-band; при `make release` они агрегируются в release-handoff → после этого секцию удалить.
 
 ## Backlog (idea state)
 - Description-оптимизация (run_loop из skill-creator) для новых/слитых скиллов (`init-service`, `stack-deep-dive`, `scaffold`, `de-template`) — эмпирический тюнинг триггеров через `claude -p`. Опционально: descriptions уже канон-pushy; запускать отдельным заходом (тяжёлый), приоритетно `scaffold` (одно description на 5 интентов).

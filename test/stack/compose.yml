@@ -11,7 +11,7 @@ x-app-env: &app-env
 
   NATS_URL: nats://nats:4222
   NATS_JETSTREAM_ENABLED: "true"
-  NATS_JS_STREAM_NAMES: ""
+  NATS_JS_STREAM_NAMES: "user,verification"
 
   REDIS_URL: redis://redis:6379/0
 

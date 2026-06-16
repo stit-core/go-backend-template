@@ -7,11 +7,13 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	verifhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/http"
 	verifnats "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/nats"
+	verifoutbox "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/infra/outbox"
 	verifpg "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/infra/postgres"
 )
 
 var Module = fx.Module(
 	"verification",
+	verifoutbox.Providers,
 	fx.Provide(
 		verifpg.NewRepository,
 		newUserReaderAdapter,
