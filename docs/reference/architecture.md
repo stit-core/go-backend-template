@@ -36,11 +36,15 @@
 
 ## Ports & adapters (cross-domain)
 
-depguard в `.golangci.yml` блокирует прямые импорты между бизнес-доменами (`auth ↛ user`
-и т.д.). Когда домену A нужны данные из B — объявляешь **порт** (интерфейс) в A
-(`usecase.go`) и **адаптер** в `A/module/adapters.go`, который оборачивает B. Адаптер в
-`module/` имеет право импортить B; usecase — нет. Cross-domain DTO в порте — локальные
-(не re-export из B).
+depguard в `.golangci.yml` строго изолирует бизнес-домены: правило `<domain>-domain-isolation`
+запрещает домену импортить что-либо **вне своего поддерева** `internal/domain/<domain>/` —
+deny префикса `internal/domain` + allow только своего поддерева (`list-mode: lax`,
+longest-prefix override: свой импорт ловит более длинный allow, любой сосед ловит umbrella-deny).
+Любой соседний домен, включая ещё не созданные, блокируется автоматически — без перечисления
+по имени. Исключения: `module/` (адаптеры) и `*_test.go`. Когда домену A нужны данные из B —
+объявляешь **порт** (интерфейс) в A (`usecase.go`) и **адаптер** в `A/module/adapters.go`,
+который оборачивает B. Адаптер в `module/` имеет право импортить B; usecase — нет. Cross-domain
+DTO в порте — локальные (не re-export из B).
 
 ## HTTP DTO naming (huma)
 

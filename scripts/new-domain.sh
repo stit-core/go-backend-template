@@ -319,13 +319,17 @@ MOCKERY
 echo
 echo "─── snippet для .golangci.yml (depguard rules, изоляция домена) ───"
 cat <<DEPGUARD
-        $NAME:
+        ${NAME}-domain-isolation:
+          list-mode: lax
           files:
             - '**/internal/domain/$NAME/**'
+            - '!**/*_test.go'
             - '!**/internal/domain/$NAME/module/**'
+          allow:
+            - '${MODULE_PATH}/internal/domain/$NAME'
           deny:
             - pkg: '${MODULE_PATH}/internal/domain'
-              desc: 'Бизнес-домены не импортят друг друга. Используй порты + адаптеры в module/.'
+              desc: 'cross-domain imports are forbidden; use a port + adapter in module/'
 DEPGUARD
 echo
 echo "После правок: make gen && make check"

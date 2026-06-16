@@ -234,19 +234,25 @@ make gen
 
 ### 15. depguard правило
 
-В `.golangci.yml` добавь правило изоляции для нового домена:
+В `.golangci.yml` добавь правило строгой изоляции (умбрелла: deny всего префикса
+`internal/domain` + allow только своего поддерева → любой сосед, включая будущие,
+блокируется автоматически; `module/` и `*_test.go` исключены). `scripts/new-domain.sh`
+печатает этот блок готовым:
 ```yaml
 <name>-domain-isolation:
   list-mode: lax
   files:
     - "**/internal/domain/<name>/**"
     - "!**/*_test.go"
+    - "!**/internal/domain/<name>/module/**"
+  allow:
+    - "<module-path>/internal/domain/<name>"
   deny:
-    - pkg: "<module-path>/internal/domain/<other>"
-      desc: "<name> domain must not import <other>"
+    - pkg: "<module-path>/internal/domain"
+      desc: "cross-domain imports are forbidden; use a port + adapter in module/"
 ```
 
-(Только если домен реально не должен импортить другие — обычно так.)
+Чужие блоки трогать не нужно — каждый домен самодостаточно изолирует себя.
 
 ### 16. Верификация
 

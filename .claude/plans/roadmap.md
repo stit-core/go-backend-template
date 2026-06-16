@@ -25,7 +25,7 @@ build/vet/lint/test 120шт/gen-check), архитектура enforce'ится 
 ловит cross-domain), MD-связность чистая. Чинимое — это **content drift и
 рассинхрон слоёв**, а не сломанная сборка. План закрывает 6 quick-win'ов и 7
 структурных правок. Решения по 4 форкам приняты юзером (см. Открытые вопросы).
-Ключевые улики: `Makefile:64,69,133`, `scripts/new-domain.sh:336-344`,
+Ключевые улики: `Makefile:64,69,133`,
 `.claude/rules/tests-pipeline.md:38` + `.claude/agents/reviewer.md:64`,
 `scripts/release.sh:70`, `.claude/skills/de-template/references/prune.md:13`,
 `.claude/rules/forward-only.md:27,37`, `internal/domain/auth/module/adapters.go:65`,
@@ -56,8 +56,6 @@ polish-нити (`dependencies.md:26` хвостовой `>`, latin-`a` в `comm
 #### Phase 1 — Quick wins (тулинг + doc-drift; независимы, низкий риск)
 - [ ] **A1:** `Makefile` — убрать `mockery@latest`-fallback (строки 64,69 → падать с подсказкой `make setup`, как `lint.sh`); починить `test-fuzz` (строка 133 → `-fuzz=FuzzNewUser ... ./internal/domain/user/`).
   - Verify: `make test-fuzz` → фаззинг стартует (не «multiple packages»); `make gen-check` → green · Зависит от: —
-- [ ] **A2:** `scripts/new-domain.sh:336-344` — переписать печатаемый depguard-сниппет под закоммиченный идиом (`list-mode: lax` + `!**/*_test.go` + `!**/internal/domain/<name>/module/**` + deny по конкретным sibling-доменам, не по umbrella-префиксу `internal/domain`).
-  - Verify: сгенерить тестовый домен, вставить сниппет, `make lint` → 0 issues на собственных импортах домена · Зависит от: —
 - [ ] **A3:** Фантом `pgseed.New(t)` → `.claude/rules/tests-pipeline.md:38` и `.claude/agents/reviewer.md:64` переписать на `golibinfra/testkit.StartPostgres(t, migrationsPath)`; уточнить роль `pgseed` (per-entity seed-хелперы поверх).
   - Verify: `grep -rn 'pgseed.New(t)' .claude` → пусто; ссылка на `repository_test.go:20` как канон · Зависит от: —
 - [ ] **A4:** `scripts/release.sh:70` — выровнять агрегацию infra-impact под реальный формат: `**Infra impact.**` (bold inline в `### `-секциях) и единый `.claude/plans/roadmap.md` (не `*.md`-glob, не `## Infra impact`-H2).
@@ -97,6 +95,11 @@ polish-нити (`dependencies.md:26` хвостовой `>`, latin-`a` в `comm
     `smartdev`(+`STACK-DRAFTS`/`TODOs in changed files`)/`stack-deep-dive`(чек-лист «6», убран арг) = часть polish.
   - НЕ закрыто: **A4** — сама логика `scripts/release.sh` (не только doc); **A5** — «частичный
     prune = EDIT файла, не delete» + остальной текст. Атомы A4/A5 остаются `[ ]`.
+- **2026-06-16 · A2 удалён — поглощён планом `strict-cross-domain-isolation`.**
+  - A2 требовал привести печатаемый сниппет `new-domain.sh` к enumerated-идиому. Решением юзера
+    идиом изоляции переведён на umbrella (deny `internal/domain` + allow self); сниппет починен
+    там же под umbrella+allow-self. Задача A2 неактуальна → атом снят, улика `new-domain.sh:336-344`
+    убрана из Контекста. Нумерация остальных атомов сохранена (A1, A3…A13).
 
 ### migrate-events-jetstream — outbox/NATS на JetStream (golibinfra v0.34.0, per-domain)
 **Создан:** 2026-06-16 · **Статус:** blocked (blocked by: `**Infra impact.**` не сдан — секцию нельзя удалять, пока `make release` не сагрегирует handoff; код-часть done, все атомы [x])

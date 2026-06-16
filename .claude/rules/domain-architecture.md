@@ -16,9 +16,12 @@ paths:
   `policy.go` (решения без I/O) · `usecase.go` (логика, зависимости через порты-интерфейсы) ·
   `events.go` (outbox payload) · `metrics.go` (bizmetric-счётчики домена, nil-safe `Record*`) ·
   `delivery/{http,nats}/` · `infra/postgres/` · `module/`.
-- **Cross-domain — только порты + адаптеры.** depguard блокирует прямые импорты между
-  доменами. Порт объявляешь в домене-потребителе (`usecase.go`), адаптер — в
-  `<consumer>/module/adapters.go` (он вправе импортить домен-провайдер). DTO в порте — локальные.
+- **Cross-domain — только порты + адаптеры.** depguard (`<domain>-domain-isolation`) запрещает
+  импортить что-либо вне своего поддерева `internal/domain/<domain>/`: deny префикса
+  `internal/domain` + allow только своего поддерева → любой сосед, включая будущие, блокируется
+  автоматически. Исключения — `module/` и `*_test.go`. Порт объявляешь в домене-потребителе
+  (`usecase.go`), адаптер — в `<consumer>/module/adapters.go` (он вправе импортить
+  домен-провайдер). DTO в порте — локальные. Новый домен: сниппет печатает `scripts/new-domain.sh`.
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `EventListOutput`, не `ListOutput`.
 - **I/O — это use-case, не метод агрегата.** Нужен repo/сеть/время → метод `*Usecase`.

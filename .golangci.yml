@@ -53,39 +53,44 @@ linters:
       analyze-types: true
     depguard:
       rules:
+        # Strict cross-domain isolation: deny the whole internal/domain prefix,
+        # allow only the domain's own subtree. list-mode lax + longest-prefix
+        # override → own imports match the longer allow; any sibling (incl. ones
+        # not yet created) matches the umbrella deny. module/ wires providers via
+        # adapters, so it's exempt; test files are exempt (also globally below).
         user-domain-isolation:
           list-mode: lax
           files:
             - "**/internal/domain/user/**"
             - "!**/*_test.go"
             - "!**/internal/domain/user/module/**"
+          allow:
+            - "git.stit.tech/stit-core/go-backend-template/internal/domain/user"
           deny:
-            - pkg: "git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
-              desc: "user domain must not import auth"
-            - pkg: "git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
-              desc: "user domain must not import verification"
+            - pkg: "git.stit.tech/stit-core/go-backend-template/internal/domain"
+              desc: "cross-domain imports are forbidden; use a port + adapter in module/"
         auth-domain-isolation:
           list-mode: lax
           files:
             - "**/internal/domain/auth/**"
             - "!**/*_test.go"
             - "!**/internal/domain/auth/module/**"
+          allow:
+            - "git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
           deny:
-            - pkg: "git.stit.tech/stit-core/go-backend-template/internal/domain/user"
-              desc: "auth domain must not import user; use auth.UserReader port + adapter"
-            - pkg: "git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
-              desc: "auth domain must not import verification"
+            - pkg: "git.stit.tech/stit-core/go-backend-template/internal/domain"
+              desc: "cross-domain imports are forbidden; use a port + adapter in module/"
         verification-domain-isolation:
           list-mode: lax
           files:
             - "**/internal/domain/verification/**"
             - "!**/*_test.go"
             - "!**/internal/domain/verification/module/**"
+          allow:
+            - "git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
           deny:
-            - pkg: "git.stit.tech/stit-core/go-backend-template/internal/domain/user"
-              desc: "verification domain must not import user; use verification.UserReader port + adapter"
-            - pkg: "git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
-              desc: "verification domain must not import auth"
+            - pkg: "git.stit.tech/stit-core/go-backend-template/internal/domain"
+              desc: "cross-domain imports are forbidden; use a port + adapter in module/"
         mocks-isolation:
           list-mode: lax
           files:
