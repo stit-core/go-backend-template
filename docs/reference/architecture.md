@@ -15,6 +15,7 @@
 ├── events.go        outbox-эвенты: типы и payload
 ├── policy.go        authorization; решения без I/O
 ├── usecase.go       бизнес-логика; зависимости через интерфейсы (порты)
+├── metrics.go       bizmetric-счётчики домена (biz_<plural>_*_total); nil-safe Record*
 ├── delivery/http/   huma/v2 + chi: handler.go, dto.go, view.go
 ├── delivery/nats/   NATS-subscriber (опц.): handler.go, dto.go
 ├── infra/postgres/  repository.go + queries/*.sql + db/ (sqlc, read-only)
@@ -28,6 +29,7 @@
 | Логика | `usecase.go` |
 | Authorization | `policy.go` |
 | Outbox-события | `events.go` |
+| Domain-метрики (bizmetric-счётчики) | `metrics.go` |
 | HTTP handler / DTO / mapping | `delivery/http/{handler,dto,view}.go` |
 | sqlc-запросы / repository | `infra/postgres/queries/*.sql`, `repository.go` |
 | fx-wiring / cross-domain адаптеры | `module/{module,adapters}.go` |

@@ -14,7 +14,8 @@ paths:
 
 - **Раскладка по слоям.** `entity.go` (типы, без I/O) · `dto.go` · `errors.go` (sentinel) ·
   `policy.go` (решения без I/O) · `usecase.go` (логика, зависимости через порты-интерфейсы) ·
-  `events.go` (outbox payload) · `delivery/{http,nats}/` · `infra/postgres/` · `module/`.
+  `events.go` (outbox payload) · `metrics.go` (bizmetric-счётчики домена, nil-safe `Record*`) ·
+  `delivery/{http,nats}/` · `infra/postgres/` · `module/`.
 - **Cross-domain — только порты + адаптеры.** depguard блокирует прямые импорты между
   доменами. Порт объявляешь в домене-потребителе (`usecase.go`), адаптер — в
   `<consumer>/module/adapters.go` (он вправе импортить домен-провайдер). DTO в порте — локальные.
