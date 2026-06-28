@@ -40,11 +40,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	logCfg := logkit.Config{Level: "info"}
+	// logkit.New — dual-sink: OTLP (→ Loki) + JSON-stdout (docker/kubectl logs).
+	// Stdout в struct-литерале задаём явно: zero-value был бы false.
+	logCfg := logkit.Config{Level: "info", Stdout: true}
 	log := logkit.New(logCfg, providers.LoggerProvider)
-	if !telCfg.StdoutOnly {
-		log = teeLogger{primary: log, mirror: logkit.NewWithWriter(logCfg, os.Stdout)}
-	}
 	log.Info(ctx, "starting", "component", "seed-admin", "version", version, "commit", commit)
 
 	exitCode := run(ctx, log)
@@ -131,30 +130,4 @@ func upsertAdmin(ctx context.Context, conn *pgx.Conn, email, passwordHash, name 
 		return fmt.Errorf("lookup: %w", err)
 	}
 	return tx.Commit(ctx)
-}
-
-type teeLogger struct{ primary, mirror logkit.Logger }
-
-func (t teeLogger) Debug(ctx context.Context, msg string, kv ...any) {
-	t.primary.Debug(ctx, msg, kv...)
-	t.mirror.Debug(ctx, msg, kv...)
-}
-
-func (t teeLogger) Info(ctx context.Context, msg string, kv ...any) {
-	t.primary.Info(ctx, msg, kv...)
-	t.mirror.Info(ctx, msg, kv...)
-}
-
-func (t teeLogger) Warn(ctx context.Context, msg string, kv ...any) {
-	t.primary.Warn(ctx, msg, kv...)
-	t.mirror.Warn(ctx, msg, kv...)
-}
-
-func (t teeLogger) Error(ctx context.Context, msg string, kv ...any) {
-	t.primary.Error(ctx, msg, kv...)
-	t.mirror.Error(ctx, msg, kv...)
-}
-
-func (t teeLogger) With(kv ...any) logkit.Logger {
-	return teeLogger{primary: t.primary.With(kv...), mirror: t.mirror.With(kv...)}
 }

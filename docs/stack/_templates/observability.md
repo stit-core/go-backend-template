@@ -8,7 +8,7 @@ status: draft
 # Observability — телеметрия
 
 ## Telemetry mode
-<Режим: local dev (`OTEL_STDOUT_ONLY=true`) vs production (OTLP + Bearer `OTEL_TOKEN`).
+<Режим: local dev (нет коллектора → метрики/трейсы дропаются, логи в stdout по `LOG_STDOUT`) vs production (OTLP + Bearer `OTEL_TOKEN`).
 Что эмитится автоматически из golibinfra (HTTP/DB/NATS/outbox/auth метрики, логи, трейсы).>
 
 ## Resource attributes

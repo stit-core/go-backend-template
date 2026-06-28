@@ -18,7 +18,7 @@ description: Прочитать или последить логи задепл�
 
 ## Когда НЕ применять
 
-- **Локальный dev.** `OTEL_STDOUT_ONLY=true` (дефолт в `.env.example`) — логи идут в stdout, в Loki ничего не попадает. Смотри прямо в терминал/stderr контейнера.
+- **Локальный dev без OTLP-коллектора.** Логи всегда в stdout (`LOG_STDOUT=true` по умолчанию), а экспорт в Loki молча дропается — в Loki пусто. Смотри прямо в терминал/stdout контейнера.
 - **Юзер хочет метрики (latency / RPS / errors-per-second)** — это VictoriaMetrics, наружу не опубликована. Скажи юзеру смотреть в Grafana.
 - **Юзер хочет трейсы по trace-id** — Tempo read API существует (`https://tempo.stit.tech/api/traces/<id>`), но в этом skill'е не покрыт, и обёртки-инструмента под него нет. **Не** дёргай `curl` с inline-подстановкой токена из `.env.local` (`grep ... .env.local`) — значение утечёт в transcript (см. Anti-patterns ниже). Нужны трейсы — заведи agent-tool по образцу `scripts/tools/logs.sh` (читает токен в bash-процессе, не эхо-ит), затем зови его.
 
@@ -75,7 +75,7 @@ scripts/tools/logs.sh watch --service api --for 5m
 - ❌ Цитировать токен в чат, даже частично. Если случайно подсмотрел в exec output — НЕ повторяй.
 - ❌ Гонять `watch --for 30m` без явного OK юзера. Cache miss + большой transcript.
 - ❌ Звать `query --raw` без `{}-matcher` — Loki потребует label selector, выдаст 400.
-- ❌ Запускать в локальном dev с `OTEL_STDOUT_ONLY=true` — токен ничего не значит, в Loki пусто.
+- ❌ Искать в Loki логи из локального dev без коллектора — экспорт дропнут, в Loki пусто (логи в stdout).
 
 ## См. также
 

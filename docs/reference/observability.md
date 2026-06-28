@@ -8,8 +8,9 @@ Telemetry-режим задаётся артефактом `docs/stack/observabi
 ## Режимы telemetry
 
 `golibinfra/telemetry`:
-- **Local dev** (дефолт `.env.example`): `OTEL_STDOUT_ONLY=true` — всё в stdout. Или
-  локальный коллектор через `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- **Local dev**: метрики/трейсы идут в OTLP; без локального коллектора
+  (`OTEL_EXPORTER_OTLP_ENDPOINT`) экспорт молча дропается. Логи всегда в stdout
+  (`LOG_STDOUT=true` по умолчанию) — видны без коллектора.
 - **Production**: `OTEL_TENANT` + `OTEL_TOKEN` непустые → `Authorization: Bearer <token>`
   на каждый OTLP-запрос. Resource attrs приложения: `service.name`, `service.version`,
   `deployment.environment.name`. `tenant` и `service.namespace` ставит/перезатирает

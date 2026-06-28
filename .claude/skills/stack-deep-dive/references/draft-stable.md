@@ -117,7 +117,7 @@ make validate-stack-docs
 > новых env есть?
 
 - ✅ `Required: DATABASE_URL, JWT_PUBLIC_KEY, OTEL_TOKEN, SEED_ADMIN_EMAIL`;
-  `Optional: HTTP_PORT (8080), OTEL_STDOUT_ONLY (false), PG_MAX_CONNS (50), …`;
+  `Optional: HTTP_PORT (8080), LOG_STDOUT (true), PG_MAX_CONNS (50), …`;
   `Secrets: JWT_PUBLIC_KEY → kv/.../jwt/public`; release-checklist.
 - ❌ «Берётся envconfig автоматически» — без перечисления.
 
@@ -162,7 +162,7 @@ make validate-stack-docs
 > Telemetry mode явный (dev/prod); resource attrs выставляются;
 > bizmetric-конвенция и где они эмитятся; trace-points перечислены?
 
-- ✅ Mode: `OTEL_STDOUT_ONLY=true` dev / OTLP+Bearer prod;
+- ✅ Mode: OTLP всегда (prod — +Bearer `OTEL_TOKEN`), логи и в stdout по `LOG_STDOUT`;
   service.name/version/commit/deployment.environment.name; biz-метрики
   `biz_orders_placed_total`/`biz_orders_canceled_seconds`; trace-points
   HTTP (otelhttp), PG (otelpgx), NATS (header propagation), use-cases

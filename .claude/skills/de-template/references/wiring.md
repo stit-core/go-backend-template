@@ -31,7 +31,7 @@
 - Если стек объявил «без authn» — пропусти и не подключай authgate.
 
 ### 5. observability → `docs/stack/observability.md`
-- telemetry-wiring: exporters по режиму (`OTEL_STDOUT_ONLY` dev vs OTLP prod).
+- telemetry-wiring: OTLP-exporters (dev — без коллектора дропается; prod — +Bearer); логи в stdout по `LOG_STDOUT`.
 - resource attrs (service.name/version/commit) из `docs/stack/service.md`.
 - bizmetric-конвенция + примеры `metrics.go` (по trace-points артефакта).
 

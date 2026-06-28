@@ -255,7 +255,7 @@ bizmetric-конвенция + примеры `metrics.go`, resource attrs из
 
 **Порядок копания**:
 
-1. `Telemetry mode`: enum `local stdout (OTEL_STDOUT_ONLY=true)` /
+1. `Telemetry mode`: enum `local (нет коллектора — экспорт дропается, логи в stdout)` /
    `OTLP prod (Bearer OTEL_TOKEN)` / `mixed (dev + prod)`.
 2. `Resource attributes`: список (`service.name`, `service.version`,
    `service.commit`, `deployment.environment.name` — стандарт; multi-select
