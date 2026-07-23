@@ -1,7 +1,7 @@
 # Release
 
 **Зона ответственности этого репо: код → image в registry. На этом — STOP.** Деплой,
-vault-patch, проверка на проде — другие репо (см. [ecosystem.md](ecosystem.md)). Skill — `/release`.
+прокатка env, проверка на проде — другие репо (см. [ecosystem.md](ecosystem.md)). Skill — `/release`.
 
 ## Одна команда
 
@@ -27,21 +27,20 @@ fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвер�
 ## INFRA-HANDOFF
 
 `make release` печатает агрегированный блок (накопленные подсекции `**Infra impact.**`
-из активных секций `.claude/plans/roadmap.md` + vault/ship-подсказки) — кому что передать инфра-админу out-of-band. Сам репо `vault kv
-patch` / `make ship` / `ssh` **не выполняет**.
+из активных секций `.claude/plans/roadmap.md` + ship-подсказки) — кому что передать инфра-админу out-of-band. Сам репо `make ship`
+/ `ssh` **не выполняет**.
 
 ## Handoff (другие репо)
 
 | Зона | Где | Что делает |
 |---|---|---|
-| Корп | корп control-plane (`corp-infra-template`, root-Vault) | `vault kv patch kv/projects/<p>/<env>/meta backend_tag=vX.Y.Z` |
-| Проект | `<org>/infra` (← project-infra-template-compose) | `make ship` → ssh-deploy → vault-agent рендерит `BACKEND_TAG` → force-recreate |
+| Проект | `<org>/infra` (← project-infra-template-compose) | выставить `BACKEND_TAG=vX.Y.Z` в `.env`/compose → `make ship` → ssh-deploy → force-recreate |
 | Verify | там же | `make ps`, лог `"starting" service=api version=vX.Y.Z commit=<sha>` |
 
 ## Откат
 
-Image уже в registry — пересборка не нужна. Полностью в infra-репо: корп-патч на
-предыдущий тег + `make ship`.
+Image уже в registry — пересборка не нужна. Полностью в infra-репо: вернуть `BACKEND_TAG`
+на предыдущий тег + `make ship`.
 
 ## Versioning
 

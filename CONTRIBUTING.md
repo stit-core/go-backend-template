@@ -22,8 +22,9 @@
   полукалеку. Граница — `docs/reference/architecture.md § Граница с golibinfra`.
 - **Cross-domain — только порты + адаптеры.** Бизнес-домены не импортят друг друга
   напрямую (depguard enforce'ит). Логи — только `logkit.Logger`, не `fmt.Print*`/`slog.*`.
-- **Без вендор-лока.** Эндпоинты control-plane (registry, OTLP, Vault) конфигурируются
-  через env/Vault, не зашиты — шаблон работает и на managed, и на self-hosted контуре.
+- **Без вендор-лока.** Единственная зависимость от control-plane — image registry;
+  хост выводится из git remote, не зашит — шаблон работает и на managed, и на
+  self-hosted контуре. Конфиг и секреты — обычные env.
 - **Forward-only документация.** Текст описывает текущее состояние, без «было/стало» —
   история живёт в `git log`.
 
@@ -33,7 +34,7 @@
   поведение.
 - **PR** — форкни репозиторий, заведи ветку, открой pull request с понятным описанием
   «зачем». Держи PR сфокусированным; не подмешивай несвязанные правки.
-- Тронул инфра-поверхность (новый required env/Vault-секрет; destructive/lock/backfill
+- Тронул инфра-поверхность (новый required env / sensitive-env-секрет; destructive/lock/backfill
   миграция; cross-service NATS/outbox-subject; breaking API; новая runtime-dep в `go.mod`)
   — опиши это в PR отдельно (в проекте это оформляется INFRA-HANDOFF-блоком инфра-админу).
 

@@ -45,7 +45,7 @@ manifest, заметки про env'ы, описание интеграций, �
    - БД, миграции, пул → `persistence`;
    - subjects published/consumed, delivery → `messaging`;
    - механизм authn, роли, seed-admin, bruteforce → `auth`;
-   - telemetry mode, метрики, trace points → `observability`;
+   - логирование (формат, уровни, структурные поля) → `observability`;
    - kit'ы golibinfra, внешние deps, ёмкость → `dependencies`.
 3. Показать план через чат:
 
@@ -56,9 +56,9 @@ manifest, заметки про env'ы, описание интеграций, �
    - persistence: Postgres 16, миграции `migrate up`, пул 50;
    - messaging: пока без NATS, только outbox-drain;
    - auth: JWT (HS256), seed-admin через cmd/seed-admin;
-   - observability: OTLP в проде, stdout в dev;
-   - dependencies: golibinfra v0.12.x, kit'ы telemetry/pgkit/outboxkit/authnkit;
-   - config: 4 required env, 2 vault-секрета;
+   - observability: структурные логи в stdout (json);
+   - dependencies: golibinfra v0.12.x, kit'ы logkit/pgkit/outboxkit/authnkit;
+   - config: 4 required env, 2 секрета (env, значение не коммитим);
    - runtime: HTTP+outbox-drain в одном cmd/api, jobs нет.
    Так?
    ```
@@ -98,13 +98,12 @@ manifest, заметки про env'ы, описание интеграций, �
    - правишь `observability` → читай `config`, `dependencies`;
    - правишь `dependencies` → читай `config` (все envconfig-теги),
      `runtime` (что из объявленного поднимается);
-   - правишь `service` → читай `observability` (resource attrs);
+   - правишь `service` → читай `observability` (log fields);
    - правишь `config` / `runtime` — они роллапы, читай все 6 kit'ов.
 4. Прогнать обязательные H2 по `references/field-checklists.md` для
    этого kind'а. Найти:
    - пустые / placeholder-only H2-секции;
-   - подозрения по anti-patterns (`Telemetry mode = OTLP prod` без
-     `OTEL_TOKEN` в `config § Secrets`; `Engine = Postgres` без
+   - подозрения по anti-patterns (`Engine = Postgres` без
      `DATABASE_URL` в `config § Required`; `Authn = JWT` без
      `JWT_PUBLIC_KEY` в `config`);
    - **пустую / TBD-`Generates`** (это **главная** дыра — без неё
@@ -137,7 +136,7 @@ manifest, заметки про env'ы, описание интеграций, �
 | ситуация | формат |
 |---|---|
 | anti-pattern (`config` объявил secret в plain-env, `messaging` оставил `Delivery: none` при at-least-once-требовании) | бинарные опции «соответствует anti-pattern» / «нет, вот почему» (Other) |
-| enum-поле (`Telemetry mode`, `Delivery`, `Ordering`, `Authn type`, `Migration strategy`, `Source` для env) | по опции на каждое значение enum |
+| enum-поле (`Log format`, `Delivery`, `Ordering`, `Authn type`, `Migration strategy`, `Source` для env) | по опции на каждое значение enum |
 | тест-критерий из `references/draft-stable.md` | опции из ✅/❌-примеров, архитектор соотносит |
 | выбор kit'а golibinfra (`auth` → какой authnkit-примитив) | по опции на kit + «не нужен» |
 | выбор существующего subject'а (cross-kind) | по опции на каждый из объявленных в messaging |

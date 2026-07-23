@@ -1,7 +1,7 @@
 # go-backend-template — гайд для агентов
 
 Шаблон Go HTTP-бэкенда stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + `golibinfra`
-(telemetry, authn, outbox, brute-force, cache, NATS, audit, clock).
+(logging, authn, outbox, brute-force, cache, NATS, audit, clock).
 
 Этот файл — **ядро (always-on) + роутер**. Детали — в `docs/`, контекстные правила — в
 `.claude/rules/` (path-scoped, грузятся когда matching-файл в контексте), процедуры — в
@@ -38,7 +38,7 @@ claim «готово» / push — **`make check`** (fmt+vet+lint+test+build+gen-
 | Тема | Где |
 |---|---|
 | Архитектура, слои, ports/adapters, события, non-goals | `docs/reference/architecture.md` + rule `domain-architecture` |
-| Observability (метрики/логи/трейсы, Grafana) | `docs/reference/observability.md` + skill `/query-logs` (чтение прод-логов) + rule `env-local` (где токен) |
+| Логирование (структурные логи в stdout, `logkit.Logger`) | CLAUDE.md § Стиль кода + артефакт `docs/stack/observability.md` |
 | Release (образы, handoff, откат) | `docs/reference/release.md` + skill `/release` |
 | Экосистема, контракт со stit-инфрой | `docs/reference/ecosystem.md` |
 | Тесты, моки, TDD, e2e | rule `tests-pipeline` + `test/README.md` |
@@ -75,7 +75,7 @@ claim «готово» / push — **`make check`** (fmt+vet+lint+test+build+gen-
 ### Делать всегда
 - Перед claim «готово» — `make check`. Без верификации ты единственный feedback-loop.
 - **Изменение — через план** (planning-first; skill `/plan`). Отклонение — осознанное, проговаривается.
-- **Тронул инфра-поверхность** (required env/Vault-секрет; миграция destructive/lock/backfill/extension;
+- **Тронул инфра-поверхность** (required env / sensitive-env-секрет; миграция destructive/lock/backfill/extension;
   cross-service NATS/outbox-subject; новый порт/breaking API; новая runtime-dep в `go.mod`) →
   оформи **INFRA-HANDOFF**-блок и попроси юзера передать инфра-админу до claim/коммита (rule
   `infra-impact` + skill `/infra-handoff`).
@@ -91,7 +91,7 @@ claim «готово» / push — **`make check`** (fmt+vet+lint+test+build+gen-
 - `--no-verify` (блокирует `permissions.deny`). Коммитить/цитировать `.env*`/`*.pem`/`*.key`.
 - Править сгенерированное руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
 - `fmt.Print*`/`slog.*` напрямую. Image-теги `:latest`/`:edge`/lightweight.
-- Deploy-команды чужих репо (`make ship`, `ssh`, `vault kv patch`) — после `make release` STOP.
+- Deploy-команды чужих репо (`make ship`, `ssh`, env-прокатка) — после `make release` STOP.
 - Принимать архитектурные решения без согласования — отклонение от skill/плана требует OK юзера.
 
 ## Forward-only

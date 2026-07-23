@@ -2,18 +2,13 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"time"
-
-	"github.com/kelseyhightower/envconfig"
 
 	auditpg "git.stit.tech/stit-core/golibinfra/auditkit/pgstore"
 	bruteforcepg "git.stit.tech/stit-core/golibinfra/bruteforcekit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	outboxpg "git.stit.tech/stit-core/golibinfra/outboxkit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
-	"git.stit.tech/stit-core/golibinfra/telemetry"
 )
 
 var (
@@ -24,32 +19,13 @@ var (
 func main() {
 	ctx := context.Background()
 
-	var telCfg telemetry.Config
-	if err := envconfig.Process("", &telCfg); err != nil {
-		// До инициализации logger'а — единственное допустимое место для stderr.
-		fmt.Fprintln(os.Stderr, "migrate: telemetry config:", err)
-		os.Exit(1)
-	}
-	providers, err := telemetry.Init(ctx, telCfg)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "migrate: telemetry init:", err)
-		os.Exit(1)
-	}
-
-	// logkit.New — dual-sink: OTLP (→ Loki) + JSON-stdout (docker/kubectl logs).
-	// Stdout в struct-литерале задаём явно: zero-value был бы false.
+	// Stdout-логгер (JSON в docker/kubectl logs). Stdout в struct-литерале
+	// задаём явно: zero-value был бы false.
 	logCfg := logkit.Config{Level: "info", Stdout: true}
-	log := logkit.New(logCfg, providers.LoggerProvider)
+	log := logkit.NewWithWriter(logCfg, os.Stdout)
 	log.Info(ctx, "starting", "component", "migrate", "version", version, "commit", commit)
 
-	// run возвращает exit code. os.Exit обходит defer'ы — поэтому
-	// shutdown зовём здесь, явно, до Exit. Без shutdown'а BatchProcessor
-	// потеряет последние log records (в т.ч. итоговый успех/ошибку миграции).
-	exitCode := run(ctx, log)
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	_ = providers.Shutdown(shutdownCtx)
-	cancel()
-	os.Exit(exitCode)
+	os.Exit(run(ctx, log))
 }
 
 func run(ctx context.Context, log logkit.Logger) int {

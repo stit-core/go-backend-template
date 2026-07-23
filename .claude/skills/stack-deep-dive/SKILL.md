@@ -38,7 +38,7 @@ kit'ы, env, subjects, capacity); его решения дословно лож�
 - ❌ «По умолчанию» применить решение, потому что «в других сервисах
   так».
 - ❌ Молча выставить «обычный» env (`HTTP_PORT=8080`,
-  `OTEL_TRACES_SAMPLER_ARG=1.0`) — это решение архитектора, спрашиваем.
+  `LOG_LEVEL=info`) — это решение архитектора, спрашиваем.
 - ❌ Один большой `AskUserQuestion` с попыткой влезть >4 вопросов —
   лимит инструмента, инструмент режет молча.
 - ❌ Скопить ответы «запишу в конце волны» — пиши после **каждого**
@@ -132,8 +132,8 @@ enum'ы из канона — даёт как опции; имена env, subjec
 3. **persistence** — Postgres: driver, миграции, kit-таблицы, пул.
 4. **messaging** — published/consumed subjects, delivery semantics.
 5. **auth** — authn/authz, authgate, роли, seed-admin, brute-force.
-6. **observability** — telemetry-режим, resource attrs, biz-метрики,
-   trace-points.
+6. **observability** — логирование: режим вывода (stdout), формат,
+   уровни, структурные поля.
 7. **config** (роллап) — required/optional env, секреты, валидация —
    собирает все envconfig-теги из подключённых kit'ов и решений 1–6.
 8. **runtime** (роллап) — entrypoints в `cmd/api` (HTTP / outbox-drain /
@@ -150,7 +150,7 @@ service; скажи если хочешь прыгнуть в конкретны
 - **Всегда через `AskUserQuestion`**, до 4 вопросов в одном раунде.
 - **Опции** только для:
   - anti-patterns (см. шаблоны + `references/field-checklists.md`);
-  - enum-поля (`Telemetry mode`: `local stdout` / `OTLP prod`;
+  - enum-поля (`Log format`: `json` / `console`;
     `Delivery`: `at-least-once` / `at-most-once`;
     `Authn type`: `JWT` / `session` / `none`; и т.п.);
   - тест-критерий kind'а (✅/❌-примеры через AskUserQuestion);
@@ -233,8 +233,8 @@ stable`. **Скилл не повышает сам.**
 - `messaging` → `config.md § Required/Optional` (NATS URL, subjects),
   `runtime.md § Entrypoints` (поднимаем ли NATS-subs, поднимаем ли
   outbox-drain), `dependencies.md § External` (NATS).
-- `observability` → `config.md § Optional` (`OTEL_*`), `dependencies.md
-  § kit'ы` (telemetry/bizmetric).
+- `observability` → `config.md § Optional` (`LOG_*`), `dependencies.md
+  § kit'ы` (logkit).
 - `dependencies` → `config.md § Optional` (по подключённым kit'ам — их
   envconfig-теги), `runtime.md § Entrypoints` (что из объявленного
   действительно поднимается).

@@ -15,11 +15,11 @@ subjects, как версионируется и деплоится образ.
 |---|---|---|
 | `service` | `service.md` | идентичность: имя, module path, версионирование, бинари |
 | `runtime` | `runtime.md` | что крутится в `cmd/api`: HTTP / outbox-drain / NATS-subs / jobs |
-| `config` | `config.md` | required/optional env, секреты (Vault-класс), валидация |
+| `config` | `config.md` | required/optional env, секреты (env-класс), валидация |
 | `persistence` | `persistence.md` | Postgres: driver, миграции, kit-таблицы, пул |
 | `messaging` | `messaging.md` | NATS/outbox subjects (published / consumed), delivery |
 | `auth` | `auth.md` | authn/authz, authgate, роли, seed-admin, brute-force |
-| `observability` | `observability.md` | telemetry-режим, resource attrs, biz-метрики, trace-points |
+| `observability` | `observability.md` | структурные логи в stdout (logkit), уровни, что логируется |
 | `dependencies` | `dependencies.md` | golibinfra kits, внешние runtime-deps, ёмкость |
 
 Каждый артефакт обязан иметь секцию **Generates** — что из него родится в коде. Это

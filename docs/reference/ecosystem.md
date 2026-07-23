@@ -19,7 +19,7 @@ frontend design-system). Корп control-plane — это репо `corp-infra-
         │ домены продукта (опц.) — её downstream под docs/projects/<slug>/
         │ side-input: читается scaffold'ом при разработке (рантайм не зависит)
         ▼
-   ЭТОТ РЕПО ◄──контракт (tenant, OTLP, registry)── corp-infra-template (corp control plane)
+   ЭТОТ РЕПО ◄──контракт (image registry)── corp-infra-template (corp control plane)
         │ ──build+push image──► git.${DOMAIN}/<org>/backend{,-migrate}
         │                                   │
    golibinfra (kit'ы)                       ▼
@@ -28,11 +28,11 @@ frontend design-system). Корп control-plane — это репо `corp-infra-
 
 ## Зависит от / используется
 
-- **Зависит от:** `stit-core/golibinfra` (kit'ы: telemetry, httpkit, pgkit, authnkit,
-  outboxkit, natskit, …); `corp-infra-template` (контракт `service_namespace == tenant`, OTLP
-  endpoint, registry); `git.${DOMAIN}` (push images).
+- **Зависит от:** `stit-core/golibinfra` (kit'ы: httpkit, pgkit, authnkit, outboxkit,
+  natskit, logkit, …); `corp-infra-template` (контракт: image registry `git.${DOMAIN}`);
+  `git.${DOMAIN}` (push images).
 - **Используется:** `<client-org>/infra` (форк `project-infra-template-compose`) — пуллит
-  образ через `vault kv patch …/meta backend_tag=<tag>` + `make ship` на проектной VPS.
+  образ, выставив `BACKEND_TAG=<tag>` в своём `.env`/compose + `make ship` на проектной VPS.
 - **Зависит (design-time) от:** `<client-org>/strategy` (форк `business-strategy-template`) —
   design-time SoT бизнес-стратегии; когда стратегия рождает продукт, его DDD-артефакты доменов
   живут под `docs/projects/<slug>/domains/`. `scaffold` читает их при разработке кода; рантайм-образ
@@ -41,28 +41,22 @@ frontend design-system). Корп control-plane — это репо `corp-infra-
 ## Контракт с корп-инфрой
 
 - `git.${DOMAIN}` — registry для `<org>/backend{,-migrate}` (build локальный, см.
-  [release.md](release.md)).
-- `vault.${DOMAIN}` — secrets backend, AppRole `projects-<p>-<env>` (per env, flat-дефис;
-  `corp-infra-template` → `scripts/onboard-project.sh`).
-- `otel.${DOMAIN}` — OTLP ingest (Bearer = `OTEL_TOKEN`). Tenant определяется на edge
-  middleware'ом `tenant-auth` по токену → `X-Scope-OrgID` → resource attr `tenant`.
-  `service.namespace` приложения перезатирается на actual tenant (корп-инвариант
-  `service_namespace == tenant`, см. `corp-infra-template/docs/ecosystem.md` § Tenant identity).
-- Корп-дашборды на golibinfra-метриках работают автоматически — достаточно выставить
-  `service.name`/`service.version`/`deployment.environment.name`; `tenant` ставит infra.
+  [release.md](release.md)). Единственная runtime-зависимость этого репо от корп-инфры.
+- Конфиг и секреты (`PG_DSN`, JWT/OIDC-ключи, …) — обычные env-переменные; в проде их
+  инжектит проектная инфра прямо в окружение контейнера. Схема ключей — артефакт
+  `docs/stack/config.md`; прокатка значений — зона `<org>/infra`, не этого репо.
 - Деплой — через `project-infra-template-compose` (docker-compose стек на проектный VPS).
 
 ## Self-hosted путь
 
-Эндпоинты выше (`vault.${DOMAIN}`, `otel.${DOMAIN}`, `git.${DOMAIN}`) на managed-пути
-указывают на хостинг stit (`*.stit.tech`); на self-hosted — на ваш форк
-`corp-infra-template`. Адреса задаются через `OTEL_EXPORTER_OTLP_ENDPOINT`, `VAULT_ADDR`,
-`REGISTRY_HOST` в `.env` (см. `.env.example`) — архитектура кода при этом не меняется,
-меняется только хост. Вендор-лока нет.
+Registry `git.${DOMAIN}` на managed-пути указывает на хостинг stit (`git.stit.tech`); на
+self-hosted — на вашу Gitea (тот же хост, что в module path `go.mod`). Хост выводится из
+`git remote get-url origin` при `make release` — правок при форке не требует. Архитектура
+кода не меняется, меняется только хост. Вендор-лока нет.
 
 ## Границы ответственности
 
 Этот репо STOP'ает на image-in-registry. Деплой-команды чужих репо (`make ship`, `ssh`,
-`vault kv patch`) отсюда **не запускаются**. Инфра-поверхность (env/секрет/миграция-с-
+env-прокатка) отсюда **не запускаются**. Инфра-поверхность (env/секрет/миграция-с-
 эффектом/cross-service-subject/runtime-dep) фиксируется INFRA-HANDOFF-блоком — см.
 `.claude/rules/infra-impact.md` и skill `infra-handoff`.

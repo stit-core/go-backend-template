@@ -1,4 +1,4 @@
-.PHONY: help test lint build fmt check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search logs release setup doctor plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench test-cover tidy
+.PHONY: help test lint build fmt check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench test-cover tidy
 
 # Release-вычисления (image-path host/org, lockstep tag) self-contained в
 # scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
@@ -6,7 +6,7 @@
 
 # Один словарь для агента: `make <verb>`. Concise-by-default; FORMAT=detailed
 # или VERBOSE=1 → полный вывод (test/lint/build — см. A3). Passthrough-аргументы
-# идут через A= (status/logs/plan-check) / Q=,P= (search) / NAME= (new-domain) /
+# идут через A= (status/plan-check) / Q=,P= (search) / NAME= (new-domain) /
 # VERSION= (release).
 
 help: ## сгруппированный список команд
@@ -101,9 +101,6 @@ search: ## Поиск по коду (Q=pattern [P=path]) — rg, fallback grep -
 	else \
 		grep -rn --exclude-dir=.git -- "$(Q)" $(if $(P),$(P),.); \
 	fi
-
-logs: ## Прод-логи через корп-Loki (A= "query --service api --since 1h")
-	@bash scripts/tools/logs.sh $(A)
 
 ##@ RELEASE
 release: ## release VERSION=vX.Y.Z — confirm→tag→preflight(+doctor)→push lockstep→handoff→STOP

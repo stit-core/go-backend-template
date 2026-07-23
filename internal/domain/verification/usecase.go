@@ -14,7 +14,6 @@ import (
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
-	"git.stit.tech/stit-core/golibinfra/telemetry"
 )
 
 const minPasswordLen = 8
@@ -93,8 +92,6 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 }
 
 func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email string) (err error) {
-	ctx, end := telemetry.Span(ctx, "verification.usecase.issue_email_verification")
-	defer end(&err)
 
 	t, err := tokens.Generate()
 	if err != nil {
@@ -128,8 +125,6 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email str
 }
 
 func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) (err error) {
-	ctx, end := telemetry.Span(ctx, "verification.usecase.request_password_reset")
-	defer end(&err)
 
 	u, err := uc.users.GetByEmail(ctx, email)
 	if err != nil {
@@ -173,8 +168,6 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) (err 
 }
 
 func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword string) (err error) {
-	ctx, end := telemetry.Span(ctx, "verification.usecase.confirm_password_reset")
-	defer end(&err)
 
 	if len(newPassword) < minPasswordLen {
 		uc.metrics.RecordPasswordResetConfirmed(ctx, "weak")
@@ -220,8 +213,6 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 }
 
 func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) (err error) {
-	ctx, end := telemetry.Span(ctx, "verification.usecase.confirm_email")
-	defer end(&err)
 
 	ev, err := uc.repo.GetEmailVerification(ctx, tokens.Hash(token))
 	if err != nil {

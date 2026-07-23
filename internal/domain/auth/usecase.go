@@ -16,7 +16,6 @@ import (
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
-	"git.stit.tech/stit-core/golibinfra/telemetry"
 )
 
 const minPasswordLen = 8
@@ -124,8 +123,6 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 }
 
 func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput, err error) {
-	ctx, end := telemetry.Span(ctx, "auth.usecase.login")
-	defer end(&err)
 
 	ip := identity.IPFrom(ctx)
 
@@ -202,8 +199,6 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 }
 
 func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (out *LoginOutput, err error) {
-	ctx, end := telemetry.Span(ctx, "auth.usecase.refresh")
-	defer end(&err)
 
 	userID, oldJTI, err := uc.tparser.ParseRefresh(refreshToken)
 	if err != nil {
@@ -266,8 +261,6 @@ func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (out *Login
 }
 
 func (uc *Usecase) Logout(ctx context.Context, refreshToken string) (err error) {
-	ctx, end := telemetry.Span(ctx, "auth.usecase.logout")
-	defer end(&err)
 
 	userID, jti, parseErr := uc.tparser.ParseRefresh(refreshToken)
 	if parseErr != nil {
@@ -305,8 +298,6 @@ func (uc *Usecase) Logout(ctx context.Context, refreshToken string) (err error) 
 }
 
 func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) (err error) {
-	ctx, end := telemetry.Span(ctx, "auth.usecase.change_password")
-	defer end(&err)
 
 	caller, ok := identity.From(ctx)
 	if !ok {

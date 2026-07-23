@@ -7,7 +7,7 @@ description: Запушить новую версию backend image'ей в regi
 
 Канонический release-флоу. **Зона ответственности этого репо: код → image в registry. На STOP — всё.** Build локальный (никаких gitea-runner), push в `<host>/<org>/backend{,-migrate}` под одним lockstep `vX.Y.Z`-тегом. Воркер отдельным образом не собирается — outbox drain, NATS subscribers, jobs живут в `cmd/api/`.
 
-Дальше — **handoff** в другие репо: корп-сторона `vault kv patch`, проектный infra-репо `make ship`. Эти шаги не выполняются здесь — `make release` печатает агрегированный INFRA-HANDOFF-блок, оператор передаёт его out-of-band.
+Дальше — **handoff** в проектный infra-репо (`<client-org>/infra`): выставить `backend_tag` в env/compose и `make ship`. Эти шаги не выполняются здесь — `make release` печатает агрегированный INFRA-HANDOFF-блок, оператор передаёт его out-of-band.
 
 ## Когда применять
 
@@ -69,11 +69,10 @@ make release VERSION=vX.Y.Z
 
 - `backend_tag → <v>` (api+migrate lockstep);
 - **накопленные `**Infra impact.**`** — `release.sh` агрегирует блоки `**Infra impact.**` из активных секций `.claude/plans/roadmap.md` (механизм — `.claude/rules/infra-impact.md` + skill `infra-handoff`). Если пусто — печатает напоминание убедиться, что инфра-затрагивающее зафиксировано;
-- действия инфра-стороны:
-  - корп: `vault kv patch kv/projects/<project>/<env>/meta backend_tag=<v>`
-  - проект: в `<client-org>/infra` → `make ship`.
+- действие инфра-стороны:
+  - проект: в `<client-org>/infra` → выставить `backend_tag=<v>` в env/compose → `make ship`.
 
-Твоя роль после команды: **показать этот блок юзеру и сказать передать инфра-админу out-of-band**. Подставь `project`/`env`, если юзер их называл. Vault/`make ship`/`ssh` отсюда **не выполняются** — другие репо, другие креды.
+Твоя роль после команды: **показать этот блок юзеру и сказать передать инфра-админу out-of-band**. Подставь `project`/`env`, если юзер их называл. `make ship`/`ssh` отсюда **не выполняются** — другой репо, другие креды.
 
 ### Verify (в infra-репо, не здесь)
 
@@ -82,8 +81,8 @@ make release VERSION=vX.Y.Z
 ## Откат
 
 **Полностью в infra-репо** (этот репо не участвует — image в registry):
-1. корпу: `vault kv patch kv/.../meta backend_tag=<предыдущий>`;
-2. в `<client-org>/infra`: `make ship`.
+1. в `<client-org>/infra`: выставить `backend_tag=<предыдущий>` в env/compose;
+2. `make ship`.
 
 ## Anti-patterns
 
@@ -92,5 +91,5 @@ make release VERSION=vX.Y.Z
 - ❌ `make release` не на main. Preflight отвергнет — не трать время.
 - ❌ `docker login <host>` сам. Креды оператора.
 - ❌ `:latest` / `:edge` / любой не-semver tag.
-- ❌ Релизить, не передав INFRA-HANDOFF-блок инфра-админу — без `vault kv patch` `backend_tag` не обновится, `make ship` поднимет старый image.
-- ❌ Выполнять `make ship` / `ssh <vps>` / `vault kv patch` из этого репо. Другие репо/креды. Наша роль — image в registry + текст-handoff юзеру.
+- ❌ Релизить, не передав INFRA-HANDOFF-блок инфра-админу — без обновления `backend_tag` в env `make ship` поднимет старый image.
+- ❌ Выполнять `make ship` / `ssh <vps>` из этого репо. Другой репо/креды. Наша роль — image в registry + текст-handoff юзеру.

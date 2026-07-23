@@ -42,7 +42,7 @@
 - Что делать, если падает в проде? Down-миграция реально откатывает?
 
 ## Инфра-поверхность (→ секция Infra impact + skill infra-handoff)
-- Новый/изменённый required env-var или Vault-секрет?
+- Новый/изменённый required env-var (в т.ч. секрет-env)?
 - Миграция destructive / lock / backfill / extension?
 - Cross-service NATS/outbox-subject, новый порт, breaking-схема?
 - Новая runtime-зависимость в `go.mod`?

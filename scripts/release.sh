@@ -6,7 +6,7 @@
 #   make release VERSION=vX.Y.Z
 #
 # Зона ответственности этого репо: код → image в registry. На STOP — всё.
-# Деплой (vault kv patch / make ship) — в <client-org>/infra, НЕ здесь.
+# Деплой (backend_tag в env проектной инфры + make ship) — в <client-org>/infra, НЕ здесь.
 #
 # Неинтерактивный запуск (нет TTY / EOF на prompt) → отмена (exit 1):
 # accidental release невозможен. Для CI-автоматизации: RELEASE_YES=1.
@@ -62,7 +62,7 @@ docker buildx build --platform linux/amd64 --push -f Dockerfile.migrate \
 
 echo "✓ released $IMAGE_BASE{,-migrate}:$VERSION"
 
-# --- агрегированный INFRA-HANDOFF (обобщает прежний хардкод vault/ship) ---
+# --- агрегированный INFRA-HANDOFF (backend_tag + накопленные infra-изменения) ---
 echo
 echo "=== INFRA HANDOFF · передай инфра-админу out-of-band ==="
 echo "backend_tag → $VERSION   (api + migrate, lockstep)"
@@ -110,8 +110,7 @@ fi
 cat <<EOF
 
 Действия инфра-стороны:
-  корп:    vault kv patch kv/projects/<project>/<env>/meta backend_tag=$VERSION
-  проект:  в <client-org>/infra → make ship
+  проект:  в <client-org>/infra выставь backend_tag=$VERSION в env и → make ship
 
 === STOP. Зона этого репо закрыта (image в registry). Деплой — не здесь. ===
 EOF

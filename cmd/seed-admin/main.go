@@ -11,14 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kelseyhightower/envconfig"
 
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
-	"git.stit.tech/stit-core/golibinfra/telemetry"
 )
 
 var (
@@ -29,28 +27,13 @@ var (
 func main() {
 	ctx := context.Background()
 
-	var telCfg telemetry.Config
-	if err := envconfig.Process("", &telCfg); err != nil {
-		fmt.Fprintln(os.Stderr, "seed-admin: telemetry config:", err)
-		os.Exit(1)
-	}
-	providers, err := telemetry.Init(ctx, telCfg)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "seed-admin: telemetry init:", err)
-		os.Exit(1)
-	}
-
-	// logkit.New — dual-sink: OTLP (→ Loki) + JSON-stdout (docker/kubectl logs).
-	// Stdout в struct-литерале задаём явно: zero-value был бы false.
+	// Stdout-логгер (JSON в docker/kubectl logs). Stdout в struct-литерале
+	// задаём явно: zero-value был бы false.
 	logCfg := logkit.Config{Level: "info", Stdout: true}
-	log := logkit.New(logCfg, providers.LoggerProvider)
+	log := logkit.NewWithWriter(logCfg, os.Stdout)
 	log.Info(ctx, "starting", "component", "seed-admin", "version", version, "commit", commit)
 
-	exitCode := run(ctx, log)
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	_ = providers.Shutdown(shutdownCtx)
-	cancel()
-	os.Exit(exitCode)
+	os.Exit(run(ctx, log))
 }
 
 func run(ctx context.Context, log logkit.Logger) int {

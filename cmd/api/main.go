@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"log/slog"
+	"os"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/fx"
 
 	auditpg "git.stit.tech/stit-core/golibinfra/auditkit/pgstore"
@@ -17,7 +21,6 @@ import (
 	"git.stit.tech/stit-core/golibinfra/natskit"
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
-	"git.stit.tech/stit-core/golibinfra/telemetry"
 	"git.stit.tech/stit-core/golibinfra/timerkit"
 
 	"git.stit.tech/stit-core/golibinfra/clockkit"
@@ -36,7 +39,6 @@ var kitConfigs = fx.Options(
 		context.Background,
 
 		logkit.NewConfig,
-		logkit.NewServiceConfig,
 		flagkit.NewConfig,
 		cachekit.NewConfig,
 		natskit.NewConfig,
@@ -48,12 +50,28 @@ var kitConfigs = fx.Options(
 	),
 )
 
+// logging — stdout-логгер (JSON в docker/kubectl logs). Без OTLP-экспорта:
+// корп observability-стек отсутствует, поэтому logkit собирается вокруг
+// os.Stdout, а не OTel LoggerProvider.
+var logging = fx.Options(
+	fx.Provide(
+		func(cfg logkit.Config) logkit.Logger { return logkit.NewWithWriter(cfg, os.Stdout) },
+		func(cfg logkit.Config) *slog.Logger { return logkit.NewSlogWithWriter(cfg, os.Stdout) },
+		// metric.Meter — глобальный no-op: MeterProvider не сконфигурирован,
+		// поэтому domain business-counter'ы (biz_*) инертны и никуда не
+		// экспортируются. Держится, чтобы DI доменных Metrics резолвился.
+		func() metric.Meter { return otel.Meter("app") },
+	),
+)
+
 var (
 	infraModules = fx.Options(
-		config.Module,
+		// Конфиг только из env: приложение читает настройки/секреты из
+		// окружения (compose/.env проектной инфры). Vault-источник не
+		// подключается — секрет-стор в экосистеме отсутствует.
+		fx.Provide(func() []config.Source { return []config.Source{config.Env()} }),
 		kitConfigs,
-		logkit.Module,
-		telemetry.Module,
+		logging,
 		pgkit.Module,
 		httpkit.Module,
 		natskit.Module,

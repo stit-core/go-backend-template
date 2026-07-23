@@ -23,8 +23,8 @@
 `"starting" service/version/commit` в `cmd/api`.
 
 **Cross-kind**: `module path` — общий якорь, на него опираются все
-импорты; `service.name`/`version` уезжает в `observability §
-Resource attributes`.
+импорты; `service`/`version`/`commit` уезжает в `observability §
+Log fields`.
 
 **Anti-patterns**:
 - module path остался шаблонным (`git.stit.tech/stit-core/go-backend-template`).
@@ -105,11 +105,11 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
    Источник — обход всех kit-артефактов на required envconfig.
    Other для каждого ряда (имя), но «где живёт» — enum (kit-структура
    golibinfra / `internal/platform/config`).
-2. `Optional env` — подсекции по префиксу (Telemetry `OTEL_*`,
+2. `Optional env` — подсекции по префиксу (Logging `LOG_*`,
    Postgres `PG_*`, HTTP `HTTP_*`, Auth `JWT_*`). Дефолты из шаблонов
    kit'ов.
-3. `Secrets` — Vault-класс с таблицей `Env | Тип | Назначение |
-   Vault-ключ`. **Значение не коммитим** — только имя ключа.
+3. `Secrets` — секреты-класс с таблицей `Env | Тип | Назначение`.
+   **Значение не коммитим** — только имя env.
 4. `Validation`: как fail-fast (envconfig); release-checklist
    подсекцией.
 5. `Generates`: пути файлов (`internal/platform/config`,
@@ -131,7 +131,6 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 - `dependencies § External` — Postgres как обязательная;
 - `runtime § Lifecycle` — `cmd/migrate` как init-container? отдельный
   бинарь?
-- `observability § Trace points` — otelpgx.
 
 **Anti-patterns**:
 - Дублирование CREATE TABLE для kit-таблиц (`outbox`, `audit_log`,
@@ -201,8 +200,7 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 **Cross-kind**:
 - `config § Required/Secrets` — JWT-ключи, `SEED_ADMIN_*`;
 - `runtime § Lifecycle` — cleanup-job интервал;
-- `dependencies § kits` — authnkit, bruteforcekit;
-- `observability § Trace points` — auth-middleware.
+- `dependencies § kits` — authnkit, bruteforcekit.
 
 **Anti-patterns**:
 - JWT с symmetric secret без обоснования (по умолчанию RS256/EdDSA).
@@ -233,41 +231,34 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 
 ## observability
 
-**Обязательные H2**: `Telemetry mode`, `Resource attributes`,
-`Business metrics`, `Trace points`, `Generates`.
+**Обязательные H2**: `Log mode`, `Log fields`, `Key log events`,
+`Generates`.
 
-**Generates содержит**: telemetry-wiring (exporters по режиму),
-bizmetric-конвенция + примеры `metrics.go`, resource attrs из
-`service`-артефакта.
+**Generates содержит**: logging-wiring (logkit → stdout, формат/уровень
+из env), список структурных полей из `service`-артефакта, конвенция
+логирования ключевых событий.
 
 **Cross-kind**:
-- `config § Optional` — `OTEL_*` envs;
-- `config § Secrets` — `OTEL_TOKEN` (prod);
-- `service § Identity` — `service.name`/`version`/`commit` уезжают в
-  resource attrs;
-- `dependencies § kits` — telemetry, bizmetric.
+- `config § Optional` — `LOG_*` envs (формат, уровень);
+- `service § Identity` — `service`/`version`/`commit` уезжают в
+  структурные поля лога;
+- `dependencies § kits` — logkit.
 
 **Anti-patterns**:
-- `Mode: OTLP prod` без `OTEL_TOKEN` в `config § Secrets`.
-- `Resource attributes` без `service.name`/`version` (нечем фильтровать).
-- biz-метрики без конвенции `biz_<domain>_<event>_{total|seconds}`
-  (Grafana autodiscover не подхватит).
+- Логи без структурных полей `service`/`version` (нечем фильтровать).
+- Неструктурный вывод (plain-text без json) в проде.
+- Ключевые события (старт, ошибки usecase, обработка эвента) не логируются.
 
 **Порядок копания**:
 
-1. `Telemetry mode`: enum `local (нет коллектора — экспорт дропается, логи в stdout)` /
-   `OTLP prod (Bearer OTEL_TOKEN)` / `mixed (dev + prod)`.
-2. `Resource attributes`: список (`service.name`, `service.version`,
-   `service.commit`, `deployment.environment.name` — стандарт; multi-select
-   + Other для расширений).
-3. `Business metrics`: конвенция `biz_<domain>_<event>_{total|seconds}`
-   (yes/no — стандарт yes); список планируемых биз-метрик (Other по
-   каждой).
-4. `Trace points`: множественный выбор из {HTTP entry (otelhttp),
-   HTTP exit (httpclient), NATS (header propagation), PG (otelpgx),
-   domain use-cases (`telemetry.Span`)} + Other.
-5. `Generates`: пути telemetry-wiring, примеры `metrics.go`,
-   resource-attrs композиция.
+1. `Log mode`: вывод в stdout (стандарт); формат enum `json` / `console`;
+   уровень `LOG_LEVEL` (default `info`; Other).
+2. `Log fields`: список (`service`, `version`, `commit` — стандарт;
+   multi-select + Other для расширений).
+3. `Key log events`: какие события логируются структурно (старт сервиса,
+   ошибки usecase, результат обработки эвента — Other по каждому).
+4. `Generates`: пути logging-wiring (logkit в fx), список полей,
+   конвенция логирования событий.
 
 ---
 
@@ -295,9 +286,9 @@ golibinfra-first принцип (generic util → golibinfra, не локаль�
 **Порядок копания**:
 
 1. `golibinfra kits` (таблица): множественный выбор kit'ов из набора
-   golibinfra (telemetry, httpkit, pgkit, authnkit, outboxkit, natskit,
-   bruteforcekit, auditkit, cachekit, clockkit, logkit, storagekit,
-   bizmetric) + Other для редких. Версия golibinfra (Other).
+   golibinfra (httpkit, pgkit, authnkit, outboxkit, natskit,
+   bruteforcekit, auditkit, cachekit, clockkit, logkit, storagekit)
+   + Other для редких. Версия golibinfra (Other).
 2. `Что НЕ подключено`: автоматически = (полный набор) − (выбранные
    в 1). Юзер подтверждает «вот эти kit'ы действительно не нужны?» через
    AskUserQuestion (multi-confirm).

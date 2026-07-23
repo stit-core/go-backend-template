@@ -84,7 +84,7 @@ polish-нити (`dependencies.md:26` хвостовой `>`, latin-`a` в `comm
   - Verify: `grep -n '^name:' .claude/agents/reviewer.md .claude/agents/explorer.md` → есть; smartdev §4 содержит шаг reviewer · Зависит от: —
 
 **Infra impact.**
-- **A12 — image-path derivation (cross-service contract).** WHAT: `release.sh` перестаёт хардкодить repo-сегмент `backend`, выводит его из `git remote` → образ `<host>/<org>/<service>{,-migrate}`. WHY: `getting-started`/`README` обещают форк `<org>/<service>`, а образ собирался как `<org>/backend` — рассинхрон image-path между build (этот репо) и pull (deploy-репо `<org>/infra`). ACTION: владельцу `<org>/infra` — сверить deploy-конфиги/Vault-пути на новый image-path `<org>/<service>` вместо `<org>/backend`. WHO: infra-админ. DECIDE: до `make release` следующей версии. RISK: deploy тянет несуществующий тег, если image-path в build и infra разойдутся.
+- **A12 — image-path derivation (cross-service contract).** WHAT: `release.sh` перестаёт хардкодить repo-сегмент `backend`, выводит его из `git remote` → образ `<host>/<org>/<service>{,-migrate}`. WHY: `getting-started`/`README` обещают форк `<org>/<service>`, а образ собирался как `<org>/backend` — рассинхрон image-path между build (этот репо) и pull (deploy-репо `<org>/infra`). ACTION: владельцу `<org>/infra` — сверить deploy-конфиги/env на новый image-path `<org>/<service>` вместо `<org>/backend`. WHO: infra-админ. DECIDE: до `make release` следующей версии. RISK: deploy тянет несуществующий тег, если image-path в build и infra разойдутся.
 
 **Чекпоинты.**
 - **2026-06-16 · Частичная pre-work закоммичена (этим docs-коммитом) до approve.**

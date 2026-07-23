@@ -102,7 +102,7 @@ go mod tidy
 
 Шесть оставшихся `Generates` (runtime/messaging/observability/auth/persistence/dependencies)
 разворачиваются как **reviewable diff поверх скелета** — `cmd/api/main.go` композиция, fx-модули,
-telemetry, subjects, authgate, pgkit, kit-prune. Процедура и маппинг `Generates`→код —
+logging, subjects, authgate, pgkit, kit-prune. Процедура и маппинг `Generates`→код —
 см. **`references/wiring.md`**. Не правь сгенерированное (`infra/postgres/db/*`, `mocks/*`) —
 только `make gen`.
 

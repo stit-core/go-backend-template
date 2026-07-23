@@ -5,27 +5,21 @@ name: observability
 status: draft
 ---
 
-# Observability — телеметрия
+# Observability — логирование
 
-## Telemetry mode
-<Режим: local dev (нет коллектора → метрики/трейсы дропаются, логи в stdout по `LOG_STDOUT`) vs production (OTLP + Bearer `OTEL_TOKEN`).
-Что эмитится автоматически из golibinfra (HTTP/DB/NATS/outbox/auth метрики, логи, трейсы).>
+Шаблон эмитит **структурные логи в stdout** через `golibinfra/logkit`. Сбор/хранение
+логов (docker/host log-driver, внешний агрегатор) — зона деплой-инфры, не этого репо.
+Корп-телеметрии (OTLP-экспорт, дашборды) в шаблоне нет.
 
-## Resource attributes
-<Что выставляет приложение: `service.name`, `service.version`,
-`deployment.environment.name`. `tenant`/`service.namespace` перезатирает корп-edge
-(инвариант `service_namespace == tenant`).>
+## Log sink
+<Куда идут логи: structured slog → stdout (`docker`/`kubectl logs`). Формат (json/text),
+уровень по `APP_ENV`/`LOG_LEVEL`, `trace_id`/`span_id` в сообщении если включён контекст.>
 
-## Business metrics
-<Конвенция `biz_<domain>_<event>_{total|seconds}` (автодискавер на Grafana
-`Apps/business`). Какие biz-метрики у сервиса.>
-
-## Trace points
-<Где открываются span'ы: HTTP-входы (otelhttp), исходы (httpclient), NATS (header
-propagation), PG (otelpgx), domain usecase'ы (`telemetry.Span`).>
+## Log levels & content
+<Уровни и что на каждом; какие события домена логируются (старт/шатдаун, ошибки usecase,
+auth-события). Логи — только через `logkit.Logger`, не `fmt.Print*`/`slog.*`.>
 
 ## Generates
 <Что de-template родит:
-- telemetry-wiring (exporters по режиму)
-- bizmetric-конвенция + примеры `metrics.go`
-- resource attrs из service-артефакта>
+- logkit-wiring (logger в fx-графе, stdout-sink)
+- уровни/формат из config-артефакта>

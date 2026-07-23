@@ -5,8 +5,8 @@
 ### Go HTTP-бэкенд со стандартами из коробки
 
 Шаблон Go-бэкенда экосистемы stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx,
-поверх [`golibinfra`](https://git.stit.tech/stit-core/golibinfra) (telemetry,
-authn, outbox, cache, NATS, audit). Observability, тесты и релиз — встроены;
+поверх [`golibinfra`](https://git.stit.tech/stit-core/golibinfra) (authn,
+outbox, cache, NATS, audit, logging). Структурные логи, тесты и релиз — встроены;
 вы пишете домены, не обвязку.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2563eb)](LICENSE)
@@ -14,7 +14,7 @@ authn, outbox, cache, NATS, audit). Observability, тесты и релиз — 
 [![Go](https://img.shields.io/badge/Go-00ADD8)](#что-внутри)
 [![API](https://img.shields.io/badge/API-huma%2Fv2_%2B_OpenAPI_3.1-0ea5e9)](#что-внутри)
 [![DB](https://img.shields.io/badge/DB-pgx_%2B_sqlc-22c55e)](#что-внутри)
-[![Observability](https://img.shields.io/badge/observability-OTel_by_default-8b5cf6)](#что-внутри)
+[![Logging](https://img.shields.io/badge/logging-structured_slog-8b5cf6)](#что-внутри)
 
 </div>
 
@@ -32,15 +32,15 @@ go-backend-template (<org>/backend)  ← вы здесь   ──► stit-core/g
 project-infra-template-compose (<org>/infra)   ← деплой образа
 ```
 
-Корп control-plane (registry, OTLP-ingest, Vault) —
+Корп control-plane (image registry) —
 [`corp-infra-template`](https://git.stit.tech/stit-core/corp-infra-template).
 Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
 
-**Два пути — без вендор-лока.** Зависимости от control-plane (registry,
-OTLP-ingest, Vault) указывают либо на наш **managed** (`git.stit.tech` /
-`otel.stit.tech`), либо на **ваш self-hosted** из
-[`corp-infra-template`](https://git.stit.tech/stit-core/corp-infra-template).
-Эндпоинты конфигурируются через env/Vault, не зашиты; архитектура одинакова.
+**Два пути — без вендор-лока.** Единственная runtime-зависимость от control-plane —
+image registry: либо наш **managed** (`git.stit.tech`), либо **ваша self-hosted**
+Gitea (тот же хост, что в module path `go.mod`). Хост выводится из
+`git remote get-url origin`, не зашит; архитектура одинакова. Конфиг и секреты —
+обычные env, инжектит проектная инфра.
 
 ## Использовать как шаблон
 
@@ -73,7 +73,7 @@ Module path, README, фундамент и удаление reference-домен
 - **DI** — uber/fx. Один runtime-бинарь `cmd/api` (HTTP + outbox-drain + NATS-subs
   + jobs); `cmd/migrate` — отдельный image, init-контейнер.
 - **Платформа** — [`golibinfra`](https://git.stit.tech/stit-core/golibinfra):
-  OTLP telemetry, JWT/session authn, outbox, brute-force, cache, NATS, audit, clock.
+  structured logging, JWT/session authn, outbox, brute-force, cache, NATS, audit, clock.
 - **DDD** — артефакты доменов в соседнем strategy-репо; маппинг в Go —
   [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
 - **Тесты** — unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
@@ -97,16 +97,14 @@ make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /r
 - Потребителю — [`getting-started.md`](docs/getting-started.md); контрибьютору —
   [`contributing.md`](docs/contributing.md).
 - Reference — [architecture](docs/reference/architecture.md) ·
-  [observability](docs/reference/observability.md) ·
   [release](docs/reference/release.md) · [ecosystem](docs/reference/ecosystem.md).
 - Design SoT — домены в соседнем strategy-репо · [`docs/stack/`](docs/stack/README.md).
 
 ## E2E
 
 Типизированный pytest-харнес `test/` поверх docker-compose стека
-(postgres/nats/redis/otel-agent/migrate/api). Нужен Docker и `./.env.local`
-(`STIT_OBS_TOKEN` + `OTEL_TENANT`; шаблон — `.env.local.example`). Детали —
-`test/README.md`.
+(postgres/nats/redis/migrate/api). Нужен Docker и `./.env.local`
+(`E2E_ADMIN_*`; шаблон — `.env.local.example`). Детали — `test/README.md`.
 
 ```bash
 make e2e          # весь набор

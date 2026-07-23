@@ -31,9 +31,9 @@
 - Если стек объявил «без authn» — пропусти и не подключай authgate.
 
 ### 5. observability → `docs/stack/observability.md`
-- telemetry-wiring: OTLP-exporters (dev — без коллектора дропается; prod — +Bearer); логи в stdout по `LOG_STDOUT`.
-- resource attrs (service.name/version/commit) из `docs/stack/service.md`.
-- bizmetric-конвенция + примеры `metrics.go` (по trace-points артефакта).
+- logging-wiring: logkit → stdout (формат/уровень из `LOG_*` env).
+- структурные поля лога (service/version/commit) из `docs/stack/service.md`.
+- конвенция логирования ключевых событий (по `Key log events` артефакта).
 
 ### 6. runtime → `docs/stack/runtime.md` (последним)
 - композиция `cmd/api/main.go`: `fx.New(...)` с нужными модулями (домены + platform + kit'ы).

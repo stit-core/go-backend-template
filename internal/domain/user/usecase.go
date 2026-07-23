@@ -15,7 +15,6 @@ import (
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
-	"git.stit.tech/stit-core/golibinfra/telemetry"
 )
 
 const minPasswordLen = 8
@@ -80,8 +79,6 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 }
 
 func (uc *Usecase) Register(ctx context.Context, in *Create) (u *User, err error) {
-	ctx, end := telemetry.Span(ctx, "user.usecase.register")
-	defer end(&err)
 
 	if len(in.Password) < minPasswordLen {
 		uc.metrics.RecordRegistered(ctx, "weak_password")
@@ -131,8 +128,6 @@ func (uc *Usecase) Register(ctx context.Context, in *Create) (u *User, err error
 }
 
 func (uc *Usecase) GetByID(ctx context.Context, id string) (u *User, err error) {
-	ctx, end := telemetry.Span(ctx, "user.usecase.get_by_id")
-	defer end(&err)
 
 	caller, ok := identity.From(ctx)
 	if !ok {
@@ -146,8 +141,6 @@ func (uc *Usecase) GetByID(ctx context.Context, id string) (u *User, err error) 
 }
 
 func (uc *Usecase) Me(ctx context.Context) (u *User, err error) {
-	ctx, end := telemetry.Span(ctx, "user.usecase.me")
-	defer end(&err)
 
 	caller, ok := identity.From(ctx)
 	if !ok {
@@ -158,8 +151,6 @@ func (uc *Usecase) Me(ctx context.Context) (u *User, err error) {
 }
 
 func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPagination) (users []*User, total int, err error) {
-	ctx, end := telemetry.Span(ctx, "user.usecase.list")
-	defer end(&err)
 
 	caller, ok := identity.From(ctx)
 	if !ok {
@@ -193,8 +184,6 @@ func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPaginatio
 }
 
 func (uc *Usecase) Update(ctx context.Context, id string, in Update) (u *User, err error) {
-	ctx, end := telemetry.Span(ctx, "user.usecase.update")
-	defer end(&err)
 
 	caller, ok := identity.From(ctx)
 	if !ok {
@@ -251,8 +240,6 @@ func (uc *Usecase) Update(ctx context.Context, id string, in Update) (u *User, e
 }
 
 func (uc *Usecase) Delete(ctx context.Context, id string) (err error) {
-	ctx, end := telemetry.Span(ctx, "user.usecase.delete")
-	defer end(&err)
 
 	caller, ok := identity.From(ctx)
 	if !ok {

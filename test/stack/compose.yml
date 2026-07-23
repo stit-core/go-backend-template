@@ -19,16 +19,7 @@ x-app-env: &app-env
   JWT_ACCESS_TTL: 15m
   JWT_REFRESH_TTL: 720h
 
-  # Прод-контракт: app шлёт OTLP инсекьюрно в локальный otel-agent.
-  # tenant + bearer держит agent (см. ./configs/otel-agent.yaml +
-  # service otel-agent ниже). App их не знает.
-  OTEL_SERVICE_NAME: backend
-  OTEL_SERVICE_VERSION: smoke
   APP_ENV: smoke
-  OTEL_EXPORTER_OTLP_ENDPOINT: otel-agent:4318
-  OTEL_EXPORTER_OTLP_INSECURE: "true"
-  OTEL_EXPORT_TIMEOUT: 10s
-  OTEL_TRACES_SAMPLER_ARG: "1.0"
 
   LOG_LEVEL: debug
 
@@ -83,25 +74,6 @@ services:
       - "127.0.0.1::6379"
     networks: [smoke]
 
-  otel-agent:
-    image: otel/opentelemetry-collector-contrib:0.151.0
-    command: ["--config=/etc/otel/config.yaml"]
-    volumes:
-      - ./configs/otel-agent.yaml:/etc/otel/config.yaml:ro
-    environment:
-      # Резолвится в up.sh из ./.env.local.
-      OTEL_TENANT: ${OTEL_TENANT}
-      OTEL_TOKEN: ${STIT_OBS_TOKEN}
-    healthcheck:
-      # Образ otel-collector-contrib distroless: внутри ничего кроме бинаря.
-      # validate проверяет что конфиг разобран — это самый дешёвый probe.
-      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otel/config.yaml"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
-    networks: [smoke]
-
   migrate:
     image: ${COMPOSE_PROJECT_NAME:-backend-smoke}:local
     build:
@@ -113,8 +85,6 @@ services:
     command: ["up"]
     depends_on:
       postgres:
-        condition: service_healthy
-      otel-agent:
         condition: service_healthy
     networks: [smoke]
 
@@ -128,8 +98,6 @@ services:
     entrypoint: ["seed-admin"]
     depends_on:
       postgres:
-        condition: service_healthy
-      otel-agent:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -146,8 +114,6 @@ services:
       nats:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      otel-agent:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully

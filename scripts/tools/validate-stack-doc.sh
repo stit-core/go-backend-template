@@ -39,7 +39,7 @@ required_sections() {
         persistence)   echo "Engine 'Migration strategy' 'Kit-owned tables' 'Connection pool' Generates" ;;
         messaging)     echo "'Published subjects' 'Consumed subjects' 'Delivery semantics' Generates" ;;
         auth)          echo "Authn Authgate Roles 'Seed-admin' 'Brute-force' Generates" ;;
-        observability) echo "'Telemetry mode' 'Resource attributes' 'Business metrics' 'Trace points' Generates" ;;
+        observability) echo "'Log sink' 'Log levels & content' Generates" ;;
         dependencies)  echo "'golibinfra kits' 'External runtime deps' Capacity Generates" ;;
         *)             echo "" ;;
     esac

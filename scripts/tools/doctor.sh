@@ -40,15 +40,15 @@ fi
 
 # 2. .env.local ключи (имя ключа, без значения — см. .claude/rules/env-local.md)
 if [ -f .env.local ]; then
-    for k in STIT_OBS_TOKEN OTEL_TENANT E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD; do
+    for k in E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD; do
         if grep -qE "^(export +)?$k=" .env.local; then
             ok ".env.local: $k задан"
         else
-            warn ".env.local: нет $k (нужен для make logs / make e2e — см. .env.local.example)"
+            warn ".env.local: нет $k (опц. для make e2e; иначе дефолты — см. .env.local.example)"
         fi
     done
 else
-    info ".env.local отсутствует (нужен только для make logs / make e2e)"
+    info ".env.local отсутствует (опционален для make e2e — есть дефолты seed-admin)"
 fi
 
 # 3. sqlc drift — read-only (sqlc diff не пишет файлы). mocks-drift мутирует

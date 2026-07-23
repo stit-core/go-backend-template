@@ -14,7 +14,7 @@ paths:
 
 - **Раскладка по слоям.** `entity.go` (типы, без I/O) · `dto.go` · `errors.go` (sentinel) ·
   `policy.go` (решения без I/O) · `usecase.go` (логика, зависимости через порты-интерфейсы) ·
-  `events.go` (outbox payload) · `metrics.go` (bizmetric-счётчики домена, nil-safe `Record*`) ·
+  `events.go` (outbox payload) ·
   `delivery/{http,nats}/` · `infra/postgres/` · `module/`.
 - **Cross-domain — только порты + адаптеры.** depguard (`<domain>-domain-isolation`) запрещает
   импортить что-либо вне своего поддерева `internal/domain/<domain>/`: deny префикса

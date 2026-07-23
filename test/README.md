@@ -78,14 +78,10 @@ point форка.
 - Один и тот же репо параллельно сам с собой не поддерживается: имя
   стабильно по пути, не по запуску.
 
-Телеметрия в скоуп изоляции не входит: параллельные форки с одинаковым
-`OTEL_TENANT` смешивают traces/logs в корп-obs по `service.namespace`.
-Разводка tenant'ов — корп-сторона, см. `corp-infra-template/docs/ecosystem.md` § Tenant identity.
-
 ## Запуск
 
-Нужен Docker и `./.env.local` с `STIT_OBS_TOKEN` + `OTEL_TENANT`
-(шаблон — `.env.local.example`; формат — `.claude/rules/env-local.md`).
+Нужен Docker. `./.env.local` опционален: без него `up.sh` берёт дефолтные
+креды seed-admin (шаблон — `.env.local.example`; формат — `.claude/rules/env-local.md`).
 
 ```
 make e2e          # весь набор (поднимает стек, гоняет, сносит)

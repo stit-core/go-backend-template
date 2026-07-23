@@ -44,8 +44,8 @@ func NewMetrics(m metric.Meter) (*Metrics, error) {
 }
 
 // Все Record* nil-safe: если Metrics не provide'ен в DI (unit-тесты,
-// CLI-утилиты без telemetry) — no-op. Observability не должна валить
-// домен.
+// CLI-утилиты без Metrics-провайдера) — no-op. Observability не должна
+// валить домен.
 
 func (m *Metrics) RecordLogin(ctx context.Context, result string) {
 	if m == nil {

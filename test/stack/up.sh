@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 # test/stack/up.sh — собрать бинари локально и поднять стек.
 #
-# Резолв секретов (НЕ логируем, НЕ возвращаем наружу):
-#   STIT_OBS_TOKEN: env > ./.env.local
-#   OTEL_TENANT:    env > ./.env.local
-#
 # Шаги:
 #   1. Build api/worker/migrate бинарей локально в test/stack/bin/
 #      (использует прогретый GOMODCACHE; не нужен ssh/.netrc в docker).
-#   2. docker compose up -d --build с подстановкой токена через окружение.
+#   2. docker compose up -d --build.
 #   3. Дождаться healthy / migrate completed.
 #
 # Канонический status-line: `OK` / `FAIL: <reason>`.
@@ -17,7 +13,7 @@ set -uo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-# === Token resolution ===
+# === Value resolution (env > ./.env.local) ===
 resolve_kv() {
     local key="$1"
     local env_val="${2:-}"
@@ -35,21 +31,6 @@ resolve_kv() {
     v="${v%\'}"; v="${v#\'}"
     printf '%s' "$v"
 }
-
-TOKEN=$(resolve_kv STIT_OBS_TOKEN "${STIT_OBS_TOKEN:-}") || true
-TENANT=$(resolve_kv OTEL_TENANT "${OTEL_TENANT:-}") || true
-
-if [ -z "${TOKEN:-}" ]; then
-    echo "FAIL: no STIT_OBS_TOKEN. Add line 'STIT_OBS_TOKEN=<token>' to ./.env.local (or set env)." >&2
-    exit 1
-fi
-if [ -z "${TENANT:-}" ]; then
-    echo "FAIL: no OTEL_TENANT. Add line 'OTEL_TENANT=<tenant>' to ./.env.local (or set env)." >&2
-    exit 1
-fi
-
-export STIT_OBS_TOKEN="$TOKEN"
-export OTEL_TENANT="$TENANT"
 
 # Креды seed-admin (one-off bootstrap первого admin). Не прод-секрет —
 # admin эфемерного e2e-стека; дефолты если .env.local не задаёт.

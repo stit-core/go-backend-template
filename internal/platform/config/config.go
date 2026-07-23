@@ -9,14 +9,12 @@ import (
 	"git.stit.tech/stit-core/golibinfra/config"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
-	"git.stit.tech/stit-core/golibinfra/telemetry"
 )
 
 type App struct {
-	Postgres  pgkit.PoolConfig
-	HTTP      httpkit.Config
-	Telemetry telemetry.Config
-	Cookie    authgate.CookieConfig
+	Postgres pgkit.PoolConfig
+	HTTP     httpkit.Config
+	Cookie   authgate.CookieConfig
 }
 
 var Module = fx.Module(
@@ -26,7 +24,6 @@ var Module = fx.Module(
 
 		func(a *App) pgkit.PoolConfig { return a.Postgres },
 		func(a *App) httpkit.Config { return a.HTTP },
-		func(a *App) telemetry.Config { return a.Telemetry },
 		func(a *App) authgate.CookieConfig { return a.Cookie },
 	),
 )

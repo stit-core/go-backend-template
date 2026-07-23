@@ -21,7 +21,7 @@
 
 Что считается конкретным:
 - пути в коде: `internal/platform/<x>`, `cmd/<bin>`, `<domain>/delivery/<y>`;
-- имена env: `DATABASE_URL`, `OTEL_TOKEN`, `JWT_PUBLIC_KEY`;
+- имена env: `DATABASE_URL`, `JWT_PUBLIC_KEY`, `LOG_LEVEL`;
 - имена fx-провайдеров / kit-функций: `pgkit.NewPool`,
   `outboxkit.NewPublisher`;
 - subjects: `users.events.registered`;
@@ -41,7 +41,7 @@ Cross-kind sync — там полная матрица.
 Программная проверка:
 - каждый env, упомянутый в `Generates` или в теле kit-артефакта, есть
   в `config.md § Required env` или `§ Optional env`;
-- каждый секрет — в `config.md § Secrets` с Vault-ключом;
+- каждый секрет — в `config.md § Secrets` (имя env; значение не коммитим);
 - каждый subscriber/job/cleanup-job, объявленный в kit-артефакте, есть
   в `runtime.md § Entrypoints` или `§ Lifecycle`;
 - каждая внешняя runtime-dep (Postgres/NATS/Redis/S3/…), упомянутая в
@@ -113,12 +113,12 @@ make validate-stack-docs
 
 > Required env перечислены полностью (валидатор `envconfig` падает без
 > них); Optional env с дефолтами по подключённым kit'ам; секреты —
-> отдельной секцией с Vault-ключами; release-checklist для добавления
-> новых env есть?
+> отдельной секцией (имя env, значение не коммитим); release-checklist для
+> добавления новых env есть?
 
-- ✅ `Required: DATABASE_URL, JWT_PUBLIC_KEY, OTEL_TOKEN, SEED_ADMIN_EMAIL`;
-  `Optional: HTTP_PORT (8080), LOG_STDOUT (true), PG_MAX_CONNS (50), …`;
-  `Secrets: JWT_PUBLIC_KEY → kv/.../jwt/public`; release-checklist.
+- ✅ `Required: DATABASE_URL, JWT_PUBLIC_KEY, SEED_ADMIN_EMAIL`;
+  `Optional: HTTP_PORT (8080), LOG_LEVEL (info), PG_MAX_CONNS (50), …`;
+  `Secrets: JWT_PUBLIC_KEY (env, значение не коммитим)`; release-checklist.
 - ❌ «Берётся envconfig автоматически» — без перечисления.
 
 ### persistence
@@ -150,7 +150,7 @@ make validate-stack-docs
 > middleware кладёт в principal; роли перечислены; seed-admin путь
 > идемпотентен; brute-force защищает login?
 
-- ✅ JWT RS256 с публичным ключом из Vault; authgate кладёт
+- ✅ JWT RS256 с публичным ключом из env (`JWT_PUBLIC_KEY`); authgate кладёт
   `Principal{UserID, Role}`; роли `client`/`admin`; seed-admin через
   `cmd/seed-admin` (env `SEED_ADMIN_*`), идемпотентен; bruteforce-cleanup
   как job интервалом 5m.
@@ -159,15 +159,14 @@ make validate-stack-docs
 
 ### observability
 
-> Telemetry mode явный (dev/prod); resource attrs выставляются;
-> bizmetric-конвенция и где они эмитятся; trace-points перечислены?
+> Режим логирования явный (stdout); формат и уровень заданы;
+> структурные поля (service/version/commit) перечислены; где и как логируются
+> ключевые события?
 
-- ✅ Mode: OTLP всегда (prod — +Bearer `OTEL_TOKEN`), логи и в stdout по `LOG_STDOUT`;
-  service.name/version/commit/deployment.environment.name; biz-метрики
-  `biz_orders_placed_total`/`biz_orders_canceled_seconds`; trace-points
-  HTTP (otelhttp), PG (otelpgx), NATS (header propagation), use-cases
-  (`telemetry.Span`).
-- ❌ «OTel включён» — без режима, без resource attrs, без biz-метрик.
+- ✅ Логи в stdout, формат `json`, уровень `LOG_LEVEL` (default `info`);
+  поля `service`/`version`/`commit`; ключевые события (старт, ошибки usecase,
+  результат обработки эвента) логируются структурно через logkit.
+- ❌ «Логирование есть» — без формата, без уровня, без структурных полей.
 
 ### dependencies
 
@@ -175,8 +174,8 @@ make validate-stack-docs
 > явно (чтобы не было ложных ожиданий «эта env читается»); внешние
 > runtime-deps с режимом отказа; capacity-оценка есть?
 
-- ✅ Kits: telemetry, httpkit, pgkit, authnkit, outboxkit, auditkit,
-  bruteforcekit, clockkit, logkit, bizmetric; **не подключено**:
+- ✅ Kits: httpkit, pgkit, authnkit, outboxkit, auditkit,
+  bruteforcekit, clockkit, logkit; **не подключено**:
   natskit, cachekit, storagekit; External: Postgres (req),
   email-провайдер (Postmark, fallback=N/A, timeout=5s); Capacity:
   1 CPU/512MB, 2 replicas, pool=50.
