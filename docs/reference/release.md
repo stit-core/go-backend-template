@@ -34,13 +34,13 @@ fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвер�
 
 | Зона | Где | Что делает |
 |---|---|---|
-| Проект | `<org>/infra` (← project-infra-template-compose) | выставить `BACKEND_TAG=vX.Y.Z` в `.env`/compose → `make ship` → ssh-deploy → force-recreate |
+| Проект | `<org>/infra` (← project-infra-template-compose) | `make bump SVC=backend TAG=vX.Y.Z` — правит `BACKEND_TAG` в `.env` на VPS + force-recreate, compose пуллит образ (канон rollout'а; `make ship` там — про доставку самого infra-репо) |
 | Verify | там же | `make ps`, лог `"starting" service=api version=vX.Y.Z commit=<sha>` |
 
 ## Откат
 
-Image уже в registry — пересборка не нужна. Полностью в infra-репо: вернуть `BACKEND_TAG`
-на предыдущий тег + `make ship`.
+Image уже в registry — пересборка не нужна. Полностью в infra-репо:
+`make bump SVC=backend TAG=<предыдущий>`.
 
 ## Versioning
 

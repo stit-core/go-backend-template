@@ -6,7 +6,7 @@
 #   make release VERSION=vX.Y.Z
 #
 # Зона ответственности этого репо: код → image в registry. На STOP — всё.
-# Деплой (backend_tag в env проектной инфры + make ship) — в <client-org>/infra, НЕ здесь.
+# Деплой (make bump SVC=backend TAG=… — BACKEND_TAG в .env VPS) — в <client-org>/infra, НЕ здесь.
 #
 # Неинтерактивный запуск (нет TTY / EOF на prompt) → отмена (exit 1):
 # accidental release невозможен. Для CI-автоматизации: RELEASE_YES=1.
@@ -62,10 +62,10 @@ docker buildx build --platform linux/amd64 --push -f Dockerfile.migrate \
 
 echo "✓ released $IMAGE_BASE{,-migrate}:$VERSION"
 
-# --- агрегированный INFRA-HANDOFF (backend_tag + накопленные infra-изменения) ---
+# --- агрегированный INFRA-HANDOFF (BACKEND_TAG + накопленные infra-изменения) ---
 echo
 echo "=== INFRA HANDOFF · передай инфра-админу out-of-band ==="
-echo "backend_tag → $VERSION   (api + migrate, lockstep)"
+echo "BACKEND_TAG → $VERSION   (api + migrate, lockstep)"
 
 # Single-file модель: единый roadmap.md. На каждую `### <slug>`-секцию под `## Active`
 # захватываем подсекцию `**Infra impact.**` (bold-лейбл) до следующего bold-лейбла /
@@ -110,7 +110,8 @@ fi
 cat <<EOF
 
 Действия инфра-стороны:
-  проект:  в <client-org>/infra выставь backend_tag=$VERSION в env и → make ship
+  проект:  в <client-org>/infra — make bump SVC=backend TAG=$VERSION
+           (правит BACKEND_TAG в .env на VPS + force-recreate)
 
 === STOP. Зона этого репо закрыта (image в registry). Деплой — не здесь. ===
 EOF
