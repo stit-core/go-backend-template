@@ -18,7 +18,8 @@ packages:
       PasswordSetter:
       Tokens:
       TokenParser:
-      SessionRepository:
+      # SessionRepository намеренно без мока: тесты используют stateful-фейк
+      # memSessions (rule tests-pipeline: мок и фейк вместе не живут).
       Authorizer:
       LoginGuard:
   git.stit.tech/stit-core/go-backend-template/internal/domain/verification:
@@ -35,5 +36,8 @@ packages:
     interfaces:
       Usecase:
   git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/http:
+    interfaces:
+      Usecase:
+  git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/nats:
     interfaces:
       Usecase:

@@ -12,11 +12,11 @@ import (
 )
 
 type Usecase interface {
-	Register(ctx context.Context, in *user.Create) (*user.User, error)
+	Register(ctx context.Context, in *user.CreateInput) (*user.User, error)
 	GetByID(ctx context.Context, id string) (*user.User, error)
 	Me(ctx context.Context) (*user.User, error)
 	List(ctx context.Context, filter user.ListFilter, pg user.ListPagination) ([]*user.User, int, error)
-	Update(ctx context.Context, id string, in user.Update) (*user.User, error)
+	Update(ctx context.Context, id string, in user.UpdateInput) (*user.User, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -83,37 +83,41 @@ func Register(api huma.API, h *Handler) {
 	}, h.delete)
 }
 
-func (h *Handler) register(ctx context.Context, in *RegisterInput) (*RegisterOutput, error) {
-	u, err := h.uc.Register(ctx, in.ToEntity())
+func (h *Handler) register(ctx context.Context, in *UserRegisterInput) (*UserRegisterOutput, error) {
+	u, err := h.uc.Register(ctx, &user.CreateInput{
+		Email:    in.Body.Email,
+		Password: in.Body.Password,
+		Name:     in.Body.Name,
+	})
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	out := &RegisterOutput{}
+	out := &UserRegisterOutput{}
 	out.Body.Data.FromEntity(u)
 	return out, nil
 }
 
-func (h *Handler) getByID(ctx context.Context, in *GetUserInput) (*GetUserOutput, error) {
+func (h *Handler) getByID(ctx context.Context, in *UserGetInput) (*UserGetOutput, error) {
 	u, err := h.uc.GetByID(ctx, in.ID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	out := &GetUserOutput{}
+	out := &UserGetOutput{}
 	out.Body.Data.FromEntity(u)
 	return out, nil
 }
 
-func (h *Handler) me(ctx context.Context, _ *struct{}) (*MeOutput, error) {
+func (h *Handler) me(ctx context.Context, _ *struct{}) (*UserMeOutput, error) {
 	u, err := h.uc.Me(ctx)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	out := &MeOutput{}
+	out := &UserMeOutput{}
 	out.Body.Data.FromEntity(u)
 	return out, nil
 }
 
-func (h *Handler) list(ctx context.Context, in *ListInput) (*ListOutput, error) {
+func (h *Handler) list(ctx context.Context, in *UserListInput) (*UserListOutput, error) {
 	filter := user.ListFilter{}
 	if in.Status != "" {
 		s := user.Status(in.Status)
@@ -130,7 +134,7 @@ func (h *Handler) list(ctx context.Context, in *ListInput) (*ListOutput, error) 
 		return nil, mapErr(err)
 	}
 
-	out := &ListOutput{}
+	out := &UserListOutput{}
 	out.Body.Total = total
 	out.Body.Page = pg.Page
 	out.Body.Size = pg.Size
@@ -141,8 +145,8 @@ func (h *Handler) list(ctx context.Context, in *ListInput) (*ListOutput, error) 
 	return out, nil
 }
 
-func (h *Handler) update(ctx context.Context, in *UpdateInput) (*UpdateOutput, error) {
-	u, err := h.uc.Update(ctx, in.ID, user.Update{
+func (h *Handler) update(ctx context.Context, in *UserUpdateInput) (*UserUpdateOutput, error) {
+	u, err := h.uc.Update(ctx, in.ID, user.UpdateInput{
 		Name:    in.Body.Name,
 		Status:  in.Body.Status,
 		Version: in.Body.Version,
@@ -150,12 +154,12 @@ func (h *Handler) update(ctx context.Context, in *UpdateInput) (*UpdateOutput, e
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	out := &UpdateOutput{}
+	out := &UserUpdateOutput{}
 	out.Body.Data.FromEntity(u)
 	return out, nil
 }
 
-func (h *Handler) delete(ctx context.Context, in *DeleteInput) (*struct{}, error) {
+func (h *Handler) delete(ctx context.Context, in *UserDeleteInput) (*struct{}, error) {
 	if err := h.uc.Delete(ctx, in.ID); err != nil {
 		return nil, mapErr(err)
 	}

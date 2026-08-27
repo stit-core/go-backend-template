@@ -14,6 +14,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
@@ -35,7 +36,7 @@ func newMemSessions() *memSessions {
 func (s *memSessions) Insert(_ context.Context, jti, userID string, expiresAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sessions[jti] = &auth.RefreshSession{JTI: jti, UserID: userID, IssuedAt: time.Now(), ExpiresAt: expiresAt}
+	s.sessions[jti] = &auth.RefreshSession{JTI: jti, UserID: userID, IssuedAt: fixedNow, ExpiresAt: expiresAt}
 	return nil
 }
 
@@ -57,7 +58,7 @@ func (s *memSessions) MarkUsed(_ context.Context, jti, replacedByJTI string) err
 	if !ok {
 		return auth.ErrSessionNotFound
 	}
-	now := time.Now()
+	now := fixedNow
 	got.UsedAt = &now
 	got.ReplacedByJTI = replacedByJTI
 	return nil
@@ -96,7 +97,7 @@ func defaultTokens(t *testing.T) *mocks.MockTokens {
 			if n > 1 {
 				jti = fmt.Sprintf("jti-%s-%d", userID, n)
 			}
-			return "refresh." + userID + "." + jti, jti, time.Now().Add(time.Hour), nil
+			return "refresh." + userID + "." + jti, jti, fixedNow.Add(time.Hour), nil
 		}).Maybe()
 	return tk
 }
@@ -114,6 +115,8 @@ func parserReturning(t *testing.T, userID, jti string, err error) *mocks.MockTok
 	p.EXPECT().ParseRefresh(mock.Anything).Return(userID, jti, err).Maybe()
 	return p
 }
+
+var fixedNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 	t.Helper()
@@ -197,7 +200,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		o.sessions = newMemSessions()
 	}
 	if o.policy == nil {
-		o.policy = defaultPolicy(t, true)
+		o.policy = defaultPolicy(t, false)
 	}
 	if o.guard == nil {
 		o.guard = defaultGuard(t)
@@ -217,7 +220,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Guard:          o.guard,
 		Audit:          aud,
 		Log:            logkit.Nop(),
-		Clock:          clockkit.NewFixed(time.Now()),
+		Clock:          clockkit.NewFixed(fixedNow),
 	})
 	return ucFixture{
 		uc: uc, users: o.users, verify: o.verify, setpw: o.setpw,
@@ -232,7 +235,7 @@ func TestLogin(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
-			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", Status: "active", Role: identity.RoleClient}, nil,
+			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}, nil,
 		)
 		f := newUC(t, withUsers(users))
 
@@ -247,7 +250,7 @@ func TestLogin(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
-			&auth.User{ID: "u1", PasswordHash: "hash:correct", Status: "active"}, nil,
+			&auth.User{ID: "u1", PasswordHash: "hash:correct", CanLogin: true}, nil,
 		)
 		f := newUC(t, withUsers(users))
 
@@ -260,7 +263,7 @@ func TestLogin(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
-			&auth.User{ID: "u1", PasswordHash: "hash:pass1234", Status: "blocked"}, nil,
+			&auth.User{ID: "u1", PasswordHash: "hash:pass1234", CanLogin: false}, nil,
 		)
 		f := newUC(t, withUsers(users))
 
@@ -274,18 +277,30 @@ func TestLogin(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
+		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, auth.ErrUserNotFound)
 		f := newUC(t, withUsers(users))
 
 		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 	})
 
+	t.Run("lookup infra error is not invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, errors.New("db down"))
+		f := newUC(t, withUsers(users))
+
+		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
+		require.Error(t, err)
+		require.NotErrorIs(t, err, auth.ErrInvalidCredentials)
+		require.False(t, f.audit.Has("login_failed"))
+	})
+
 	t.Run("account locked", func(t *testing.T) {
 		t.Parallel()
 		g := mocks.NewMockLoginGuard(t)
 		g.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).
-			Return(&auth.LockState{Until: time.Now().Add(15 * time.Minute)}, nil)
+			Return(&auth.LockState{Until: fixedNow.Add(15 * time.Minute)}, nil)
 		f := newUC(t, withGuard(g))
 
 		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "p"})
@@ -303,7 +318,7 @@ func TestRefresh(t *testing.T) {
 		users.EXPECT().GetByID(mock.Anything, mock.Anything).
 			Return(&auth.User{ID: "u1", Email: "a@b.com", Role: identity.RoleClient}, nil)
 		sessions := newMemSessions()
-		require.NoError(t, sessions.Insert(context.Background(), "jti-old", "u1", time.Now().Add(time.Hour)))
+		require.NoError(t, sessions.Insert(context.Background(), "jti-old", "u1", fixedNow.Add(time.Hour)))
 		f := newUC(
 			t,
 			withUsers(users),
@@ -341,7 +356,7 @@ func TestRefresh(t *testing.T) {
 	t.Run("expired at session level", func(t *testing.T) {
 		t.Parallel()
 		sessions := newMemSessions()
-		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", time.Now().Add(-time.Minute)))
+		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", fixedNow.Add(-time.Minute)))
 		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByID(mock.Anything, mock.Anything).Return(&auth.User{ID: "u1"}, nil).Maybe()
 		f := newUC(t, withUsers(users), withSessions(sessions))
@@ -353,7 +368,7 @@ func TestRefresh(t *testing.T) {
 	t.Run("reused jti", func(t *testing.T) {
 		t.Parallel()
 		sessions := newMemSessions()
-		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", time.Now().Add(time.Hour)))
+		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", fixedNow.Add(time.Hour)))
 		require.NoError(t, sessions.MarkUsed(context.Background(), "jti-u1", "jti-other"))
 		f := newUC(t, withSessions(sessions))
 
@@ -376,7 +391,7 @@ func TestLogout(t *testing.T) {
 	t.Run("marks session used", func(t *testing.T) {
 		t.Parallel()
 		sessions := newMemSessions()
-		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", time.Now().Add(time.Hour)))
+		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", fixedNow.Add(time.Hour)))
 		f := newUC(t, withSessions(sessions))
 
 		require.NoError(t, f.uc.Logout(context.Background(), "tok"))
@@ -411,9 +426,9 @@ func TestChangePassword(t *testing.T) {
 			})
 		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByID(mock.Anything, mock.Anything).Return(&auth.User{ID: "u1", Version: 7}, nil)
-		f := newUC(t, withUsers(users), withVerifier(verify), withSetter(setter))
+		f := newUC(t, withUsers(users), withVerifier(verify), withSetter(setter), withPolicy(defaultPolicy(t, true)))
 
-		ctx := identity.With(context.Background(), identity.Identity{UserID: "u1"})
+		ctx := identitytest.Client("u1")
 		require.NoError(t, f.uc.ChangePassword(ctx, "u1", "old", "newpassword123"))
 		require.Equal(t, "hash:newpassword123", lastHash)
 		require.Equal(t, 7, lastVersion)
@@ -424,25 +439,25 @@ func TestChangePassword(t *testing.T) {
 		t.Parallel()
 		verify := mocks.NewMockPasswordVerifier(t)
 		verify.EXPECT().VerifyPassword(mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
-		f := newUC(t, withVerifier(verify))
+		f := newUC(t, withVerifier(verify), withPolicy(defaultPolicy(t, true)))
 
-		ctx := identity.With(context.Background(), identity.Identity{UserID: "u1"})
+		ctx := identitytest.Client("u1")
 		err := f.uc.ChangePassword(ctx, "u1", "old", "newpassword123")
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 	})
 
 	t.Run("weak new", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t)
-		ctx := identity.With(context.Background(), identity.Identity{UserID: "u1"})
+		f := newUC(t, withPolicy(defaultPolicy(t, true)))
+		ctx := identitytest.Client("u1")
 		err := f.uc.ChangePassword(ctx, "u1", "old", "short")
 		require.ErrorIs(t, err, auth.ErrWeakPassword)
 	})
 
 	t.Run("forbidden", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t, withPolicy(defaultPolicy(t, false)))
-		ctx := identity.With(context.Background(), identity.Identity{UserID: "u1"})
+		f := newUC(t)
+		ctx := identitytest.Client("u1")
 		err := f.uc.ChangePassword(ctx, "u2", "old", "newpassword123")
 		var fe *auth.ForbiddenError
 		require.ErrorAs(t, err, &fe)

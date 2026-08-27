@@ -5,9 +5,10 @@
 #   make new-domain NAME=order
 #   bash scripts/new-domain.sh order
 #
-# Создаёт минимальную структуру по конвенции `.claude/rules/domain-architecture.md`.
-# Дальше дописывает skill `scaffold` (вариант domain, references/domain.md): usecase,
-# repository, handler, моки, тесты, миграцию, fx-wiring.
+# Создаёт минимальную структуру по канону `.claude/rules/domain-architecture.md`
+# (обязательность файлов, naming, policy.Decision, subject-const) и сам вписывает
+# domain-isolation в .golangci.yml и интерфейсы в .mockery.yml. Дальше дописывает
+# skill `scaffold` (вариант domain): полноценный usecase, sqlc, handler, миграция.
 
 set -euo pipefail
 
@@ -18,7 +19,6 @@ if [ -z "$NAME" ]; then
     exit 1
 fi
 
-# snake_case проверка
 if ! [[ "$NAME" =~ ^[a-z][a-z0-9_]*$ ]]; then
     echo "ERROR: имя домена — snake_case (a-z, 0-9, _), начинается с буквы" >&2
     echo "       получено: '$NAME'" >&2
@@ -48,7 +48,6 @@ package $NAME
 
 import "time"
 
-// $TITLE — корневая сущность домена.
 type $TITLE struct {
 	ID        string
 	Version   int
@@ -60,13 +59,9 @@ EOF
 cat >"$DOMAIN_DIR/dto.go" <<EOF
 package $NAME
 
-// Create${TITLE}Input — вход usecase для создания.
-type Create${TITLE}Input struct{}
-
-// Create${TITLE}Output — выход usecase для создания.
-type Create${TITLE}Output struct {
-	${TITLE} *$TITLE
-}
+// Канон naming — <Op>Input/<Op>Output (rule domain-architecture).
+// Output-DTO заводится, только когда результат usecase ≠ entity и ≠ скаляр.
+type CreateInput struct{}
 EOF
 
 cat >"$DOMAIN_DIR/errors.go" <<EOF
@@ -75,37 +70,30 @@ package $NAME
 import "errors"
 
 var (
-	ErrNotFound = errors.New("$NAME: not found")
-	ErrConflict = errors.New("$NAME: version conflict")
+	ErrNotFound         = errors.New("$NAME: not found")
+	ErrConcurrentUpdate = errors.New("$NAME: concurrent update")
 )
-EOF
-
-cat >"$DOMAIN_DIR/events.go" <<EOF
-package $NAME
-
-import "time"
-
-// Subject — литерал \`$NAME.events.created\` (см. .claude/rules/events-and-messaging.md).
-// Публикатор передаёт его прямо в \`events.Publish(...)\`; consumer заводит свою
-// локальную константу в \`<consumer>/delivery/nats/dto.go\`.
-type ${TITLE}Created struct {
-	${TITLE}ID string    \`json:"${NAME}_id"\`
-	Timestamp time.Time \`json:"timestamp"\`
-}
 EOF
 
 cat >"$DOMAIN_DIR/policy.go" <<EOF
 package $NAME
 
-import "context"
+import (
+	"context"
 
-// Policy — authorization decisions для домена.
+	"$MODULE_PATH/internal/platform/identity"
+	"$MODULE_PATH/pkg/policy"
+)
+
 type Policy struct{}
 
 func NewPolicy() *Policy { return &Policy{} }
 
-func (p *Policy) CanCreate(_ context.Context) error {
-	return nil
+func (p *Policy) CanCreate(_ context.Context, caller identity.Identity) policy.Decision {
+	if caller.Role == identity.RoleAdmin {
+		return policy.Allow()
+	}
+	return policy.Deny("admin only")
 }
 EOF
 
@@ -116,13 +104,28 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"$MODULE_PATH/internal/domain/$NAME"
+	"$MODULE_PATH/internal/platform/identity"
 )
 
 func TestPolicy_CanCreate(t *testing.T) {
+	t.Parallel()
 	p := $NAME.NewPolicy()
-	if err := p.CanCreate(context.Background()); err != nil {
-		t.Fatalf("CanCreate: %v", err)
+	cases := []struct {
+		name   string
+		caller identity.Identity
+		want   bool
+	}{
+		{"admin", identity.Identity{UserID: "a1", Role: identity.RoleAdmin}, true},
+		{"client", identity.Identity{UserID: "u1", Role: identity.RoleClient}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, p.CanCreate(context.Background(), tc.caller).IsAllowed)
+		})
 	}
 }
 EOF
@@ -130,27 +133,86 @@ EOF
 cat >"$DOMAIN_DIR/usecase.go" <<EOF
 package $NAME
 
-import "context"
+import (
+	"context"
 
-// Repository — порт persistence для $NAME.
+	"go.uber.org/fx"
+
+	"$MODULE_PATH/internal/platform/identity"
+	"$MODULE_PATH/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/logkit"
+)
+
 type Repository interface {
 	Insert(ctx context.Context, e *$TITLE) error
 	GetByID(ctx context.Context, id string) (*$TITLE, error)
 }
 
-// Authorizer — порт policy decisions.
 type Authorizer interface {
-	CanCreate(ctx context.Context) error
+	CanCreate(ctx context.Context, caller identity.Identity) policy.Decision
 }
 
-// Usecase — бизнес-логика домена.
+type UsecaseDeps struct {
+	fx.In
+
+	Repo    Repository
+	Policy  Authorizer
+	Log     logkit.Logger
+	Clock   clockkit.Clock
+	Metrics *Metrics
+}
+
 type Usecase struct {
-	repo Repository
-	auth Authorizer
+	repo    Repository
+	policy  Authorizer
+	log     logkit.Logger
+	clock   clockkit.Clock
+	metrics *Metrics
 }
 
-func NewUsecase(repo Repository, auth Authorizer) *Usecase {
-	return &Usecase{repo: repo, auth: auth}
+func NewUsecase(d UsecaseDeps) *Usecase {
+	return &Usecase{
+		repo:    d.Repo,
+		policy:  d.Policy,
+		log:     d.Log.With("domain", "$NAME"),
+		clock:   d.Clock,
+		metrics: d.Metrics,
+	}
+}
+EOF
+
+cat >"$DOMAIN_DIR/metrics.go" <<EOF
+package $NAME
+
+import (
+	"context"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+
+	"git.stit.tech/stit-core/golibinfra/bizmetric"
+)
+
+// Metrics — bizmetric-счётчики домена (biz_${NAME}_*_total). Все Record* nil-safe.
+type Metrics struct {
+	created metric.Int64Counter
+}
+
+func NewMetrics(m metric.Meter) (*Metrics, error) {
+	return &Metrics{
+		created: bizmetric.Counter(
+			m, "$NAME", "created",
+			metric.WithDescription("${TITLE} creations by outcome"),
+		),
+	}, nil
+}
+
+func (m *Metrics) RecordCreated(ctx context.Context, result string) {
+	if m == nil {
+		return
+	}
+	m.created.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
 }
 EOF
 
@@ -159,15 +221,24 @@ package ${NAME}_test
 
 import (
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"$MODULE_PATH/internal/domain/$NAME"
+	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/logkit"
 )
 
-func TestUsecase_New(t *testing.T) {
-	uc := $NAME.NewUsecase(nil, nil)
-	if uc == nil {
-		t.Fatal("usecase is nil")
-	}
+var fixedNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+func TestNewUsecase(t *testing.T) {
+	t.Parallel()
+	uc := $NAME.NewUsecase($NAME.UsecaseDeps{
+		Log:   logkit.Nop(),
+		Clock: clockkit.NewFixed(fixedNow),
+	})
+	require.NotNil(t, uc)
 }
 EOF
 
@@ -178,7 +249,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// Usecase — порт для handler-а.
 type Usecase interface{}
 
 type Handler struct {
@@ -189,20 +259,13 @@ func NewHandler(uc Usecase) *Handler {
 	return &Handler{uc: uc}
 }
 
-// Register — регистрирует роуты в huma API.
 func Register(api huma.API, h *Handler) {
 	_ = api
 	_ = h
-	// huma.Register(api, huma.Operation{...}, h.Create${TITLE})
+	// huma.Register(api, huma.Operation{OperationID: "create${TITLE}", ...}, h.create)
+	// HTTP-DTO — в dto.go, имена ${TITLE}<Op>Input/Output (huma-registry глобальна);
+	// ошибки мапит mapErr через httpkit.MapErr (см. auth/delivery/http/handler.go).
 }
-EOF
-
-cat >"$DOMAIN_DIR/delivery/http/dto.go" <<EOF
-package http
-EOF
-
-cat >"$DOMAIN_DIR/delivery/http/view.go" <<EOF
-package http
 EOF
 
 cat >"$DOMAIN_DIR/delivery/http/handler_test.go" <<EOF
@@ -211,13 +274,14 @@ package http_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	httpdelivery "$MODULE_PATH/internal/domain/$NAME/delivery/http"
 )
 
 func TestNewHandler(t *testing.T) {
-	if h := httpdelivery.NewHandler(nil); h == nil {
-		t.Fatal("handler is nil")
-	}
+	t.Parallel()
+	require.NotNil(t, httpdelivery.NewHandler(nil))
 }
 EOF
 
@@ -227,18 +291,19 @@ package postgres
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"$MODULE_PATH/internal/domain/$NAME"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 
 type Repository struct {
-	pool *pgxpool.Pool
+	db *pgkit.DB
 }
 
-func NewRepository(pool *pgxpool.Pool) *Repository {
-	return &Repository{pool: pool}
+func NewRepository(database *pgkit.DB) ${NAME}.Repository {
+	return &Repository{db: database}
 }
+
+// После sqlc-генерации замени db на db.Queries (см. auth/infra/postgres/repository.go).
 
 func (r *Repository) Insert(ctx context.Context, e *${NAME}.${TITLE}) error {
 	_ = ctx
@@ -253,13 +318,12 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*${NAME}.${TITLE},
 }
 EOF
 
-# infra/postgres/queries/$NAME.sql — пустой файл с placeholder'ом
 cat >"$DOMAIN_DIR/infra/postgres/queries/$NAME.sql" <<EOF
 -- Запросы для $NAME домена.
--- Следуй sqlc-конвенции: '-- name: <Method> :<one|many|exec|execrows>'
+-- sqlc-конвенция: '-- name: <Method> :<one|many|exec|execrows>'; создание — Insert<Entity>.
 -- См. .claude/rules/sqlc-and-migrations.md
 
--- name: GetByID :one
+-- name: Get${TITLE} :one
 -- SELECT * FROM ${NAME}s WHERE id = \$1;
 EOF
 
@@ -279,35 +343,42 @@ var Module = fx.Module(
 	fx.Provide(
 		${NAME}pg.NewRepository,
 		fx.Annotate(${NAME}.NewPolicy, fx.As(new(${NAME}.Authorizer))),
-		func(r *${NAME}pg.Repository) ${NAME}.Repository { return r },
+		${NAME}.NewMetrics,
 		${NAME}.NewUsecase,
 		${NAME}http.NewHandler,
 		func(u *${NAME}.Usecase) ${NAME}http.Usecase { return u },
 	),
 	fx.Invoke(${NAME}http.Register),
 )
+
+// Cross-domain порт нужен → тип-адаптер и его конструктор в module/adapters.go
+// (identity-closure только без логики). См. rule domain-architecture.
 EOF
 
-cat >"$DOMAIN_DIR/module/adapters.go" <<EOF
-package module
+# ── авто-вписывание конфигов ──────────────────────────────────────────────
 
-// Cross-domain адаптеры: если $NAME-домену нужны данные из другого домена,
-// определи порт в $NAME/usecase.go и реализуй адаптер здесь.
-EOF
+echo "→ вписываю ${NAME}-domain-isolation в .golangci.yml"
+awk -v name="$NAME" -v mod="$MODULE_PATH" '
+{ print }
+/^    depguard:$/ { in_depguard = 1 }
+in_depguard && /^      rules:$/ && !done {
+    print "        " name "-domain-isolation:"
+    print "          list-mode: lax"
+    print "          files:"
+    print "            - \"**/internal/domain/" name "/**\""
+    print "            - \"!**/*_test.go\""
+    print "            - \"!**/internal/domain/" name "/module/**\""
+    print "          allow:"
+    print "            - \"" mod "/internal/domain/" name "\""
+    print "          deny:"
+    print "            - pkg: \"" mod "/internal/domain\""
+    print "              desc: \"cross-domain imports are forbidden; use a port + adapter in module/\""
+    done = 1
+}
+' "$ROOT/.golangci.yml" >"$ROOT/.golangci.yml.tmp" && mv "$ROOT/.golangci.yml.tmp" "$ROOT/.golangci.yml"
 
-echo
-echo "✓ создан $DOMAIN_DIR/"
-echo
-echo "Дальше (см. .claude/skills/scaffold/references/domain.md):"
-echo "  1. Добавь миграцию: migrations/NNNN_${NAME}.{up,down}.sql"
-echo "  2. Добавь sqlc-блок в sqlc.yaml для пути queries/$NAME"
-echo "  3. Заполни запросы в infra/postgres/queries/$NAME.sql"
-echo "  4. make gen — регенерация sqlc+mocks"
-echo "  5. Заполни usecase, handler, тесты"
-echo "  6. Подключи модуль в cmd/api/main.go (domainModules)"
-echo
-echo "─── snippet для .mockery.yml (вставить под секцию packages:) ───"
-cat <<MOCKERY
+echo "→ вписываю интерфейсы в .mockery.yml"
+cat >>"$ROOT/.mockery.yml" <<EOF
   ${MODULE_PATH}/internal/domain/${NAME}:
     interfaces:
       Repository:
@@ -315,21 +386,17 @@ cat <<MOCKERY
   ${MODULE_PATH}/internal/domain/${NAME}/delivery/http:
     interfaces:
       Usecase:
-MOCKERY
+EOF
+
 echo
-echo "─── snippet для .golangci.yml (depguard rules, изоляция домена) ───"
-cat <<DEPGUARD
-        ${NAME}-domain-isolation:
-          list-mode: lax
-          files:
-            - '**/internal/domain/$NAME/**'
-            - '!**/*_test.go'
-            - '!**/internal/domain/$NAME/module/**'
-          allow:
-            - '${MODULE_PATH}/internal/domain/$NAME'
-          deny:
-            - pkg: '${MODULE_PATH}/internal/domain'
-              desc: 'cross-domain imports are forbidden; use a port + adapter in module/'
-DEPGUARD
+echo "✓ создан $DOMAIN_DIR/ + конфиги вписаны (.golangci.yml, .mockery.yml)"
 echo
-echo "После правок: make gen && make check"
+echo "Дальше (см. .claude/skills/scaffold/references/domain.md):"
+echo "  1. Миграция: migrations/NNNN_${NAME}.{up,down}.sql (нумерация непрерывна — migrations-check)"
+echo "  2. sqlc-блок в sqlc.yaml для infra/postgres/queries/$NAME + запросы"
+echo "  3. make gen — регенерация sqlc+mocks"
+echo "  4. Usecase/handler/тесты; HTTP-DTO в delivery/http/dto.go (${TITLE}<Op>Input/Output),"
+echo "     view.go — когда появится тело ответа; events.go (payload + unexported subject-const)"
+echo "     + infra/outbox/outbox.go — при первой публикации (rule events-and-messaging)"
+echo "  5. Подключи модуль в cmd/api/main.go (domainModules)"
+echo "  6. make check (fmt+vet+lint+test+build+gen-check+migrations+cover)"

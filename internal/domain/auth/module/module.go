@@ -7,8 +7,6 @@ import (
 	authhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/delivery/http"
 	authpg "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/infra/postgres"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit-core/golibinfra/authnkit"
-	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
 )
 
 var Module = fx.Module(
@@ -19,13 +17,9 @@ var Module = fx.Module(
 		func(uc *user.Usecase) auth.PasswordSetter { return uc },
 		authpg.NewRepository,
 		fx.Annotate(auth.NewPolicy, fx.As(new(auth.Authorizer))),
-		func(s authnkit.JWTSigner, cfg authnkit.JWTConfig) auth.Tokens {
-			return &tokensAdapter{signer: s, accessTTL: cfg.AccessTTL, refreshTTL: cfg.RefreshTTL}
-		},
-		func(p authnkit.JWTParser) auth.TokenParser {
-			return &tokenParserAdapter{parser: p}
-		},
-		func(g bruteforcekit.Guard) auth.LoginGuard { return g },
+		newTokensAdapter,
+		newTokenParserAdapter,
+		newLoginGuardAdapter,
 		auth.NewMetrics,
 		auth.NewUsecase,
 		authhttp.NewHandler,
@@ -33,7 +27,3 @@ var Module = fx.Module(
 	),
 	fx.Invoke(authhttp.Register),
 )
-
-func newUserReaderAdapter(uc *user.Usecase) auth.UserReader {
-	return &userReaderAdapter{uc: uc}
-}

@@ -156,7 +156,7 @@ import "errors"
 
 var (
     ErrNotFound = errors.New("<name>: not found")
-    ErrConflict = errors.New("<name>: version conflict")
+    ErrConcurrentUpdate = errors.New("<name>: concurrent update")
 )
 ```
 
@@ -234,10 +234,10 @@ make gen
 
 ### 15. depguard правило
 
-В `.golangci.yml` добавь правило строгой изоляции (умбрелла: deny всего префикса
-`internal/domain` + allow только своего поддерева → любой сосед, включая будущие,
-блокируется автоматически; `module/` и `*_test.go` исключены). `scripts/new-domain.sh`
-печатает этот блок готовым:
+`scripts/new-domain.sh` **сам вписывает** правило строгой изоляции в `.golangci.yml`
+(умбрелла: deny всего префикса `internal/domain` + allow только своего поддерева →
+любой сосед, включая будущие, блокируется автоматически; `module/` и `*_test.go`
+исключены) и интерфейсы в `.mockery.yml`. Если домен создавался вручную — блок такой:
 ```yaml
 <name>-domain-isolation:
   list-mode: lax

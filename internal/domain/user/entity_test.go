@@ -1,14 +1,16 @@
 package user_test
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 )
 
 func TestNewUser(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		email   string
@@ -25,33 +27,36 @@ func TestNewUser(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			u, err := user.NewUser(tc.email, tc.hash, tc.uname, tc.role)
-			if !errors.Is(err, tc.wantErr) {
-				t.Fatalf("ожидали %v, получили %v", tc.wantErr, err)
-			}
+			require.ErrorIs(t, err, tc.wantErr)
 			if err == nil {
 				wantRole := tc.role
 				if wantRole == identity.RoleUnknown {
 					wantRole = identity.RoleClient
 				}
-				if u.Role != wantRole {
-					t.Fatalf("ожидали role=%s, получили %s", wantRole, u.Role)
-				}
+				require.Equal(t, wantRole, u.Role)
 			}
 		})
 	}
 }
 
 func TestUserCanLogin(t *testing.T) {
-	cases := map[user.Status]bool{
-		user.StatusActive:  true,
-		user.StatusBlocked: false,
-		user.StatusUnknown: false,
+	t.Parallel()
+	tests := []struct {
+		name   string
+		status user.Status
+		want   bool
+	}{
+		{"active", user.StatusActive, true},
+		{"blocked", user.StatusBlocked, false},
+		{"unknown", user.StatusUnknown, false},
 	}
-	for s, want := range cases {
-		u := &user.User{Status: s}
-		if got := u.CanLogin(); got != want {
-			t.Fatalf("status=%s: ожидали %v, получили %v", s, want, got)
-		}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			u := &user.User{Status: tc.status}
+			require.Equal(t, tc.want, u.CanLogin())
+		})
 	}
 }

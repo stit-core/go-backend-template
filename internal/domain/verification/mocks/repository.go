@@ -176,20 +176,29 @@ func (_c *MockRepository_GetPasswordReset_Call) RunAndReturn(run func(ctx contex
 }
 
 // InsertEmailVerification provides a mock function for the type MockRepository
-func (_mock *MockRepository) InsertEmailVerification(ctx context.Context, userID string, tokenHash string, expiresAt time.Time) error {
+func (_mock *MockRepository) InsertEmailVerification(ctx context.Context, userID string, tokenHash string, expiresAt time.Time) (bool, error) {
 	ret := _mock.Called(ctx, userID, tokenHash, expiresAt)
 
 	if len(ret) == 0 {
 		panic("no return value specified for InsertEmailVerification")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, time.Time) error); ok {
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, time.Time) (bool, error)); ok {
+		return returnFunc(ctx, userID, tokenHash, expiresAt)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, time.Time) bool); ok {
 		r0 = returnFunc(ctx, userID, tokenHash, expiresAt)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(bool)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, time.Time) error); ok {
+		r1 = returnFunc(ctx, userID, tokenHash, expiresAt)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockRepository_InsertEmailVerification_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InsertEmailVerification'
@@ -234,12 +243,12 @@ func (_c *MockRepository_InsertEmailVerification_Call) Run(run func(ctx context.
 	return _c
 }
 
-func (_c *MockRepository_InsertEmailVerification_Call) Return(err error) *MockRepository_InsertEmailVerification_Call {
-	_c.Call.Return(err)
+func (_c *MockRepository_InsertEmailVerification_Call) Return(inserted bool, err error) *MockRepository_InsertEmailVerification_Call {
+	_c.Call.Return(inserted, err)
 	return _c
 }
 
-func (_c *MockRepository_InsertEmailVerification_Call) RunAndReturn(run func(ctx context.Context, userID string, tokenHash string, expiresAt time.Time) error) *MockRepository_InsertEmailVerification_Call {
+func (_c *MockRepository_InsertEmailVerification_Call) RunAndReturn(run func(ctx context.Context, userID string, tokenHash string, expiresAt time.Time) (bool, error)) *MockRepository_InsertEmailVerification_Call {
 	_c.Call.Return(run)
 	return _c
 }

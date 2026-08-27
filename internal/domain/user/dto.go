@@ -1,12 +1,12 @@
 package user
 
-type Create struct {
+type CreateInput struct {
 	Email    string
 	Password string
 	Name     string
 }
 
-type Update struct {
+type UpdateInput struct {
 	Name    *string
 	Status  *Status
 	Version int

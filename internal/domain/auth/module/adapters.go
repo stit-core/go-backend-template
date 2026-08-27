@@ -11,16 +11,22 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
+	"git.stit.tech/stit-core/golibinfra/clockkit"
 )
 
 type userReaderAdapter struct {
 	uc *user.Usecase
 }
 
+func newUserReaderAdapter(uc *user.Usecase) auth.UserReader {
+	return &userReaderAdapter{uc: uc}
+}
+
 func (a *userReaderAdapter) GetByID(ctx context.Context, id string) (*auth.User, error) {
 	u, err := a.uc.LookupByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, mapUserErr(err)
 	}
 	return userToAuth(u), nil
 }
@@ -28,9 +34,17 @@ func (a *userReaderAdapter) GetByID(ctx context.Context, id string) (*auth.User,
 func (a *userReaderAdapter) GetByEmail(ctx context.Context, email string) (*auth.User, error) {
 	u, err := a.uc.LookupByEmail(ctx, email)
 	if err != nil {
-		return nil, err
+		return nil, mapUserErr(err)
 	}
 	return userToAuth(u), nil
+}
+
+// Ports carry consumer-domain sentinels: callers can't errors.Is against user's (depguard).
+func mapUserErr(err error) error {
+	if errors.Is(err, user.ErrNotFound) {
+		return auth.ErrUserNotFound
+	}
+	return err
 }
 
 func userToAuth(u *user.User) *auth.User {
@@ -39,7 +53,7 @@ func userToAuth(u *user.User) *auth.User {
 		Email:        u.Email,
 		PasswordHash: u.PasswordHash,
 		Name:         u.Name,
-		Status:       string(u.Status),
+		CanLogin:     u.CanLogin(),
 		Role:         u.Role,
 		Version:      u.Version,
 	}
@@ -47,8 +61,13 @@ func userToAuth(u *user.User) *auth.User {
 
 type tokensAdapter struct {
 	signer     authnkit.JWTSigner
+	clock      clockkit.Clock
 	accessTTL  time.Duration
 	refreshTTL time.Duration
+}
+
+func newTokensAdapter(s authnkit.JWTSigner, cfg authnkit.JWTConfig, clock clockkit.Clock) auth.Tokens {
+	return &tokensAdapter{signer: s, clock: clock, accessTTL: cfg.AccessTTL, refreshTTL: cfg.RefreshTTL}
 }
 
 func (a *tokensAdapter) IssueAccess(u *auth.User) (string, error) {
@@ -62,7 +81,7 @@ func (a *tokensAdapter) IssueAccess(u *auth.User) (string, error) {
 
 func (a *tokensAdapter) IssueRefresh(userID string) (string, string, time.Time, error) {
 	jti := uuid.NewString()
-	expiresAt := time.Now().Add(a.refreshTTL)
+	expiresAt := a.clock.Now().Add(a.refreshTTL)
 	token, err := a.signer.Sign(map[string]any{
 		"sub": userID,
 		"typ": "refresh",
@@ -74,8 +93,36 @@ func (a *tokensAdapter) IssueRefresh(userID string) (string, string, time.Time, 
 	return token, jti, expiresAt, nil
 }
 
+type loginGuardAdapter struct {
+	guard bruteforcekit.Guard
+}
+
+func newLoginGuardAdapter(g bruteforcekit.Guard) auth.LoginGuard {
+	return &loginGuardAdapter{guard: g}
+}
+
+func (a *loginGuardAdapter) Check(ctx context.Context, subject, ip string) (*auth.LockState, error) {
+	lock, err := a.guard.Check(ctx, subject, ip)
+	if err != nil || lock == nil {
+		return nil, err
+	}
+	return &auth.LockState{Until: lock.Until}, nil
+}
+
+func (a *loginGuardAdapter) RecordFailure(ctx context.Context, subject, ip string) error {
+	return a.guard.RecordFailure(ctx, subject, ip)
+}
+
+func (a *loginGuardAdapter) RecordSuccess(ctx context.Context, subject, ip string) error {
+	return a.guard.RecordSuccess(ctx, subject, ip)
+}
+
 type tokenParserAdapter struct {
 	parser authnkit.JWTParser
+}
+
+func newTokenParserAdapter(p authnkit.JWTParser) auth.TokenParser {
+	return &tokenParserAdapter{parser: p}
 }
 
 func (a *tokenParserAdapter) ParseRefresh(token string) (string, string, error) {

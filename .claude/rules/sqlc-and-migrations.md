@@ -17,6 +17,7 @@ paths:
 
 - Файлы парные: `migrations/NNNN_name.up.sql` + `NNNN_name.down.sql`. Нумерация —
   последовательная четырёхзначная (`0001`…), имя snake_case (`0006_bruteforce_partial_index`).
+  Парность+непрерывность enforce'ит `scripts/tools/migrations-check.sh` (шаг `make check`).
 - Каждая миграция **обратима** через `down`. Откат бессмыслен (drop колонки с данными) —
   `down` всё равно есть: минимум `-- noop` + WHY-комментарий.
 - **Не правь уже накатившуюся в боевой среде миграцию.** Только новая.
@@ -30,14 +31,24 @@ paths:
 - Аннотация обязательна: `-- name: <Method> :<one|many|exec|execrows>`.
   - `:one` — одна строка; отсутствие → `pgx.ErrNoRows`, маппь на sentinel (`ErrNotFound`).
   - `:many` — срез; пусто → пустой срез.
-  - `:exec` — без возврата; `:execrows` — число затронутых строк (optimistic-lock).
+  - `:exec` — без возврата; `:execrows` — число затронутых строк (optimistic-lock, idempotent insert).
+- Создание — `Insert<Entity>` (repo-метод и sqlc-name), не `Create*`.
+- Repository мапит ошибки: no-rows (`pgkit.IsNoRows`) → sentinel not-found домена; невалидный
+  UUID в **lookup-ключе** → тот же sentinel not-found (не отличим снаружи); невалидный UUID в
+  **write-параметре** → wrapped `fmt.Errorf` (программная ошибка). Row→entity-маппер при ≥2
+  использованиях — функция `rowToEntity`, не копипаста литералов.
 - После правки `queries/` или `migrations/` — `make gen`; `make gen-check` (в `make check`)
-  падает, если сгенерированное разошлось.
+  падает, если сгенерированное разошлось (включая untracked-моки).
 
 ## PG-конвенции
 
-- PK — `uuid`. Soft-delete нет: удалили — удалили.
-- Optimistic lock через `version`: `WHERE id=$1 AND version=$2`; `:execrows`=0 → `ErrConflict`.
+- PK — `uuid`.
+- **Delete-политика — решение домена, фиксируется явно.** user-домен — status-based
+  soft-delete (`status='deleted'` + partial unique index `WHERE status != 'deleted'`):
+  сохраняет audit-историю и освобождает email. Домен без такой нужды — hard delete.
+  Теневые флаги `deleted_at` без политики — нет.
+- Optimistic lock через `version`: `WHERE id=$1 AND version=$2 … RETURNING` (`:one`;
+  no-rows → `ErrConcurrentUpdate`) либо `:execrows`=0 → `ErrConcurrentUpdate`.
 - **Kit-таблицы** (`outbox`/`audit_log`/`bruteforce_*`) схему держат
   `golibinfra/{outboxkit,auditkit,bruteforcekit}/pgstore` (`MigrationsFS`), `cmd/migrate`
   накатывает рядом. **Не дублируй их `CREATE TABLE`** в `migrations/`.

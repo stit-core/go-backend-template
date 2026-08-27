@@ -23,7 +23,7 @@ func NewRepository(database *pgkit.DB) verification.Repository {
 func (r *Repository) InsertPasswordReset(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
 	uid, err := pgkit.ParseUUID(userID)
 	if err != nil {
-		return verification.ErrUserNotFound
+		return fmt.Errorf("verification repo: invalid user id: %w", err)
 	}
 	if err := r.q.InsertPasswordReset(ctx, db.InsertPasswordResetParams{
 		UserID:    uid,
@@ -62,19 +62,20 @@ func (r *Repository) MarkPasswordResetUsed(ctx context.Context, id string) error
 	return nil
 }
 
-func (r *Repository) InsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+func (r *Repository) InsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (bool, error) {
 	uid, err := pgkit.ParseUUID(userID)
 	if err != nil {
-		return verification.ErrUserNotFound
+		return false, fmt.Errorf("verification repo: invalid user id: %w", err)
 	}
-	if err := r.q.InsertEmailVerification(ctx, db.InsertEmailVerificationParams{
+	rows, err := r.q.InsertEmailVerification(ctx, db.InsertEmailVerificationParams{
 		UserID:    uid,
 		TokenHash: tokenHash,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	}); err != nil {
-		return fmt.Errorf("verification repo: insert email verification: %w", err)
+	})
+	if err != nil {
+		return false, fmt.Errorf("verification repo: insert email verification: %w", err)
 	}
-	return nil
+	return rows > 0, nil
 }
 
 func (r *Repository) GetEmailVerification(ctx context.Context, tokenHash string) (*verification.EmailVerificationToken, error) {

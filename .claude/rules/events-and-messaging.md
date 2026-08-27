@@ -22,9 +22,11 @@ paths:
   `outbox_<d>` заводит миграция этого репо (DDL зеркалит `outboxkit/pgstore.SchemaSQL`).
 - Drain публикует в JetStream (`natskit.StreamBus`, PubAck + дедуп по `Nats-Msg-Id`). Нужны
   `NATS_JETSTREAM_ENABLED=true` + стрим, покрывающий subject (`NATS_JS_STREAM_NAMES`).
-- Subject — литерал `<domain>.events.<event>`. Источник его **не экспортит**; consumer
-  заводит локальную константу. Breaking-change payload → новый subject (`….v2`).
-- payload-типы — в `events.go` домена-источника.
+- Subject `<domain>.events.<event>` — **unexported const `subject<Event>`** в `events.go`
+  источника, рядом с payload (не inline-литерал в usecase, не экспорт). Consumer заводит
+  свою const в `delivery/nats/`. Breaking-change payload → новый subject (`….v2`).
+- payload-типы — в `events.go` источника: `<Aggregate><PastEvent>`, поля **без json-тегов**
+  (wire = Go-имена; смена формата = `.v2`), timestamp — `At time.Time`.
 
 ## Subscribers (in-domain)
 
@@ -34,8 +36,12 @@ paths:
   (local-dev без `-js`).
 - Объявляют **локальный** payload-DTO (`delivery/nats/dto.go`) — прямой импорт домена-
   источника запрещён depguard. Регистрируются в `module/module.go` потребителя.
-- **Идемпотентность обязательна** (at-least-once): `ON CONFLICT DO NOTHING`, `UPDATE … WHERE
-  status='pending'`, idempotency-key. Не «вряд ли задвоится». Poison consumer'а —
+- **Идемпотентность обязательна** (at-least-once), и она — свойство **схемы, не удачи**:
+  unique-индекс под natural key + `ON CONFLICT DO NOTHING` (`:execrows`; 0 rows → skip
+  side-effects: письмо/событие не повторяются), либо `UPDATE … WHERE status='pending'`,
+  либо idempotency-key из payload. Канон — `verification.IssueEmailVerification` +
+  партиал-индекс `email_verifications(user_id) WHERE used_at IS NULL`. Redelivery-кейс
+  покрыт юнит-тестом (rule tests-pipeline). Poison consumer'а —
   `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - Subscriber — быстрый. Тяжёлое (PDF, batch на 1M) → отдельный job/usecase.
 

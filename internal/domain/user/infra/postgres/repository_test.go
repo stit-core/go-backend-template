@@ -12,16 +12,17 @@ import (
 	userpg "git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/postgres"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/pgseed"
+	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
 	"git.stit.tech/stit-core/golibinfra/testkit"
 )
 
-func setup(t *testing.T) *userpg.Repository {
+func setup(t *testing.T) user.Repository {
 	t.Helper()
-	fx := testkit.StartPostgres(t, "../../../../migrations")
+	fx := testkit.StartPostgres(t, repopath.Migrations())
 	return userpg.NewRepository(fx.DB(t))
 }
 
-func TestCreate(t *testing.T) {
+func TestInsert(t *testing.T) {
 	repo := setup(t)
 	ctx := context.Background()
 
@@ -30,7 +31,7 @@ func TestCreate(t *testing.T) {
 	require.Equal(t, identity.RoleClient, u.Role)
 
 	dup := pgseed.NewUser(pgseed.WithEmail(u.Email))
-	err := repo.Create(ctx, dup)
+	err := repo.Insert(ctx, dup)
 	require.ErrorIs(t, err, user.ErrAlreadyExists)
 }
 

@@ -11,7 +11,6 @@ import (
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
-	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
@@ -20,7 +19,7 @@ import (
 const minPasswordLen = 8
 
 type Repository interface {
-	Create(ctx context.Context, u *User) error
+	Insert(ctx context.Context, u *User) error
 	GetByID(ctx context.Context, id string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	UpdateProfile(ctx context.Context, id, name string, version int) (*User, error)
@@ -78,8 +77,7 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 	}
 }
 
-func (uc *Usecase) Register(ctx context.Context, in *Create) (u *User, err error) {
-
+func (uc *Usecase) Register(ctx context.Context, in *CreateInput) (u *User, err error) {
 	if len(in.Password) < minPasswordLen {
 		uc.metrics.RecordRegistered(ctx, "weak_password")
 		return nil, ErrWeakPassword
@@ -98,11 +96,11 @@ func (uc *Usecase) Register(ctx context.Context, in *Create) (u *User, err error
 	}
 
 	if err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
-		if err := uc.repo.Create(txCtx, newU); err != nil {
+		if err := uc.repo.Insert(txCtx, newU); err != nil {
 			return err
 		}
 
-		return uc.events.Publish(txCtx, "user.events.registered",
+		return uc.events.Publish(txCtx, subjectUserRegistered,
 			UserRegistered{ID: newU.ID, Email: newU.Email, At: newU.CreatedAt})
 	}); err != nil {
 		uc.metrics.RecordRegistered(ctx, "error")
@@ -119,7 +117,7 @@ func (uc *Usecase) Register(ctx context.Context, in *Create) (u *User, err error
 		ResourceID: newU.ID,
 		At:         uc.clock.Now(),
 		IP:         identity.IPFrom(ctx),
-		RequestID:  httpkit.RequestIDFrom(ctx),
+		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
 		uc.log.Error(ctx, "audit register", "err", auditErr)
 	}
@@ -128,7 +126,6 @@ func (uc *Usecase) Register(ctx context.Context, in *Create) (u *User, err error
 }
 
 func (uc *Usecase) GetByID(ctx context.Context, id string) (u *User, err error) {
-
 	caller, ok := identity.From(ctx)
 	if !ok {
 		return nil, &ForbiddenError{Reason: "no identity"}
@@ -141,7 +138,6 @@ func (uc *Usecase) GetByID(ctx context.Context, id string) (u *User, err error) 
 }
 
 func (uc *Usecase) Me(ctx context.Context) (u *User, err error) {
-
 	caller, ok := identity.From(ctx)
 	if !ok {
 		return nil, &ForbiddenError{Reason: "no identity"}
@@ -151,7 +147,6 @@ func (uc *Usecase) Me(ctx context.Context) (u *User, err error) {
 }
 
 func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPagination) (users []*User, total int, err error) {
-
 	caller, ok := identity.From(ctx)
 	if !ok {
 		return nil, 0, &ForbiddenError{Reason: "no identity"}
@@ -183,8 +178,7 @@ func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPaginatio
 	return list, total, nil
 }
 
-func (uc *Usecase) Update(ctx context.Context, id string, in Update) (u *User, err error) {
-
+func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *User, err error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
 		uc.metrics.RecordUpdated(ctx, "forbidden")
@@ -214,7 +208,7 @@ func (uc *Usecase) Update(ctx context.Context, id string, in Update) (u *User, e
 		}
 		u = updated
 
-		return uc.events.Publish(txCtx, "user.events.updated",
+		return uc.events.Publish(txCtx, subjectUserUpdated,
 			UserUpdated{ID: updated.ID, At: updated.UpdatedAt})
 	}); err != nil {
 		uc.metrics.RecordUpdated(ctx, "error")
@@ -231,7 +225,7 @@ func (uc *Usecase) Update(ctx context.Context, id string, in Update) (u *User, e
 		ResourceID: u.ID,
 		At:         uc.clock.Now(),
 		IP:         identity.IPFrom(ctx),
-		RequestID:  httpkit.RequestIDFrom(ctx),
+		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
 		uc.log.Error(ctx, "audit update", "err", auditErr)
 	}
@@ -239,8 +233,7 @@ func (uc *Usecase) Update(ctx context.Context, id string, in Update) (u *User, e
 	return u, nil
 }
 
-func (uc *Usecase) Delete(ctx context.Context, id string) (err error) {
-
+func (uc *Usecase) Delete(ctx context.Context, id string) error {
 	caller, ok := identity.From(ctx)
 	if !ok {
 		uc.metrics.RecordDeleted(ctx, "forbidden")
@@ -262,7 +255,7 @@ func (uc *Usecase) Delete(ctx context.Context, id string) (err error) {
 		if _, err := uc.repo.UpdateStatus(txCtx, id, StatusDeleted, current.Version); err != nil {
 			return err
 		}
-		return uc.events.Publish(txCtx, "user.events.deleted",
+		return uc.events.Publish(txCtx, subjectUserDeleted,
 			UserDeleted{ID: id, At: uc.clock.Now()})
 	}); err != nil {
 		uc.metrics.RecordDeleted(ctx, "error")
@@ -279,7 +272,7 @@ func (uc *Usecase) Delete(ctx context.Context, id string) (err error) {
 		ResourceID: id,
 		At:         uc.clock.Now(),
 		IP:         identity.IPFrom(ctx),
-		RequestID:  httpkit.RequestIDFrom(ctx),
+		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
 		uc.log.Error(ctx, "audit delete", "err", auditErr)
 	}

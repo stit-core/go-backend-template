@@ -127,7 +127,7 @@ make build
 make test
 ```
 
-Integration-тесты используют `testkit/pgseed`, который накатывает все миграции — твоя свежая попадёт автоматически.
+Integration-тесты поднимают Postgres через `golibinfra/testkit.StartPostgres(t, migrationsPath)`, который накатывает все миграции — твоя свежая попадёт автоматически (`testkit/pgseed` — только seed-хелперы строк поверх).
 
 ### 9. CI-проверка
 

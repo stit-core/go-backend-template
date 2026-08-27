@@ -17,8 +17,8 @@ func NewRepository(database *pgkit.DB) user.Repository {
 	return &Repository{q: db.New(database)}
 }
 
-func (r *Repository) Create(ctx context.Context, u *user.User) error {
-	row, err := r.q.CreateUser(ctx, db.CreateUserParams{
+func (r *Repository) Insert(ctx context.Context, u *user.User) error {
+	row, err := r.q.InsertUser(ctx, db.InsertUserParams{
 		Email:        u.Email,
 		PasswordHash: u.PasswordHash,
 		Name:         u.Name,

@@ -13,12 +13,9 @@ import (
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
-	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
-
-const minPasswordLen = 8
 
 type UserReader interface {
 	GetByID(ctx context.Context, id string) (*User, error)
@@ -56,15 +53,6 @@ type LoginGuard interface {
 	Check(ctx context.Context, subject, ip string) (*LockState, error)
 	RecordFailure(ctx context.Context, subject, ip string) error
 	RecordSuccess(ctx context.Context, subject, ip string) error
-}
-
-type ForbiddenError struct{ Reason string }
-
-func (e *ForbiddenError) Error() string {
-	if e.Reason == "" {
-		return "forbidden"
-	}
-	return "forbidden: " + e.Reason
 }
 
 type UsecaseDeps struct {
@@ -122,8 +110,7 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 	}
 }
 
-func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput, err error) {
-
+func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, error) {
 	ip := identity.IPFrom(ctx)
 
 	lock, guardErr := uc.guard.Check(ctx, in.Email, ip)
@@ -137,6 +124,9 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 
 	u, err := uc.users.GetByEmail(ctx, in.Email)
 	if err != nil {
+		if !errors.Is(err, ErrUserNotFound) {
+			return nil, fmt.Errorf("lookup user: %w", err)
+		}
 		if recordErr := uc.guard.RecordFailure(ctx, in.Email, ip); recordErr != nil {
 			uc.log.Error(ctx, "guard record failure", "err", recordErr)
 		}
@@ -145,7 +135,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 		return nil, ErrInvalidCredentials
 	}
 
-	if u.Status != "active" {
+	if !u.CanLogin {
 		if recordErr := uc.guard.RecordFailure(ctx, in.Email, ip); recordErr != nil {
 			uc.log.Error(ctx, "guard record failure", "err", recordErr)
 		}
@@ -189,7 +179,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 		ResourceID: u.ID,
 		At:         uc.clock.Now(),
 		IP:         ip,
-		RequestID:  httpkit.RequestIDFrom(ctx),
+		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
 		uc.log.Error(ctx, "audit login", "err", auditErr)
 	}
@@ -198,8 +188,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (out *LoginOutput,
 	return &LoginOutput{AccessToken: access, RefreshToken: refresh, User: u}, nil
 }
 
-func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (out *LoginOutput, err error) {
-
+func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*LoginOutput, error) {
 	userID, oldJTI, err := uc.tparser.ParseRefresh(refreshToken)
 	if err != nil {
 		if errors.Is(err, ErrTokenExpired) {
@@ -234,6 +223,9 @@ func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (out *Login
 
 	u, err := uc.users.GetByID(ctx, userID)
 	if err != nil {
+		if !errors.Is(err, ErrUserNotFound) {
+			return nil, fmt.Errorf("lookup user: %w", err)
+		}
 		uc.metrics.RecordRefresh(ctx, "invalid")
 		return nil, ErrInvalidCredentials
 	}
@@ -260,11 +252,10 @@ func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (out *Login
 	return &LoginOutput{AccessToken: access, RefreshToken: newRefresh, User: u}, nil
 }
 
-func (uc *Usecase) Logout(ctx context.Context, refreshToken string) (err error) {
-
+func (uc *Usecase) Logout(ctx context.Context, refreshToken string) error {
 	userID, jti, parseErr := uc.tparser.ParseRefresh(refreshToken)
 	if parseErr != nil {
-		return nil
+		return nil //nolint:nilerr // logout is idempotent: a broken/expired token is already logged out
 	}
 
 	session, err := uc.sessions.GetByJTI(ctx, jti)
@@ -289,7 +280,7 @@ func (uc *Usecase) Logout(ctx context.Context, refreshToken string) (err error) 
 		ResourceID: userID,
 		At:         uc.clock.Now(),
 		IP:         identity.IPFrom(ctx),
-		RequestID:  httpkit.RequestIDFrom(ctx),
+		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
 		uc.log.Error(ctx, "audit logout", "err", auditErr)
 	}
@@ -297,8 +288,7 @@ func (uc *Usecase) Logout(ctx context.Context, refreshToken string) (err error) 
 	return nil
 }
 
-func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) (err error) {
-
+func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) error {
 	caller, ok := identity.From(ctx)
 	if !ok {
 		uc.metrics.RecordPasswordChange(ctx, "forbidden")
@@ -309,16 +299,16 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 		return &ForbiddenError{Reason: d.Reason}
 	}
 
-	if len(newPassword) < minPasswordLen {
+	if !PasswordStrengthOK(newPassword) {
 		uc.metrics.RecordPasswordChange(ctx, "weak")
 		return ErrWeakPassword
 	}
 
-	ok, err = uc.pwVer.VerifyPassword(ctx, userID, oldPassword)
+	verified, err := uc.pwVer.VerifyPassword(ctx, userID, oldPassword)
 	if err != nil {
 		return fmt.Errorf("verify old password: %w", err)
 	}
-	if !ok {
+	if !verified {
 		uc.metrics.RecordPasswordChange(ctx, "invalid_old")
 		return ErrInvalidCredentials
 	}
@@ -343,7 +333,7 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 		ResourceID: userID,
 		At:         uc.clock.Now(),
 		IP:         identity.IPFrom(ctx),
-		RequestID:  httpkit.RequestIDFrom(ctx),
+		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
 		uc.log.Error(ctx, "audit change_password", "err", auditErr)
 	}
@@ -359,7 +349,7 @@ func (uc *Usecase) writeLoginFailedAudit(ctx context.Context, email, action, rea
 		ResourceID: email,
 		At:         uc.clock.Now(),
 		IP:         identity.IPFrom(ctx),
-		RequestID:  httpkit.RequestIDFrom(ctx),
+		RequestID:  identity.RequestIDFrom(ctx),
 		Metadata:   map[string]any{"reason": reason},
 	}
 	if auditErr := uc.audit.Log(ctx, entry); auditErr != nil {
@@ -375,7 +365,7 @@ func (uc *Usecase) writeRefreshReusedAudit(ctx context.Context, userID, jti stri
 		ResourceID: jti,
 		At:         uc.clock.Now(),
 		IP:         identity.IPFrom(ctx),
-		RequestID:  httpkit.RequestIDFrom(ctx),
+		RequestID:  identity.RequestIDFrom(ctx),
 	}
 	if auditErr := uc.audit.Log(ctx, entry); auditErr != nil {
 		uc.log.Error(ctx, "audit refresh_reused", "err", auditErr)

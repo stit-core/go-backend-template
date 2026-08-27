@@ -42,6 +42,7 @@ func (h *Handler) onUserRegistered(ctx context.Context, e UserRegisteredEvent) e
 }
 
 func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
+	// Background is the legitimate root here: the subscription outlives OnStart's ctx.
 	ctx, cancel := context.WithCancel(context.Background())
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {

@@ -36,9 +36,10 @@ func (q *Queries) GetEmailVerification(ctx context.Context, tokenHash string) (G
 	return i, err
 }
 
-const insertEmailVerification = `-- name: InsertEmailVerification :exec
+const insertEmailVerification = `-- name: InsertEmailVerification :execrows
 INSERT INTO email_verifications (user_id, token_hash, expires_at)
 VALUES ($1, $2, $3)
+ON CONFLICT (user_id) WHERE used_at IS NULL DO NOTHING
 `
 
 type InsertEmailVerificationParams struct {
@@ -47,9 +48,12 @@ type InsertEmailVerificationParams struct {
 	ExpiresAt pgtype.Timestamptz
 }
 
-func (q *Queries) InsertEmailVerification(ctx context.Context, arg InsertEmailVerificationParams) error {
-	_, err := q.db.Exec(ctx, insertEmailVerification, arg.UserID, arg.TokenHash, arg.ExpiresAt)
-	return err
+func (q *Queries) InsertEmailVerification(ctx context.Context, arg InsertEmailVerificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertEmailVerification, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markEmailVerificationUsed = `-- name: MarkEmailVerificationUsed :exec

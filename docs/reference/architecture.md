@@ -12,10 +12,10 @@
 ├── entity.go        доменные типы (User, Session); без инфраструктуры
 ├── dto.go           input/output типы usecase (не HTTP-DTO)
 ├── errors.go        sentinel-ошибки: var ErrNotFound = errors.New(...)
-├── events.go        outbox-эвенты: типы и payload
-├── policy.go        authorization; решения без I/O
+├── events.go        outbox-эвенты: payload-типы + unexported subject-const
+├── policy.go        authorization + чистые правила; решения без I/O
 ├── usecase.go       бизнес-логика; зависимости через интерфейсы (порты)
-├── metrics.go       bizmetric-счётчики домена (biz_<plural>_*_total); nil-safe Record*
+├── metrics.go       bizmetric-счётчики домена (biz_<domain>_*_total); nil-safe Record*
 ├── delivery/http/   huma/v2 + chi: handler.go, dto.go, view.go
 ├── delivery/nats/   NATS-subscriber (опц.): handler.go, dto.go
 ├── infra/postgres/  repository.go + queries/*.sql + db/ (sqlc, read-only)
@@ -27,12 +27,81 @@
 | Доменные типы | `entity.go` |
 | Ошибки (sentinel) | `errors.go` |
 | Логика | `usecase.go` |
-| Authorization | `policy.go` |
+| Authorization + чистые валидационные правила | `policy.go` |
 | Outbox-события | `events.go` |
 | Domain-метрики (bizmetric-счётчики) | `metrics.go` |
 | HTTP handler / DTO / mapping | `delivery/http/{handler,dto,view}.go` |
 | sqlc-запросы / repository | `infra/postgres/queries/*.sql`, `repository.go` |
 | fx-wiring / cross-domain адаптеры | `module/{module,adapters}.go` |
+
+### Обязательность файлов
+
+Файл существует, только если существует его содержимое — пустышек-плейсхолдеров нет.
+Условия существования:
+
+| Файл | Когда обязателен |
+|---|---|
+| `entity.go`, `errors.go`, `usecase.go`, `module/module.go` | всегда |
+| `metrics.go` | всегда (мутирующие use-case'ы инструментированы) |
+| `dto.go` | есть хоть один Input/Output-тип (метод с 1–2 скалярами обходится без DTO) |
+| `policy.go` | есть authenticated actor (authorization) **или** чистые правила валидации (password strength и т.п.) |
+| `events.go` | домен публикует хотя бы одно outbox-событие; вместе с ним — `infra/outbox/outbox.go` |
+| `delivery/http/view.go` | есть хоть один response с телом (mapping entity → view) |
+| `delivery/nats/` | домен подписан хотя бы на один subject |
+| `module/adapters.go` | у домена есть хоть один cross-domain порт с логикой маппинга |
+
+Мёртвый слой (тип/файл без потребителя) не хранится «на будущее» — удаляется, история в git.
+
+### Что запрещено класть в каждый слой
+
+| Файл | Запрещено |
+|---|---|
+| `entity.go` | любой I/O, импорт `infra/`/`delivery/`/kit'ов кроме stdlib и `internal/platform/{identity,shared}` |
+| `policy.go` | I/O, импорт `infra/`/`delivery/`; только чистые решения (`pkg/policy.Decision` / bool) |
+| `dto.go` | huma-теги, json-теги транспорта (это `delivery/http/dto.go`), методы с I/O |
+| `errors.go` | всё, кроме sentinel-`var` и error-типов домена (`ForbiddenError` живёт здесь, не в usecase) |
+| `events.go` | всё, кроме payload-типов и unexported subject-констант |
+| `usecase.go` | прямой транспорт: `httpkit`/`natskit`/huma/`net/http`; ctx-геттеры транспорта — только через `internal/platform/identity`; inline-константы правил (место — `policy.go`) |
+| `delivery/*` | бизнес-решения (все ветвления — в usecase), импорт чужих доменов (depguard) |
+| `infra/postgres` | бизнес-логика в SQL (сложные CASE-ветвления политик); запросы держат CRUD/фильтры |
+| `module/` | бизнес-логика; только wiring + маппинг типов/ошибок между доменами |
+
+### Канон именования
+
+- **Domain-DTO** (`dto.go`): `<Op>Input` / `<Op>Output` (`LoginInput`, `CreateInput`).
+  Вспомогательные value-типы — описательно (`ListFilter`, `ListPagination`).
+  Output-DTO заводится, когда результат ≠ entity и ≠ скаляр.
+- **События** (`events.go`): `<Aggregate><PastEvent>` (`UserRegistered`,
+  `EmailVerificationRequested`); payload — без json-тегов (wire = Go-имена; смена формата =
+  новый subject `.v2`), timestamp-поле — `At time.Time`. Subject — unexported const
+  `subject<Event>` рядом с payload-типом.
+- **Sentinel** (`errors.go`): `Err<What> = errors.New("<domain>: <lowercase text>")`.
+- **HTTP-DTO** (`delivery/http/dto.go`): `<Domain><Op>Input/Output` — глобально уникальные
+  имена (huma registry, см. ниже). Response-envelope — `Body.Data` (`json:"data"`); списки —
+  `data` + `total`.
+- **OperationID**: lowerCamel `<verb><Noun>` (`loginUser`, `listUsers`), уникален глобально.
+  Path-префикс и `Tags` роута могут не совпадать с доменом-владельцем (регистрация живёт в
+  `user`, но путь `/api/auth/register`): владелец = тот, чей usecase вызывается.
+- **Метрики** (`metrics.go`): первый аргумент bizmetric — имя домена = имени пакета
+  (`biz_<domain>_<event>_total`); struct `Metrics`, конструктор `NewMetrics(m metric.Meter)`,
+  все `Record*` — nil-safe.
+- **Repository**: создание — `Insert*` (не `Create*`), sqlc-аннотации — `Insert<Entity>`.
+
+### Разбиение переростков
+
+Рукописный файл > ~400 строк — сигнал к разбиению по потокам: `usecase_<flow>.go`
+(`usecase_login.go`), `handler_<op>.go`. Порты, `UsecaseDeps`, `Usecase`, `NewUsecase`
+остаются в `usecase.go`. Разбиение — внутри пакета, без смены API.
+
+### Usecase-канон
+
+- Порты-интерфейсы объявлены в `usecase.go` сверху; зависимости — `UsecaseDeps{fx.In}`;
+  конструктор `NewUsecase(d UsecaseDeps)`; хвост deps в порядке `Audit?, Log, Clock, Metrics`.
+- Named returns не используются (кроме naked-return/defer-модификации — здесь таких нет).
+- Каждый **мутирующий** метод пишет `metrics.Record*` на всех исходах; read-методы — опционально.
+- Security-значимые операции (login/logout/смена+сброс пароля/verification) пишут `audit`
+  из usecase; технические записи адаптеров (`mail_sent`) допустимы в адаптере.
+- Транспортные значения из ctx (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`.
 
 ## Ports & adapters (cross-domain)
 
@@ -45,6 +114,19 @@ longest-prefix override: свой импорт ловит более длинн�
 объявляешь **порт** (интерфейс) в A (`usecase.go`) и **адаптер** в `A/module/adapters.go`,
 который оборачивает B. Адаптер в `module/` имеет право импортить B; usecase — нет. Cross-domain
 DTO в порте — локальные (не re-export из B).
+
+Канон адаптера:
+
+- **Identity-closure** — только когда провайдер уже удовлетворяет порт как есть:
+  `func(uc *user.Usecase) auth.PasswordVerifier { return uc }` inline в `module.go`.
+- **Типовой адаптер** — при любой логике (маппинг DTO, clock, преобразование ошибок):
+  тип **и его конструктор** — в `adapters.go` (не расщеплять между module.go/adapters.go).
+- **Sentinel-маппинг обязателен:** порт возвращает sentinel'ы домена-потребителя
+  (`user.ErrNotFound` → `verification.ErrUserNotFound` в адаптере) — usecase-потребитель
+  не может `errors.Is` по чужим sentinel'ам (depguard).
+- **Порт переносит решения, не сырьё:** вычисленное свойство (`Active bool`,
+  `CanLogin() bool`) вместо сырого статуса-строки чужого enum'а.
+- Времени в адаптерах нет: `clockkit.Clock` инжектится так же, как в usecase.
 
 ## HTTP DTO naming (huma)
 

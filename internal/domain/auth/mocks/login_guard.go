@@ -102,8 +102,8 @@ func (_c *MockLoginGuard_Check_Call) Run(run func(ctx context.Context, subject s
 	return _c
 }
 
-func (_c *MockLoginGuard_Check_Call) Return(v *auth.LockState, err error) *MockLoginGuard_Check_Call {
-	_c.Call.Return(v, err)
+func (_c *MockLoginGuard_Check_Call) Return(lockState *auth.LockState, err error) *MockLoginGuard_Check_Call {
+	_c.Call.Return(lockState, err)
 	return _c
 }
 

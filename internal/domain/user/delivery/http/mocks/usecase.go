@@ -306,7 +306,7 @@ func (_c *MockUsecase_Me_Call) RunAndReturn(run func(ctx context.Context) (*user
 }
 
 // Register provides a mock function for the type MockUsecase
-func (_mock *MockUsecase) Register(ctx context.Context, in *user.Create) (*user.User, error) {
+func (_mock *MockUsecase) Register(ctx context.Context, in *user.CreateInput) (*user.User, error) {
 	ret := _mock.Called(ctx, in)
 
 	if len(ret) == 0 {
@@ -315,17 +315,17 @@ func (_mock *MockUsecase) Register(ctx context.Context, in *user.Create) (*user.
 
 	var r0 *user.User
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *user.Create) (*user.User, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *user.CreateInput) (*user.User, error)); ok {
 		return returnFunc(ctx, in)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *user.Create) *user.User); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *user.CreateInput) *user.User); ok {
 		r0 = returnFunc(ctx, in)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*user.User)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, *user.Create) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *user.CreateInput) error); ok {
 		r1 = returnFunc(ctx, in)
 	} else {
 		r1 = ret.Error(1)
@@ -340,20 +340,20 @@ type MockUsecase_Register_Call struct {
 
 // Register is a helper method to define mock.On call
 //   - ctx context.Context
-//   - in *user.Create
+//   - in *user.CreateInput
 func (_e *MockUsecase_Expecter) Register(ctx interface{}, in interface{}) *MockUsecase_Register_Call {
 	return &MockUsecase_Register_Call{Call: _e.mock.On("Register", ctx, in)}
 }
 
-func (_c *MockUsecase_Register_Call) Run(run func(ctx context.Context, in *user.Create)) *MockUsecase_Register_Call {
+func (_c *MockUsecase_Register_Call) Run(run func(ctx context.Context, in *user.CreateInput)) *MockUsecase_Register_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 *user.Create
+		var arg1 *user.CreateInput
 		if args[1] != nil {
-			arg1 = args[1].(*user.Create)
+			arg1 = args[1].(*user.CreateInput)
 		}
 		run(
 			arg0,
@@ -368,13 +368,13 @@ func (_c *MockUsecase_Register_Call) Return(user1 *user.User, err error) *MockUs
 	return _c
 }
 
-func (_c *MockUsecase_Register_Call) RunAndReturn(run func(ctx context.Context, in *user.Create) (*user.User, error)) *MockUsecase_Register_Call {
+func (_c *MockUsecase_Register_Call) RunAndReturn(run func(ctx context.Context, in *user.CreateInput) (*user.User, error)) *MockUsecase_Register_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Update provides a mock function for the type MockUsecase
-func (_mock *MockUsecase) Update(ctx context.Context, id string, in user.Update) (*user.User, error) {
+func (_mock *MockUsecase) Update(ctx context.Context, id string, in user.UpdateInput) (*user.User, error) {
 	ret := _mock.Called(ctx, id, in)
 
 	if len(ret) == 0 {
@@ -383,17 +383,17 @@ func (_mock *MockUsecase) Update(ctx context.Context, id string, in user.Update)
 
 	var r0 *user.User
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, user.Update) (*user.User, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, user.UpdateInput) (*user.User, error)); ok {
 		return returnFunc(ctx, id, in)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, user.Update) *user.User); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, user.UpdateInput) *user.User); ok {
 		r0 = returnFunc(ctx, id, in)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*user.User)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, user.Update) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, user.UpdateInput) error); ok {
 		r1 = returnFunc(ctx, id, in)
 	} else {
 		r1 = ret.Error(1)
@@ -409,12 +409,12 @@ type MockUsecase_Update_Call struct {
 // Update is a helper method to define mock.On call
 //   - ctx context.Context
 //   - id string
-//   - in user.Update
+//   - in user.UpdateInput
 func (_e *MockUsecase_Expecter) Update(ctx interface{}, id interface{}, in interface{}) *MockUsecase_Update_Call {
 	return &MockUsecase_Update_Call{Call: _e.mock.On("Update", ctx, id, in)}
 }
 
-func (_c *MockUsecase_Update_Call) Run(run func(ctx context.Context, id string, in user.Update)) *MockUsecase_Update_Call {
+func (_c *MockUsecase_Update_Call) Run(run func(ctx context.Context, id string, in user.UpdateInput)) *MockUsecase_Update_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -424,9 +424,9 @@ func (_c *MockUsecase_Update_Call) Run(run func(ctx context.Context, id string, 
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 user.Update
+		var arg2 user.UpdateInput
 		if args[2] != nil {
-			arg2 = args[2].(user.Update)
+			arg2 = args[2].(user.UpdateInput)
 		}
 		run(
 			arg0,
@@ -442,7 +442,7 @@ func (_c *MockUsecase_Update_Call) Return(user1 *user.User, err error) *MockUsec
 	return _c
 }
 
-func (_c *MockUsecase_Update_Call) RunAndReturn(run func(ctx context.Context, id string, in user.Update) (*user.User, error)) *MockUsecase_Update_Call {
+func (_c *MockUsecase_Update_Call) RunAndReturn(run func(ctx context.Context, id string, in user.UpdateInput) (*user.User, error)) *MockUsecase_Update_Call {
 	_c.Call.Return(run)
 	return _c
 }

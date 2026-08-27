@@ -4,11 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 )
 
 func TestPolicy_CanChangePassword(t *testing.T) {
+	t.Parallel()
 	p := auth.NewPolicy()
 	cases := []struct {
 		name     string
@@ -23,10 +26,27 @@ func TestPolicy_CanChangePassword(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := p.CanChangePassword(context.Background(), tc.caller, tc.targetID).IsAllowed
-			if got != tc.want {
-				t.Fatalf("want %v, got %v", tc.want, got)
-			}
+			t.Parallel()
+			require.Equal(t, tc.want, p.CanChangePassword(context.Background(), tc.caller, tc.targetID).IsAllowed)
+		})
+	}
+}
+
+func TestPasswordStrengthOK(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		plain string
+		want  bool
+	}{
+		{"long enough", "pass1234", true},
+		{"too short", "pass123", false},
+		{"empty", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, auth.PasswordStrengthOK(tc.plain))
 		})
 	}
 }

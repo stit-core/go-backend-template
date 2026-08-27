@@ -1,0 +1,1 @@
+DROP INDEX email_verifications_pending_user_idx;

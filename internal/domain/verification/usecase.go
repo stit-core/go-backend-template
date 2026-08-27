@@ -2,21 +2,22 @@ package verification
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/pkg/tokens"
+	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
-
-const minPasswordLen = 8
 
 type UserReader interface {
 	GetByID(ctx context.Context, id string) (*User, error)
@@ -35,7 +36,9 @@ type Repository interface {
 	InsertPasswordReset(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
 	GetPasswordReset(ctx context.Context, tokenHash string) (*PasswordResetToken, error)
 	MarkPasswordResetUsed(ctx context.Context, id string) error
-	InsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
+	// InsertEmailVerification reports inserted=false when a pending verification
+	// already exists for the user (ON CONFLICT no-op) — the redelivery case.
+	InsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (inserted bool, err error)
 	GetEmailVerification(ctx context.Context, tokenHash string) (*EmailVerificationToken, error)
 	MarkEmailVerificationUsed(ctx context.Context, id string) error
 }
@@ -56,6 +59,7 @@ type UsecaseDeps struct {
 	Tx            pgkit.Transactor
 	Events        outboxkit.Publisher
 	Mailer        Mailer
+	Audit         auditkit.Logger
 	Log           logkit.Logger
 	Clock         clockkit.Clock
 	Metrics       *Metrics
@@ -70,6 +74,7 @@ type Usecase struct {
 	tx       pgkit.Transactor
 	events   outboxkit.Publisher
 	mailer   Mailer
+	audit    auditkit.Logger
 	log      logkit.Logger
 	clock    clockkit.Clock
 	metrics  *Metrics
@@ -85,14 +90,14 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 		tx:       d.Tx,
 		events:   d.Events,
 		mailer:   d.Mailer,
+		audit:    d.Audit,
 		log:      d.Log.With("domain", "verification"),
 		clock:    d.Clock,
 		metrics:  d.Metrics,
 	}
 }
 
-func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email string) (err error) {
-
+func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email string) error {
 	t, err := tokens.Generate()
 	if err != nil {
 		return fmt.Errorf("generate verify token: %w", err)
@@ -100,11 +105,17 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email str
 
 	tokenID := uuid.NewString()
 
+	var inserted bool
 	if err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
-		if err := uc.repo.InsertEmailVerification(txCtx, userID, tokens.Hash(t), uc.clock.Now().Add(24*time.Hour)); err != nil {
+		var err error
+		inserted, err = uc.repo.InsertEmailVerification(txCtx, userID, tokens.Hash(t), uc.clock.Now().Add(24*time.Hour))
+		if err != nil {
 			return err
 		}
-		return uc.events.Publish(txCtx, "verification.events.email_verification_requested",
+		if !inserted {
+			return nil
+		}
+		return uc.events.Publish(txCtx, subjectEmailVerificationRequested,
 			EmailVerificationRequested{
 				TokenID: tokenID,
 				UserID:  userID,
@@ -115,6 +126,11 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email str
 		uc.metrics.RecordEmailIssued(ctx, "error")
 		return err
 	}
+	if !inserted {
+		uc.log.Info(ctx, "email verification already pending, skip", "user_id", userID)
+		uc.metrics.RecordEmailIssued(ctx, "duplicate")
+		return nil
+	}
 
 	if err := uc.mailer.SendEmailVerification(ctx, email, t); err != nil {
 		uc.metrics.RecordEmailIssued(ctx, "error")
@@ -124,12 +140,14 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email str
 	return nil
 }
 
-func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) (err error) {
-
+func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error {
 	u, err := uc.users.GetByEmail(ctx, email)
 	if err != nil {
-		uc.metrics.RecordPasswordResetRequested(ctx, "user_not_found")
-		return nil
+		if errors.Is(err, ErrUserNotFound) {
+			uc.metrics.RecordPasswordResetRequested(ctx, "user_not_found")
+			return nil // anti-enumeration: absence of an account must be indistinguishable
+		}
+		return fmt.Errorf("lookup user: %w", err)
 	}
 	if !u.Active {
 		uc.metrics.RecordPasswordResetRequested(ctx, "inactive")
@@ -147,7 +165,7 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) (err 
 		if err := uc.repo.InsertPasswordReset(txCtx, u.ID, tokens.Hash(token), uc.clock.Now().Add(time.Hour)); err != nil {
 			return err
 		}
-		return uc.events.Publish(txCtx, "verification.events.password_reset_requested",
+		return uc.events.Publish(txCtx, subjectPasswordResetRequested,
 			PasswordResetRequested{
 				TokenID: tokenID,
 				UserID:  u.ID,
@@ -167,9 +185,8 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) (err 
 	return nil
 }
 
-func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword string) (err error) {
-
-	if len(newPassword) < minPasswordLen {
+func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword string) error {
+	if !PasswordStrengthOK(newPassword) {
 		uc.metrics.RecordPasswordResetConfirmed(ctx, "weak")
 		return ErrWeakPassword
 	}
@@ -208,12 +225,12 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 	}
 
 	uc.log.Info(ctx, "password reset", "user_id", pr.UserID)
+	uc.writeAudit(ctx, pr.UserID, "password_reset_confirmed", "user", pr.UserID)
 	uc.metrics.RecordPasswordResetConfirmed(ctx, "ok")
 	return nil
 }
 
-func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) (err error) {
-
+func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 	ev, err := uc.repo.GetEmailVerification(ctx, tokens.Hash(token))
 	if err != nil {
 		uc.metrics.RecordEmailConfirmed(ctx, "invalid")
@@ -236,6 +253,21 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) (err error) {
 	}); err != nil {
 		return err
 	}
+	uc.writeAudit(ctx, ev.UserID, "email_confirmed", "user", ev.UserID)
 	uc.metrics.RecordEmailConfirmed(ctx, "ok")
 	return nil
+}
+
+func (uc *Usecase) writeAudit(ctx context.Context, actorID, action, resource, resourceID string) {
+	if auditErr := uc.audit.Log(ctx, auditkit.Entry{
+		ActorID:    actorID,
+		Action:     action,
+		Resource:   resource,
+		ResourceID: resourceID,
+		At:         uc.clock.Now(),
+		IP:         identity.IPFrom(ctx),
+		RequestID:  identity.RequestIDFrom(ctx),
+	}); auditErr != nil {
+		uc.log.Error(ctx, "audit "+action, "err", auditErr)
+	}
 }

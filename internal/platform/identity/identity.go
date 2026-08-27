@@ -1,6 +1,10 @@
 package identity
 
-import "context"
+import (
+	"context"
+
+	"git.stit.tech/stit-core/golibinfra/httpkit"
+)
 
 type Role string
 
@@ -43,4 +47,10 @@ func WithIP(ctx context.Context, ip string) context.Context {
 func IPFrom(ctx context.Context) string {
 	ip, _ := ctx.Value(ipCtxKey{}).(string)
 	return ip
+}
+
+// RequestIDFrom keeps domains transport-agnostic: usecases read request meta
+// through platform/identity only, never httpkit directly (rule domain-architecture).
+func RequestIDFrom(ctx context.Context) string {
+	return httpkit.RequestIDFrom(ctx)
 }

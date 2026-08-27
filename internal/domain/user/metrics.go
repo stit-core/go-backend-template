@@ -10,7 +10,7 @@ import (
 )
 
 // Metrics — domain-уровень счётчики user (register/update/delete).
-// Имена через bizmetric.* → `biz_users_*_total`.
+// Имена через bizmetric.* → `biz_user_*_total`.
 type Metrics struct {
 	registered metric.Int64Counter
 	updated    metric.Int64Counter
@@ -20,15 +20,15 @@ type Metrics struct {
 func NewMetrics(m metric.Meter) (*Metrics, error) {
 	return &Metrics{
 		registered: bizmetric.Counter(
-			m, "users", "registered",
+			m, "user", "registered",
 			metric.WithDescription("User registrations by outcome"),
 		),
 		updated: bizmetric.Counter(
-			m, "users", "updated",
+			m, "user", "updated",
 			metric.WithDescription("User profile/status updates by outcome"),
 		),
 		deleted: bizmetric.Counter(
-			m, "users", "deleted",
+			m, "user", "deleted",
 			metric.WithDescription("User soft-deletes by outcome"),
 		),
 	}, nil

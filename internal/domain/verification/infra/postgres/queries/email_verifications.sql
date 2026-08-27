@@ -1,6 +1,7 @@
--- name: InsertEmailVerification :exec
+-- name: InsertEmailVerification :execrows
 INSERT INTO email_verifications (user_id, token_hash, expires_at)
-VALUES ($1, $2, $3);
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id) WHERE used_at IS NULL DO NOTHING;
 
 -- name: GetEmailVerification :one
 SELECT id, user_id, expires_at, used_at

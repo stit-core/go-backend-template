@@ -1,6 +1,6 @@
 package auth
 
-import "git.stit.tech/stit-core/golibinfra/bruteforcekit"
+import "time"
 
 type LoginInput struct {
 	Email    string
@@ -13,5 +13,6 @@ type LoginOutput struct {
 	User         *User
 }
 
-// Alias (not new type) so bruteforcekit.Guard satisfies auth.LoginGuard structurally.
-type LockState = bruteforcekit.LockState
+type LockState struct {
+	Until time.Time
+}

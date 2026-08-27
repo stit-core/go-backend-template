@@ -2,7 +2,7 @@ package http
 
 import "git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 
-type RegisterInput struct {
+type UserRegisterInput struct {
 	Body struct {
 		Email    string `json:"email"    format:"email" required:"true"`
 		Password string `json:"password" minLength:"8"  required:"true"`
@@ -10,43 +10,35 @@ type RegisterInput struct {
 	}
 }
 
-func (i *RegisterInput) ToEntity() *user.Create {
-	return &user.Create{
-		Email:    i.Body.Email,
-		Password: i.Body.Password,
-		Name:     i.Body.Name,
-	}
-}
-
-type RegisterOutput struct {
+type UserRegisterOutput struct {
 	Body struct {
 		Data UserView `json:"data"`
 	}
 }
 
-type GetUserInput struct {
+type UserGetInput struct {
 	ID string `path:"id"`
 }
 
-type GetUserOutput struct {
+type UserGetOutput struct {
 	Body struct {
 		Data UserView `json:"data"`
 	}
 }
 
-type MeOutput struct {
+type UserMeOutput struct {
 	Body struct {
 		Data UserView `json:"data"`
 	}
 }
 
-type ListInput struct {
+type UserListInput struct {
 	Page   int    `default:"1"           minimum:"1"    query:"page"`
 	Size   int    `default:"20"          maximum:"100"  minimum:"1"  query:"size"`
 	Status string `enum:"active,blocked" query:"status"`
 }
 
-type ListOutput struct {
+type UserListOutput struct {
 	Body struct {
 		Data  []UserView `json:"data"`
 		Total int        `json:"total"`
@@ -55,7 +47,7 @@ type ListOutput struct {
 	}
 }
 
-type UpdateInput struct {
+type UserUpdateInput struct {
 	ID   string `path:"id"`
 	Body struct {
 		Name    *string      `json:"name,omitempty"`
@@ -64,12 +56,12 @@ type UpdateInput struct {
 	}
 }
 
-type UpdateOutput struct {
+type UserUpdateOutput struct {
 	Body struct {
 		Data UserView `json:"data"`
 	}
 }
 
-type DeleteInput struct {
+type UserDeleteInput struct {
 	ID string `path:"id"`
 }

@@ -25,47 +25,6 @@ func (q *Queries) CountUsers(ctx context.Context, status *string) (int64, error)
 	return count, err
 }
 
-const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, password_hash, name, status, role)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, version, email_verified, created_at, updated_at
-`
-
-type CreateUserParams struct {
-	Email        string
-	PasswordHash string
-	Name         string
-	Status       string
-	Role         string
-}
-
-type CreateUserRow struct {
-	ID            pgtype.UUID
-	Version       int32
-	EmailVerified bool
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-}
-
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
-	row := q.db.QueryRow(ctx, createUser,
-		arg.Email,
-		arg.PasswordHash,
-		arg.Name,
-		arg.Status,
-		arg.Role,
-	)
-	var i CreateUserRow
-	err := row.Scan(
-		&i.ID,
-		&i.Version,
-		&i.EmailVerified,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
 FROM users
@@ -108,6 +67,47 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.Name,
 		&i.Status,
 		&i.Role,
+		&i.Version,
+		&i.EmailVerified,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertUser = `-- name: InsertUser :one
+INSERT INTO users (email, password_hash, name, status, role)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, version, email_verified, created_at, updated_at
+`
+
+type InsertUserParams struct {
+	Email        string
+	PasswordHash string
+	Name         string
+	Status       string
+	Role         string
+}
+
+type InsertUserRow struct {
+	ID            pgtype.UUID
+	Version       int32
+	EmailVerified bool
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error) {
+	row := q.db.QueryRow(ctx, insertUser,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Name,
+		arg.Status,
+		arg.Role,
+	)
+	var i InsertUserRow
+	err := row.Scan(
+		&i.ID,
 		&i.Version,
 		&i.EmailVerified,
 		&i.CreatedAt,

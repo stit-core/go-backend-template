@@ -41,7 +41,6 @@ var kitConfigs = fx.Options(
 		logkit.NewConfig,
 		flagkit.NewConfig,
 		cachekit.NewConfig,
-		natskit.NewConfig,
 		authnkit.NewArgon2idParams,
 		authnkit.NewJWTConfig,
 		bruteforcekit.NewConfig,
@@ -56,7 +55,8 @@ var kitConfigs = fx.Options(
 var logging = fx.Options(
 	fx.Provide(
 		func(cfg logkit.Config) logkit.Logger { return logkit.NewWithWriter(cfg, os.Stdout) },
-		func(cfg logkit.Config) *slog.Logger { return logkit.NewSlogWithWriter(cfg, os.Stdout) },
+		// timerkit resolves *slog.Logger from the fx graph; built via logkit, not for direct logging.
+		func(cfg logkit.Config) *slog.Logger { return logkit.NewSlogWithWriter(cfg, os.Stdout) }, //nolint:forbidigo
 		// metric.Meter — глобальный no-op: MeterProvider не сконфигурирован,
 		// поэтому domain business-counter'ы (biz_*) инертны и никуда не
 		// экспортируются. Держится, чтобы DI доменных Metrics резолвился.
@@ -74,7 +74,7 @@ var (
 		logging,
 		pgkit.Module,
 		httpkit.Module,
-		natskit.Module,
+		natskit.Module(""),
 		cachekit.Module,
 		flagkit.Module,
 		timerkit.Module,

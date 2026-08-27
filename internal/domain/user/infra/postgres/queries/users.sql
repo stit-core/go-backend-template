@@ -1,4 +1,4 @@
--- name: CreateUser :one
+-- name: InsertUser :one
 INSERT INTO users (email, password_hash, name, status, role)
 VALUES ($1, $2, $3, $4, $5)
 RETURNING id, version, email_verified, created_at, updated_at;

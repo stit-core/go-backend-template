@@ -2,11 +2,12 @@ package module
 
 import (
 	"context"
-	"time"
+	"errors"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
+	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 )
 
@@ -17,7 +18,7 @@ type userReaderAdapter struct {
 func (a *userReaderAdapter) GetByID(ctx context.Context, id string) (*verification.User, error) {
 	u, err := a.uc.LookupByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, mapUserErr(err)
 	}
 	return userToVerification(u), nil
 }
@@ -25,9 +26,17 @@ func (a *userReaderAdapter) GetByID(ctx context.Context, id string) (*verificati
 func (a *userReaderAdapter) GetByEmail(ctx context.Context, email string) (*verification.User, error) {
 	u, err := a.uc.LookupByEmail(ctx, email)
 	if err != nil {
-		return nil, err
+		return nil, mapUserErr(err)
 	}
 	return userToVerification(u), nil
+}
+
+// Ports carry consumer-domain sentinels: callers can't errors.Is against user's (depguard).
+func mapUserErr(err error) error {
+	if errors.Is(err, user.ErrNotFound) {
+		return verification.ErrUserNotFound
+	}
+	return err
 }
 
 func userToVerification(u *user.User) *verification.User {
@@ -42,10 +51,11 @@ func userToVerification(u *user.User) *verification.User {
 type logMailerAdapter struct {
 	log   logkit.Logger
 	audit auditkit.Logger
+	clock clockkit.Clock
 }
 
-func newLogMailerAdapter(log logkit.Logger, auditLog auditkit.Logger) verification.Mailer {
-	return &logMailerAdapter{log: log.With("component", "mailer"), audit: auditLog}
+func newLogMailerAdapter(log logkit.Logger, auditLog auditkit.Logger, clock clockkit.Clock) verification.Mailer {
+	return &logMailerAdapter{log: log.With("component", "mailer"), audit: auditLog, clock: clock}
 }
 
 func (m *logMailerAdapter) SendPasswordReset(ctx context.Context, email, token string) error {
@@ -53,7 +63,7 @@ func (m *logMailerAdapter) SendPasswordReset(ctx context.Context, email, token s
 	return m.audit.Log(ctx, auditkit.Entry{
 		Action:   "mail_sent",
 		Resource: "password_reset",
-		At:       time.Now(),
+		At:       m.clock.Now(),
 		Metadata: map[string]any{"email": email},
 	})
 }
@@ -63,7 +73,7 @@ func (m *logMailerAdapter) SendEmailVerification(ctx context.Context, email, tok
 	return m.audit.Log(ctx, auditkit.Entry{
 		Action:   "mail_sent",
 		Resource: "email_verification",
-		At:       time.Now(),
+		At:       m.clock.Now(),
 		Metadata: map[string]any{"email": email},
 	})
 }

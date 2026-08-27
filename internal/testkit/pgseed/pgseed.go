@@ -35,14 +35,14 @@ func NewUser(opts ...UserOption) *user.User {
 }
 
 type UserRepo interface {
-	Create(ctx context.Context, u *user.User) error
+	Insert(ctx context.Context, u *user.User) error
 }
 
 func InsertUser(t *testing.T, repo UserRepo, opts ...UserOption) *user.User {
 	t.Helper()
 	u := NewUser(opts...)
-	if err := repo.Create(context.Background(), u); err != nil {
-		t.Fatalf("pgseed: create user: %v", err)
+	if err := repo.Insert(context.Background(), u); err != nil {
+		t.Fatalf("pgseed: insert user: %v", err)
 	}
 	return u
 }

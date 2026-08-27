@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 )
@@ -25,42 +27,40 @@ var selfOrAdminCases = []policyCase{
 }
 
 func TestPolicy_CanGetByID(t *testing.T) {
+	t.Parallel()
 	p := user.NewPolicy()
 	for _, tc := range selfOrAdminCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := p.CanGetByID(context.Background(), tc.caller, tc.targetID).IsAllowed
-			if got != tc.want {
-				t.Fatalf("CanGetByID: want %v, got %v", tc.want, got)
-			}
+			t.Parallel()
+			require.Equal(t, tc.want, p.CanGetByID(context.Background(), tc.caller, tc.targetID).IsAllowed)
 		})
 	}
 }
 
 func TestPolicy_CanUpdate(t *testing.T) {
+	t.Parallel()
 	p := user.NewPolicy()
 	for _, tc := range selfOrAdminCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := p.CanUpdate(context.Background(), tc.caller, tc.targetID).IsAllowed
-			if got != tc.want {
-				t.Fatalf("CanUpdate: want %v, got %v", tc.want, got)
-			}
+			t.Parallel()
+			require.Equal(t, tc.want, p.CanUpdate(context.Background(), tc.caller, tc.targetID).IsAllowed)
 		})
 	}
 }
 
 func TestPolicy_CanDelete(t *testing.T) {
+	t.Parallel()
 	p := user.NewPolicy()
 	for _, tc := range selfOrAdminCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := p.CanDelete(context.Background(), tc.caller, tc.targetID).IsAllowed
-			if got != tc.want {
-				t.Fatalf("CanDelete: want %v, got %v", tc.want, got)
-			}
+			t.Parallel()
+			require.Equal(t, tc.want, p.CanDelete(context.Background(), tc.caller, tc.targetID).IsAllowed)
 		})
 	}
 }
 
 func TestPolicy_CanList(t *testing.T) {
+	t.Parallel()
 	p := user.NewPolicy()
 	cases := []struct {
 		name   string
@@ -73,10 +73,8 @@ func TestPolicy_CanList(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := p.CanList(context.Background(), tc.caller).IsAllowed
-			if got != tc.want {
-				t.Fatalf("CanList: want %v, got %v", tc.want, got)
-			}
+			t.Parallel()
+			require.Equal(t, tc.want, p.CanList(context.Background(), tc.caller).IsAllowed)
 		})
 	}
 }

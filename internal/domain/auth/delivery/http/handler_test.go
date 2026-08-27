@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	authhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/delivery/http"
@@ -42,8 +42,8 @@ func TestLogin_HappyPath(t *testing.T) {
 
 	resp := api.Post("/api/auth/login", strings.NewReader(`{"email":"a@b.com","password":"pass1234"}`))
 	handlertest.AssertStatus(t, resp, http.StatusOK)
-	assert.ElementsMatch(t, []string{authgate.CookieAccess, authgate.CookieRefresh}, setCookieNames(resp.Header()))
-	assert.Contains(t, resp.Body.String(), `"id":"u1"`)
+	require.ElementsMatch(t, []string{authgate.CookieAccess, authgate.CookieRefresh}, setCookieNames(resp.Header()))
+	require.Contains(t, resp.Body.String(), `"id":"u1"`)
 }
 
 func TestLogin_InvalidCredentials(t *testing.T) {
@@ -75,7 +75,7 @@ func TestRefresh_HappyPath(t *testing.T) {
 
 	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=old.refresh.jwt")
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
-	assert.ElementsMatch(t, []string{authgate.CookieAccess, authgate.CookieRefresh}, setCookieNames(resp.Header()))
+	require.ElementsMatch(t, []string{authgate.CookieAccess, authgate.CookieRefresh}, setCookieNames(resp.Header()))
 }
 
 func TestRefresh_NoCookie(t *testing.T) {
@@ -117,8 +117,8 @@ func TestLogout_WithCookie(t *testing.T) {
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
 
 	cookies := setCookieNames(resp.Header())
-	assert.Contains(t, cookies, authgate.CookieAccess)
-	assert.Contains(t, cookies, authgate.CookieRefresh)
+	require.Contains(t, cookies, authgate.CookieAccess)
+	require.Contains(t, cookies, authgate.CookieRefresh)
 }
 
 func TestLogout_NoCookie(t *testing.T) {

@@ -99,7 +99,7 @@ func TestRegister(t *testing.T) {
 		t.Parallel()
 		var captured *user.User
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().Create(mock.Anything, mock.Anything).
+		repo.EXPECT().Insert(mock.Anything, mock.Anything).
 			RunAndReturn(func(_ context.Context, u *user.User) error {
 				captured = u
 				u.ID = "id-1"
@@ -107,7 +107,7 @@ func TestRegister(t *testing.T) {
 			})
 		f := newUC(t, withRepo(repo))
 
-		got, err := f.uc.Register(context.Background(), &user.Create{
+		got, err := f.uc.Register(context.Background(), &user.CreateInput{
 			Email: "a@b.com", Password: "longenough", Name: "Alice",
 		})
 		require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestRegister(t *testing.T) {
 	t.Run("weak password", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t)
-		_, err := f.uc.Register(context.Background(), &user.Create{
+		_, err := f.uc.Register(context.Background(), &user.CreateInput{
 			Email: "a@b.com", Password: "short", Name: "Alice",
 		})
 		require.ErrorIs(t, err, user.ErrWeakPassword)
@@ -128,9 +128,9 @@ func TestRegister(t *testing.T) {
 	t.Run("repo conflict", func(t *testing.T) {
 		t.Parallel()
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().Create(mock.Anything, mock.Anything).Return(user.ErrAlreadyExists)
+		repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(user.ErrAlreadyExists)
 		f := newUC(t, withRepo(repo))
-		_, err := f.uc.Register(context.Background(), &user.Create{
+		_, err := f.uc.Register(context.Background(), &user.CreateInput{
 			Email: "a@b.com", Password: "longenough", Name: "Alice",
 		})
 		require.ErrorIs(t, err, user.ErrAlreadyExists)
@@ -252,7 +252,7 @@ func TestUpdate(t *testing.T) {
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
 
 		newName := "New"
-		got, err := f.uc.Update(identitytest.Client("u1"), "u1", user.Update{Name: &newName, Version: 1})
+		got, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Name: &newName, Version: 1})
 		require.NoError(t, err)
 		require.Equal(t, "New", got.Name)
 		require.Equal(t, 1, seenVersion)
@@ -267,21 +267,21 @@ func TestUpdate(t *testing.T) {
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
 
 		newName := "New"
-		_, err := f.uc.Update(identitytest.Client("u1"), "u1", user.Update{Name: &newName, Version: 1})
+		_, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Name: &newName, Version: 1})
 		require.ErrorIs(t, err, user.ErrConcurrentUpdate)
 	})
 
 	t.Run("no fields", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withPolicy(defaultPolicy(t, true)))
-		_, err := f.uc.Update(identitytest.Client("u1"), "u1", user.Update{Version: 1})
+		_, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Version: 1})
 		require.ErrorIs(t, err, user.ErrNoUpdateFields)
 	})
 
 	t.Run("forbidden", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withPolicy(defaultPolicy(t, false)))
-		_, err := f.uc.Update(identitytest.Client("u1"), "u2", user.Update{})
+		_, err := f.uc.Update(identitytest.Client("u1"), "u2", user.UpdateInput{})
 		var fe *user.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})

@@ -12,10 +12,13 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification/mocks"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
+	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/eventbus"
 	"git.stit.tech/stit-core/golibinfra/testkit/txkit"
 )
+
+var fixedNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 type ucFixture struct {
 	uc       *verification.Usecase
@@ -25,6 +28,7 @@ type ucFixture struct {
 	emailSet *mocks.MockEmailVerificationSetter
 	mailer   *mocks.MockMailer
 	bus      *eventbus.Recorder
+	audit    *audittest.Recorder
 }
 
 type ucOpts struct {
@@ -59,7 +63,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		r.EXPECT().InsertPasswordReset(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		r.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(nil, verification.ErrInvalidResetToken).Maybe()
 		r.EXPECT().MarkPasswordResetUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
-		r.EXPECT().InsertEmailVerification(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+		r.EXPECT().InsertEmailVerification(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
 		r.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(nil, verification.ErrInvalidVerificationToken).Maybe()
 		r.EXPECT().MarkEmailVerificationUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
 		o.repo = r
@@ -88,6 +92,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	}
 
 	bus := &eventbus.Recorder{}
+	aud := &audittest.Recorder{}
 	uc := verification.NewUsecase(verification.UsecaseDeps{
 		Repo:          o.repo,
 		Users:         o.users,
@@ -97,11 +102,13 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Tx:            txkit.Identity{},
 		Events:        bus,
 		Mailer:        o.mailer,
+		Audit:         aud,
 		Log:           logkit.Nop(),
-		Clock:         clockkit.NewFixed(time.Now()),
+		Clock:         clockkit.NewFixed(fixedNow),
 	})
 	return ucFixture{
 		uc: uc, repo: o.repo, users: o.users, pwSet: o.pwSet, emailSet: o.emailSet, mailer: o.mailer, bus: bus,
+		audit: aud,
 	}
 }
 
@@ -129,6 +136,18 @@ func TestIssueEmailVerification_HappyPath(t *testing.T) {
 	require.Equal(t, "a@b.com", sentEmail)
 	require.NotEmpty(t, sentToken)
 	require.NotEqual(t, ev.TokenID, sentToken, "TokenID must not equal plaintext token")
+}
+
+func TestIssueEmailVerification_RedeliveryIsNoOp(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().InsertEmailVerification(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(false, nil)
+	mailer := mocks.NewMockMailer(t) // no expectations: any Send* call fails the test
+	f := newUC(t, withRepo(repo), withMailer(mailer))
+
+	require.NoError(t, f.uc.IssueEmailVerification(context.Background(), "u1", "a@b.com"))
+	require.Equal(t, 0, f.bus.Count(), "duplicate delivery must not publish a second event")
 }
 
 func TestRequestPasswordReset_HappyPath(t *testing.T) {
@@ -177,7 +196,7 @@ func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
-		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: time.Now().Add(time.Hour)}, nil,
+		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
 	)
 	repo.EXPECT().MarkPasswordResetUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
 	users := mocks.NewMockUserReader(t)
@@ -198,6 +217,7 @@ func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	require.NoError(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"))
 	require.Equal(t, "hash:newpassword123", lastHash)
 	require.Equal(t, 3, lastVersion)
+	require.True(t, f.audit.Has("password_reset_confirmed"))
 }
 
 func TestConfirmPasswordReset_WeakPassword(t *testing.T) {
@@ -211,7 +231,7 @@ func TestConfirmPasswordReset_Expired(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
-		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: time.Now().Add(-time.Hour)}, nil,
+		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(-time.Hour)}, nil,
 	)
 	f := newUC(t, withRepo(repo))
 	err := f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123")
@@ -222,7 +242,7 @@ func TestConfirmEmail_HappyPath(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(
-		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: time.Now().Add(time.Hour)}, nil,
+		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
 	)
 	repo.EXPECT().MarkEmailVerificationUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
 	emailSet := mocks.NewMockEmailVerificationSetter(t)
@@ -236,13 +256,14 @@ func TestConfirmEmail_HappyPath(t *testing.T) {
 
 	require.NoError(t, f.uc.ConfirmEmail(context.Background(), "tok"))
 	require.Equal(t, "u1", markedID)
+	require.True(t, f.audit.Has("email_confirmed"))
 }
 
 func TestConfirmEmail_Expired(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(
-		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: time.Now().Add(-time.Hour)}, nil,
+		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: fixedNow.Add(-time.Hour)}, nil,
 	)
 	f := newUC(t, withRepo(repo))
 	err := f.uc.ConfirmEmail(context.Background(), "tok")

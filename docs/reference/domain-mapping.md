@@ -106,7 +106,7 @@ DDD-домены опциональны (заводятся, только ког
 | `kind: policy` файл | функции/методы в `policy.go` (без I/O) |
 | Inputs | параметры функции |
 | Rules | реализуются как набор условий → возвращают `allow`/`deny` |
-| Outcomes | `nil` для allow, `ErrForbidden`/специфичная ошибка для deny |
+| Outcomes | authorization: `pkg/policy.Decision` (`policy.Allow()` / `policy.Deny(reason)`); usecase мапит deny на `ForbiddenError{Reason}` из `errors.go`. Чистое правило-валидация: bool/sentinel |
 | Used by | вызывается из `Usecase.<Operation>` на шаге Authorize/Validate |
 | Pure | `policy.go` не должен импортить `infra/` или `delivery/` |
 

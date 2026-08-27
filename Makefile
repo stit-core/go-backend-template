@@ -1,4 +1,4 @@
-.PHONY: help test lint build fmt check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench test-cover tidy
+.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench test-cover cover-check tidy
 
 # Release-вычисления (image-path host/org, lockstep tag) self-contained в
 # scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
@@ -43,9 +43,16 @@ build: ## Сборка бинарника bin/api concise (VERBOSE=1 — сыр�
 fmt: ## gofumpt -w .
 	gofumpt -w .
 
-check: ## Канонический gate: fmt+vet+lint+test+build+gen-check (pre-push)
-	@echo "→ make fmt"
-	@$(MAKE) fmt
+fmt-check: ## Проверка форматирования без мутации дерева (gate)
+	@files=$$(gofumpt -l .); \
+	if [ -n "$$files" ]; then \
+		echo "$$files" | sed 's/^/  /'; \
+		echo "FAIL: fmt — файлы не отформатированы, запусти make fmt"; exit 1; \
+	fi
+
+check: ## Канонический gate: fmt-check+vet+lint+test+build+gen-check+migrations (pre-push)
+	@echo "→ make fmt-check"
+	@$(MAKE) fmt-check
 	@echo "→ go vet ./..."
 	@go vet ./...
 	@echo "→ make lint"
@@ -56,19 +63,28 @@ check: ## Канонический gate: fmt+vet+lint+test+build+gen-check (pre-
 	@$(MAKE) build
 	@echo "→ make gen-check"
 	@$(MAKE) gen-check
+	@echo "→ migrations-check"
+	@bash scripts/tools/migrations-check.sh
+	@echo "→ make cover-check"
+	@$(MAKE) cover-check
 	@echo "✓ check clean"
 
 ##@ GEN
 gen: ## Регенерация сгенерированного кода: sqlc + mockery
 	sqlc generate
-	@command -v mockery >/dev/null || go install github.com/vektra/mockery/v3@latest
+	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
 	mockery
 
 gen-check: ## Проверка, что sqlc/mocks актуальны (для check/CI)
 	sqlc diff
-	@command -v mockery >/dev/null || go install github.com/vektra/mockery/v3@latest
+	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
 	mockery
-	@git diff --exit-code -- '**/mocks/*.go' || (echo "mocks out of date — run make gen" && exit 1)
+	@git diff --exit-code -- '**/mocks/*.go' || { echo "mocks out of date — run make gen"; exit 1; }
+	@untracked=$$(git ls-files --others --exclude-standard -- '**/mocks/*.go'); \
+	if [ -n "$$untracked" ]; then \
+		echo "$$untracked" | sed 's/^/  /'; \
+		echo "FAIL: untracked mocks — интерфейс не в .mockery.yml был, либо мок не закоммичен"; exit 1; \
+	fi
 
 ##@ DB
 migrate-up: ## Накатить миграции (требует PG_DSN; PG_MIGRATIONS_PATH default ./migrations)
@@ -136,15 +152,32 @@ local-deps-down: ## Снести локальные зависимости
 test-int: ## Только integration (testcontainers); требует docker
 	go test -race -tags=integration ./...
 
-test-fuzz: ## Короткие fuzz-прогоны (10s на цель) — для CI smoke
-	go test -run=^$$ -fuzz=. -fuzztime=10s ./internal/domain/...
+test-fuzz: ## Короткие fuzz-прогоны (10s на цель; go test -fuzz работает per-пакет)
+	@pkgs=$$(grep -rl 'func Fuzz' --include='*_test.go' internal/ | xargs -r -n1 dirname | sort -u); \
+	[ -z "$$pkgs" ] && { echo "OK: fuzz-целей нет"; exit 0; }; \
+	for p in $$pkgs; do \
+		echo "→ fuzz ./$$p"; \
+		go test -run='^$$' -fuzz=. -fuzztime=10s "./$$p" || exit 1; \
+	done
 
 test-bench: ## Бенчмарки
 	go test -run=^$$ -bench=. -benchmem ./internal/domain/...
 
-test-cover: ## Coverage по доменным пакетам
+test-cover: ## Coverage по доменным пакетам (полный отчёт, без gate)
 	go test -short -coverprofile=coverage.out ./internal/domain/... ./internal/platform/...
 	go tool cover -func=coverage.out | tail -1
+
+# Gate меряет юнит-тестируемое: domain-core + delivery + platform-примитивы.
+# Вне scope: сгенерированное (mocks, sqlc db), integration-канон (infra/postgres),
+# fx-обвязка (module/, infra/outbox, platform/events) — их держат integration/e2e/ValidateApp.
+COVER_FLOOR ?= 75
+cover-check: ## Coverage-gate: юнит-профиль ≥ $(COVER_FLOOR)% (шаг make check)
+	@go test -short -coverprofile=coverage.out ./internal/domain/... ./internal/platform/... >/dev/null
+	@grep -v -e '/mocks/' -e '/infra/' -e '/module/' -e '/platform/events/' coverage.out > coverage.gate.out
+	@total=$$(go tool cover -func=coverage.gate.out | tail -1 | awk '{gsub("%","",$$NF); print $$NF}'); \
+	LC_ALL=C awk -v t="$$total" -v f="$(COVER_FLOOR)" 'BEGIN { \
+		if (t+0 < f+0) { printf "FAIL: coverage %.1f%% < floor %s%% (scope: domain+delivery+platform без generated/infra/fx-wiring)\n", t, f; exit 1 } \
+		printf "OK: coverage %.1f%% >= %s%%\n", t, f }'
 
 tidy: ## go mod tidy
 	go mod tidy
