@@ -1,5 +1,5 @@
 -- 0002_auth: refresh-сессии auth-домена.
--- bruteforce_attempts владеет bruteforcekit/pgstore (см. MigrationsFS) — здесь не дублируется.
+-- bruteforce_attempts владеет bruteforcekit/pgstore (источник Migrations в cmd/migrate) — здесь не дублируется.
 
 -- Refresh-токены: jti как PK, replaced_by_jti для chain rotation.
 CREATE TABLE refresh_sessions (

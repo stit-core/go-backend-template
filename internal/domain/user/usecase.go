@@ -83,7 +83,7 @@ func (uc *Usecase) Register(ctx context.Context, in *CreateInput) (u *User, err 
 		return nil, ErrWeakPassword
 	}
 
-	hash, err := uc.hasher.Hash(in.Password)
+	hash, err := uc.hasher.Hash(ctx, in.Password)
 	if err != nil {
 		uc.metrics.RecordRegistered(ctx, "error")
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -298,7 +298,7 @@ func (uc *Usecase) VerifyPassword(ctx context.Context, userID, plain string) (bo
 	if err != nil {
 		return false, err
 	}
-	return uc.hasher.Verify(plain, u.PasswordHash)
+	return uc.hasher.Verify(ctx, plain, u.PasswordHash)
 }
 
 func (uc *Usecase) MarkEmailVerified(ctx context.Context, userID string) error {

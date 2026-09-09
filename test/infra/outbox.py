@@ -1,4 +1,5 @@
-"""Typed-ассерты по таблице outbox (golibinfra/outboxkit/pgstore).
+"""Typed-ассерты по per-domain outbox-таблицам (golibinfra/outboxkit/pgstore,
+`TableMigrations`): subject `<domain>.events.<event>` живёт в `outbox_<domain>`.
 
 Колонки: id, subject, payload (JSONB → dict psycopg'ом), created_at,
 published_at (NULL пока строку не сдренил worker в NATS).
@@ -6,6 +7,7 @@ published_at (NULL пока строку не сдренил worker в NATS).
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -14,13 +16,23 @@ from infra.pg import Pg
 
 Predicate = Callable[[dict[str, Any]], bool]
 
+_DOMAIN = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def table_for(subject: str) -> str:
+    """`user.events.registered` → `outbox_user` (per-domain таблица источника)."""
+    domain = subject.split(".", 1)[0]
+    if not _DOMAIN.match(domain):
+        raise ValueError(f"outbox: subject без domain-префикса: {subject!r}")
+    return f"outbox_{domain}"
+
 
 def find(
     pg: Pg, subject: str, *, predicate: Predicate | None = None
 ) -> list[dict[str, Any]]:
     rows = pg.rows(
         "SELECT id, subject, payload, created_at, published_at "
-        "FROM outbox WHERE subject = %s ORDER BY created_at",
+        f"FROM {table_for(subject)} WHERE subject = %s ORDER BY created_at",
         [subject],
     )
     if predicate is None:

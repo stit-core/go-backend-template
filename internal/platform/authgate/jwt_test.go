@@ -1,6 +1,7 @@
 package authgate_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,7 +18,15 @@ type stubParser struct {
 	err    error
 }
 
-func (s stubParser) Parse(string) (map[string]any, error) { return s.claims, s.err }
+func (s stubParser) Parse(context.Context, string) (map[string]any, error) { return s.claims, s.err }
+
+func (s stubParser) ParseAccess(context.Context, string) (map[string]any, error) {
+	return s.claims, s.err
+}
+
+func (s stubParser) ParseRefresh(context.Context, string) (map[string]any, error) {
+	return s.claims, s.err
+}
 
 func TestExtract(t *testing.T) {
 	t.Parallel()

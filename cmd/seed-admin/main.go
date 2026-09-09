@@ -27,10 +27,11 @@ var (
 func main() {
 	ctx := context.Background()
 
-	// Stdout-логгер (JSON в docker/kubectl logs). Stdout в struct-литерале
-	// задаём явно: zero-value был бы false.
-	logCfg := logkit.Config{Level: "info", Stdout: true}
-	log := logkit.NewWithWriter(logCfg, os.Stdout)
+	log, err := logkit.New(logkit.Config{Level: "info"})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("seed-admin: logger: " + err.Error() + "\n")
+		os.Exit(1)
+	}
 	log.Info(ctx, "starting", "component", "seed-admin", "version", version, "commit", commit)
 
 	os.Exit(run(ctx, log))
@@ -54,7 +55,12 @@ func run(ctx context.Context, log logkit.Logger) int {
 		log.Error(ctx, "argon params", "err", err)
 		return 1
 	}
-	hash, err := authnkit.NewArgon2idHasher(p).Hash(password)
+	hasher, err := authnkit.NewArgon2idHasher(p)
+	if err != nil {
+		log.Error(ctx, "argon params", "err", err)
+		return 1
+	}
+	hash, err := hasher.Hash(ctx, password)
 	if err != nil {
 		log.Error(ctx, "hash password", "err", err)
 		return 1

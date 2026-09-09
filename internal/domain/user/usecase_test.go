@@ -18,8 +18,8 @@ import (
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
-	"git.stit.tech/stit-core/golibinfra/testkit/eventbus"
-	"git.stit.tech/stit-core/golibinfra/testkit/txkit"
+	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
+	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
 
 func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
@@ -45,7 +45,7 @@ func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 type ucFixture struct {
 	uc    *user.Usecase
 	repo  *mocks.MockRepository
-	bus   *eventbus.Recorder
+	bus   *outboxtest.Recorder
 	audit *audittest.Recorder
 }
 
@@ -72,7 +72,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		o.pol = defaultPolicy(t, false)
 	}
 
-	bus := &eventbus.Recorder{}
+	bus := &outboxtest.Recorder{}
 	aud := &audittest.Recorder{}
 
 	m, err := user.NewMetrics(noopmetric.NewMeterProvider().Meter("test"))
@@ -82,7 +82,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Repo:    o.repo,
 		Hasher:  authntest.DeterministicHasher{},
 		Policy:  o.pol,
-		Tx:      txkit.Identity{},
+		Tx:      pgtest.Identity{},
 		Events:  bus,
 		Audit:   aud,
 		Metrics: m,

@@ -138,7 +138,7 @@ depguard в `.golangci.yml` блокирует прямые импорты ме�
 | Property `Constraints` | `CHECK`-constraint или валидируется только в коде (если бизнес-уровень) |
 | Lifecycle enum | `CHECK (status IN ('active', 'blocked', 'deleted'))` или отдельная enum-таблица |
 | Identity ID type | `id UUID PRIMARY KEY` или `TEXT` для composite |
-| Outbox-эмит | таблица `outbox` — **не в `migrations/` этого репо**; схему держит `golibinfra/outboxkit/pgstore` (`MigrationsFS`), `cmd/migrate/main.go` накатывает её рядом с миграциями приложения. То же про `audit_log` (`auditkit/pgstore`) и `bruteforce_attempts` (`bruteforcekit/pgstore`). |
+| Outbox-эмит | таблица `outbox_<domain>` — **не в `migrations/` этого репо**; схему даёт `golibinfra/outboxkit/pgstore.TableMigrations(Table)` (`infra/outbox/outbox.go: Migrations`), `cmd/migrate/main.go` накатывает её рядом с миграциями приложения (таблица версий на источник). То же про `audit_log` (`auditkit/pgstore.Migrations`) и `bruteforce_attempts` (`bruteforcekit/pgstore.Migrations`). |
 
 ## Что НЕ маппится 1:1
 

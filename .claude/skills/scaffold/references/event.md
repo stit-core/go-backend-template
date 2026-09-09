@@ -2,7 +2,7 @@
 
 Эвент-флоу: usecase домена-источника пишет событие в **per-domain outbox** (`outbox_<source>`) в той же транзакции, что и основное изменение → drain этого инстанса (поднимается fx.Lifecycle того же `cmd/api`) публикует в **JetStream** через `natskit.StreamBus` → durable-subscriber потребляющего домена (`internal/domain/<consumer>/delivery/nats/`) обрабатывает. Отдельного worker-процесса нет — всё в одном бинаре.
 
-См. `.claude/rules/events-and-messaging.md` (бэкграунд — автогрузится при правке `events.go` / `delivery/nats/` / `internal/jobs/`) и `docs/reference/architecture.md § События и messaging`.
+См. `.claude/rules/events-and-messaging.md` (бэкграунд — автогрузится при правке `events.go` / `delivery/nats/` / `infra/outbox/`) и `docs/reference/architecture.md § События и messaging`.
 
 > `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
 > `git.stit.tech/<org>/backend`). Подставляй фактический, не копируй буквально.
@@ -73,7 +73,7 @@ err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
 
 `uc.events` — это `outboxkit.Publisher` (`Publish(ctx, subject, payload) error`), инжектится в `UsecaseDeps`. Сериализация в JSON — внутри `outboxkit/pgstore.Insert`.
 
-Если домен-источник **ещё не публикует** события — заведи ему per-domain outbox: `internal/domain/<source>/infra/outbox/outbox.go` с `const Table = "outbox_<source>"` + `var Providers = events.OutboxFor("<source>", Table)`; включи `Providers` в `<source>/module/module.go` (даёт приватный `outboxkit.Publisher`); добавь таблицу `outbox_<source>` в миграцию (DDL зеркалит `outboxkit/pgstore.SchemaSQL` — см. `migrations/0003_outbox_domains.up.sql`); если subject-префикс новый — добавь стрим в `NATS_JS_STREAM_NAMES` (инфра-handoff).
+Если домен-источник **ещё не публикует** события — заведи ему per-domain outbox: `internal/domain/<source>/infra/outbox/outbox.go` с `const Table = "outbox_<source>"`, `var Migrations = outboxpg.TableMigrations(Table)` и `var Providers = events.OutboxFor("<source>", Table)`; включи `Providers` в `<source>/module/module.go` (даёт приватный `outboxkit.Publisher`); добавь `<source>outbox.Migrations` в список источников `cmd/migrate/main.go` (схема kit-owned, в `migrations/` не дублируется — образец `internal/domain/user/infra/outbox/outbox.go`); если subject-префикс новый — добавь стрим в `NATS_JS_STREAM_NAMES` (инфра-handoff).
 
 ### 4. Subscriber in-domain (`internal/domain/<consumer>/delivery/nats/`)
 
@@ -134,16 +134,27 @@ func (h *Handler) on<Event>(ctx context.Context, e <Event>Payload) error {
 
 func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
     ctx, cancel := context.WithCancel(context.Background())
+    var sub natskit.Subscription
     lc.Append(fx.Hook{
         OnStart: func(_ context.Context) error {
-            err := natskit.SubscribeStreamJSON(bus, ctx, stream<Event>, Subject<Event>, durable<Event>, h.on<Event>)
+            s, err := natskit.SubscribeStreamJSON(bus, ctx, stream<Event>, Subject<Event>, durable<Event>, h.on<Event>)
             if errors.Is(err, natskit.ErrJetStreamDisabled) {
                 h.log.Warn(ctx, "jetstream disabled: <event> intake off", "subject", Subject<Event>)
                 return nil // local-dev без -js: сервис стартует, событие не потребляется
             }
-            return err
+            if err != nil {
+                return err
+            }
+            sub = s
+            return nil
         },
-        OnStop: func(_ context.Context) error { cancel(); return nil },
+        OnStop: func(stopCtx context.Context) error {
+            defer cancel() // Drain раньше отмены ctx: обработчики в работе успевают Ack
+            if sub == nil {
+                return nil
+            }
+            return sub.Drain(stopCtx)
+        },
     })
 }
 ```

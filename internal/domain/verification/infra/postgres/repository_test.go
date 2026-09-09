@@ -22,7 +22,7 @@ var tokenExpiry = time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 // setup seeds a user because both token tables reference users(id).
 func setup(t *testing.T) (verification.Repository, string) {
 	t.Helper()
-	fx := testkit.StartPostgres(t, repopath.Migrations())
+	fx := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
 	db := fx.DB(t)
 	u := pgseed.InsertUser(t, userpg.NewRepository(db))
 	return verifpg.NewRepository(db), u.ID

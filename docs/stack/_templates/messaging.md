@@ -25,5 +25,5 @@ breaking-changes.>
 <Что de-template родит:
 - subject-константы и stream/durable у consumer'ов (`delivery/nats/dto.go`)
 - регистрация durable JetStream-подписчиков в fx
-- per-domain outbox wiring: `infra/outbox/outbox.go` (`OutboxFor`) + таблица `outbox_<domain>`
-  в миграции + `NATS_JS_STREAM_NAMES` под subject-префиксы>
+- per-domain outbox wiring: `infra/outbox/outbox.go` (`OutboxFor` + `TableMigrations`) +
+  источник в `cmd/migrate` + `NATS_JS_STREAM_NAMES` под subject-префиксы>

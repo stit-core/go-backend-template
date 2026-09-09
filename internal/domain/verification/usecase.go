@@ -205,7 +205,7 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 		return ErrInvalidResetToken
 	}
 
-	hash, err := uc.hasher.Hash(newPassword)
+	hash, err := uc.hasher.Hash(ctx, newPassword)
 	if err != nil {
 		return fmt.Errorf("hash new password: %w", err)
 	}

@@ -31,12 +31,12 @@ type PasswordSetter interface {
 }
 
 type Tokens interface {
-	IssueAccess(u *User) (string, error)
-	IssueRefresh(userID string) (token, jti string, expiresAt time.Time, err error)
+	IssueAccess(ctx context.Context, u *User) (string, error)
+	IssueRefresh(ctx context.Context, userID string) (token, jti string, expiresAt time.Time, err error)
 }
 
 type TokenParser interface {
-	ParseRefresh(token string) (userID, jti string, err error)
+	ParseRefresh(ctx context.Context, token string) (userID, jti string, err error)
 }
 
 type SessionRepository interface {
@@ -127,6 +127,9 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 		if !errors.Is(err, ErrUserNotFound) {
 			return nil, fmt.Errorf("lookup user: %w", err)
 		}
+		// Холостая проверка: ответ на неизвестный email стоит столько же, сколько
+		// проверка пароля — наличие учётной записи не выдаётся таймингом.
+		uc.hasher.VerifyDummy(ctx)
 		if recordErr := uc.guard.RecordFailure(ctx, in.Email, ip); recordErr != nil {
 			uc.log.Error(ctx, "guard record failure", "err", recordErr)
 		}
@@ -136,6 +139,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 	}
 
 	if !u.CanLogin {
+		uc.hasher.VerifyDummy(ctx)
 		if recordErr := uc.guard.RecordFailure(ctx, in.Email, ip); recordErr != nil {
 			uc.log.Error(ctx, "guard record failure", "err", recordErr)
 		}
@@ -144,7 +148,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 		return nil, ErrInvalidCredentials
 	}
 
-	ok, err := uc.hasher.Verify(in.Password, u.PasswordHash)
+	ok, err := uc.hasher.Verify(ctx, in.Password, u.PasswordHash)
 	if err != nil || !ok {
 		if recordErr := uc.guard.RecordFailure(ctx, in.Email, ip); recordErr != nil {
 			uc.log.Error(ctx, "guard record failure", "err", recordErr)
@@ -158,11 +162,11 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 		uc.log.Error(ctx, "guard record success", "err", recordErr)
 	}
 
-	access, err := uc.tokens.IssueAccess(u)
+	access, err := uc.tokens.IssueAccess(ctx, u)
 	if err != nil {
 		return nil, fmt.Errorf("issue access token: %w", err)
 	}
-	refresh, jti, expiresAt, err := uc.tokens.IssueRefresh(u.ID)
+	refresh, jti, expiresAt, err := uc.tokens.IssueRefresh(ctx, u.ID)
 	if err != nil {
 		return nil, fmt.Errorf("issue refresh token: %w", err)
 	}
@@ -189,7 +193,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 }
 
 func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*LoginOutput, error) {
-	userID, oldJTI, err := uc.tparser.ParseRefresh(refreshToken)
+	userID, oldJTI, err := uc.tparser.ParseRefresh(ctx, refreshToken)
 	if err != nil {
 		if errors.Is(err, ErrTokenExpired) {
 			uc.metrics.RecordRefresh(ctx, "expired")
@@ -230,11 +234,11 @@ func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*LoginOutp
 		return nil, ErrInvalidCredentials
 	}
 
-	access, err := uc.tokens.IssueAccess(u)
+	access, err := uc.tokens.IssueAccess(ctx, u)
 	if err != nil {
 		return nil, fmt.Errorf("issue access token: %w", err)
 	}
-	newRefresh, newJTI, newExpiresAt, err := uc.tokens.IssueRefresh(u.ID)
+	newRefresh, newJTI, newExpiresAt, err := uc.tokens.IssueRefresh(ctx, u.ID)
 	if err != nil {
 		return nil, fmt.Errorf("issue refresh token: %w", err)
 	}
@@ -253,7 +257,7 @@ func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*LoginOutp
 }
 
 func (uc *Usecase) Logout(ctx context.Context, refreshToken string) error {
-	userID, jti, parseErr := uc.tparser.ParseRefresh(refreshToken)
+	userID, jti, parseErr := uc.tparser.ParseRefresh(ctx, refreshToken)
 	if parseErr != nil {
 		return nil //nolint:nilerr // logout is idempotent: a broken/expired token is already logged out
 	}
@@ -318,7 +322,7 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 		return fmt.Errorf("load user: %w", err)
 	}
 
-	hash, err := uc.hasher.Hash(newPassword)
+	hash, err := uc.hasher.Hash(ctx, newPassword)
 	if err != nil {
 		return fmt.Errorf("hash new password: %w", err)
 	}

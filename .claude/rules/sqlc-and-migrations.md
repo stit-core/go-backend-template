@@ -21,8 +21,9 @@ paths:
 - Каждая миграция **обратима** через `down`. Откат бессмыслен (drop колонки с данными) —
   `down` всё равно есть: минимум `-- noop` + WHY-комментарий.
 - **Не правь уже накатившуюся в боевой среде миграцию.** Только новая.
-- `make migrate-up` / `make migrate-down` (нужна `PG_DSN`). В CI — автоматически перед
-  integration-тестами (testcontainers с чистой БД).
+- `make migrate-up` / `make migrate-down` (нужна `PG_DSN`); `down` откатывает одну миграцию
+  приложения, схему китов ведёт golibinfra. В CI — автоматически перед integration-тестами
+  (testcontainers с чистой БД).
 
 ## sqlc
 
@@ -49,7 +50,9 @@ paths:
   Теневые флаги `deleted_at` без политики — нет.
 - Optimistic lock через `version`: `WHERE id=$1 AND version=$2 … RETURNING` (`:one`;
   no-rows → `ErrConcurrentUpdate`) либо `:execrows`=0 → `ErrConcurrentUpdate`.
-- **Kit-таблицы** (`outbox`/`audit_log`/`bruteforce_*`) схему держат
-  `golibinfra/{outboxkit,auditkit,bruteforcekit}/pgstore` (`MigrationsFS`), `cmd/migrate`
-  накатывает рядом. **Не дублируй их `CREATE TABLE`** в `migrations/`.
+- **Kit-таблицы** (`outbox_<domain>`/`audit_log`/`bruteforce_attempts`) схему держат
+  `golibinfra/{outboxkit,auditkit,bruteforcekit}/pgstore` (`Migrations`,
+  `TableMigrations(table)`), `cmd/migrate` накатывает рядом — таблица версий у каждого
+  источника своя (`schema_migrations_<source>`, приложение — `schema_migrations_app`).
+  **Не дублируй их `CREATE TABLE`** в `migrations/`.
 - Имена: таблицы — множественное snake_case (`users`, `refresh_sessions`); колонки — snake_case.

@@ -5,6 +5,8 @@
 package mocks
 
 import (
+	"context"
+
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -36,8 +38,8 @@ func (_m *MockTokenParser) EXPECT() *MockTokenParser_Expecter {
 }
 
 // ParseRefresh provides a mock function for the type MockTokenParser
-func (_mock *MockTokenParser) ParseRefresh(token string) (string, string, error) {
-	ret := _mock.Called(token)
+func (_mock *MockTokenParser) ParseRefresh(ctx context.Context, token string) (string, string, error) {
+	ret := _mock.Called(ctx, token)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ParseRefresh")
@@ -46,21 +48,21 @@ func (_mock *MockTokenParser) ParseRefresh(token string) (string, string, error)
 	var r0 string
 	var r1 string
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(string) (string, string, error)); ok {
-		return returnFunc(token)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (string, string, error)); ok {
+		return returnFunc(ctx, token)
 	}
-	if returnFunc, ok := ret.Get(0).(func(string) string); ok {
-		r0 = returnFunc(token)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) string); ok {
+		r0 = returnFunc(ctx, token)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(string) string); ok {
-		r1 = returnFunc(token)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) string); ok {
+		r1 = returnFunc(ctx, token)
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(string) error); ok {
-		r2 = returnFunc(token)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string) error); ok {
+		r2 = returnFunc(ctx, token)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -73,19 +75,25 @@ type MockTokenParser_ParseRefresh_Call struct {
 }
 
 // ParseRefresh is a helper method to define mock.On call
+//   - ctx context.Context
 //   - token string
-func (_e *MockTokenParser_Expecter) ParseRefresh(token interface{}) *MockTokenParser_ParseRefresh_Call {
-	return &MockTokenParser_ParseRefresh_Call{Call: _e.mock.On("ParseRefresh", token)}
+func (_e *MockTokenParser_Expecter) ParseRefresh(ctx interface{}, token interface{}) *MockTokenParser_ParseRefresh_Call {
+	return &MockTokenParser_ParseRefresh_Call{Call: _e.mock.On("ParseRefresh", ctx, token)}
 }
 
-func (_c *MockTokenParser_ParseRefresh_Call) Run(run func(token string)) *MockTokenParser_ParseRefresh_Call {
+func (_c *MockTokenParser_ParseRefresh_Call) Run(run func(ctx context.Context, token string)) *MockTokenParser_ParseRefresh_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(string)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -96,7 +104,7 @@ func (_c *MockTokenParser_ParseRefresh_Call) Return(userID string, jti string, e
 	return _c
 }
 
-func (_c *MockTokenParser_ParseRefresh_Call) RunAndReturn(run func(token string) (string, string, error)) *MockTokenParser_ParseRefresh_Call {
+func (_c *MockTokenParser_ParseRefresh_Call) RunAndReturn(run func(ctx context.Context, token string) (string, string, error)) *MockTokenParser_ParseRefresh_Call {
 	_c.Call.Return(run)
 	return _c
 }

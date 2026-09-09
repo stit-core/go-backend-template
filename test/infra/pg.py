@@ -1,7 +1,7 @@
 """Типизированная интроспекция Postgres стека (порт проброшен на 127.0.0.1:5432).
 
 Только чтение для ассертов side-effects. Схема — migrations/0001_users.up.sql,
-0002_auth.up.sql; таблица outbox — golibinfra/outboxkit/pgstore.
+0002_auth.up.sql; таблицы outbox_<domain> — golibinfra/outboxkit/pgstore (TableMigrations).
 """
 
 from __future__ import annotations

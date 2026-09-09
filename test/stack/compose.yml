@@ -28,7 +28,6 @@ x-app-env: &app-env
 
   BRUTEFORCE_MAX_FAILURES: "5"
   BRUTEFORCE_LOCK_DURATION: 15m
-  BRUTEFORCE_WINDOW: 1h
 
 services:
   postgres:

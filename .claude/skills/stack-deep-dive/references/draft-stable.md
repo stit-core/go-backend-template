@@ -125,11 +125,11 @@ make validate-stack-docs
 
 > Engine + driver + migrations + kit-таблицы + пул описаны конкретно?
 > Миграции kit'ов (outbox/audit/bruteforce) не дублируются вручную, а
-> подключаются через MigrationsFS?
+> подключаются как `pgkit.Source` китов (`pgstore.Migrations` / `TableMigrations`)?
 
 - ✅ Postgres 16, pgx/v5, golang-migrate up/down парные, `cmd/migrate`
-  как init-контейнер, `outbox`/`audit_log` миграции наследуются из
-  golibinfra MigrationsFS, пул `PG_MAX_CONNS=50` с метрикой `db_pool_*`.
+  как init-контейнер, `outbox_<domain>`/`audit_log` миграции наследуются из
+  golibinfra (`pgstore.Migrations`), пул `PG_MAX_CONNS=50` с метрикой `pg_pool_*`.
 - ❌ «Postgres, миграции, пул» — без конкретики.
 
 ### messaging

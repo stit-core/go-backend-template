@@ -57,7 +57,7 @@ manifest, заметки про env'ы, описание интеграций, �
    - messaging: пока без NATS, только outbox-drain;
    - auth: JWT (HS256), seed-admin через cmd/seed-admin;
    - observability: структурные логи в stdout (json);
-   - dependencies: golibinfra v0.12.x, kit'ы logkit/pgkit/outboxkit/authnkit;
+   - dependencies: golibinfra v1.x, kit'ы logkit/pgkit/outboxkit/authnkit;
    - config: 4 required env, 2 секрета (env, значение не коммитим);
    - runtime: HTTP+outbox-drain в одном cmd/api, jobs нет.
    Так?

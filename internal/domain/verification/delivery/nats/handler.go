@@ -44,9 +44,10 @@ func (h *Handler) onUserRegistered(ctx context.Context, e UserRegisteredEvent) e
 func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
 	// Background is the legitimate root here: the subscription outlives OnStart's ctx.
 	ctx, cancel := context.WithCancel(context.Background())
+	var sub natskit.Subscription
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
-			err := natskit.SubscribeStreamJSON(bus, ctx, streamUser, SubjectUserRegistered, durableName, h.onUserRegistered)
+			s, err := natskit.SubscribeStreamJSON(bus, ctx, streamUser, SubjectUserRegistered, durableName, h.onUserRegistered)
 			// JetStream выключен (local-dev без -js) → лог + skip: сервис стартует,
 			// событие просто не потребляется (для приёма нужен NATS_JETSTREAM_ENABLED).
 			if errors.Is(err, natskit.ErrJetStreamDisabled) {
@@ -56,11 +57,17 @@ func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
 			if err != nil {
 				return fmt.Errorf("subscribe %s: %w", SubjectUserRegistered, err)
 			}
+			sub = s
 			return nil
 		},
-		OnStop: func(_ context.Context) error {
-			cancel()
-			return nil
+		OnStop: func(stopCtx context.Context) error {
+			// Сначала Drain (дообработать полученное, дождаться обработчиков — иначе
+			// сообщение в работе теряет Ack и уходит на ределивери), затем отмена ctx.
+			defer cancel()
+			if sub == nil {
+				return nil
+			}
+			return sub.Drain(stopCtx)
 		},
 	})
 }

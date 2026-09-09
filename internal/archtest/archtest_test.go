@@ -230,27 +230,25 @@ func TestNoExportedSubjectInDomainRoot(t *testing.T) {
 }
 
 // TestNoTimeNowInDomains: детерминизм — clockkit.Clock вместо time.Now()
-// во всём internal/domain и internal/jobs (кроме тестов).
+// во всём internal/domain (кроме тестов).
 func TestNoTimeNowInDomains(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	for _, dir := range []string{filepath.Join(root, "internal", "domain"), filepath.Join(root, "internal", "jobs")} {
-		walkGoFiles(t, dir, func(path string) {
-			f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-			require.NoError(t, err)
-			ast.Inspect(f, func(n ast.Node) bool {
-				sel, ok := n.(*ast.SelectorExpr)
-				if !ok {
-					return true
-				}
-				ident, ok := sel.X.(*ast.Ident)
-				if ok && ident.Name == "time" && sel.Sel.Name == "Now" {
-					t.Errorf("%s calls time.Now() — inject clockkit.Clock (rule domain-architecture)", path)
-				}
+	walkGoFiles(t, filepath.Join(root, "internal", "domain"), func(path string) {
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		require.NoError(t, err)
+		ast.Inspect(f, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
 				return true
-			})
+			}
+			ident, ok := sel.X.(*ast.Ident)
+			if ok && ident.Name == "time" && sel.Sel.Name == "Now" {
+				t.Errorf("%s calls time.Now() — inject clockkit.Clock (rule domain-architecture)", path)
+			}
+			return true
 		})
-	}
+	})
 }
 
 func walkGoFiles(t *testing.T, root string, fn func(path string)) {

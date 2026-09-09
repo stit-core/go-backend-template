@@ -62,31 +62,33 @@ func userToAuth(u *user.User) *auth.User {
 type tokensAdapter struct {
 	signer     authnkit.JWTSigner
 	clock      clockkit.Clock
-	accessTTL  time.Duration
 	refreshTTL time.Duration
 }
 
+// newTokensAdapter: TTL и claim typ проставляет кит (SignAccess/SignRefresh);
+// refreshTTL нужен здесь только для expires_at строки refresh_sessions.
 func newTokensAdapter(s authnkit.JWTSigner, cfg authnkit.JWTConfig, clock clockkit.Clock) auth.Tokens {
-	return &tokensAdapter{signer: s, clock: clock, accessTTL: cfg.AccessTTL, refreshTTL: cfg.RefreshTTL}
+	ttl := cfg.RefreshTTL
+	if ttl <= 0 {
+		ttl = authnkit.DefaultRefreshTTL // нулевой JWT_REFRESH_TTL = дефолт кита
+	}
+	return &tokensAdapter{signer: s, clock: clock, refreshTTL: ttl}
 }
 
-func (a *tokensAdapter) IssueAccess(u *auth.User) (string, error) {
-	claims := map[string]any{
+func (a *tokensAdapter) IssueAccess(ctx context.Context, u *auth.User) (string, error) {
+	return a.signer.SignAccess(ctx, map[string]any{
 		"sub":  u.ID,
 		"role": string(u.Role),
-		"typ":  "access",
-	}
-	return a.signer.Sign(claims, a.accessTTL)
+	})
 }
 
-func (a *tokensAdapter) IssueRefresh(userID string) (string, string, time.Time, error) {
+func (a *tokensAdapter) IssueRefresh(ctx context.Context, userID string) (string, string, time.Time, error) {
 	jti := uuid.NewString()
 	expiresAt := a.clock.Now().Add(a.refreshTTL)
-	token, err := a.signer.Sign(map[string]any{
+	token, err := a.signer.SignRefresh(ctx, map[string]any{
 		"sub": userID,
-		"typ": "refresh",
 		"jti": jti,
-	}, a.refreshTTL)
+	})
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
@@ -110,7 +112,10 @@ func (a *loginGuardAdapter) Check(ctx context.Context, subject, ip string) (*aut
 }
 
 func (a *loginGuardAdapter) RecordFailure(ctx context.Context, subject, ip string) error {
-	return a.guard.RecordFailure(ctx, subject, ip)
+	// Состояние блокировки после неудачи домену не нужно: следующий Login
+	// увидит её через Check.
+	_, err := a.guard.RecordFailure(ctx, subject, ip)
+	return err
 }
 
 func (a *loginGuardAdapter) RecordSuccess(ctx context.Context, subject, ip string) error {
@@ -125,17 +130,15 @@ func newTokenParserAdapter(p authnkit.JWTParser) auth.TokenParser {
 	return &tokenParserAdapter{parser: p}
 }
 
-func (a *tokenParserAdapter) ParseRefresh(token string) (string, string, error) {
-	claims, err := a.parser.Parse(token)
+// ParseRefresh: тип токена (typ=refresh) проверяет кит — access-токен в
+// refresh-контуре даёт authnkit.ErrWrongTokenType.
+func (a *tokenParserAdapter) ParseRefresh(ctx context.Context, token string) (string, string, error) {
+	claims, err := a.parser.ParseRefresh(ctx, token)
 	if err != nil {
 		if errors.Is(err, authnkit.ErrTokenExpired) {
 			return "", "", auth.ErrTokenExpired
 		}
 		return "", "", fmt.Errorf("parse refresh token: %w", err)
-	}
-	typ, _ := claims["typ"].(string)
-	if typ != "refresh" {
-		return "", "", fmt.Errorf("token type is not refresh")
 	}
 	sub, _ := claims["sub"].(string)
 	if sub == "" {

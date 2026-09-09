@@ -134,7 +134,7 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 
 **Anti-patterns**:
 - Дублирование CREATE TABLE для kit-таблиц (`outbox`, `audit_log`,
-  `bruteforce_*`) — должно подключаться через MigrationsFS.
+  `bruteforce_*`) — должно подключаться как `pgkit.Source` кита (`pgstore.Migrations`).
 - Размер пула без обоснования / без метрики.
 
 **Порядок копания**:
@@ -145,10 +145,10 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 2. `Migration strategy`: инструмент (golang-migrate — стандарт),
    парные up/down (yes), нумерация (последовательная),
    `cmd/migrate` как init-контейнер (yes/no).
-3. `Kit-owned tables`: какие подключаются через MigrationsFS (множественный
+3. `Kit-owned tables`: какие подключаются источниками китов `pgstore.Migrations` (множественный
    выбор: outboxkit, auditkit, bruteforcekit).
 4. `Connection pool`: размер (Other — число), timeout acquire (Other),
-   нужны ли метрики `db_pool_*` (yes/no).
+   нужны ли метрики `pg_pool_*` (yes/no).
 5. `Generates`: пути pgkit-wiring, `sqlc.yaml` каркас, `cmd/migrate`.
 
 ---

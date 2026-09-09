@@ -61,7 +61,7 @@ Cognition Devin Review публично заявляет: ревьюер с чи
 - TDD-test для багфикса написан **до** фикса (если это bugfix-коммит)?
 - Edge-cases покрыты?
 - Mocks не over-specified (`.Once()` где можно `.Times(N)` если N важно)?
-- Integration-тесты используют `golibinfra/testkit.StartPostgres(t, migrationsPath)` для изоляции (seed строк — `testkit/pgseed`)?
+- Integration-тесты используют `golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(path))` для изоляции (seed строк — `testkit/pgseed`)?
 
 ### Стиль
 

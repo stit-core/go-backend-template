@@ -1,3 +1,7 @@
+// Command migrate — прогон миграций отдельным шагом (lockstep с образом api).
+// Источники: киты golibinfra (bruteforcekit, auditkit, per-domain outbox-таблицы)
+// и каталог приложения PG_MIGRATIONS_PATH; у каждого — своя таблица версий
+// schema_migrations_<source>, новая миграция кита не сдвигает версии приложения.
 package main
 
 import (
@@ -7,8 +11,10 @@ import (
 	auditpg "git.stit.tech/stit-core/golibinfra/auditkit/pgstore"
 	bruteforcepg "git.stit.tech/stit-core/golibinfra/bruteforcekit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/logkit"
-	outboxpg "git.stit.tech/stit-core/golibinfra/outboxkit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
+
+	useroutbox "git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/outbox"
+	verifoutbox "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/infra/outbox"
 )
 
 var (
@@ -19,10 +25,11 @@ var (
 func main() {
 	ctx := context.Background()
 
-	// Stdout-логгер (JSON в docker/kubectl logs). Stdout в struct-литерале
-	// задаём явно: zero-value был бы false.
-	logCfg := logkit.Config{Level: "info", Stdout: true}
-	log := logkit.NewWithWriter(logCfg, os.Stdout)
+	log, err := logkit.New(logkit.Config{Level: "info"})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("migrate: logger: " + err.Error() + "\n")
+		os.Exit(1)
+	}
 	log.Info(ctx, "starting", "component", "migrate", "version", version, "commit", commit)
 
 	os.Exit(run(ctx, log))
@@ -40,48 +47,50 @@ func run(ctx context.Context, log logkit.Logger) int {
 		return 1
 	}
 
-	path := os.Getenv("PG_MIGRATIONS_PATH")
-	if path == "" {
-		path = "/migrations"
+	// PG_MIGRATIONS_PATH (default /migrations) и PG_MIGRATE_TIMEOUT (2m) — тот же
+	// конфиг, что у pgkit.MigrateModule: одна семантика на оба способа прогона.
+	cfg, err := pgkit.NewMigrateRunnerConfig()
+	if err != nil {
+		log.Error(ctx, "migrate config", "err", err)
+		return 1
+	}
+	app := pgkit.DirSource(pgkit.AppSourceName, cfg.Path)
+	// Киты раньше приложения: миграции приложения могут опираться на их таблицы.
+	sources := []pgkit.Source{
+		bruteforcepg.Migrations,
+		auditpg.Migrations,
+		useroutbox.Migrations,
+		verifoutbox.Migrations,
+		app,
 	}
 
-	// Порядок Sources append-only — новые kit'ы добавляются в КОНЕЦ после "app",
-	// чтобы не сдвигать существующие version'ы в schema_migrations.
-	cfg := pgkit.MultiSourceConfig{
-		DSN: dsn,
-		Sources: []pgkit.Source{
-			{Name: "bruteforcekit", FS: bruteforcepg.MigrationsFS, Prefix: "migrations"},
-			{Name: "auditkit", FS: auditpg.MigrationsFS, Prefix: "migrations"},
-			{Name: "outboxkit", FS: outboxpg.MigrationsFS, Prefix: "migrations"},
-			{Name: "app", FS: os.DirFS(path), Prefix: "."},
-		},
-	}
+	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
 
 	switch os.Args[1] {
 	case "up":
-		if err := pgkit.MigrateUpMulti(cfg); err != nil {
+		if err := pgkit.MigrateUpAll(ctx, dsn, sources...); err != nil {
 			log.Error(ctx, "migrate up failed", "err", err)
 			return 1
 		}
 		log.Info(ctx, "migrate up: ok")
 
 	case "down":
-		if err := pgkit.MigrateDownMulti(cfg); err != nil {
+		// Откат — одна миграция приложения: схему китов ведёт golibinfra.
+		if err := pgkit.MigrateDown(ctx, dsn, app); err != nil {
 			log.Error(ctx, "migrate down failed", "err", err)
 			return 1
 		}
 		log.Info(ctx, "migrate down: ok")
 
 	case "version":
-		v, dirty, err := pgkit.MigrateVersionMulti(cfg)
-		if err != nil {
-			log.Error(ctx, "migrate version failed", "err", err)
-			return 1
-		}
-		if v == 0 && !dirty {
-			log.Info(ctx, "no migrations applied")
-		} else {
-			log.Info(ctx, "migrate version", "version", v, "dirty", dirty)
+		for _, src := range sources {
+			v, dirty, err := pgkit.MigrateVersion(ctx, dsn, src)
+			if err != nil {
+				log.Error(ctx, "migrate version failed", "source", src.Name, "version", v, "dirty", dirty, "err", err)
+				return 1
+			}
+			log.Info(ctx, "migrate version", "source", src.Name, "version", v)
 		}
 
 	default:

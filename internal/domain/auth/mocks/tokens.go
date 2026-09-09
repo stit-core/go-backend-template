@@ -5,6 +5,7 @@
 package mocks
 
 import (
+	"context"
 	"time"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
@@ -39,8 +40,8 @@ func (_m *MockTokens) EXPECT() *MockTokens_Expecter {
 }
 
 // IssueAccess provides a mock function for the type MockTokens
-func (_mock *MockTokens) IssueAccess(u *auth.User) (string, error) {
-	ret := _mock.Called(u)
+func (_mock *MockTokens) IssueAccess(ctx context.Context, u *auth.User) (string, error) {
+	ret := _mock.Called(ctx, u)
 
 	if len(ret) == 0 {
 		panic("no return value specified for IssueAccess")
@@ -48,16 +49,16 @@ func (_mock *MockTokens) IssueAccess(u *auth.User) (string, error) {
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(*auth.User) (string, error)); ok {
-		return returnFunc(u)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *auth.User) (string, error)); ok {
+		return returnFunc(ctx, u)
 	}
-	if returnFunc, ok := ret.Get(0).(func(*auth.User) string); ok {
-		r0 = returnFunc(u)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *auth.User) string); ok {
+		r0 = returnFunc(ctx, u)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(*auth.User) error); ok {
-		r1 = returnFunc(u)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *auth.User) error); ok {
+		r1 = returnFunc(ctx, u)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -70,19 +71,25 @@ type MockTokens_IssueAccess_Call struct {
 }
 
 // IssueAccess is a helper method to define mock.On call
+//   - ctx context.Context
 //   - u *auth.User
-func (_e *MockTokens_Expecter) IssueAccess(u interface{}) *MockTokens_IssueAccess_Call {
-	return &MockTokens_IssueAccess_Call{Call: _e.mock.On("IssueAccess", u)}
+func (_e *MockTokens_Expecter) IssueAccess(ctx interface{}, u interface{}) *MockTokens_IssueAccess_Call {
+	return &MockTokens_IssueAccess_Call{Call: _e.mock.On("IssueAccess", ctx, u)}
 }
 
-func (_c *MockTokens_IssueAccess_Call) Run(run func(u *auth.User)) *MockTokens_IssueAccess_Call {
+func (_c *MockTokens_IssueAccess_Call) Run(run func(ctx context.Context, u *auth.User)) *MockTokens_IssueAccess_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *auth.User
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(*auth.User)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *auth.User
+		if args[1] != nil {
+			arg1 = args[1].(*auth.User)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -93,14 +100,14 @@ func (_c *MockTokens_IssueAccess_Call) Return(s string, err error) *MockTokens_I
 	return _c
 }
 
-func (_c *MockTokens_IssueAccess_Call) RunAndReturn(run func(u *auth.User) (string, error)) *MockTokens_IssueAccess_Call {
+func (_c *MockTokens_IssueAccess_Call) RunAndReturn(run func(ctx context.Context, u *auth.User) (string, error)) *MockTokens_IssueAccess_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // IssueRefresh provides a mock function for the type MockTokens
-func (_mock *MockTokens) IssueRefresh(userID string) (string, string, time.Time, error) {
-	ret := _mock.Called(userID)
+func (_mock *MockTokens) IssueRefresh(ctx context.Context, userID string) (string, string, time.Time, error) {
+	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for IssueRefresh")
@@ -110,26 +117,26 @@ func (_mock *MockTokens) IssueRefresh(userID string) (string, string, time.Time,
 	var r1 string
 	var r2 time.Time
 	var r3 error
-	if returnFunc, ok := ret.Get(0).(func(string) (string, string, time.Time, error)); ok {
-		return returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (string, string, time.Time, error)); ok {
+		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(string) string); ok {
-		r0 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) string); ok {
+		r0 = returnFunc(ctx, userID)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(string) string); ok {
-		r1 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) string); ok {
+		r1 = returnFunc(ctx, userID)
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(string) time.Time); ok {
-		r2 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string) time.Time); ok {
+		r2 = returnFunc(ctx, userID)
 	} else {
 		r2 = ret.Get(2).(time.Time)
 	}
-	if returnFunc, ok := ret.Get(3).(func(string) error); ok {
-		r3 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(3).(func(context.Context, string) error); ok {
+		r3 = returnFunc(ctx, userID)
 	} else {
 		r3 = ret.Error(3)
 	}
@@ -142,19 +149,25 @@ type MockTokens_IssueRefresh_Call struct {
 }
 
 // IssueRefresh is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID string
-func (_e *MockTokens_Expecter) IssueRefresh(userID interface{}) *MockTokens_IssueRefresh_Call {
-	return &MockTokens_IssueRefresh_Call{Call: _e.mock.On("IssueRefresh", userID)}
+func (_e *MockTokens_Expecter) IssueRefresh(ctx interface{}, userID interface{}) *MockTokens_IssueRefresh_Call {
+	return &MockTokens_IssueRefresh_Call{Call: _e.mock.On("IssueRefresh", ctx, userID)}
 }
 
-func (_c *MockTokens_IssueRefresh_Call) Run(run func(userID string)) *MockTokens_IssueRefresh_Call {
+func (_c *MockTokens_IssueRefresh_Call) Run(run func(ctx context.Context, userID string)) *MockTokens_IssueRefresh_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(string)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -165,7 +178,7 @@ func (_c *MockTokens_IssueRefresh_Call) Return(token string, jti string, expires
 	return _c
 }
 
-func (_c *MockTokens_IssueRefresh_Call) RunAndReturn(run func(userID string) (string, string, time.Time, error)) *MockTokens_IssueRefresh_Call {
+func (_c *MockTokens_IssueRefresh_Call) RunAndReturn(run func(ctx context.Context, userID string) (string, string, time.Time, error)) *MockTokens_IssueRefresh_Call {
 	_c.Call.Return(run)
 	return _c
 }

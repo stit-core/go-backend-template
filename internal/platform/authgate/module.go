@@ -2,6 +2,7 @@ package authgate
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/danielgtaylor/huma/v2"
 	"go.uber.org/fx"
@@ -13,14 +14,19 @@ import (
 
 const SecuritySchemeName = "Cookie"
 
+// userIDAttr — экстрактор поля user_id для logkit.RegisterAttr.
+//
+//nolint:forbidigo // slog.Value — тип контракта logkit.Attr, не прямое логирование
+func userIDAttr(ctx context.Context) (slog.Value, bool) {
+	id, ok := identity.From(ctx)
+	if !ok {
+		return slog.Value{}, false
+	}
+	return slog.StringValue(id.UserID), true
+}
+
 func registerIdentityLogAttr() {
-	logkit.RegisterAttr(func(ctx context.Context) (string, any, bool) {
-		id, ok := identity.From(ctx)
-		if !ok {
-			return "", nil, false
-		}
-		return "user_id", id.UserID, true
-	})
+	logkit.RegisterAttr("user_id", userIDAttr)
 }
 
 func newCookieSecurityScheme() httpkit.SecuritySchemeEntry {
@@ -37,11 +43,13 @@ func newCookieSecurityScheme() httpkit.SecuritySchemeEntry {
 
 var Module = fx.Module(
 	"authgate",
+	authnProviders,
 	fx.Provide(
 		NewExtractor,
 
 		func(e *Extractor) httpkit.AuthExtractor { return e.Extract },
-		fx.Annotate(newCookieSecurityScheme, fx.ResultTags(`group:"httpkit.security_scheme"`)),
+		fx.Annotate(newCookieSecurityScheme, fx.ResultTags(`group:"`+httpkit.SecuritySchemeGroup+`"`)),
+		fx.Annotate(newClientIPMiddleware, fx.ResultTags(`group:"`+httpkit.MiddlewareGroup+`"`)),
 	),
 	fx.Invoke(registerIdentityLogAttr),
 )

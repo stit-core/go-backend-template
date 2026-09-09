@@ -127,7 +127,7 @@ make build
 make test
 ```
 
-Integration-тесты поднимают Postgres через `golibinfra/testkit.StartPostgres(t, migrationsPath)`, который накатывает все миграции — твоя свежая попадёт автоматически (`testkit/pgseed` — только seed-хелперы строк поверх).
+Integration-тесты поднимают Postgres через `golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))`, который накатывает миграции приложения — твоя свежая попадёт автоматически (kit-таблица нужна тесту → ещё `testkit.WithMigrations(<kit>pg.Migrations)`; `testkit/pgseed` — только seed-хелперы строк поверх).
 
 ### 9. CI-проверка
 
@@ -139,7 +139,9 @@ Integration-тесты поднимают Postgres через `golibinfra/testki
 feat(<domain>): add NNNN_name migration
 ```
 
-Или для общих миграций (audit, outbox):
+Kit-таблицы (`audit_log`, `bruteforce_attempts`, `outbox_<domain>`) мигрирует golibinfra
+(источники в `cmd/migrate`) — файлов в `migrations/` для них не бывает; общая для нескольких
+доменов миграция приложения:
 ```
 feat: add NNNN_name migration
 ```

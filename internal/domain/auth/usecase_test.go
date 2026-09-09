@@ -20,7 +20,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
-	"git.stit.tech/stit-core/golibinfra/testkit/txkit"
+	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
 
 // memSessions — stateful in-memory SessionRepository для проверки сайд-эффектов.
@@ -79,16 +79,16 @@ func (s *memSessions) get(jti string) *auth.RefreshSession {
 func defaultTokens(t *testing.T) *mocks.MockTokens {
 	t.Helper()
 	tk := mocks.NewMockTokens(t)
-	tk.EXPECT().IssueAccess(mock.Anything).
-		RunAndReturn(func(u *auth.User) (string, error) {
+	tk.EXPECT().IssueAccess(mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, u *auth.User) (string, error) {
 			return "access." + u.ID + "." + string(u.Role), nil
 		}).Maybe()
 	var (
 		mu    sync.Mutex
 		count = map[string]int{}
 	)
-	tk.EXPECT().IssueRefresh(mock.Anything).
-		RunAndReturn(func(userID string) (string, string, time.Time, error) {
+	tk.EXPECT().IssueRefresh(mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, userID string) (string, string, time.Time, error) {
 			mu.Lock()
 			count[userID]++
 			n := count[userID]
@@ -105,14 +105,14 @@ func defaultTokens(t *testing.T) *mocks.MockTokens {
 func defaultParser(t *testing.T) *mocks.MockTokenParser {
 	t.Helper()
 	p := mocks.NewMockTokenParser(t)
-	p.EXPECT().ParseRefresh(mock.Anything).Return("u1", "jti-u1", nil).Maybe()
+	p.EXPECT().ParseRefresh(mock.Anything, mock.Anything).Return("u1", "jti-u1", nil).Maybe()
 	return p
 }
 
 func parserReturning(t *testing.T, userID, jti string, err error) *mocks.MockTokenParser {
 	t.Helper()
 	p := mocks.NewMockTokenParser(t)
-	p.EXPECT().ParseRefresh(mock.Anything).Return(userID, jti, err).Maybe()
+	p.EXPECT().ParseRefresh(mock.Anything, mock.Anything).Return(userID, jti, err).Maybe()
 	return p
 }
 
@@ -215,7 +215,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Tokens:         o.tokens,
 		TokenParser:    o.parser,
 		Sessions:       o.sessions,
-		Tx:             txkit.Identity{},
+		Tx:             pgtest.Identity{},
 		Policy:         o.policy,
 		Guard:          o.guard,
 		Audit:          aud,

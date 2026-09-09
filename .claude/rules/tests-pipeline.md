@@ -61,7 +61,8 @@ RED→GREEN: падающий тест, воспроизводящий баг �
 ## Интеграционные
 
 - Build-tag `//go:build integration` сверху файла; `make test-int` (нужен Docker).
-- Контейнер+миграции+пул — `golibinfra/testkit.StartPostgres(t, migrationsPath)`;
+- Контейнер+миграции+пул — `golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(path))`
+  (нужна kit-таблица → ещё `testkit.WithMigrations(<kit>pg.Migrations)`);
   канон — `internal/domain/user/infra/postgres/repository_test.go`. Seed-хелперы строк
   поверх — `internal/testkit/pgseed`.
 

@@ -18,7 +18,7 @@ import (
 
 func setup(t *testing.T) user.Repository {
 	t.Helper()
-	fx := testkit.StartPostgres(t, repopath.Migrations())
+	fx := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
 	return userpg.NewRepository(fx.DB(t))
 }
 

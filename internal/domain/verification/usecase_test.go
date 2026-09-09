@@ -14,8 +14,8 @@ import (
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
-	"git.stit.tech/stit-core/golibinfra/testkit/eventbus"
-	"git.stit.tech/stit-core/golibinfra/testkit/txkit"
+	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
+	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
 
 var fixedNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -27,7 +27,7 @@ type ucFixture struct {
 	pwSet    *mocks.MockPasswordSetter
 	emailSet *mocks.MockEmailVerificationSetter
 	mailer   *mocks.MockMailer
-	bus      *eventbus.Recorder
+	bus      *outboxtest.Recorder
 	audit    *audittest.Recorder
 }
 
@@ -91,7 +91,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		o.mailer = m
 	}
 
-	bus := &eventbus.Recorder{}
+	bus := &outboxtest.Recorder{}
 	aud := &audittest.Recorder{}
 	uc := verification.NewUsecase(verification.UsecaseDeps{
 		Repo:          o.repo,
@@ -99,7 +99,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		PasswordSet:   o.pwSet,
 		EmailVerifier: o.emailSet,
 		Hasher:        authntest.DeterministicHasher{},
-		Tx:            txkit.Identity{},
+		Tx:            pgtest.Identity{},
 		Events:        bus,
 		Mailer:        o.mailer,
 		Audit:         aud,

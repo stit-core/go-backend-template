@@ -23,7 +23,7 @@ var sessionExpiry = time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 // setup seeds a user because refresh_sessions.user_id references users(id).
 func setup(t *testing.T) (auth.SessionRepository, string) {
 	t.Helper()
-	fx := testkit.StartPostgres(t, repopath.Migrations())
+	fx := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
 	db := fx.DB(t)
 	u := pgseed.InsertUser(t, userpg.NewRepository(db))
 	return authpg.NewRepository(db), u.ID
