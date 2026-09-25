@@ -135,7 +135,7 @@ doctor: ## Fail-fast preflight: auth/env/drift
 	@bash scripts/tools/doctor.sh $(A)
 
 ##@ META
-plan-check: ## Валидатор структуры планов
+plan-check: ## Формат планов .claude/plans/ (A=--summary — сводка активных планов)
 	@bash scripts/tools/validate-plan.sh $(A)
 
 validate-stack-docs: ## Валидатор stack-артефактов docs/stack (8 kinds, status/frontmatter)

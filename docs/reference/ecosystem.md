@@ -1,66 +1,73 @@
 # Ecosystem
 
-Место шаблона в экосистеме stit: **6 форкаемых шаблонов** `stit-core/`
-(`corp-infra-template`, `project-infra-template-compose`, `go-backend-template`,
-`spa-frontend-template`, `telegram-bot-template`, `business-strategy-template`)
-+ 3 общие библиотеки `stit-core/golibinfra` (Go-kits), `stit-core/pylibinfra`
-(Python-kits, `tgbotkit`) и `stit-core/ui-lib` (`@stit/ui`, frontend
-design-system). Корп control-plane — это репо `corp-infra-template`
-(managed = инстанс на `*.stit.tech`; self-hosted = форк `<org>/infra`). Канон
-контрактов и операционной модели агентов — `corp-infra-template/docs/ecosystem.md`.
+Короткая карта для этого репо: роль, соседи, как сюда приходят агенты, что репо отдаёт и
+берёт. Канон карты и операционного флоу — `docs/reference/ecosystem.md` инфра-репо `<org>/infra`
+(форк `project-infra-template-compose`; sibling-checkout — `../infra`).
 
 ## Роль
 
-Шаблон Go-бэкенда. Форкается в `<client-org>/backend`; разработчик собирает + пушит образ
-`git.${DOMAIN}/<client-org>/backend:<vX.Y.Z>`. Деплоем **не занимается** — handoff в
-`<client-org>/infra`.
+`go-backend-template` форкается в `<org>/backend` — Go-сервис проекта: HTTP API, outbox-drain,
+NATS-подписчики и фоновые jobs в одном бинаре `cmd/api`; `cmd/migrate` — отдельный образ
+(init-контейнер). Зона репо — код → образ в registry; выкатка — не здесь.
 
 ```
-   <org>/strategy (← business-strategy-template)  — design-time SoT: бизнес-стратегия;
-        │ домены продукта (опц.) — её downstream под docs/projects/<slug>/
-        │ side-input: читается scaffold'ом при разработке (рантайм не зависит)
-        ▼
-   ЭТОТ РЕПО ◄──контракт (image registry)── corp-infra-template (corp control plane)
-        │ ──build+push image──► git.${DOMAIN}/<org>/backend{,-migrate}
-        │                                   │
-   golibinfra (kit'ы)                       ▼
-                              <org>/infra (← project-infra-template-compose) ──deploy──► VPS
+<org>/strategy ──домены (design-time, read-only)──► <org>/backend (этот репо) ◄── golibinfra (go.mod)
+                                                         │ make release
+                                                         ▼
+                                   registry Gitea: <host>/<org>/backend{,-migrate}:vX.Y.Z
+                                                         │ make bump SVC=backend TAG=vX.Y.Z
+                                                         ▼
+                                   <org>/infra — хаб проекта, docker-compose на VPS
 ```
 
-## Зависит от / используется
+## Соседи
 
-- **Зависит от:** `stit-core/golibinfra` (kit'ы: httpkit, pgkit, authnkit, outboxkit,
-  natskit, logkit, …); `corp-infra-template` (контракт: image registry `git.${DOMAIN}`);
-  `git.${DOMAIN}` (push images).
-- **Используется:** `<client-org>/infra` (форк `project-infra-template-compose`) — пуллит
-  образ; rollout тега — `make bump SVC=backend TAG=<tag>` там (правит `BACKEND_TAG`
-  в `.env` на VPS + force-recreate). `<org>/infra` — операционный хаб проекта:
-  задачи входят туда, агенты приходят сюда и работают обвязкой этого репо
-  (`make check` — гейт), — прямой заход разработчика сюда равно нормален.
-- **Зависит (design-time) от:** `<client-org>/strategy` (форк `business-strategy-template`) —
-  design-time SoT бизнес-стратегии; когда стратегия рождает продукт, его DDD-артефакты доменов
-  живут под `docs/projects/<slug>/domains/`. `scaffold` читает их при разработке кода; рантайм-образ
-  от strategy-репо не зависит (это source-of-truth проектирования, не deploy-звено).
+Шаблоны `stit-core/*` форкаются в репо клиентской орги `<org>/*`; форки одной орги лежат рядом
+sibling-checkout'ами (`../<name>`).
 
-## Контракт с корп-инфрой
+| Форк (шаблон) | Роль |
+|---|---|
+| `<org>/strategy` (`business-strategy-template`) | design-time source of truth: бизнес, продукты, сервисы и их домены |
+| `<org>/infra` (`project-infra-template-compose`) | runtime проекта (docker-compose на VPS) и операционный хаб: общий план, рассылка агентов по сиблингам, выкатка тегов (`make bump`) |
+| `<org>/backend` (`go-backend-template`) | **этот репо** — Go-сервис |
+| `<org>/frontend` (`spa-frontend-template`) | React SPA (кабинет, всё за логином) |
+| `<org>/site` (`ssr-frontend-template`) | Astro SSR-сайт (индексируемый контент) |
+| `<org>/<bot>` (`telegram-bot-template`) | Telegram-бот (Python, aiogram) |
+| `<org>/mobile` (`mobile-template`) | KMP-приложение Android + iOS; релиз — в магазины |
 
-- `git.${DOMAIN}` — registry для `<org>/backend{,-migrate}` (build локальный, см.
-  [release.md](release.md)). Единственная runtime-зависимость этого репо от корп-инфры.
-- Конфиг и секреты (`PG_DSN`, JWT/OIDC-ключи, …) — обычные env-переменные; в проде их
-  инжектит проектная инфра прямо в окружение контейнера. Схема ключей — артефакт
-  `docs/stack/config.md`; прокатка значений — зона `<org>/infra`, не этого репо.
-- Деплой — через `project-infra-template-compose` (docker-compose стек на проектный VPS).
+Библиотеки: `golibinfra` — Go-киты этого сервиса; `pylibinfra` — Python-киты бота.
 
-## Self-hosted путь
+## Как сюда приходят агенты
 
-Registry `git.${DOMAIN}` на managed-пути указывает на хостинг stit (`git.stit.tech`); на
-self-hosted — на вашу Gitea (тот же хост, что в module path `go.mod`). Хост выводится из
-`git remote get-url origin` при `make release` — правок при форке не требует. Архитектура
-кода не меняется, меняется только хост. Вендор-лока нет.
+- **Из хаба `<org>/infra`** — обычный путь. Проект стартует в `<org>/strategy`, дальше работу ведёт
+  хаб: сквозная задача — план-программа в его `.claude/plans/`, оттуда агент уходит в `../backend`
+  с фазой, ведёт её планом здесь (`/plan`, `parent: infra:<slug>`) и работает обвязкой этого репо (`CLAUDE.md`, скиллы, гейт `make check`). В хаб возвращаются образ в registry
+  (`/release`) и INFRA-HANDOFF-блок.
+- **Прямой заход** — тоже нормальный режим: та же обвязка. Последствия для соседей (required env
+  и секреты, миграции с эффектом, cross-service subjects, новые runtime-deps) оформляются
+  INFRA-HANDOFF-блоком для хаба — rule `infra-impact`, skill `/infra-handoff`.
 
-## Границы ответственности
+## Что репо отдаёт
 
-Этот репо STOP'ает на image-in-registry. Деплой-команды чужих репо (`make ship`, `ssh`,
-env-прокатка) отсюда **не запускаются**. Инфра-поверхность (env/секрет/миграция-с-
-эффектом/cross-service-subject/runtime-dep) фиксируется INFRA-HANDOFF-блоком — см.
-`.claude/rules/infra-impact.md` и skill `infra-handoff`.
+- **Образы** `<host>/<org>/backend:vX.Y.Z` (`cmd/api`) и `<host>/<org>/backend-migrate:vX.Y.Z`
+  (`cmd/migrate` + SQL) одним lockstep-тегом — `make release` (skill `/release`, процедура —
+  [release.md](release.md)). `<host>/<org>` выводятся из `git remote get-url origin`: образы уходят
+  в container registry той же Gitea, где лежит репо (`git.stit.tech`). `<org>/infra` тянет их из
+  registry `REGISTRY_HOST` (дефолт `git.stit.tech`).
+- **INFRA-HANDOFF-блок**: `BACKEND_TAG` + накопленные разделы `## Handoff` активных планов.
+- **STOP после `/release`.** Выкатка тега — `make bump SVC=backend TAG=vX.Y.Z` в `<org>/infra`
+  (правит `BACKEND_TAG` в `.env` на VPS + force-recreate); откат — тот же `make bump` с предыдущим
+  тегом. Деплой-команды (`make bump`, `make ship`, `ssh`) отсюда не запускаются.
+
+## Что репо берёт
+
+- **Домены — из `../strategy`** (design-time, read-only): `docs/projects/<slug>/services/<svc>/domains/<ctx>/`,
+  общие VO — `services/_shared/`, границы сервиса — паспорт `services/<svc>/README.md`. `<slug>`,
+  `<svc>` и путь к strategy-репо записаны в `docs/stack/service.md § Identity`; по ним `/scaffold`
+  (вариант domain) разворачивает код, маппинг — [domain-mapping.md](domain-mapping.md).
+  Проектируются домены там (`/domain-deep-dive`); рантайм-образ от strategy-репо не зависит.
+- **Киты — `golibinfra`** (версия в `go.mod`): logging, authn, outbox, NATS, cache, audit, clock.
+  Переиспользуемый примитив — PR в `golibinfra`, не локально (`architecture.md § Граница с golibinfra`).
+- **Конфиг и секреты — из окружения контейнера.** В проде их задаёт `<org>/infra`: `.env` на VPS по
+  контракту его `.env.example`, интерполяция в compose `environment:`. Схема ключей — артефакт
+  `docs/stack/config.md`; значения в этот репо не попадают.

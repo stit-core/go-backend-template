@@ -24,12 +24,12 @@ ref: docs/stack/messaging.md
 
 ## Открытые вопросы
 - Outbox-drain: один реплика-инстанс с advisory lock, или per-shard? (**blocker**)
-- Subject версионирование при breaking-change — `v2.events.<x>` суффикс
+- Subject версионирование при breaking-change — суффикс `….v2`
   или новый subject целиком?
 
 ## Платформенные решения
 - `Delivery: at-least-once` сознательно — at-most-once дешевле, но
-  consumer-side idempotency у нас уже есть через EventID.
+  consumer-side idempotency уже держит схема (unique-индекс + `ON CONFLICT`).
 
 ## Что копать дальше
 - После решения по drain — обновить `runtime.md § Entrypoints` (один
@@ -58,7 +58,7 @@ ref: docs/stack/messaging.md
 - **Cross-kind blocker** (drift между kit-артефактом и роллапом
   `config`/`runtime`) — частый случай для стека. Помечать в state того
   роллапа, который недополучил: `state/config.md` → «`auth` объявил
-  `JWT_PUBLIC_KEY` — добавить в Required env (**blocker**)».
+  `JWT_SECRET` — добавить в Required env и Secrets (**blocker**)».
 
 ### `## Платформенные решения`
 

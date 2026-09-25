@@ -51,11 +51,11 @@ ALTER TABLE sessions
 
 -- Новая таблица
 CREATE TABLE orders (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id),
     status TEXT NOT NULL,
     total_cents BIGINT NOT NULL,
-    version INT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -89,9 +89,9 @@ ALTER TABLE users DROP COLUMN sensitive_data;
 
 Если миграция меняет схему таблицы которой пользуется sqlc — обнови запросы в `internal/domain/<name>/infra/postgres/queries/`.
 
-Пример: добавили `last_login_at` → возможно нужно обновить `GetByID` чтобы возвращал колонку:
+Пример: добавили `last_login_at` → возможно нужно обновить `GetUserByID` чтобы возвращал колонку:
 ```sql
--- name: GetByID :one
+-- name: GetUserByID :one
 SELECT id, email, ..., last_login_at, version, created_at, updated_at
 FROM users
 WHERE id = $1;
@@ -99,7 +99,7 @@ WHERE id = $1;
 
 Или новый запрос:
 ```sql
--- name: UpdateLastLogin :exec
+-- name: UpdateUserLastLogin :exec
 UPDATE users SET last_login_at = NOW() WHERE id = $1;
 ```
 

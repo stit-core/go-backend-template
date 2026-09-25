@@ -21,10 +21,10 @@
 
 Что считается конкретным:
 - пути в коде: `internal/platform/<x>`, `cmd/<bin>`, `<domain>/delivery/<y>`;
-- имена env: `DATABASE_URL`, `JWT_PUBLIC_KEY`, `LOG_LEVEL`;
-- имена fx-провайдеров / kit-функций: `pgkit.NewPool`,
-  `outboxkit.NewPublisher`;
-- subjects: `users.events.registered`;
+- имена env: `PG_DSN`, `JWT_SECRET`, `LOG_LEVEL`;
+- имена fx-модулей / kit-функций: `pgkit.Module`, `outboxkit.Instance`,
+  `events.OutboxFor`;
+- subjects: `user.events.registered`;
 - ldflags-флаги: `-X main.version`.
 
 Что НЕ считается:
@@ -90,11 +90,11 @@ make validate-stack-docs
 
 > Идентичность сервиса полная: имя, module path (`git.stit.tech/<org>/<svc>`),
 > схема версионирования, какие бинари собираются. На старте логируется
-> service+version+commit?
+> component+version+commit?
 
 - ✅ `name=orders`, `module=git.stit.tech/foo/orders`, semver через
   ldflags `-X main.version/-X main.commit`, бинари: `cmd/api` +
-  `cmd/migrate`, лог `"starting" service version commit`.
+  `cmd/migrate`, лог `"starting" component version commit`.
 - ❌ `name=service`, `module=git.stit.tech/stit-core/go-backend-template`
   (не сменили), version=`dev` без ldflags.
 
@@ -116,9 +116,9 @@ make validate-stack-docs
 > отдельной секцией (имя env, значение не коммитим); release-checklist для
 > добавления новых env есть?
 
-- ✅ `Required: DATABASE_URL, JWT_PUBLIC_KEY, SEED_ADMIN_EMAIL`;
-  `Optional: HTTP_PORT (8080), LOG_LEVEL (info), PG_MAX_CONNS (50), …`;
-  `Secrets: JWT_PUBLIC_KEY (env, значение не коммитим)`; release-checklist.
+- ✅ `Required: PG_DSN, JWT_SECRET`;
+  `Optional: HTTP_ADDR (:8080), LOG_LEVEL (info), PG_MAX_CONNS (10), …`;
+  `Secrets: JWT_SECRET, пароль в PG_DSN (env, значение не коммитим)`; release-checklist.
 - ❌ «Берётся envconfig автоматически» — без перечисления.
 
 ### persistence
@@ -129,7 +129,7 @@ make validate-stack-docs
 
 - ✅ Postgres 16, pgx/v5, golang-migrate up/down парные, `cmd/migrate`
   как init-контейнер, `outbox_<domain>`/`audit_log` миграции наследуются из
-  golibinfra (`pgstore.Migrations`), пул `PG_MAX_CONNS=50` с метрикой `pg_pool_*`.
+  golibinfra (`pgstore.Migrations` / `TableMigrations`), пул `PG_MAX_CONNS=50` с метрикой `pg_pool_*`.
 - ❌ «Postgres, миграции, пул» — без конкретики.
 
 ### messaging
@@ -138,10 +138,11 @@ make validate-stack-docs
 > delivery/ordering/idempotency явные; версионирование subject'ов при
 > breaking-changes описано?
 
-- ✅ Published `users.events.registered`, `users.events.email_changed`;
+- ✅ Published `user.events.registered`, `user.events.email_changed`;
   Consumed `verification.events.email_verified`; Delivery=at-least-once,
-  Ordering=per-aggregate (key=UserID), Idempotency=EventID, versioning
-  через суффикс `.v2` при breaking.
+  Ordering=per-aggregate (key=UserID), Idempotency=unique-индекс по
+  natural key + `ON CONFLICT DO NOTHING`, versioning через суффикс `.v2`
+  при breaking.
 - ❌ «Outbox для всего, NATS пока нет» — но в коде уже есть consumers.
 
 ### auth
@@ -150,7 +151,7 @@ make validate-stack-docs
 > middleware кладёт в principal; роли перечислены; seed-admin путь
 > идемпотентен; brute-force защищает login?
 
-- ✅ JWT RS256 с публичным ключом из env (`JWT_PUBLIC_KEY`); authgate кладёт
+- ✅ JWT HS256 (authnkit) с секретом из env (`JWT_SECRET`, ≥32 байт); authgate кладёт
   `Principal{UserID, Role}`; роли `client`/`admin`; seed-admin через
   `cmd/seed-admin` (env `SEED_ADMIN_*`), идемпотентен; bruteforce-cleanup
   как job интервалом 5m.
@@ -159,12 +160,11 @@ make validate-stack-docs
 
 ### observability
 
-> Режим логирования явный (stdout); формат и уровень заданы;
-> структурные поля (service/version/commit) перечислены; где и как логируются
-> ключевые события?
+> Sink явный (stdout); формат и уровень заданы; старт-лог
+> (component/version/commit) есть; где и как логируются ключевые события?
 
 - ✅ Логи в stdout, формат `json`, уровень `LOG_LEVEL` (default `info`);
-  поля `service`/`version`/`commit`; ключевые события (старт, ошибки usecase,
+  старт-лог `component`/`version`/`commit`; ключевые события (старт, ошибки usecase,
   результат обработки эвента) логируются структурно через logkit.
 - ❌ «Логирование есть» — без формата, без уровня, без структурных полей.
 

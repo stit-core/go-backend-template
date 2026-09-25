@@ -98,14 +98,14 @@ manifest, заметки про env'ы, описание интеграций, �
    - правишь `observability` → читай `config`, `dependencies`;
    - правишь `dependencies` → читай `config` (все envconfig-теги),
      `runtime` (что из объявленного поднимается);
-   - правишь `service` → читай `observability` (log fields);
+   - правишь `service` → читай `observability` (старт-лог в `Log levels & content`);
    - правишь `config` / `runtime` — они роллапы, читай все 6 kit'ов.
 4. Прогнать обязательные H2 по `references/field-checklists.md` для
    этого kind'а. Найти:
    - пустые / placeholder-only H2-секции;
    - подозрения по anti-patterns (`Engine = Postgres` без
-     `DATABASE_URL` в `config § Required`; `Authn = JWT` без
-     `JWT_PUBLIC_KEY` в `config`);
+     `PG_DSN` в `config § Required`; `Authn = JWT` без
+     `JWT_SECRET` в `config`);
    - **пустую / TBD-`Generates`** (это **главная** дыра — без неё
      артефакт бесполезен de-template);
    - cross-kind drift (kit-артефакт объявил env, который не появился в

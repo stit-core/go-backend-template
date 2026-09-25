@@ -20,11 +20,11 @@
 
 **Generates содержит**: `go.mod module path`, README-шапка, ldflags
 `-X main.version` / `-X main.commit` в Makefile/build, лог
-`"starting" service/version/commit` в `cmd/api`.
+`"starting" component/version/commit` в `cmd/*`.
 
 **Cross-kind**: `module path` — общий якорь, на него опираются все
-импорты; `service`/`version`/`commit` уезжает в `observability §
-Log fields`.
+импорты; старт-лог `component`/`version`/`commit` уезжает в
+`observability § Log levels & content`.
 
 **Anti-patterns**:
 - module path остался шаблонным (`git.stit.tech/stit-core/go-backend-template`).
@@ -35,12 +35,13 @@ Log fields`.
 **Порядок копания**:
 
 1. `Identity`: имя сервиса (Other), module path (Other), одно-фразовое
-   назначение (Other), `project-slug` — папка продукта в соседнем strategy-репо,
-   откуда `scaffold` берёт домены (Other), `strategy-path` — путь к форку
-   `<org>/strategy` (дефолт `../strategy`; Other для иной раскладки).
+   назначение (Other), `project-slug` — папка продукта в соседнем strategy-репо
+   (Other), `service-slug` — этот сервис в реестре `services/service.md`
+   strategy-репо, откуда `scaffold` берёт домены (Other), `strategy-path` —
+   путь к форку `<org>/strategy` (дефолт `../strategy`; Other для иной раскладки).
 2. `Versioning`: схема (semver `vX.Y.Z` — стандарт; Other для отклонения),
-   как попадает в бинарь (ldflags — Other), что логируется (обычно
-   `service/version/commit`).
+   как попадает в бинарь (ldflags — Other), что логируется (стандарт —
+   `"starting" component/version/commit`).
 3. `Binaries`: какие `cmd/<x>` собираются (HTTP `cmd/api`,
    `cmd/migrate` как init, `cmd/seed-admin` one-off — выбор +
    Other для дополнительных).
@@ -126,21 +127,22 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 `sqlc.yaml`, `cmd/migrate` + порядок накатки app+kit миграций.
 
 **Cross-kind**:
-- `config § Required` — `DATABASE_URL`;
-- `config § Optional` — `PG_MAX_CONNS`, `PG_*_TIMEOUT`;
+- `config § Required` — `PG_DSN`;
+- `config § Optional` — `PG_MAX_CONNS`, `PG_MIN_CONNS`, `PG_MAX_CONN_*`, `PG_MIGRATE_TIMEOUT`;
 - `dependencies § External` — Postgres как обязательная;
 - `runtime § Lifecycle` — `cmd/migrate` как init-container? отдельный
   бинарь?
 
 **Anti-patterns**:
-- Дублирование CREATE TABLE для kit-таблиц (`outbox`, `audit_log`,
-  `bruteforce_*`) — должно подключаться как `pgkit.Source` кита (`pgstore.Migrations`).
+- Дублирование CREATE TABLE для kit-таблиц (`outbox_<domain>`, `audit_log`,
+  `bruteforce_*`) — должно подключаться как `pgkit.Source` кита (`pgstore.Migrations` /
+  `TableMigrations`).
 - Размер пула без обоснования / без метрики.
 
 **Порядок копания**:
 
 1. `Engine`: Postgres+pgx/v5 (стандарт; Other для отклонения); PK-конвенции
-   (uuid v7 — стандарт); naming (snake_case, мн. число); optimistic-lock
+   (uuid, `gen_random_uuid()` — стандарт); naming (snake_case, мн. число); optimistic-lock
    стратегия (через `version`-колонку — yes/no).
 2. `Migration strategy`: инструмент (golang-migrate — стандарт),
    парные up/down (yes), нумерация (последовательная),
@@ -171,19 +173,19 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 - `Delivery: at-most-once` при том, что у consumer нет idempotency.
 - `Ordering: none` при cross-instance subscriber'ах с
   state-mutation на одном aggregate.
-- Cross-service subject без явного версионирования (`v1.events.<x>`).
+- Breaking-change payload без нового subject (`<domain>.events.<event>.v2`).
 - В `Generates` упомянуты consumers, но в `runtime § Entrypoints` нет
   NATS-subs.
 
 **Порядок копания**:
 
 1. `Published subjects` (таблица). Source-aggregate — выбор из
-   aggregate'ов соседнего strategy-репо (`../strategy/docs/projects/<slug>/domains/`) + Other.
+   aggregate'ов соседнего strategy-репо (`../strategy/docs/projects/<slug>/services/<svc>/domains/`) + Other.
 2. `Consumed subjects` (таблица). Source-context — выбор + Other.
 3. `Delivery semantics`:
    - `Delivery`: enum at-least-once / at-most-once / exactly-once-effective;
    - `Ordering`: enum none / per-aggregate (key) / global;
-   - `Idempotency`: Other (обычно EventID);
+   - `Idempotency`: Other (стандарт — natural key + unique-индекс, rule `events-and-messaging`);
    - `Versioning`: как меняем subject при breaking (Other).
 4. `Generates`: пути `delivery/nats/dto.go`, fx-регистрация, outbox.
 
@@ -198,12 +200,13 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 (JWT verifier, hasher), `cmd/seed-admin`, bruteforce guard + cleanup-job.
 
 **Cross-kind**:
-- `config § Required/Secrets` — JWT-ключи, `SEED_ADMIN_*`;
+- `config § Required/Secrets` — `JWT_SECRET`, `SEED_ADMIN_*`;
 - `runtime § Lifecycle` — cleanup-job интервал;
 - `dependencies § kits` — authnkit, bruteforcekit.
 
 **Anti-patterns**:
-- JWT с symmetric secret без обоснования (по умолчанию RS256/EdDSA).
+- `JWT_SECRET` вне `Secrets` или с plain-default: authnkit подписывает HS256, секрет и есть
+  ключ подписи (не короче 32 байт — иначе старт падает).
 - Публичный путь сделать admin'а.
 - Bruteforce не защищает login → возможен credentials stuffing.
 - Authgate-middleware кладёт что-то отличное от plain Principal
@@ -213,7 +216,8 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 
 1. `Authn`:
    - `type`: enum `JWT` / `session` / `none` / `mixed`;
-   - алгоритм (если JWT): RS256 / EdDSA / HS256 (через Other-обоснование);
+   - алгоритм (если JWT): HS256 — authnkit другого не подписывает; иной алгоритм — PR в
+     golibinfra, не локально (CLAUDE.md § Стиль кода);
    - где верифицируется: enum `authgate middleware` / `per-domain`.
 2. `Authgate`: что middleware кладёт в context (Other — обычно
    `Principal{UserID, Role}`), публичные vs защищённые роуты (Other).
@@ -231,34 +235,31 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 
 ## observability
 
-**Обязательные H2**: `Log mode`, `Log fields`, `Key log events`,
-`Generates`.
+**Обязательные H2**: `Log sink`, `Log levels & content`, `Generates`.
 
 **Generates содержит**: logging-wiring (logkit → stdout, формат/уровень
-из env), список структурных полей из `service`-артефакта, конвенция
+из `LOG_*`), старт-лог `component`/`version`/`commit`, конвенция
 логирования ключевых событий.
 
 **Cross-kind**:
-- `config § Optional` — `LOG_*` envs (формат, уровень);
-- `service § Identity` — `service`/`version`/`commit` уезжают в
-  структурные поля лога;
+- `config § Optional` — `LOG_*` envs (формат, уровень, redact);
+- `service § Versioning` — `version`/`commit` старт-лога (ldflags);
 - `dependencies § kits` — logkit.
 
 **Anti-patterns**:
-- Логи без структурных полей `service`/`version` (нечем фильтровать).
-- Неструктурный вывод (plain-text без json) в проде.
+- Неструктурный вывод (`LOG_FORMAT=text`) в проде.
 - Ключевые события (старт, ошибки usecase, обработка эвента) не логируются.
+- Логи мимо `logkit.Logger` (`fmt.Print*` / `slog.*`).
 
 **Порядок копания**:
 
-1. `Log mode`: вывод в stdout (стандарт); формат enum `json` / `console`;
-   уровень `LOG_LEVEL` (default `info`; Other).
-2. `Log fields`: список (`service`, `version`, `commit` — стандарт;
-   multi-select + Other для расширений).
-3. `Key log events`: какие события логируются структурно (старт сервиса,
-   ошибки usecase, результат обработки эвента — Other по каждому).
-4. `Generates`: пути logging-wiring (logkit в fx), список полей,
-   конвенция логирования событий.
+1. `Log sink`: вывод в stdout (стандарт); формат enum `json` / `text`
+   (`LOG_FORMAT`); уровень `LOG_LEVEL` (default `info`; Other).
+2. `Log levels & content`: что пишется на каждом уровне; какие события
+   логируются структурно (старт сервиса, ошибки usecase, результат обработки
+   эвента — Other по каждому); доп. структурные поля (multi-select + Other).
+3. `Generates`: пути logging-wiring (logkit в fx), конвенция логирования
+   событий.
 
 ---
 
@@ -285,10 +286,12 @@ golibinfra-first принцип (generic util → golibinfra, не локаль�
 
 **Порядок копания**:
 
-1. `golibinfra kits` (таблица): множественный выбор kit'ов из набора
-   golibinfra (httpkit, pgkit, authnkit, outboxkit, natskit,
-   bruteforcekit, auditkit, cachekit, clockkit, logkit, storagekit)
-   + Other для редких. Версия golibinfra (Other).
+1. `golibinfra kits` (таблица): множественный выбор kit'ов golibinfra —
+   в `cmd/api` шаблона wired httpkit, pgkit, authnkit, outboxkit, natskit,
+   bruteforcekit, auditkit, cachekit, clockkit, logkit, healthkit, timerkit,
+   flagkit, config, bizmetric; полный набор — пакеты в корне golibinfra
+   нужной версии (storagekit, httpclient, … — Other для редких). Версия
+   golibinfra (Other).
 2. `Что НЕ подключено`: автоматически = (полный набор) − (выбранные
    в 1). Юзер подтверждает «вот эти kit'ы действительно не нужны?» через
    AskUserQuestion (multi-confirm).

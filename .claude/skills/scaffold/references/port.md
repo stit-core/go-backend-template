@@ -35,13 +35,13 @@
 
 ```go
 type <Provider>Reader interface {
-    GetByID(ctx context.Context, id string) (*<consumer>.<DTO>, error)
+    GetByID(ctx context.Context, id string) (*<DTO>, error)
 }
 ```
 
 Имя — что-то вроде `<Provider>Reader`, `<Provider>Writer`, `<Resource><Verb>er`. Сужай интерфейс до **минимально нужных методов**, не копируй весь Repository.
 
-DTO — **локальные** типы консьюмера, не utility-типы провайдера. Если auth нужны 3 поля от user — заведи `auth.User` с этими 3 полями. Не возвращай `*user.User`.
+DTO — **локальные** типы консьюмера, не utility-типы провайдера. Если auth нужны 3 поля от user — заведи `auth.User` с этими 3 полями. Не возвращай `*user.User`. Порт переносит решения, а не сырьё: вычисленное свойство (`CanLogin bool`) вместо сырого статуса чужого enum'а. Ошибки порта — sentinel'ы **потребителя** (`Err<Provider>NotFound` в его `errors.go`): чужие sentinel'ы потребитель не может `errors.Is` (depguard).
 
 ### 3. Инжектируй порт в usecase
 
@@ -68,11 +68,15 @@ type UsecaseDeps struct {
 
 ### 5. Адаптер в `module/adapters.go` потребителя
 
+Тип адаптера **и его конструктор** — в `adapters.go` (не расщеплять между `module.go` и
+`adapters.go`); канон — `internal/domain/auth/module/adapters.go`.
+
 ```go
 package module
 
 import (
     "context"
+    "errors"
 
     "<module-path>/internal/domain/<consumer>"
     "<module-path>/internal/domain/<provider>"
@@ -82,15 +86,27 @@ type <provider>ReaderAdapter struct {
     uc *<provider>.Usecase
 }
 
+func new<Provider>ReaderAdapter(uc *<provider>.Usecase) <consumer>.<Provider>Reader {
+    return &<provider>ReaderAdapter{uc: uc}
+}
+
 func (a *<provider>ReaderAdapter) GetByID(ctx context.Context, id string) (*<consumer>.<DTO>, error) {
     src, err := a.uc.LookupByID(ctx, id)
     if err != nil {
-        return nil, err
+        return nil, map<Provider>Err(err)
     }
     return <provider>To<Consumer>(src), nil
 }
 
-func <provider>To<Consumer>(s *<provider>.<DTO>) *<consumer>.<DTO> {
+// Ports carry consumer-domain sentinels: callers can't errors.Is against <provider>'s (depguard).
+func map<Provider>Err(err error) error {
+    if errors.Is(err, <provider>.ErrNotFound) {
+        return <consumer>.Err<Provider>NotFound
+    }
+    return err
+}
+
+func <provider>To<Consumer>(s *<provider>.<Entity>) *<consumer>.<DTO> {
     return &<consumer>.<DTO>{
         ID:    s.ID,
         Email: s.Email,
@@ -99,7 +115,7 @@ func <provider>To<Consumer>(s *<provider>.<DTO>) *<consumer>.<DTO> {
 }
 ```
 
-`module/adapters.go` имеет право импортить другой домен — depguard для пути `module/**` исключён.
+`module/adapters.go` имеет право импортить другой домен — depguard для пути `module/**` исключён. Время в адаптере — только через инжектированный `clockkit.Clock`, не `time.Now()`.
 
 Если в провайдере нет `LookupByID`-метода (т.е. publicly не выставлен) — добавь его в `<provider>/usecase.go`. Lookup-методы без проверки policy — нормальная практика для cross-domain (вызывающий уже сделал свою проверку).
 
@@ -110,13 +126,13 @@ var Module = fx.Module(
     "<consumer>",
     fx.Provide(
         // ...уже было
-        func(uc *<provider>.Usecase) <consumer>.<Provider>Reader {
-            return &<provider>ReaderAdapter{uc: uc}
-        },
+        new<Provider>ReaderAdapter,
     ),
     // ...
 )
 ```
+
+Inline identity-closure (`func(uc *<provider>.Usecase) <consumer>.<Port> { return uc }`) — только когда провайдер удовлетворяет порт как есть, без маппинга.
 
 ### 7. Проверить depguard
 

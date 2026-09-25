@@ -32,8 +32,8 @@
 
 ### 5. observability → `docs/stack/observability.md`
 - logging-wiring: logkit → stdout (формат/уровень из `LOG_*` env).
-- структурные поля лога (service/version/commit) из `docs/stack/service.md`.
-- конвенция логирования ключевых событий (по `Key log events` артефакта).
+- старт-лог `"starting" component/version/commit` (версия и commit — ldflags из `docs/stack/service.md`).
+- конвенция логирования ключевых событий (по `Log levels & content` артефакта).
 
 ### 6. runtime → `docs/stack/runtime.md` (последним)
 - композиция `cmd/api/main.go`: `fx.New(...)` с нужными модулями (домены + platform + kit'ы).

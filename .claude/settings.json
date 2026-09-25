@@ -18,7 +18,6 @@
       "Bash(make status*)",
       "Bash(make map*)",
       "Bash(make search*)",
-      "Bash(make logs*)",
       "Bash(make doctor)",
       "Bash(make plan-check*)",
       "Bash(make setup)",
@@ -73,11 +72,7 @@
       "Edit(**/infra/postgres/db/**)",
       "Edit(**/mocks/*.go)",
       "Edit(go.sum)",
-      "Write(**/infra/postgres/db/**)",
-      "Write(**/mocks/*.go)",
-      "Write(**/.claude/projects/**/memory/**)",
-      "Edit(**/.claude/projects/**/memory/**)",
-      "MultiEdit(**/.claude/projects/**/memory/**)"
+      "Edit(**/.claude/projects/**/memory/**)"
     ]
   }
 }

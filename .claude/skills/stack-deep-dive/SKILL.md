@@ -1,6 +1,6 @@
 ---
 name: stack-deep-dive
-description: Углублённая интерактивная проработка 8 платформенных артефактов в `docs/stack/` (service · runtime · config · persistence · messaging · auth · observability · dependencies) — единственная точка входа для **проектирования стека**. Ведёт сессию через серию структурированных раундов `AskUserQuestion` (каждый шаг — раунд вопросов; без монологов и догадок), фиксирует рабочее состояние в собственной памяти `state/`, не выдумывает платформенные решения. Активируй когда архитектор проектирует/добивает стек, говорит "/stack-deep-dive", "спроектируем стек", "добьём stack-артефакты", приносит сырьё (compose.yaml, k8s manifest, текущий main.go) под платформенный разбор, или когда `/init-service` дошёл до шага стека. Точечные правки **уже стабильного** артефакта (поменялся env / добавился subject) идут через прямой Edit, не сюда.
+description: Проектирование 8 платформенных артефактов `docs/stack/` (service · runtime · config · persistence · messaging · auth · observability · dependencies) — единственная точка входа для проектирования стека. Ведёт сессию раундами `AskUserQuestion` (без монологов и догадок), решения архитектора пишет в артефакты, рабочее состояние — в собственной памяти `state/`, платформенные решения не выдумывает. Используй, когда архитектор проектирует или добивает стек, приносит сырьё (compose.yaml, k8s-манифест, текущий main.go) под платформенный разбор, или `/init-service` дошёл до шага стека. Точечная правка **уже стабильного** артефакта (поменялся env / добавился subject) — прямой Edit, не сюда.
 ---
 
 # Skill: stack-deep-dive
@@ -32,19 +32,19 @@ kit'ы, env, subjects, capacity); его решения дословно лож�
 `AskUserQuestion` (до 4 вопросов за раунд, иначе следующий раунд) →
 получаем ответ → пишем в артефакт через `Edit` → следующий раунд.
 
-**Никаких альтернатив этому ритму нет.** В частности:
+Отклонения от ритма, которые портят артефакт:
 
 - ❌ Длинный prose-ответ «вот как я бы спроектировал X» вместо вопросов.
 - ❌ «По умолчанию» применить решение, потому что «в других сервисах
   так».
-- ❌ Молча выставить «обычный» env (`HTTP_PORT=8080`,
+- ❌ Молча выставить «обычный» env (`HTTP_ADDR=:8080`,
   `LOG_LEVEL=info`) — это решение архитектора, спрашиваем.
 - ❌ Один большой `AskUserQuestion` с попыткой влезть >4 вопросов —
   лимит инструмента, инструмент режет молча.
 - ❌ Скопить ответы «запишу в конце волны» — пиши после **каждого**
   раунда, иначе теряется при `/clear`.
-- ✅ Сомневаешься, что архитектор хочет именно `JWT RS256`, а не `EdDSA` →
-  лишний раунд вопросов, а не догадка.
+- ✅ Сомневаешься, какой TTL access-токена нужен архитектору
+  (`JWT_ACCESS_TTL`) → лишний раунд вопросов, а не догадка.
 
 Платформенные решения скилл **не выдумывает**. Он формулирует
 falsifiable-вопрос и пишет ответ архитектора дословно. Anti-pattern'ы и
@@ -150,7 +150,7 @@ service; скажи если хочешь прыгнуть в конкретны
 - **Всегда через `AskUserQuestion`**, до 4 вопросов в одном раунде.
 - **Опции** только для:
   - anti-patterns (см. шаблоны + `references/field-checklists.md`);
-  - enum-поля (`Log format`: `json` / `console`;
+  - enum-поля (`Log format`: `json` / `text`;
     `Delivery`: `at-least-once` / `at-most-once`;
     `Authn type`: `JWT` / `session` / `none`; и т.п.);
   - тест-критерий kind'а (✅/❌-примеры через AskUserQuestion);
@@ -159,9 +159,9 @@ service; скажи если хочешь прыгнуть в конкретны
 - **Свободная форма** (через Other) — только для **значения**: имя
   сервиса, module path, имена env, имена subjects, человекочитаемые
   описания, конкретные числа (timeout'ы, размер пула).
-- **Никогда** не предлагать конкретные env-имена / module path / subject'ы
-  как «правильный вариант» от себя. Anti-patterns как опции — да; имя
-  как значение — нет.
+- Не предлагать конкретные env-имена / module path / subject'ы как
+  «правильный вариант» от себя: это решения архитектора. Anti-patterns как
+  опции — да; имя как значение — нет.
 
 ## Память `state/<kind>.md`
 
@@ -198,9 +198,9 @@ State лежит рядом со скиллом
 3. **Cross-kind sync согласован.** Решения, объявленные в kit-артефактах
    (`auth`, `persistence`, `messaging`, `observability`, `dependencies`),
    роллапятся в `config` (env + секреты) и `runtime` (subscribers, jobs,
-   shutdown-хуки). Если auth добавил `JWT_PUBLIC_KEY` — он есть в
-   `config.md § Required env`. См. `references/draft-stable.md § Cross-kind
-   sync`.
+   shutdown-хуки). Если auth добавил `JWT_SECRET` — он есть в
+   `config.md § Required env` и `§ Secrets`. См. `references/draft-stable.md
+   § 3. Cross-kind sync согласован`.
 4. **Валидатор зелёный** — `make validate-stack-docs` без ошибок.
 5. **Тест-критерий kind'а явно подтверждён** в этой сессии. См.
    `references/draft-stable.md § Тест-критерий по kind`.
@@ -221,13 +221,12 @@ stable`. **Скилл не повышает сам.**
 выражены через **`Generates`-секции** и через **роллапы в `config`/`runtime`**.
 
 Правило: после правки kit-артефакта (`auth`, `persistence`, `messaging`,
-`observability`, `dependencies`) — скилл предлагает через
-`AskUserQuestion` пройтись по `config` и `runtime`, чтобы обновить
-роллап (новый env / новый subscriber / новый job).
+`observability`, `dependencies`) скилл обновляет роллап в `config` и
+`runtime` (новый env / новый subscriber / новый job) — по матрице ниже.
 
-- `auth` → `config.md § Required/Secrets` (JWT keys, seed-admin),
+- `auth` → `config.md § Required/Secrets` (`JWT_SECRET`, `SEED_ADMIN_*`),
   `runtime.md § Lifecycle` (если auth-cleanup-job).
-- `persistence` → `config.md § Required` (`DATABASE_URL`, pool tuning),
+- `persistence` → `config.md § Required` (`PG_DSN`, pool tuning),
   `runtime.md § Lifecycle` (миграция как init-контейнер? отдельный
   бинарь?), `dependencies.md § External` (Postgres как зависимость).
 - `messaging` → `config.md § Required/Optional` (NATS URL, subjects),
@@ -255,7 +254,7 @@ stable`. **Скилл не повышает сам.**
    - **Отдельно** (стек уже жил, поменялся): артефакты теперь актуальный
      source of truth; если правка задевает инфра-поверхность (env /
      секрет / NATS subject / runtime-dep) — оформи через `/infra-handoff`
-     для админа.
+     для хаба `<org>/infra`.
 
 ## Запреты
 

@@ -1,18 +1,18 @@
 ---
 name: release
-description: Запушить новую версию backend image'ей в registry (api+migrate lockstep) одной командой и передать инфра-админу агрегированный handoff. Активируй когда пользователь говорит "релиз", "запушим версию", "сделай release vX.Y.Z", "/release".
+description: Выпустить версию бэкенда одной командой — `make release VERSION=vX.Y.Z`: annotated tag, образы api+migrate одним тегом в registry, агрегированный INFRA-HANDOFF для хаба `<org>/infra`, затем STOP (выкатка — `make bump` в infra). Используй, когда юзер просит релиз, новый тег или образ в registry.
 ---
 
 # Skill: release
 
 Канонический release-флоу. **Зона ответственности этого репо: код → image в registry. На STOP — всё.** Build локальный (никаких gitea-runner), push в `<host>/<org>/backend{,-migrate}` под одним lockstep `vX.Y.Z`-тегом. Воркер отдельным образом не собирается — outbox drain, NATS subscribers, jobs живут в `cmd/api/`.
 
-Дальше — **handoff** в проектный infra-репо (`<client-org>/infra`): rollout — `make bump SVC=backend TAG=<v>` там (правит `BACKEND_TAG` в `.env` на VPS + force-recreate). Эти шаги не выполняются здесь — `make release` печатает агрегированный INFRA-HANDOFF-блок, оператор передаёт его out-of-band.
+Дальше — **handoff** в хаб `<org>/infra`: rollout — `make bump SVC=backend TAG=<v>` там (правит `BACKEND_TAG` в `.env` на VPS + force-recreate). Эти шаги не выполняются здесь — `make release` печатает агрегированный INFRA-HANDOFF-блок, и он уходит в хаб.
 
 ## Когда применять
 
-- "Релизим v1.2.3" / "Запушь новую версию" / "/release"
-- После закрытия задачи и зелёного `make check`, когда юзер сказал "пора катить".
+- Юзер просит релиз или новую версию образа в registry.
+- После закрытия задачи и зелёного `make check`, когда юзер сказал «пора катить».
 
 ## Когда НЕ применять
 
@@ -68,15 +68,15 @@ make release VERSION=vX.Y.Z
 `make release` сам печатает блок `=== INFRA HANDOFF ===`:
 
 - `BACKEND_TAG → <v>` (api+migrate lockstep);
-- **накопленные `**Infra impact.**`** — `release.sh` агрегирует блоки `**Infra impact.**` из активных секций `.claude/plans/roadmap.md` (механизм — `.claude/rules/infra-impact.md` + skill `infra-handoff`). Если пусто — печатает напоминание убедиться, что инфра-затрагивающее зафиксировано;
+- **накопленный handoff** — `release.sh` собирает разделы `## Handoff` активных планов `.claude/plans/` (механизм — `.claude/rules/infra-impact.md` + skill `infra-handoff`). Если пусто — печатает напоминание убедиться, что инфра-затрагивающее зафиксировано;
 - действие инфра-стороны:
-  - проект: в `<client-org>/infra` — `make bump SVC=backend TAG=<v>` (правит `BACKEND_TAG` в `.env` на VPS + force-recreate).
+  - проект: в `<org>/infra` — `make bump SVC=backend TAG=<v>` (правит `BACKEND_TAG` в `.env` на VPS + force-recreate).
 
-Твоя роль после команды: **показать этот блок юзеру и сказать передать инфра-админу out-of-band**. Подставь `project`/`env`, если юзер их называл. `make ship`/`make bump`/`ssh` отсюда **не выполняются** — другой репо, другие креды.
+Твоя роль после команды: **отдать этот блок в хаб `<org>/infra`** — пришёл агентом из хаба, блок входит в твой отчёт; прямой заход — покажи юзеру и попроси передать. `make bump`/`make ship`/`ssh` отсюда **не выполняются** — другой репо, другие креды.
 
 ### Verify (в infra-репо, не здесь)
 
-`make ps` → backend `healthy`; в логах на старте `"starting" service=api version=<v> commit=<sha>`. Описано в release-skill **infra-репо**.
+`make ps` → backend `healthy`; в логах на старте `"starting" component=api version=<v> commit=<sha>`.
 
 ## Откат
 
@@ -90,5 +90,5 @@ make release VERSION=vX.Y.Z
 - ❌ `make release` не на main. Preflight отвергнет — не трать время.
 - ❌ `docker login <host>` сам. Креды оператора.
 - ❌ `:latest` / `:edge` / любой не-semver tag.
-- ❌ Релизить, не передав INFRA-HANDOFF-блок инфра-админу — без `make bump` на инфра-стороне продолжит крутиться старый image.
-- ❌ Выполнять `make ship` / `ssh <vps>` из этого репо. Другой репо/креды. Наша роль — image в registry + текст-handoff юзеру.
+- ❌ Релизить, не передав INFRA-HANDOFF-блок в `<org>/infra` — без `make bump` на инфра-стороне продолжит крутиться старый image.
+- ❌ Выполнять `make bump` / `make ship` / `ssh <vps>` из этого репо. Другой репо/креды. Наша роль — image в registry + текст-handoff в хаб.

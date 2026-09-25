@@ -30,9 +30,9 @@ if [ -n "$CHANGED_STACK" ]; then
     fi
 fi
 
-echo "pre-commit: validating plan roadmap (.claude/plans/roadmap.md)..."
-CHANGED_ROADMAP=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^\.claude/plans/roadmap\.md$' || true)
-if [ -n "$CHANGED_ROADMAP" ]; then
+echo "pre-commit: validating plans (.claude/plans/)..."
+CHANGED_PLANS=$(git diff --cached --name-only --diff-filter=ACMRD | grep -E '^\.claude/plans/' || true)
+if [ -n "$CHANGED_PLANS" ]; then
     if [ -x scripts/tools/validate-plan.sh ]; then
         scripts/tools/validate-plan.sh
     else

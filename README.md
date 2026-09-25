@@ -23,24 +23,19 @@ outbox, cache, NATS, audit, logging). Структурные логи, тест�
 ## Место в экосистеме
 
 ```
-business-strategy-template (<org>/strategy)   ← стратегия; домены продукта — опц. слой
+business-strategy-template (<org>/strategy)   ← проектирование: сервисы и их домены
         │  scaffold доменов в Go по stable-артефактам
         ▼
 go-backend-template (<org>/backend)  ← вы здесь   ──► stit-core/golibinfra
-        │  build + push image
+        │  make release → образы в registry
         ▼
-project-infra-template-compose (<org>/infra)   ← деплой образа
+project-infra-template-compose (<org>/infra)   ← хаб проекта: план, агенты, выкатка (make bump)
 ```
 
-Корп control-plane (image registry) —
-[`corp-infra-template`](https://git.stit.tech/stit-core/corp-infra-template).
-Подробнее — [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
-
-**Два пути — без вендор-лока.** Единственная runtime-зависимость от control-plane —
-image registry: либо наш **managed** (`git.stit.tech`), либо **ваша self-hosted**
-Gitea (тот же хост, что в module path `go.mod`). Хост выводится из
-`git remote get-url origin`, не зашит; архитектура одинакова. Конфиг и секреты —
-обычные env, инжектит проектная инфра.
+Образы уходят в container registry Gitea (`git.stit.tech`): хост и орга выводятся из
+`git remote get-url origin`, в коде не зашиты. Конфиг и секреты — обычные env, их задаёт
+`<org>/infra`. Как сюда приходят агенты и что репо отдаёт и берёт —
+[`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
 
 ## Использовать как шаблон
 
@@ -77,7 +72,8 @@ Module path, README, фундамент и удаление reference-домен
 - **DDD** — артефакты доменов в соседнем strategy-репо; маппинг в Go —
   [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
 - **Тесты** — unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
-- **Gate** — `make check` = fmt + vet + lint + test + build + gen-check (pre-push хук).
+- **Gate** — `make check` = fmt-check + vet + lint + test + build + gen-check + migrations-check
+  + cover-check ≥75% (pre-push хук).
 
 ## Команды
 
@@ -85,7 +81,7 @@ Module path, README, фундамент и удаление reference-домен
 Полный гайд агента — [`CLAUDE.md`](CLAUDE.md); точка входа в сессию — `/smartdev`.
 
 ```bash
-make check        # fmt + vet + lint + test + build + gen-check (gate перед push)
+make check        # полный gate перед push (fmt, vet, lint, test, build, gen, миграции, coverage)
 make gen          # регенерация sqlc + mockery
 make e2e          # поднять docker-стек → pytest → снести
 make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /release)
@@ -113,8 +109,8 @@ make e2e-smoke    # только -m smoke (быстрый gate)
 
 ## Release
 
-Зона репо: **код → image в registry, STOP.** Деплой — другие репо. Одна команда
-`make release VERSION=vX.Y.Z` (skill `/release`). Полностью —
+Зона репо: **код → image в registry, STOP.** Выкатка — `make bump` в `<org>/infra`. Одна
+команда `make release VERSION=vX.Y.Z` (skill `/release`). Полностью —
 [`docs/reference/release.md`](docs/reference/release.md).
 
 ## Часть экосистемы stit

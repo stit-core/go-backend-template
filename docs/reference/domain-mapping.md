@@ -4,17 +4,17 @@
 Если у тебя есть сомнение «куда это положить в коде» — смотри сюда.
 
 Артефакты доменов живут **не в этом репо**, а в соседнем strategy-репо орга (`<org>/strategy`,
-форк `business-strategy-template`) — design-time SoT бизнес-стратегии, где продукт и его
-DDD-домены опциональны (заводятся, только когда стратегия рождает продукт):
-`../strategy/docs/projects/<slug>/domains/<context>/`, где `<slug>` — `project-slug` из
-`docs/stack/service.md`. Этот файл — **мост** от их формы к Go-коду именно этого бэкенда; его
-потребляет `scaffold` (вариант domain), разворачивая код по stable-артефактам.
+форк `business-strategy-template`) — design-time SoT, где домены лежат внутри сервиса-владельца:
+`../strategy/docs/projects/<slug>/services/<svc>/domains/<context>/`, где `<slug>` и `<svc>` —
+`project-slug` и `service-slug` из `docs/stack/service.md` (`<svc>` — сервис, который реализует
+этот репо). Этот файл — **мост** от их формы к Go-коду именно этого бэкенда; его потребляет
+`scaffold` (вариант domain), разворачивая код по stable-артефактам.
 
 ## Bounded context
 
-`../strategy/docs/projects/<slug>/domains/<context>/` ↔ `internal/domain/<context>/` — один Go-пакет, один FX-модуль (`module/module.go`).
+`../strategy/docs/projects/<slug>/services/<svc>/domains/<context>/` ↔ `internal/domain/<context>/` — один Go-пакет, один FX-модуль (`module/module.go`).
 
-`../strategy/docs/projects/<slug>/domains/_shared/<Name>.md` (kind=vo) ↔ `internal/platform/shared/` — платформенные cross-context VO в одном пакете. Не зависят от бизнес-доменов; бизнес-домены импортят их напрямую.
+`../strategy/docs/projects/<slug>/services/_shared/<Name>.md` (kind=vo) ↔ `internal/platform/shared/` — платформенные cross-context VO в одном пакете. Не зависят от бизнес-доменов; бизнес-домены импортят их напрямую.
 
 ## Aggregate / Entity
 
@@ -82,7 +82,7 @@ DDD-домены опциональны (заводятся, только ког
 | Consumers | `internal/domain/<consumer>/delivery/nats/handler.go` — handler рядом с `delivery/http/`, на равных правах. Регистрируется fx того же `cmd/api`. |
 | Delivery `idempotency key` | поле в payload; subscriber хранит уже обработанные ID |
 | Delivery `at-least-once` | `outboxkit.Publisher` гарантирует, subscriber обязан быть идемпотентен |
-| Delivery `ordering: per-aggregate` | в текущем `natskit`/core-NATS upgrade'а до partition'а **нет**: ordering держится только тем, что outbox-drain — single-instance worker, читает строки в порядке `id`. Если subscriber'у важен per-aggregate order — он сам сериализует обработку по `<Aggregate>ID` (например, очередь in-memory keyed by ID). |
+| Delivery `ordering: per-aggregate` | партиционирования по ключу нет. Порядок очереди на хопе drain → JetStream держит `OUTBOX_PUBLISH_MODE=ordered` (последовательная публикация; дефолт `batch` — best-effort). Если subscriber'у важен per-aggregate order — он сам сериализует обработку по `<Aggregate>ID` (например, очередь in-memory keyed by ID). |
 
 ## Use Case
 
@@ -159,4 +159,4 @@ depguard в `.golangci.yml` блокирует прямые импорты ме�
 | Выставление `CreatedAt` | репозиторий, не конструктор |
 | Уникальность по полю | use-case (нужен `repo.GetBy*`), не aggregate-invariant |
 | Нотификация (email, webhook) | port в use-case + адаптер в `module/` |
-| Идемпотентность subscriber'а | поле события `EventID` + хранилище обработанных ID |
+| Идемпотентность subscriber'а | схема потребителя: unique-индекс под natural key + `ON CONFLICT DO NOTHING` (или idempotency-key из payload) — rule `events-and-messaging` |

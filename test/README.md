@@ -8,10 +8,10 @@
 
 | Зона | Где | Отвечает за |
 |---|---|---|
-| Стек | `stack/` | docker-compose + секреты (bash). `up.sh`/`down.sh`, `compose.yml`, `Dockerfile.local`, `configs/`. |
+| Стек | `stack/` | docker-compose + креды seed-admin (bash). `up.sh`/`down.sh`, `lib.sh`, `compose.yml`, `Dockerfile.local`. |
 | Транспорт+модели | `client/` | типизированная httpx-обёртка + pydantic-DTO (зеркало huma). |
 | Сценарии | `scenarios/` | переиспользуемые step-функции над `client` (без ассертов). |
-| Infra-интроспекция | `infra/` | типизированный доступ к side-effects: `pg.py` (psycopg, users/refresh_sessions/bruteforce/email_verifications), `outbox.py` (outbox-таблица), `nats.py` (core-NATS collector), `redis.py` (cache-probe). |
+| Infra-интроспекция | `infra/` | типизированный доступ к side-effects: `pg.py` (psycopg, users/refresh_sessions/bruteforce/email_verifications), `outbox.py` (per-domain `outbox_<domain>`), `nats.py` (core-NATS collector), `redis.py` (cache-probe). |
 | Smoke-тесты | `smoke/` | boot + критический happy-path, `@pytest.mark.smoke`. |
 | E2E-тесты | `e2e/` | сценарии по доменам, `@pytest.mark.e2e`. |
 | Фикстуры | `conftest.py` | session-стек, `endpoints` (резолвнутые адреса), `api`, `user`, `admin`, `other_user`, `pg`, `redis`, `nats_collector`. |
@@ -23,10 +23,11 @@
 Сервисы публикуют порты эфемерно на `127.0.0.1` (Docker берёт свободный
 host-порт); `up.sh` резолвит фактические адреса в `stack/.e2e-endpoints.env`,
 `conftest` инжектит их в `infra/`-хелперы — те ходят на резолвнутый адрес
-напрямую (детали — §Изоляция). Эвенты доменов идут через
-`outbox`-таблицу (детерминированно, на каждый эвент) → outboxkit-worker
-дренит в **core NATS** (реплея нет). Поэтому `NatsCollector` подписывается
-**до** HTTP-действия; `outbox.wait_for(..., published=True)` подтверждает дрен.
+напрямую (детали — §Изоляция). Эвенты доменов идут через per-domain
+outbox-таблицу `outbox_<domain>` (детерминированно, на каждый эвент) → outboxkit-drain
+публикует в JetStream. `NatsCollector` слушает subject обычной core-подпиской (без
+реплея), поэтому подписывается **до** HTTP-действия; `outbox.wait_for(..., published=True)`
+подтверждает дрен.
 Showcase полного async-пути — `e2e/test_event_flow.py`. Bruteforce-счётчики
 в Postgres (`bruteforcekit/pgstore`), не Redis.
 
@@ -48,7 +49,7 @@ cross-user 403.
 - **authz** (`user/policy.go`): list = admin-only; get/update/delete =
   selfOrAdmin; cross-user → 403.
 - **negatives**: huma schema-валидация (4xx, у v2 — 422), 404, 401-без-cookie.
-- **cross-domain**: register → outbox → core-NATS → verification consume →
+- **cross-domain**: register → outbox → JetStream → verification consume →
   `email_verifications` (`e2e/test_event_flow.py`).
 
 Сознательно вне e2e: **verification confirm-roundtrip** (email-verify /

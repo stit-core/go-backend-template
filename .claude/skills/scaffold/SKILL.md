@@ -1,6 +1,6 @@
 ---
 name: scaffold
-description: Добавить строительный блок в существующий проект по конвенциям шаблона. Варианты — domain (новый бизнес-домен в internal/domain/), endpoint (HTTP-метод в существующий домен), event (outbox-эвент + subscriber), migration (схема БД up/down + sqlc), port (cross-domain порт + адаптер). Активируй когда юзер говорит "добавь домен/endpoint/событие/миграцию/порт", "новый route/ручка/метод API", "scaffold a domain", "измени схему / добавь колонку/индекс/таблицу", "домену A нужны данные из B", "сделай adapter", "после X асинхронно делать Y". Для правки уже существующего блока scaffold НЕ нужен — это прямая правка.
+description: Добавить новый строительный блок по конвенциям шаблона — domain (бизнес-домен в internal/domain/), endpoint (HTTP-метод существующего домена), event (outbox-событие + subscriber), migration (схема БД up/down + sqlc), port (cross-domain порт + адаптер). Используй, когда задача — завести такой блок: новый домен, ручку API, асинхронную реакцию на событие, изменение схемы БД, данные одного домена для другого. Правка уже существующего блока — прямая правка, не scaffold.
 ---
 
 # Skill: scaffold (роутер)
@@ -27,8 +27,9 @@ description: Добавить строительный блок в сущест�
 - **Правка существующего** блока (переписать метод, поменять существующий route/запрос) —
   точечная правка без scaffold.
 - **Проектирование нового домена с нуля** (бизнес-смысл ещё не зафиксирован) — сначала
-  `/domain-deep-dive` в соседнем strategy-репо орга (домены — `../strategy/docs/projects/<slug>/domains/`),
-  scaffold — потом по stable-артефактам оттуда.
+  `/domain-deep-dive` в соседнем strategy-репо орга (домены —
+  `../strategy/docs/projects/<slug>/services/<svc>/domains/`), scaffold — потом по stable-артефактам
+  оттуда.
 - **Онбординг форка** (развернуть фундамент проекта) — это `init-service` → `de-template`.
 
 ## Общий ритм (применим ко всем вариантам)
@@ -42,7 +43,7 @@ Reference даёт variant-специфичные шаги; этот ритм о
    `.mockery.yml`. Сгенерированное (`infra/postgres/db/*`, `**/mocks/*`) руками не правь.
 4. **Тесты по RED→GREEN.** Где появляется логика — сначала тест (red по нужной причине), потом
    код до green. Какие файлы/пакеты — в reference.
-5. **Верифицируй перед claim «готово»:** `make check` (fmt+vet+lint+test+build+gen-check). Точечно —
+5. **Верифицируй перед claim «готово»:** `make check` (полный gate, см. CLAUDE.md § Команды). Точечно —
    `make test PKG=./internal/domain/<name>/...` / `make lint PKG=...` по ходу.
 6. **Conventional Commit:** `feat(<scope>): <subject>` (точный scope/subject — в reference).
    Тронул инфра-поверхность (env/секрет/миграция-с-эффектом/cross-service-subject/новый

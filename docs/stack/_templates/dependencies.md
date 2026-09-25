@@ -8,7 +8,7 @@ status: draft
 # Dependencies — зависимости и ёмкость
 
 ## golibinfra kits
-<Какие kit'ы golibinfra подключены и зачем (таблица `| Kit | Зачем |`): httpkit, pgkit, authnkit, outboxkit, natskit, bruteforcekit, auditkit, cachekit, clockkit, logkit, storagekit. Версия golibinfra.>
+<Какие kit'ы golibinfra подключены и зачем (таблица `| Kit | Зачем |`). В `cmd/api` шаблона wired: httpkit, pgkit, authnkit, outboxkit, natskit, bruteforcekit, auditkit, cachekit, clockkit, logkit, healthkit, timerkit, flagkit, config, bizmetric; полный набор — пакеты в корне golibinfra нужной версии (storagekit, httpclient, …). Версия golibinfra.>
 
 ## Что НЕ подключено
 <Kit'ы, доступные в golibinfra, но НЕ wired в `cmd/api/main.go` — их env'ы runtime игнорирует, de-template их prune'ит. Перечисли (напр. natskit/outboxkit/cachekit/httpclient/flagkit), чтобы не было ложных ожиданий «эта env читается».>

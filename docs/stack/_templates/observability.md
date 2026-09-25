@@ -9,11 +9,13 @@ status: draft
 
 Шаблон эмитит **структурные логи в stdout** через `golibinfra/logkit`. Сбор/хранение
 логов (docker/host log-driver, внешний агрегатор) — зона деплой-инфры, не этого репо.
-Корп-телеметрии (OTLP-экспорт, дашборды) в шаблоне нет.
+Бизнес-счётчики доменов (`biz_*`, `metrics.go`) пишутся в глобальный no-op `metric.Meter`:
+MeterProvider в `cmd/api` не сконфигурирован, экспорта метрик нет.
 
 ## Log sink
-<Куда идут логи: structured slog → stdout (`docker`/`kubectl logs`). Формат (json/text),
-уровень по `APP_ENV`/`LOG_LEVEL`, `trace_id`/`span_id` в сообщении если включён контекст.>
+<Куда идут логи: structured slog → stdout (`docker`/`kubectl logs`). Формат `LOG_FORMAT`
+(json/text), уровень `LOG_LEVEL`, `LOG_SILENT` глушит stdout-sink; `trace_id`/`span_id` в
+записи, если в ctx есть валидный span.>
 
 ## Log levels & content
 <Уровни и что на каждом; какие события домена логируются (старт/шатдаун, ошибки usecase,

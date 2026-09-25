@@ -22,8 +22,8 @@ Progressive disclosure: на холодном старте — только им
 ## Цикл одной задачи
 
 ```
-prompt → /smartdev (cockpit: make status, читает roadmap, чейнит режим)
-       → plan (planning-first: изменение идёт через план — секция в .claude/plans/roadmap.md)
+prompt → /smartdev (cockpit: make status, читает активные планы, чейнит режим)
+       → plan (planning-first: изменение идёт через план — файл в .claude/plans/)
        → act (RED→GREEN→REFACTOR; инфра-поверхность задета → infra-handoff)
        → verify (make test/lint/build; claim «готово» → make check)
        → review (опц. subagent reviewer)
@@ -31,8 +31,8 @@ prompt → /smartdev (cockpit: make status, читает roadmap, чейнит �
 ```
 
 Планирование — **дефолт** (см. skill `plan`). Прямая правка — только truly-atomic и
-багфиксы (→ `triage-failure`). Планы живут в едином `.claude/plans/roadmap.md`
-inline-секциями; done → секция удаляется (история в git).
+багфиксы (→ `triage-failure`). Планы — файлы `.claude/plans/<slug>.md`, бэклог —
+`.claude/plans/backlog.md`; закрытый план удаляется (история в git).
 
 ## Кто что enforce'ит
 
@@ -52,7 +52,7 @@ Claude Code хуков (PreToolUse/PostToolUse/Stop) в шаблоне **нет*
 | Хочется | Как |
 |---|---|
 | Прервать работу | `Esc` |
-| План на одно сообщение | `/plan` |
+| Спланировать до правок | `/plan` (план в `.claude/plans/`) |
 | Заблокировать путь | `.claude/settings.local.json` → `permissions.deny` |
 | После 2 неудачных попыток | `/clear` + переписать запрос |
 | Разовый контекст | `@path/to/file` |
@@ -68,8 +68,9 @@ string-replace edit.
 
 | Симптом | Куда смотреть |
 |---|---|
-| Skill не активируется | `description` в frontmatter — переписать конкретнее, «pushy» |
+| Skill не активируется | `description` в frontmatter: ключевой сценарий первым, категории намерений вместо списка фраз; `description` + `when_to_use` ≤ 1536 символов (дальше листинг обрезает) |
 | Path-scoped rule не грузится | frontmatter `paths:` (не `globs:`!) — проверить glob |
+| Subagent не подхватывается | frontmatter агента без `name` — файл считается документацией |
 | Subagent ушёл надолго | `tools` в frontmatter — урезать до read-only |
 | CLAUDE.md игнорируется | длина >200 строк, либо конфликт инструкций между секциями |
 | Коммит reject'нут | `scripts/git-hooks/commit-msg` — type ∈ {feat,fix,refactor,docs,test,chore,meta} |

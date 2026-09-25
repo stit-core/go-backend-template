@@ -7,14 +7,15 @@
 > не путь шаблона. Подставляй фактический — не копируй буквально.
 
 **Gate (soft).** Домены проектируются **не в этом репо**, а в соседнем strategy-репо орга
-(`<org>/strategy`, форк `business-strategy-template`) — там они опциональный продуктовый слой
-стратегии. Скаффолдь по **stable**-артефактам оттуда:
-`<strategy-path>/docs/projects/<slug>/domains/<ctx>/`, где `<slug>` / `<strategy-path>` — это
-`project-slug` / `strategy-path` из `docs/stack/service.md § Identity` (дефолт `strategy-path` =
-`../strategy`, sibling-чекаут рядом). Код разворачивается по дизайну, не наоборот: если артефакт
-ещё `draft` (или sibling-репо не склонирован рядом) — сначала доведи домен до `stable` в
-strategy-репо его скиллом `/domain-deep-dive <slug> <ctx>`, потом сюда. Жёсткого хука нет — это
-дисциплина. Как секции артефакта ложатся в Go-код этого репо — `docs/reference/domain-mapping.md`.
+(`<org>/strategy`, форк `business-strategy-template`) — внутри сервиса-владельца. Скаффолдь по
+**stable**-артефактам оттуда: `<strategy-path>/docs/projects/<slug>/services/<svc>/domains/<ctx>/`,
+где `<slug>` / `<svc>` / `<strategy-path>` — это `project-slug` / `service-slug` / `strategy-path`
+из `docs/stack/service.md § Identity` (дефолт `strategy-path` = `../strategy`, sibling-чекаут
+рядом; контекст уникален в проекте, так что его папку находит и `services/*/domains/<ctx>/`).
+Код разворачивается по дизайну, не наоборот: если артефакт ещё `draft` (или sibling-репо не
+склонирован рядом) — сначала доведи домен до `stable` в strategy-репо его скиллом
+`/domain-deep-dive <slug> <ctx>`, потом сюда. Жёсткого хука нет — это дисциплина. Как секции
+артефакта ложатся в Go-код этого репо — `docs/reference/domain-mapping.md`.
 
 ## Когда применять
 
@@ -34,7 +35,7 @@ strategy-репо его скиллом `/domain-deep-dive <slug> <ctx>`, пот
 
 Прежде чем что-то делать:
 - Имя домена в `snake_case` (например, `order`, `notification`, `subscription`).
-- Что нужно: CRUD? только read? с outbox-событиями? с HTTP-API или только worker?
+- Что нужно: CRUD? только read? с outbox-событиями? с HTTP-API или только subscriber/job?
 
 Если неясно — спроси одним вопросом до начала.
 
@@ -44,31 +45,33 @@ strategy-репо его скиллом `/domain-deep-dive <slug> <ctx>`, пот
 make new-domain NAME=<name>
 ```
 
-Скрипт `scripts/new-domain.sh` создаёт:
+Скрипт `scripts/new-domain.sh` создаёт stub-файлы и сам вписывает конфиги:
 ```
 internal/domain/<name>/
 ├── entity.go
 ├── dto.go
 ├── errors.go
-├── events.go
+├── metrics.go
 ├── policy.go
 ├── policy_test.go
 ├── usecase.go
 ├── usecase_test.go
 ├── delivery/http/
 │   ├── handler.go
-│   ├── handler_test.go
-│   ├── dto.go
-│   └── view.go
+│   └── handler_test.go
 ├── infra/postgres/
 │   ├── repository.go
 │   └── queries/<name>.sql
 └── module/
-    ├── module.go
-    └── adapters.go
+    └── module.go
 ```
++ правило `<name>-domain-isolation` в `.golangci.yml` и интерфейсы `Repository`, `Authorizer`,
+`delivery/http.Usecase` в `.mockery.yml`.
 
-Файлы — со stub-кодом, который дальше дописываешь.
+Остальные файлы появляются вместе с содержимым (таблица обязательности —
+`docs/reference/architecture.md`): `delivery/http/dto.go` и `view.go` — с первым endpoint'ом,
+`events.go` + `infra/outbox/outbox.go` — с первой публикацией (`references/event.md`),
+`module/adapters.go` — с первым cross-domain портом (`references/port.md`).
 
 ### 3. Миграция
 
@@ -77,9 +80,9 @@ internal/domain/<name>/
 Структура `up`:
 ```sql
 CREATE TABLE <name>s (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     -- ...поля
-    version INT NOT NULL DEFAULT 0,  -- для optimistic lock
+    version INT NOT NULL DEFAULT 1,  -- для optimistic lock
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -105,19 +108,20 @@ CREATE TABLE <name>s (
       emit_json_tags: false
       emit_prepared_queries: false
       emit_methods_with_db_argument: false
+      omit_unused_structs: true
 ```
 
 ### 5. Запросы
 
-В `internal/domain/<name>/infra/postgres/queries/<name>.sql`:
+В `internal/domain/<name>/infra/postgres/queries/<name>.sql` (создание — `Insert<Entity>`, rule `sqlc-and-migrations`):
 ```sql
--- name: GetByID :one
+-- name: Get<Name>ByID :one
 SELECT * FROM <name>s WHERE id = $1;
 
--- name: Insert :exec
+-- name: Insert<Name> :exec
 INSERT INTO <name>s (id, ...) VALUES ($1, ...);
 
--- name: Update :execrows
+-- name: Update<Name> :execrows
 UPDATE <name>s
 SET ..., version = version + 1, updated_at = NOW()
 WHERE id = $1 AND version = $2;
@@ -169,30 +173,34 @@ var (
 `usecase.go`:
 - Объяви интерфейсы зависимостей (порты).
 - Структура `Usecase` с зависимостями.
-- Методы — бизнес-логика.
+- Методы — бизнес-логика; мутирующие инструментированы `metrics.Record*` (`metrics.go`).
 
 ### 10. Adapters (если нужны cross-domain)
 
-Если domain нужны данные другого домена — порт в `usecase.go`, адаптер в `module/adapters.go`. depguard блокирует прямые импорты.
+Если domain нужны данные другого домена — порт в `usecase.go`, адаптер в `module/adapters.go` (`references/port.md`). depguard блокирует прямые импорты.
 
 ### 11. fx-модуль
 
-`module/module.go`:
+`module/module.go` генерирует `new-domain.sh`:
 ```go
 package module
 
 var Module = fx.Module(
     "<name>",
     fx.Provide(
-        postgres.NewRepository,
+        <name>pg.NewRepository,
+        fx.Annotate(<name>.NewPolicy, fx.As(new(<name>.Authorizer))),
+        <name>.NewMetrics,
         <name>.NewUsecase,
-        // ...
-        http.NewHandler,
-        func(u *<name>.Usecase) http.Usecase { return u },
+        <name>http.NewHandler,
+        func(u *<name>.Usecase) <name>http.Usecase { return u },
     ),
-    fx.Invoke(http.Register),
+    fx.Invoke(<name>http.Register),
 )
 ```
+
+Дальше дополняй его провайдерами по мере роста: адаптеры портов (`new<Port>Adapter` из
+`adapters.go`), `outbox.Providers` домена-публикатора, NATS-handler (`references/event.md`).
 
 ### 12. Подключить в cmd/api/main.go
 
@@ -207,17 +215,15 @@ domainModules = fx.Options(
 )
 ```
 
-### 13. Моки (если есть exported интерфейсы)
+### 13. Моки
 
-В `.mockery.yml`:
+`new-domain.sh` уже вписал в `.mockery.yml` `Repository`, `Authorizer` и `delivery/http.Usecase`.
+Новые интерфейсы из `usecase.go` и `delivery/*` добавляй туда же:
 ```yaml
 <module-path>/internal/domain/<name>:
   interfaces:
     Repository:
     # другие интерфейсы из usecase.go
-<module-path>/internal/domain/<name>/delivery/http:
-  interfaces:
-    Usecase:
 ```
 
 ```bash
@@ -237,7 +243,7 @@ make gen
 `scripts/new-domain.sh` **сам вписывает** правило строгой изоляции в `.golangci.yml`
 (умбрелла: deny всего префикса `internal/domain` + allow только своего поддерева →
 любой сосед, включая будущие, блокируется автоматически; `module/` и `*_test.go`
-исключены) и интерфейсы в `.mockery.yml`. Если домен создавался вручную — блок такой:
+исключены). Если домен создавался вручную — блок такой:
 ```yaml
 <name>-domain-isolation:
   list-mode: lax

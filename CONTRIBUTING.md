@@ -22,9 +22,8 @@
   полукалеку. Граница — `docs/reference/architecture.md § Граница с golibinfra`.
 - **Cross-domain — только порты + адаптеры.** Бизнес-домены не импортят друг друга
   напрямую (depguard enforce'ит). Логи — только `logkit.Logger`, не `fmt.Print*`/`slog.*`.
-- **Без вендор-лока.** Единственная зависимость от control-plane — image registry;
-  хост выводится из git remote, не зашит — шаблон работает и на managed, и на
-  self-hosted контуре. Конфиг и секреты — обычные env.
+- **Хосты не зашиты.** Registry образов выводится из `git remote get-url origin`,
+  хост приватных модулей — из module path `go.mod`. Конфиг и секреты — обычные env.
 - **Forward-only документация.** Текст описывает текущее состояние, без «было/стало» —
   история живёт в `git log`.
 
@@ -36,12 +35,12 @@
   «зачем». Держи PR сфокусированным; не подмешивай несвязанные правки.
 - Тронул инфра-поверхность (новый required env / sensitive-env-секрет; destructive/lock/backfill
   миграция; cross-service NATS/outbox-subject; breaking API; новая runtime-dep в `go.mod`)
-  — опиши это в PR отдельно (в проекте это оформляется INFRA-HANDOFF-блоком инфра-админу).
+  — опиши это в PR отдельно (в проекте это оформляется INFRA-HANDOFF-блоком для `<org>/infra`).
 
 ## Перед PR
 
 ```bash
-make check    # канонический gate: fmt + vet + lint + test + build + gen-check
+make check    # канонический gate: fmt-check + vet + lint + test + build + gen-check + migrations-check + cover-check
 ```
 
 Зелёный `make check` — gate пройден (его же гоняет git-хук `pre-push`).

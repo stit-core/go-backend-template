@@ -14,10 +14,9 @@
    `git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/`.
 4. `make setup` — pinned dev-tools + git-хуки.
 
-> `git.stit.tech` здесь — managed-хост Gitea. Self-hosted форк живёт на своей Gitea:
-> подставь её хост в clone-URL и в `insteadOf`-rewrite (это тот же хост, что в module
-> path `go.mod`). `make setup` выводит хост из `go.mod` автоматически и предупредит,
-> если rewrite не настроен.
+> Хост в clone-URL и в `insteadOf`-rewrite — Gitea, где живёт орга (тот же хост, что в
+> module path `go.mod`). `make setup` берёт хост из `go.mod` и предупреждает, если rewrite
+> не настроен.
 
 ## 1. `/init-service`
 
@@ -28,9 +27,9 @@
 ## 2. Домены — уже спроектированы (в соседнем strategy-репо)
 
 - Домены продукта проектируются **не здесь и не на этом шаге** — они уже готовы к моменту форка
-  бэкенда. DDD-артефакты — опциональный продуктовый слой форка `<org>/strategy` (из
-  `business-strategy-template`), склонированного рядом (`../strategy`):
-  `docs/projects/<slug>/domains/<ctx>/`.
+  бэкенда. DDD-артефакты живут в форке `<org>/strategy` (из `business-strategy-template`),
+  склонированном рядом (`../strategy`), внутри сервиса, который реализует этот бэкенд:
+  `docs/projects/<slug>/services/<svc>/domains/<ctx>/`.
 - Тебе нужны они в `status: stable` как **вход**. Если какой-то домен ещё не доведён — это
   делается в strategy-репо (`/domain-deep-dive <slug> <ctx>`) до онбординга бэка, не здесь.
 - Reference-домены `auth` / `user` / `verification` в **этом** репо — **code-only** учебные
@@ -40,7 +39,8 @@
 
 - 8 артефактов в `docs/stack/` (service/runtime/config/persistence/messaging/auth/
   observability/dependencies). См. [stack/README.md](stack/README.md).
-- В `service.md` запиши `project-slug` + `strategy-path` (дефолт `../strategy`) — по ним `scaffold`
+- В `service.md § Identity` запиши `project-slug`, `service-slug` (сервис этого репо в реестре
+  `services/service.md` strategy-репо) и `strategy-path` (дефолт `../strategy`) — по ним `scaffold`
   найдёт домены в strategy-репо.
 - Цель: `status: stable` + `make validate-stack-docs` зелёный. Это вход для де-темплейтизации.
 
@@ -55,18 +55,19 @@
 ## 5. Сгенерируй свои домены — `/scaffold` (вариант domain)
 
 По каждому stable-домену из strategy-репо разверни Go-код: `/scaffold domain <name>` читает
-`../strategy/docs/projects/<slug>/domains/<ctx>/` (slug/strategy-path из `docs/stack/service.md`) и
-разворачивает слои `internal/domain/<ctx>/`. Маппинг секций артефакта → код —
+`../strategy/docs/projects/<slug>/services/<svc>/domains/<ctx>/` (slug, сервис и strategy-path — из
+`docs/stack/service.md`) и разворачивает слои `internal/domain/<ctx>/`. Маппинг секций артефакта → код —
 [reference/domain-mapping.md](reference/domain-mapping.md). Делай это **до** удаления reference
 (шаг 6) — иначе теряешь живой Go-образец.
 
 ## 6. Удали reference-домены
 
-Когда свои домены сгенерированы (шаг 5), убери учебные `auth`/`user`/`verification`:
+Когда свои домены сгенерированы (шаг 5), убери учебные `auth`/`user`/`verification` (полный
+чеклист — `.claude/skills/de-template/references/prune.md`, его выполняет `/de-template`):
 - `internal/domain/{auth,user,verification}/` (DDD-артефактов в docs у них нет — code-only).
-- блоки в `sqlc.yaml`, их `migrations/`, fx-wiring в `cmd/api`, depguard-правила в `.golangci.yml`.
-- их e2e-сценарии в `test/`.
-- `/de-template` подсказывает/выполняет этот чеклист.
+- блоки в `sqlc.yaml` и `.mockery.yml`, их `migrations/` (свои — перенумеровать подряд с `0001`),
+  fx-wiring в `cmd/api`, depguard-правила в `.golangci.yml`.
+- их e2e-сценарии в `test/` и `cmd/seed-admin`.
 
 ## 7. Готово
 

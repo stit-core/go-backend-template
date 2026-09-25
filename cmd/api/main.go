@@ -54,8 +54,7 @@ var kitConfigs = fx.Provide(
 var (
 	infraModules = fx.Options(
 		// Конфиг только из env: настройки/секреты приходят из окружения
-		// (compose/.env проектной инфры). Vault-источник не подключается —
-		// секрет-стора в экосистеме нет.
+		// (compose/.env проектной инфры).
 		config.Module,
 		kitConfigs,
 		// metric.Meter — глобальный no-op: MeterProvider не сконфигурирован,

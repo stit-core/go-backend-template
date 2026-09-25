@@ -12,10 +12,10 @@
 - [reference/architecture.md](reference/architecture.md) — слои домена, ports/adapters, fx, outbox, non-goals, граница с golibinfra.
 - [reference/domain-mapping.md](reference/domain-mapping.md) — как DDD-артефакт (из соседнего strategy-репо) ложится в Go-код этого репо; потребляет `scaffold`.
 - [reference/release.md](reference/release.md) — релиз образов, handoff в infra, откат, версионирование.
-- [reference/ecosystem.md](reference/ecosystem.md) — карта экосистемы (шаблоны `stit-core` + корп control-plane + дизайн-система), image-handoff, контракт со stit-инфрой.
+- [reference/ecosystem.md](reference/ecosystem.md) — роль репо и соседи, как сюда приходят агенты (из хаба `<org>/infra` или прямым заходом), что репо отдаёт и берёт, контракт с `<org>/infra`.
 
 ## Design source-of-truth
-- **Домены** — опциональный продуктовый слой **соседнего strategy-репо** орга (`../strategy`, форк `business-strategy-template`): `docs/projects/<slug>/domains/`. Проектирование — скиллом `/domain-deep-dive` там; маппинг в Go-код — [reference/domain-mapping.md](reference/domain-mapping.md).
+- **Домены** — в **соседнем strategy-репо** орга (`../strategy`, форк `business-strategy-template`): `docs/projects/<slug>/services/<svc>/domains/`, внутри сервиса, который реализует этот репо. Проектирование — скиллом `/domain-deep-dive` там; маппинг в Go-код — [reference/domain-mapping.md](reference/domain-mapping.md).
 - [stack/README.md](stack/README.md) — артефакты платформы/стека (8 kinds, вход для `/de-template`). Остаётся в этом репо.
 
 Точка входа агента в репо — `CLAUDE.md` (ядро + роутер). Дневной флоу — skill `/smartdev`.

@@ -1,7 +1,7 @@
 # Release
 
-**Зона ответственности этого репо: код → image в registry. На этом — STOP.** Деплой,
-прокатка env, проверка на проде — другие репо (см. [ecosystem.md](ecosystem.md)). Skill — `/release`.
+**Зона ответственности этого репо: код → image в registry. На этом — STOP.** Выкатка,
+прокатка env, проверка на проде — хаб `<org>/infra` (см. [ecosystem.md](ecosystem.md)). Skill — `/release`.
 
 ## Одна команда
 
@@ -26,16 +26,16 @@ fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвер�
 
 ## INFRA-HANDOFF
 
-`make release` печатает агрегированный блок (накопленные подсекции `**Infra impact.**`
-из активных секций `.claude/plans/roadmap.md` + ship-подсказки) — кому что передать инфра-админу out-of-band. Сам репо `make ship`
-/ `ssh` **не выполняет**.
+`make release` печатает агрегированный блок (`BACKEND_TAG`, накопленные разделы
+`## Handoff` активных планов `.claude/plans/` и команду выкатки `make bump`) —
+что передать в хаб `<org>/infra`. Сам репо `make bump` / `make ship` / `ssh` **не выполняет**.
 
 ## Handoff (другие репо)
 
 | Зона | Где | Что делает |
 |---|---|---|
 | Проект | `<org>/infra` (← project-infra-template-compose) | `make bump SVC=backend TAG=vX.Y.Z` — правит `BACKEND_TAG` в `.env` на VPS + force-recreate, compose пуллит образ (канон rollout'а; `make ship` там — про доставку самого infra-репо) |
-| Verify | там же | `make ps`, лог `"starting" service=api version=vX.Y.Z commit=<sha>` |
+| Verify | там же | `make ps`, лог `"starting" component=api version=vX.Y.Z commit=<sha>` |
 
 ## Откат
 
@@ -45,6 +45,6 @@ Image уже в registry — пересборка не нужна. Полнос�
 ## Versioning
 
 Версия и commit зашиваются в бинарь через `-ldflags` (`-X main.version=$TAG -X
-main.commit=$GIT_SHA`). На старте сервис логирует `"starting" service=<name>
+main.commit=$GIT_SHA`). На старте бинарь логирует `"starting" component=<api|migrate>
 version=vX.Y.Z commit=<short-sha>` — на проде сразу виден крутящийся коммит без map'а
 tag↔SHA. Схема версий и бинари — артефакт `docs/stack/service.md`.

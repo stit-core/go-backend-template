@@ -1,6 +1,6 @@
 ---
 name: de-template
-description: Развернуть форк go-backend-template в самостоятельный проект по stable-артефактам docs/stack (домены — в соседнем strategy-репо) — module path, README, .env.example, platform/cmd wiring, prune reference-доменов. Активируй когда юзер форкнул шаблон и говорит "/de-template", "разверни фундамент", "де-темплейтизируй", "убери шаблонную мету", "сделай из шаблона свой проект", или когда init-service дошёл до развёртывания (стек спроектирован и stable). Движок skill-only: и механика, и wiring — reviewable edits под этой процедурой. НЕ запускать на каноническом репозитории шаблона.
+description: Развернуть форк go-backend-template в самостоятельный проект по stable-артефактам docs/stack (домены — в соседнем strategy-репо) — module path, README, .env.example, platform/cmd wiring, prune reference-доменов. Используй, когда init-service дошёл до развёртывания (стек спроектирован и stable) или юзер просит превратить форк в свой проект и убрать шаблонную мету. Движок skill-only: и механика, и wiring — reviewable edits под этой процедурой. На каноническом репозитории шаблона не запускать — это его уничтожит.
 ---
 
 # Skill: de-template (движок развёртывания)
@@ -16,7 +16,7 @@ domain), не здесь. Движок **skill-only**: нет committed-скри
 
 ## Когда применять
 
-- "/de-template" / "разверни фундамент" / "сделай из шаблона свой проект"
+- Юзер просит развернуть фундамент форка / сделать из шаблона свой проект
 - `init-service` дошёл до развёртывания (стек спроектирован, валидатор зелёный; домены — в strategy-репо)
 
 ## Когда НЕ применять
@@ -74,7 +74,7 @@ go mod tidy
 ### A.2 README-шапка
 
 Из `docs/stack/service.md` (имя, назначение, бинари): замени шаблонную шапку `README.md` на
-проектную. Убери упоминания «шаблон»/«template»/«форкни». Детали release/observability/ecosystem
+проектную. Убери упоминания «шаблон»/«template»/«форкни». Детали release/ecosystem/architecture
 остаются ссылками на `docs/reference/*` (они общие).
 
 ### A.3 `.env.example`
@@ -88,8 +88,8 @@ go mod tidy
 - Удали `docs/getting-started.md` ([META] — гайд «как форкнуть шаблон», форку не нужен).
 - `docs/contributing.md` ([META] про устройство `.claude`-системы) — **оставь** (система
   наследуется форком); при желании переформулируй «шаблон» → имя проекта.
-- Сбрось `.claude/plans/roadmap.md` к пустому fork-start (history шаблона — не история форка):
-  оставь шапку + пустые `## Active` / `## Backlog`.
+- `.claude/plans/` — форк стартует без планов шаблона: только `backlog.md` с `_пусто_`
+  (планы шаблона — не планы форка).
 
 ### A.5 Prune reference-доменов
 
@@ -110,7 +110,7 @@ logging, subjects, authgate, pgkit, kit-prune. Процедура и маппи�
 
 ```bash
 make build      # фундамент компилируется
-make check      # перед claim «готово»: fmt+vet+lint+test+build+gen-check
+make check      # перед claim «готово»: полный gate (CLAUDE.md § Команды)
 ```
 
 Зелёный `make build` на развёрнутом форке — главный критерий движка.

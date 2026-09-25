@@ -1,6 +1,6 @@
 # scaffold › endpoint — новый HTTP-метод в существующем домене
 
-Расширение `delivery/http/` существующего домена новым HTTP-методом. НЕ для нового домена (вариант `domain`) и НЕ для перепиливания существующего метода (точечная правка, без scaffold).
+Расширение `delivery/http/` существующего домена новым HTTP-методом. Новый домен — вариант `domain`; переделка существующего метода — точечная правка без scaffold.
 
 ## Когда применять
 
@@ -46,17 +46,20 @@ type Usecase interface {
 
 ### 4. DTO в `delivery/http/dto.go`
 
+Имена — `<Domain><Op>Input/Output` (huma собирает все DTO в одну OpenAPI-registry по имени типа;
+`NewMethodInput` в двух доменах → panic):
+
 ```go
-type NewMethodInput struct {
+type UserNewMethodInput struct {
     ID   string `path:"id" doc:"User ID"`
     Body struct {
         Field string `json:"field" minLength:"1" doc:"…"`
     }
 }
 
-type NewMethodOutput struct {
+type UserNewMethodOutput struct {
     Body struct {
-        Data View `json:"data"`
+        Data UserView `json:"data"`
     }
 }
 ```
@@ -66,12 +69,12 @@ type NewMethodOutput struct {
 ### 5. Handler-метод в `handler.go`
 
 ```go
-func (h *Handler) newMethod(ctx context.Context, in *NewMethodInput) (*NewMethodOutput, error) {
+func (h *Handler) newMethod(ctx context.Context, in *UserNewMethodInput) (*UserNewMethodOutput, error) {
     res, err := h.uc.NewMethod(ctx, /* mapping */)
     if err != nil {
         return nil, mapErr(err)
     }
-    out := &NewMethodOutput{}
+    out := &UserNewMethodOutput{}
     out.Body.Data.FromEntity(res)
     return out, nil
 }
@@ -85,7 +88,7 @@ huma.Register(api, huma.Operation{
     Method:        http.MethodPost,
     Path:          "/api/users/{id}/...",
     Tags:          []string{"users"},
-    Security:      []map[string][]string{{"Bearer": {}}},  // если требуется auth
+    Security:      []map[string][]string{{"Cookie": {}}},  // если требуется auth (схема authgate.SecuritySchemeName)
     DefaultStatus: http.StatusOK,                           // или 201/204
     Summary:       "Краткое описание для OpenAPI",
 }, h.newMethod)
@@ -110,7 +113,7 @@ httpkit.ErrorMapping{
 
 Минимум:
 - Happy path (201/200)
-- Forbidden (mock policy.Deny → 403)
+- Forbidden (мок usecase возвращает `&<domain>.ForbiddenError{…}` → 403)
 - Validation error (huma сам отдаёт 422 / 400)
 - Один specific error mapping (например, `ErrAlreadyExists` → 409)
 
