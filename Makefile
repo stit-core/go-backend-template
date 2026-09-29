@@ -91,16 +91,18 @@ gen: ## Регенерация сгенерированного: sqlc, mockery, 
 	go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 -args -update
 
 gen-check: ## Проверка, что sqlc, моки и openapi.json актуальны (шаг make check)
-	sqlc diff
-	go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1
+	@sqlc diff || { echo "FAIL: sqlc diff — вывод выше (дрейф сгенерированного чинит make gen)"; exit 1; }
+	@out=$$(go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 2>&1) || \
+		{ echo "$$out"; echo "FAIL: TestOpenAPISpec — вывод выше (расхождение с openapi.json чинит make gen)"; exit 1; }
 	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
-	mockery
-	@git diff --exit-code -- '**/mocks/*.go' || { echo "mocks out of date — run make gen"; exit 1; }
+	@mockery
+	@git diff --exit-code -- '**/mocks/*.go' || { echo "FAIL: моки устарели — запусти make gen"; exit 1; }
 	@untracked=$$(git ls-files --others --exclude-standard -- '**/mocks/*.go'); \
 	if [ -n "$$untracked" ]; then \
 		echo "$$untracked" | sed 's/^/  /'; \
 		echo "FAIL: untracked mocks — интерфейс не в .mockery.yml был, либо мок не закоммичен"; exit 1; \
 	fi
+	@echo "OK: sqlc, моки и openapi.json совпадают с кодом"
 
 ##@ DB
 migrate-up: ## Накатить миграции (требует PG_DSN; PG_MIGRATIONS_PATH default ./migrations)

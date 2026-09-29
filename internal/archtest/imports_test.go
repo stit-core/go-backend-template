@@ -34,10 +34,12 @@ func importViolation(from, target string) string {
 	switch {
 	case path.Base(target) == "mocks":
 		return "mocks are for tests only"
+	case lowLayer(from) && !lowLayer(target):
+		return "platform and pkg lie below the domains: they import only platform and pkg"
+	case inDomain && !toDomainPkg && !lowLayer(target):
+		return "besides domains, a domain imports only platform and pkg: any other package would bridge domains around the ports"
 	case !toDomainPkg:
 		return ""
-	case under(from, "internal/platform"), under(from, "pkg"):
-		return "platform and pkg do not depend on business domains"
 	case toSub == "infra/outbox" && from != "internal/domain/"+toDomain+"/module" && !under(from, "cmd/migrate"):
 		return "a domain outbox is mounted by its own module/ and migrated by cmd/migrate only"
 	case toSub == "infra/postgres/db" && from != "internal/domain/"+toDomain+"/infra/postgres":
@@ -54,6 +56,11 @@ func importViolation(from, target string) string {
 		return "delivery calls the usecase, not infra"
 	}
 	return ""
+}
+
+// lowLayer — platform и pkg: на них опираются домены, сами они доменов и прочего не знают.
+func lowLayer(pkg string) bool {
+	return under(pkg, "internal/platform") || under(pkg, "pkg")
 }
 
 // ioStdlib — stdlib, которая ходит в ОС, сеть или БД (по префиксу пути); парсеры из net — не I/O.

@@ -92,7 +92,8 @@ blocked-by: —
   повторить эксперимент → таблица
 - [ ] **AC7** — Каждая новая проверка, которая срабатывает на текущем коде, имеет явный
   allowlist с ID находки на каждую запись; итоговый список в «Где мы сейчас» (его опустошает
-  `fix-reference-code`). Проверка: `grep -rn "allowlist" internal/archtest cmd` → записи с ID
+  `fix-reference-code`). Проверка: `grep -rnE '"[A-Z]{2,3}-[0-9]{2}"' internal/archtest cmd` →
+  записи с ID; запись без ID находки или без нарушения → FAIL теста
 - [ ] **AC8** — Гейт зелёный. Проверка: `make check` → `✓ check clean`, сырой
   `golangci-lint run ./...` → exit 0
 - [x] **AC9** — Поломки DI, которые видны только при запуске, ловит гейт: boot-тест поднимает
@@ -166,8 +167,9 @@ blocked-by: —
   - Проверка: инъекции 1b, 13, M, ADP b, c, g, h, i и fx X9 → пойманы · Закрывает: AC5, AC6 · Зависит от: S3
   - Сделано: `imports_test.go` — `TestImportBoundaries`, `TestDomainRootIsTransportAgnostic` (весь
     корень), `TestPureLayersHaveNoIO` (по префиксу); depguard удалён. Проверка (`make check`): 1b,
-    13 (= ADP i), M, ADP b, c, g, h, fx X9, TST-05 (`net/http/httputil` и `os/signal` в
-    `policy.go`, `rules.go`, `service.go`), 12 и сосед под `//nolint:depguard` → FAIL archtest
+    13 (= ADP i), M, ADP b, c, g (и мост вне `platform`), h, fx X9, TST-05 (`net/http/httputil`
+    и `os/signal` в `policy.go`, `rules.go`, `service.go`), 12 и сосед под `//nolint:depguard` →
+    FAIL archtest
 - [x] **S8** — Поведенческие инварианты: `time.Now` через типы (алиасы не проходят); запрет
   identity-closure для портов между доменами в `module/`; у каждой huma-операции `Security` или
   запись в явном списке публичных; уникальность всех экспортируемых типов `delivery/http`; тест,
@@ -177,8 +179,9 @@ blocked-by: —
   - Сделано: archtest — `time.Now` по импортам файла, `TestNoCrossDomainIdentityClosure`,
     уникальность типов `delivery/http`, `TestQueriesUseOwnTables`; `registerHTTP` в `cmd/api` и
     `cmd/api/api_test.go` (API как у сервиса без БД). Проверка (`make check`): 3b и dot-import,
-    ADP k, M22, X5b, X5c и тот же маршрут с другим параметром, `UserView` в двух доменах (COD-05),
-    новая closure, лишняя запись allowlist → FAIL с точной причиной
+    ADP k (и JOIN через запятую, подзапрос, `"users"`), M22, X5b, X5c и тот же маршрут с другим
+    параметром, `UserView` в двух доменах (COD-05, и `userView`), новая closure, лишняя запись
+    allowlist или запись без ID → FAIL с точной причиной
 - [x] **S9** — Самопроверка обвязки (небольшой Go-тест или скрипт в `make check`): упомянутые в
   прозе make-цели и пути существуют; required envconfig ⊆ `.env.example`; каждый домен с
   `infra/outbox` зарегистрирован в `cmd/migrate`; модуль каждого домена подключён в `cmd/api`, а
@@ -262,7 +265,20 @@ blocked-by: —
   API без JWT.
 - `time.Now` — по таблице импортов файла (алиас, dot-import), без go/types: тот же охват без
   загрузки пакетов. Владелец таблицы — единственный домен, чьи запросы её трогают (таблицы — из
-  `CREATE TABLE` в `migrations/`). Allowlist — `map[нарушение]ID`; запись без нарушения валит тест.
+  `CREATE TABLE` в `migrations/`); запрос трогает таблицу, если в нём (вне комментариев и строк)
+  есть слово с её именем — так видны JOIN через запятую, подзапрос и имя в кавычках без разбора
+  SQL; kit-таблиц в запросах нет — схема sqlc только `migrations/` (N2). Allowlist — один тип
+  `allowlist.List` (`internal/testkit/allowlist`) в archtest и `cmd/api`: нарушение → ID
+  находки; запись без нарушения или без ID валит тест, проверка AC7 — grep по ID (N4).
+- Мост к чужому домену закрыт слоями, а не списком импортёров: домен вне доменов импортирует только
+  `internal/platform` и `pkg`, а они — только друг друга; пакет-мост (`internal/<каталог>`,
+  `cmd/…`, `internal/testkit`) домену недоступен, а `cmd/` и `internal/testkit` (`pgseed`)
+  импортируют домены (N1). Столкновение `userView` с `UserView` ловит `buildAPI` (паника huma
+  `duplicate name` в `TestHTTPOperations` и `TestOpenAPISpec`) — archtest его не дублирует (N3).
+- `gen-check` — как остальные шаги: вывод только на провале, последняя строка `OK`/`FAIL` (N5).
+  Порог покрытия не трогаю и тестов доменов не дописываю (N7): запас ≈1 statement, но тесты —
+  `fix-reference-code` (S13 — канон и happy-path, S14 — широкий scope, порог 90), а тесты к
+  `Lookup*` и `changePassword` сейчас переписали бы её S6–S8.
 - Самопроверка обвязки — Go-тесты, не скрипт: кто на что ссылается в Go-коде (AST) и какие env
   required (reflect конфигов) надёжнее grep. Проза — только в коде (inline и fenced): цели `make`
   и пути репо (и `.claude/…`); репо — что отслеживает git (`git ls-files`, файл есть на диске),
@@ -304,13 +320,15 @@ S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Эта
 `fix(gate)`. Этап S7–S11: валидатор — FAIL, проверен частично (отчёт —
 `/home/mm/.cache/stit-audit-program/validation-harden-gate-B.md`, кейсы — `valb/inj.py` рядом).
 Блокирующий B1 исправлен: ссылки прозы сверяются с отслеживаемыми git путями — свежий worktree →
-`✓ check clean`, ссылка на неотслеживаемый файл → FAIL. Неблокирующие N1–N5, N7 и строки 9, 11,
-15 матрицы ENF — следующими фиксами. Не проверено: инъекции ENF, ADP, fx,
+`✓ check clean`, ссылка на неотслеживаемый файл → FAIL. Неблокирующие решены («Решения»): N1, N2,
+N4, N5 — правками, N3 — без правок (ловит `buildAPI`), N7 — хвостом ниже, N6 — констатация.
+Строки 9, 11, 15 матрицы ENF — следующим фиксом. Не проверено: инъекции ENF, ADP, fx,
 M22, COD-05, OpenAPI и S9; ложные срабатывания (`make new-domain NAME=probe`, проза после prune
 учебных доменов); `TestBoot -count=3`; `make gen`/`status`/pre-commit; сверка «Сделано».
 Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
 `auth/module/module.go` и `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
 `docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. Обходы
-до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Следующее: фиксы
-N1–N7 и строк 9, 11, 15 → довалидация этапа S7–S11 → S12 отдельным агентом → закрыть план, push
-шаблона.
+до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Хвост: запас покрытия
+≈1 statement (75,1% при пороге 75%) — первый шаг `fix-reference-code` с непокрытым кодом упрётся в
+`cover-check`; снимают S13–S14 там. Следующее: фикс строк 9, 11, 15 → довалидация этапа S7–S11 →
+S12 отдельным агентом → закрыть план, push шаблона.

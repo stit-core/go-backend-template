@@ -12,10 +12,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/testkit/allowlist"
 )
 
 // closureAllowlist — identity-closure между доменами в текущем коде.
-var closureAllowlist = allowlist{
+var closureAllowlist = allowlist.List{
 	"internal/domain/auth/module/module.go: *user.Usecase → auth.PasswordVerifier":                        "ADP-02",
 	"internal/domain/auth/module/module.go: *user.Usecase → auth.PasswordSetter":                          "ADP-02",
 	"internal/domain/verification/module/module.go: *user.Usecase → verification.PasswordSetter":          "ADP-02",
@@ -47,7 +49,7 @@ func TestNoCrossDomainIdentityClosure(t *testing.T) {
 			return true
 		})
 	}
-	closureAllowlist.check(t, found, "a port between domains is implemented by a typed adapter in module/adapters.go that maps errors and types")
+	closureAllowlist.Check(t, found, "a port between domains is implemented by a typed adapter in module/adapters.go that maps errors and types")
 }
 
 // identityFunc распознаёт функцию вида func(x T) R { return x } и возвращает типы T и R.
@@ -91,13 +93,14 @@ func typePackage(expr ast.Expr) string {
 }
 
 var (
-	createTable = regexp.MustCompile(`(?i)\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?(\w+)`)
-	tableRef    = regexp.MustCompile(`(?i)\b(?:from|join|into|update)\s+(?:only\s+)?(?:public\.)?(\w+)`)
+	createTable = regexp.MustCompile(`(?i)\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:"?public"?\.)?"?(\w+)`)
+	sqlWord     = regexp.MustCompile(`(\w+)`)
 	sqlNoise    = regexp.MustCompile(`--[^\n]*|/\*[\s\S]*?\*/|'(?:[^']|'')*'`)
 )
 
 // TestQueriesUseOwnTables: таблица приложения (CREATE TABLE в migrations/) принадлежит одному
-// домену; запрос соседа к ней — связь в обход порта (ADP-03).
+// домену; запрос соседа к ней — связь в обход порта (ADP-03). Запрос трогает таблицу, если в нём
+// есть слово с её именем: так видны и JOIN через запятую, и подзапрос, и имя в кавычках.
 func TestQueriesUseOwnTables(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -105,7 +108,7 @@ func TestQueriesUseOwnTables(t *testing.T) {
 	require.NotEmpty(t, tables)
 	queriedBy := map[string][]string{} // таблица → домены
 	for _, d := range domains(t) {
-		used := sqlNames(t, filepath.Join(root, "internal", "domain", d, "infra", "postgres", "queries", "*.sql"), tableRef)
+		used := sqlNames(t, filepath.Join(root, "internal", "domain", d, "infra", "postgres", "queries", "*.sql"), sqlWord)
 		for _, table := range tables {
 			if slices.Contains(used, table) {
 				queriedBy[table] = append(queriedBy[table], d)

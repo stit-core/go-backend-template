@@ -4,12 +4,14 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
+	"git.stit.tech/stit-core/go-backend-template/internal/testkit/allowlist"
 )
 
 // Граф fx должен быть разрешим (все зависимости предоставлены), включая per-domain
@@ -20,9 +22,8 @@ func TestFxGraphValidates(t *testing.T) {
 	require.NoError(t, fx.ValidateApp(service, fx.NopLogger), "fx graph invalid")
 }
 
-// envAllowlist — required-переменные конфигов, которых нет в .env.example: переменная → ID
-// находки; опустошает fix-reference-code.
-var envAllowlist = map[string]string{"JWT_SECRET": "SEC-10"}
+// envAllowlist — required-переменные конфигов, которых нет в .env.example.
+var envAllowlist = allowlist.List{"JWT_SECRET": "SEC-10"}
 
 // TestEnvExampleHasRequired: .env.example — минимум, с которым сервис стартует; required-
 // переменная конфига, которой там нет, роняет запуск по примеру.
@@ -38,16 +39,15 @@ func TestEnvExampleHasRequired(t *testing.T) {
 	for _, ctor := range kitConfigs {
 		configs = append(configs, reflect.TypeOf(ctor).Out(0))
 	}
-	missing := map[string]string{}
+	var missing []string
 	for _, c := range configs {
 		for _, key := range requiredEnv(c) {
-			if !example[key] {
-				missing[key] = envAllowlist[key]
+			if !example[key] && !slices.Contains(missing, key) {
+				missing = append(missing, key)
 			}
 		}
 	}
-	require.Equal(t, envAllowlist, missing,
-		"required env of the service configs belongs in .env.example; envAllowlist lists exactly what is still missing")
+	envAllowlist.Check(t, missing, "a required env of the service configs is missing from .env.example")
 }
 
 // requiredEnv — переменные с required:"true" без default в конфиге typ, включая вложенные.

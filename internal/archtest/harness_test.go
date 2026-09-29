@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/testkit/allowlist"
 )
 
 // TestDomainsAreWired: домен, не подключённый к сервису, молчит тихо — граф валиден и тесты
@@ -64,7 +66,7 @@ func refers(t *testing.T, files []goFile, dir, pkgPath, name string) bool {
 }
 
 // proseAllowlist — мёртвые ссылки прозы в текущем тексте.
-var proseAllowlist = allowlist{
+var proseAllowlist = allowlist.List{
 	"docs/reference/domain-mapping.md: internal/platform/shared/":          "ADP-03",
 	"docs/reference/domain-mapping.md: internal/platform/shared/errors.go": "ADP-03",
 }
@@ -125,7 +127,7 @@ func TestProseReferencesExist(t *testing.T) {
 			}
 		}
 	}
-	proseAllowlist.check(t, dead, "the prose points to a missing make target or to a path git does not track")
+	proseAllowlist.Check(t, dead, "the prose points to a missing make target or to a path git does not track")
 }
 
 func inRepo(repo map[string]bool, ref string) bool {

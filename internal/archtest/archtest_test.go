@@ -13,7 +13,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -132,25 +131,6 @@ func splitDomain(pkg string) (string, string, bool) {
 // under — путь p совпадает с dir или лежит внутри него.
 func under(p, dir string) bool {
 	return p == dir || strings.HasPrefix(p, dir+"/")
-}
-
-// allowlist — нарушения новой проверки в текущем коде: нарушение → ID находки аудита. Список
-// опустошает fix-reference-code; запись, которой не соответствует нарушение, тоже провал —
-// исправленное вычёркивается.
-type allowlist map[string]string
-
-func (a allowlist) check(t *testing.T, violations []string, rule string) {
-	t.Helper()
-	for _, v := range violations {
-		if _, known := a[v]; !known {
-			t.Errorf("%s: %s", v, rule)
-		}
-	}
-	for v, id := range a {
-		if !slices.Contains(violations, v) {
-			t.Errorf("allowlist entry %q (%s) matches no violation: remove it", v, id)
-		}
-	}
 }
 
 // TestHTTPDTONamesGloballyUnique: huma регистрирует схемы по имени Go-типа на весь API, и
