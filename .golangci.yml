@@ -36,8 +36,15 @@ linters:
     - forbidigo
     - depguard
     - tagalign
+    - nolintlint
+    - testifylint
 
   settings:
+    errcheck:
+      check-blank: true # `_ = f()` тоже глотает ошибку
+    nolintlint:
+      require-explanation: true
+      require-specific: true
     errorlint:
       errorf: true
       asserts: true
@@ -55,6 +62,12 @@ linters:
           msg: "use logkit.Logger instead of fmt.Print*"
         - pattern: '^slog\.'
           msg: "use logkit.Logger; do not call slog directly"
+        - pattern: '^log\.'
+          msg: "use logkit.Logger instead of the standard log package"
+        - pattern: '^(print|println)$'
+          msg: "use logkit.Logger instead of builtin print/println"
+        - pattern: '^os\.(Stdout|Stderr)$'
+          msg: "write logs via logkit.Logger, not os.Stdout/os.Stderr"
       analyze-types: true
     depguard:
       rules:

@@ -36,7 +36,8 @@ paths:
   (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`. Named returns не используем.
   Мутирующий метод инструментирован `metrics.Record*` на всех исходах; security-операции
   пишут audit из usecase.
-- **Логи — `logkit.Logger`.** Не `fmt.Print*` / `slog.*` напрямую (forbidigo).
+- **Логи — `logkit.Logger`.** Не `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` и не запись в
+  `os.Stdout`/`os.Stderr` напрямую (forbidigo).
 - Файл > ~400 строк → разбей по потокам (`usecase_<flow>.go`, `handler_<op>.go`), порты и
   конструкторы остаются в `usecase.go`.
 - Pure-методы агрегата покрыты `*_test.go`; интерфейсы из `usecase.go` и `delivery/*` →

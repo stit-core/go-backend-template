@@ -156,9 +156,16 @@ blocked-by: —
     `Reapply "…"`, `fixup!`/`squash!`/`amend!`; `make setup` — `git config core.hooksPath
     scripts/git-hooks`; `make release*` и `docker buildx*` убраны из allow; `release.sh` — чистое
     дерево и `make check` до тега. Проверка — AC4; `make check` → `✓ check clean`
-- [ ] **S5** — Линтеры: nolintlint с обязательным объяснением, errcheck `check-blank`, forbidigo
+- [x] **S5** — Линтеры: nolintlint с обязательным объяснением, errcheck `check-blank`, forbidigo
   на `log.Print*`, `println`, `print`, запись в `os.Stdout`/`os.Stderr`; testifylint (ENF-07)
   - Проверка: инъекции 2b, 10a, 16 → пойманы · Закрывает: AC5 · Зависит от: S2
+  - Сделано: nolintlint (`require-explanation`, `require-specific`), testifylint, errcheck
+    `check-blank`, forbidigo на `log.*`, `print`/`println`, `os.Stdout`/`os.Stderr`. На текущем
+    коде: testifylint в archtest исправлен (`require.NotContains`); 4 места в `cmd/` (запись в
+    stderr без логгера, отложенные `Close`/`Rollback` в seed-admin) — `//nolint:<линтер> //
+    <причина>`. Проверка: `make lint` — `log.Printf`, `println`, `Fprintf(os.Stderr)` →
+    forbidigo; `_ = uc.repo.SetEmailVerified` → errcheck; `//nolint:depguard` без причины →
+    nolintlint; `make check` → `✓ check clean`
 - [ ] **S6** — Миграции: запрет пустого down; деструктивные операторы (`DROP`, `TRUNCATE`,
   `ALTER … TYPE`, `RENAME`) только с маркером `-- infra-handoff:` (ENF-05)
   - Проверка: инъекции 7c, 7d, 8 → пойманы · Закрывает: AC5 · Зависит от: S3
@@ -238,13 +245,18 @@ blocked-by: —
   временного worktree на пушимом SHA из предложения аудита.
 - В основном репо `core.hooksPath` не менял: он выставлен вручную абсолютным путём и общий с
   чужим worktree `.claude/worktrees/agent-…`; `make setup` проверен в клоне.
+- Срабатывания S5 на текущем коде — не долг, а законные исключения: запись в stderr, пока нет
+  логгера, и отложенные `Close`/`Rollback` в CLI. Они размечены `//nolint:<линтер> // <причина>`
+  (nolintlint требует оба), а не allowlist с ID находки — чинить там нечего.
+- `//nolint:depguard // <причина>` по-прежнему гасит depguard: причину nolintlint проверить не
+  может. Закрывает S7 — изоляция доменов переезжает в archtest, на который nolint не действует.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S2–S4 закрыты. S4: обходы хуков из сессии Claude блокирует `.claude/hooks/guard-bash.sh`
-(действует уже в этой сессии), pre-push пушит только чистый HEAD, `make setup` подключает хуки
-через `core.hooksPath`, release гоняет `make check` до тега. `make check` → `✓ check clean` за
-≈14 с (integration ≈11 с без кеша). Обнаружено: в S2 `config verify` закрыл строку матрицы 13d —
-учесть в S10. Следующий шаг — S5.
+S2–S5 закрыты. S5: nolintlint, testifylint, errcheck `check-blank` и forbidigo на `log.*`,
+`print(ln)`, `os.Stdout`/`os.Stderr` — инъекции 2b, 10a, 16 пойманы. Allowlist с ID находок пока
+пуст; исключения без долга — 4 `//nolint` с причиной в `cmd/migrate` и `cmd/seed-admin`.
+`make check` → `✓ check clean` за ≈14 с (integration ≈11 с без кеша). Для S10: `config verify`
+закрыл строку матрицы 13d; `//nolint:depguard` с причиной ещё проходит — до S7. Следующий шаг — S6.

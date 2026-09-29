@@ -116,7 +116,7 @@ func TestUsecaseIsTransportAgnostic(t *testing.T) {
 					require.False(t, strings.HasPrefix(imp, bad),
 						"%s imports %q — usecase must not know transport/driver packages", path, imp)
 				}
-				require.False(t, strings.Contains(imp, "/internal/domain/"+d+"/"),
+				require.NotContains(t, imp, "/internal/domain/"+d+"/",
 					"%s imports own subpackage %q — usecase depends on ports, not delivery/infra", path, imp)
 			}
 		}

@@ -60,10 +60,11 @@ test-int (юнит + integration, нужен Docker) + build + gen-check + migra
 ## Стиль кода (инварианты)
 
 - **gofumpt** обязателен (`make fmt`).
-- **golangci-lint** (`.golangci.yml`): **forbidigo** — нельзя `fmt.Print*`/`slog.*`, только
-  `logkit.Logger`; **depguard** — бизнес-домены не импортят друг друга, cross-domain через
-  порты + адаптеры в `<domain>/module/adapters.go`. errcheck/errorlint/gosec/govet/contextcheck
-  /noctx/rowserrcheck/bodyclose/sqlclosecheck — на.
+- **golangci-lint** (`.golangci.yml`): **forbidigo** — нельзя `fmt.Print*`/`log.*`/`print(ln)`/
+  `slog.*` и запись в `os.Stdout`/`os.Stderr`, только `logkit.Logger`; **depguard** — бизнес-домены
+  не импортят друг друга, cross-domain через порты + адаптеры в `<domain>/module/adapters.go`.
+  errcheck (и `_ = f()`)/errorlint/gosec/govet/contextcheck/noctx/rowserrcheck/bodyclose
+  /sqlclosecheck/testifylint — на; `//nolint` — только с именем линтера и объяснением (nolintlint).
 - Ошибки — `%w` + `errors.Is/As`; sentinel в `errors.go` корня домена.
 - Комментарии — только WHY (rule `comments`).
 - **Не городить велосипеды**: переиспользуемый/инфра-примитив (generic util, HTTP-client,
@@ -105,7 +106,7 @@ test-int (юнит + integration, нужен Docker) + build + gen-check + migra
   `GOFLAGS=` (блокируют `permissions.deny` и хук `guard-bash`). Коммитить/цитировать `.env`,
   `.env.local`, `*.pem`, `*.key` (в репо живут только `*.example`-шаблоны).
 - Править сгенерированное руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
-- `fmt.Print*`/`slog.*` напрямую. Image-теги `:latest`/`:edge`/lightweight.
+- `fmt.Print*`/`log.*`/`print(ln)`/`slog.*`/`os.Stdout`/`os.Stderr` напрямую. Image-теги `:latest`/`:edge`/lightweight.
 - Deploy-команды (`make bump`, `make ship`, `ssh`, env-прокатка) — выкатка идёт только из
   `<org>/infra`; после `make release` STOP.
 - Принимать архитектурные решения без согласования — отклонение от skill/плана требует OK юзера.

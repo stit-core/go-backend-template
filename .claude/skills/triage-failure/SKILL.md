@@ -86,7 +86,7 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 |---|---|
 | **Build error** после правки sqlc-запроса | `make gen` — проверь, что сигнатура в `infra/postgres/db/*.sql.go` обновилась. Если нет — посмотри запрос в `queries/*.sql`, синтаксис аннотации `-- name: X :one\|many\|exec\|execrows`. |
 | **Build error** после правки `.mockery.yml` или интерфейса | `make gen` — мок-файл регенерится. |
-| **forbidigo** | замени `fmt.Print*` / `slog.*` на `logkit.Logger`. Внутри тестов forbidigo выключен — если падает в тесте, путь не _test.go. |
+| **forbidigo** | замени `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` / запись в `os.Stdout`/`os.Stderr` на `logkit.Logger`. Внутри тестов forbidigo выключен — если падает в тесте, путь не _test.go. |
 | **depguard** | прямой импорт домена в домен. Делай port + adapter (skill `scaffold`, вариант port). |
 | **errcheck** | `_ = unhandledErr` — нет; разбери err-возврат и обработай. Если действительно игнор оправдан — `//nolint:errcheck // <причина>`. |
 | **gosec G115** | int-конверсия с потенциальным overflow. Если bounded — exclude в `.golangci.yml` (как сделано для `repository.go` G115). Если нет — добавь явный bound check. |

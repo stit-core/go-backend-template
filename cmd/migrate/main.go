@@ -27,7 +27,7 @@ func main() {
 
 	log, err := logkit.New(logkit.Config{Level: "info"})
 	if err != nil {
-		_, _ = os.Stderr.WriteString("migrate: logger: " + err.Error() + "\n")
+		_, _ = os.Stderr.WriteString("migrate: logger: " + err.Error() + "\n") //nolint:errcheck,forbidigo // логгера нет: stderr — последний канал
 		os.Exit(1)
 	}
 	log.Info(ctx, "starting", "component", "migrate", "version", version, "commit", commit)

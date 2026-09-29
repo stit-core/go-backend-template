@@ -29,7 +29,7 @@ func main() {
 
 	log, err := logkit.New(logkit.Config{Level: "info"})
 	if err != nil {
-		_, _ = os.Stderr.WriteString("seed-admin: logger: " + err.Error() + "\n")
+		_, _ = os.Stderr.WriteString("seed-admin: logger: " + err.Error() + "\n") //nolint:errcheck,forbidigo // логгера нет: stderr — последний канал
 		os.Exit(1)
 	}
 	log.Info(ctx, "starting", "component", "seed-admin", "version", version, "commit", commit)
@@ -71,7 +71,7 @@ func run(ctx context.Context, log logkit.Logger) int {
 		log.Error(ctx, "pg connect", "err", err)
 		return 1
 	}
-	defer func() { _ = conn.Close(ctx) }()
+	defer func() { _ = conn.Close(ctx) }() //nolint:errcheck // процесс завершается, ошибку закрытия некуда вернуть
 
 	if err := upsertAdmin(ctx, conn, email, hash, name); err != nil {
 		log.Error(ctx, "seed admin failed", "err", err)
@@ -89,7 +89,7 @@ func upsertAdmin(ctx context.Context, conn *pgx.Conn, email, passwordHash, name 
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // после Commit — no-op с ErrTxClosed
 
 	var id string
 	err = tx.QueryRow(
