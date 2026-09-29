@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -225,9 +226,12 @@ func TestNoExportedSubjectInDomainRoot(t *testing.T) {
 	}
 }
 
-// TestNoTimeNowInDomains: детерминизм — clockkit.Clock вместо time.Now() во всём
+// wallClock — функции time, которые читают или ждут настенные часы.
+var wallClock = []string{"Now", "Since", "Until", "After", "AfterFunc", "Tick", "NewTimer", "NewTicker", "Sleep"}
+
+// TestNoWallClockInDomains: детерминизм — clockkit.Clock вместо настенных часов во всём
 // internal/domain (кроме тестов). Имя пакета берётся из импортов файла: алиас не прячет вызов.
-func TestNoTimeNowInDomains(t *testing.T) {
+func TestNoWallClockInDomains(t *testing.T) {
 	t.Parallel()
 	for _, f := range goFiles(t) {
 		if _, _, ok := splitDomain(f.pkg); !ok || f.test {
@@ -236,15 +240,15 @@ func TestNoTimeNowInDomains(t *testing.T) {
 		file := parseGo(t, f.path)
 		byName := importsByName(file)
 		if byName["."] == "time" {
-			t.Errorf("%s dot-imports time: time.Now() would hide behind it", f.path)
+			t.Errorf("%s dot-imports time: the wall clock would hide behind it", f.path)
 		}
 		ast.Inspect(file, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Now" {
+			if !ok || !slices.Contains(wallClock, sel.Sel.Name) {
 				return true
 			}
 			if id, ok := sel.X.(*ast.Ident); ok && byName[id.Name] == "time" {
-				t.Errorf("%s calls time.Now(): inject clockkit.Clock (rule domain-architecture)", f.path)
+				t.Errorf("%s calls time.%s: the domain reads time through an injected clockkit.Clock (rule domain-architecture)", f.path, sel.Sel.Name)
 			}
 			return true
 		})

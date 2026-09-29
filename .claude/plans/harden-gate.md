@@ -264,8 +264,9 @@ blocked-by: —
   операции — провал; после httpkit v1.3.0 список заменяют пометки `httpkit.Public` в `Register`
   доменов (`fix-reference-code` S9). `authgate.SecurityScheme` вынесен из `Module`, чтобы собрать
   API без JWT.
-- `time.Now` — по таблице импортов файла (алиас, dot-import), без go/types: тот же охват без
-  загрузки пакетов. Владелец таблицы — единственный домен, чьи запросы её трогают (таблицы — из
+- Настенные часы (`time.Now`, `Since`, `Until`, `After`, `AfterFunc`, `Tick`, `NewTimer`,
+  `NewTicker`, `Sleep` — NB7) — по таблице импортов файла (алиас, dot-import), без go/types: тот
+  же охват без загрузки пакетов. Владелец таблицы — единственный домен, чьи запросы её трогают (таблицы — из
   `CREATE TABLE` в `migrations/`); запрос трогает таблицу, если её имя стоит в позиции таблицы:
   после FROM, JOIN, INTO, UPDATE, USING и в списке FROM через запятую (схема, кавычки, алиас) —
   так видны неявный JOIN, подзапрос и `"users"`, а колонка `orders.notes` при таблице `notes`
@@ -346,8 +347,9 @@ S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Эта
 B1 (таблица запроса — в позиции таблицы), NB1 (утверждение в хелпере), NB4 (маршрут мимо huma),
 NB5 (closure с `(T, error)`), NB6 (AC8 с чистым кешем), NB8 (ID только в allowlist); NB2 и NB3
 переносит в планы дирижёр. Дыры шагов S7–S8 из его NB7 и перепроверки закрываются фиксами:
-корень домена — по перечню разрешённого (`nats-root`, `cache-root` → FAIL); дальше — часы мимо
-`time.Now`, SQL-разбор, хелперы второго уровня, маршруты спецификации huma. Строки матрицы ENF:
+корень домена — по перечню разрешённого (`nats-root`, `cache-root` → FAIL); часы — все функции
+настенного времени (`time-since` → FAIL); дальше — SQL-разбор, хелперы второго уровня, маршруты
+спецификации huma. Строки матрицы ENF:
 15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Allowlist (опустошает
 `fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
 `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
