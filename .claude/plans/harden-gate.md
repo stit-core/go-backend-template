@@ -279,6 +279,14 @@ blocked-by: —
   Порог покрытия не трогаю и тестов доменов не дописываю (N7): запас ≈1 statement, но тесты —
   `fix-reference-code` (S13 — канон и happy-path, S14 — широкий scope, порог 90), а тесты к
   `Lookup*` и `changePassword` сейчас переписали бы её S6–S8.
+- Матрица ENF: строка 15 (тест без ассертов) — `TestTestsAssert`: тест домена или платформы без
+  `require`, `assert` или `handlertest.Assert*` — провал (канон tests-pipeline; пустышка поднимала
+  покрытие 75,1 → 75,6%). Исключены: строка 9 (статус в хендлере) — где живёт бизнес-правило,
+  решает смысл, а не синтаксис: `if` в хендлере не отличить от маппинга транспорта, эвристика по
+  константам домена пропустит литерал и поле; держат правило и ревью (`repair-harness` S1–S2,
+  HAR-01). Строка 11 (≈30 непокрытых statement'ов) — сейчас `cover-check` → 71,6%, но только
+  из-за запаса ≈1 statement; надёжно ловит лишь покрытие по функциям или диффу (TST-04), а это
+  перестройка покрытия `fix-reference-code` S14 — здесь вышел бы allowlist из 16 функций с 0%.
 - Самопроверка обвязки — Go-тесты, не скрипт: кто на что ссылается в Go-коде (AST) и какие env
   required (reflect конфигов) надёжнее grep. Проза — только в коде (inline и fenced): цели `make`
   и пути репо (и `.claude/…`); репо — что отслеживает git (`git ls-files`, файл есть на диске),
@@ -322,13 +330,14 @@ S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Эта
 Блокирующий B1 исправлен: ссылки прозы сверяются с отслеживаемыми git путями — свежий worktree →
 `✓ check clean`, ссылка на неотслеживаемый файл → FAIL. Неблокирующие решены («Решения»): N1, N2,
 N4, N5 — правками, N3 — без правок (ловит `buildAPI`), N7 — хвостом ниже, N6 — констатация.
-Строки 9, 11, 15 матрицы ENF — следующим фиксом. Не проверено: инъекции ENF, ADP, fx,
-M22, COD-05, OpenAPI и S9; ложные срабатывания (`make new-domain NAME=probe`, проза после prune
-учебных доменов); `TestBoot -count=3`; `make gen`/`status`/pre-commit; сверка «Сделано».
-Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
-`auth/module/module.go` и `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
-`docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. Обходы
-до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Хвост: запас покрытия
-≈1 statement (75,1% при пороге 75%) — первый шаг `fix-reference-code` с непокрытым кодом упрётся в
-`cover-check`; снимают S13–S14 там. Следующее: фикс строк 9, 11, 15 → довалидация этапа S7–S11 →
-S12 отдельным агентом → закрыть план, push шаблона.
+Строки матрицы ENF: 15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Не проверено:
+инъекции ENF, ADP, fx, M22, COD-05, OpenAPI и S9; ложные срабатывания (`make new-domain
+NAME=probe`, проза после prune учебных доменов); `TestBoot -count=3`; `make gen`/`status`/
+pre-commit; сверка «Сделано». Allowlist (опустошает `fix-reference-code`): ADP-02 — 4
+identity-closure в `auth/module/module.go` и `verification/module/module.go`; ADP-03 —
+`internal/platform/shared` в `docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET`
+нет в `.env.example`. Обходы до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP`
+(FX-01). Хвост: запас покрытия ≈1 statement (75,1% при пороге 75%) — первый шаг
+`fix-reference-code` с непокрытым кодом упрётся в `cover-check`; снимают S13–S14 там, и там же —
+покрытие по функциям или диффу (строка 11). Следующее: довалидация этапа S7–S11 → S12 отдельным
+агентом → закрыть план, push шаблона.

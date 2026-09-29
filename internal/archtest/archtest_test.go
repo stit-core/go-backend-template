@@ -1,7 +1,8 @@
 // Package archtest машинно держит границы и слоевые инварианты доменов (rule
 // domain-architecture) для любого каталога internal/domain/*: импорты между доменами и
 // слоями, чистоту корня домена, адаптеры и таблицы между доменами, huma-уникальность
-// HTTP-типов, владение subject-литералами и запрет time.Now(). На archtest //nolint не действует.
+// HTTP-типов, владение subject-литералами, запрет time.Now() и тестов без утверждений. На archtest
+// //nolint не действует.
 package archtest
 
 import (
@@ -248,4 +249,39 @@ func TestNoTimeNowInDomains(t *testing.T) {
 			return true
 		})
 	}
+}
+
+// TestTestsAssert: покрытие считает исполненный код, поэтому тест домена или платформы без
+// единого утверждения поднимает его, ничего не проверив (TST-04).
+func TestTestsAssert(t *testing.T) {
+	t.Parallel()
+	for _, f := range goFiles(t) {
+		if !f.test || !under(f.pkg, "internal/domain") && !under(f.pkg, "internal/platform") {
+			continue
+		}
+		file := parseGo(t, f.path)
+		byName := importsByName(file)
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if ok && fn.Recv == nil && strings.HasPrefix(fn.Name.Name, "Test") && fn.Name.Name != "TestMain" && !asserts(fn, byName) {
+				t.Errorf("%s: %s has no require, assert or handlertest.Assert* call (rule tests-pipeline): an assertion-free test raises coverage without checking anything", f.path, fn.Name.Name)
+			}
+		}
+	}
+}
+
+// asserts — тело теста (с замыканиями t.Run) обращается к testify require/assert или handlertest.Assert*.
+func asserts(fn *ast.FuncDecl, byName map[string]string) bool {
+	found := false
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			if id, ok := sel.X.(*ast.Ident); ok {
+				pkg := byName[id.Name]
+				found = found || pkg == "github.com/stretchr/testify/require" || pkg == "github.com/stretchr/testify/assert" ||
+					path.Base(pkg) == "handlertest" && strings.HasPrefix(sel.Sel.Name, "Assert")
+			}
+		}
+		return !found
+	})
+	return found
 }
