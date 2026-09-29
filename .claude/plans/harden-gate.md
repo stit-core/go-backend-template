@@ -95,7 +95,8 @@ blocked-by: —
   `fix-reference-code`). Проверка: `grep -rnE '"[A-Z]{2,3}-[0-9]{2}"' internal/archtest cmd` →
   записи с ID; запись без ID находки или без нарушения → FAIL теста
 - [ ] **AC8** — Гейт зелёный. Проверка: `make check` → `✓ check clean`, сырой
-  `golangci-lint run ./...` → exit 0
+  `GOLANGCI_LINT_CACHE=$(mktemp -d) golangci-lint run ./...` → exit 0 (общий кеш линтера держит
+  фантомы чужих деревьев)
 - [x] **AC9** — Поломки DI, которые видны только при запуске, ловит гейт: boot-тест поднимает
   `cmd/api` целиком — без cookie 401, перебор паролей 429, событие доходит до подписчика, HTTP
   останавливается раньше пула БД (до httpkit v1.2.0 — обходом `beforeHTTP`). Проверка: повторить эксперименты
@@ -341,18 +342,16 @@ S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Эта
 `fix(gate)`. Этап S7–S11: валидатор B2 — FAIL (отчёт —
 `/home/mm/.cache/stit-audit-program/validation-harden-gate-B2.md`, кейсы — `valb2/` рядом); шаги
 S7–S11, AC9, AC10 и фиксы прошлого круга (проза по путям git, N1–N5, строка 15) он воспроизвёл.
-Его блокирующий B1 исправлен: таблица запроса — только в позиции таблицы, колонка с именем
-чужой таблицы гейт не роняет (кейсы `k*` → FAIL, `k-column` → clean). NB1 исправлен: утверждение
-в хелпере засчитывается (`t15-helper` → clean, `t15` → FAIL). NB5 исправлен: closure с `(T,
-error)` видна (`closure-err-clean`, `closure-new-err` → FAIL). NB4 исправлен: маршрут мимо huma
-валит `TestBoot` (`raw-route`, `raw-route-live`, `Mount` → FAIL). NB8 исправлен: ID находок —
-только в записях allowlist. NB6 (AC8) — следующим фиксом; NB2 и NB3 переносит в планы дирижёр. Строки матрицы ENF:
-15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Allowlist (опустошает
-`fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
-`verification/module/module.go`; ADP-03 — `internal/platform/shared` в
+Его замечания исправлены («Решения»): B1 — таблица запроса только в позиции таблицы (`k*` → FAIL,
+`k-column` → clean); NB1 — утверждение в хелпере засчитывается (`t15-helper` → clean, `t15` →
+FAIL); NB5 — closure с `(T, error)` видна (`closure-err-clean`, `closure-new-err` → FAIL); NB4 —
+маршрут мимо huma валит `TestBoot` (`raw-route`, `raw-route-live`, `Mount` → FAIL); NB8 — ID
+находок только в записях allowlist; NB6 — сырой линтер в AC8 с чистым кешем. NB2 и NB3 переносит
+в планы дирижёр. Строки матрицы ENF: 15 закрыта (`TestTestsAssert`), 9 и 11 исключены
+(«Решения»). Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
+`auth/module/module.go` и `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
 `docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. Обходы
 до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Хвост: запас покрытия
 ≈1 statement (75,1% при пороге 75%) — первый шаг `fix-reference-code` с непокрытым кодом упрётся в
 `cover-check`; снимают S13–S14 там, и там же — покрытие по функциям или диффу (строка 11).
-Следующее: фикс NB6 → перепроверка валидатором B2 → S12 отдельным агентом →
-закрыть план, push шаблона.
+Следующее: перепроверка валидатором B2 → S12 отдельным агентом → закрыть план, push шаблона.
