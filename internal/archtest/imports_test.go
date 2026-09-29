@@ -70,16 +70,19 @@ var (
 )
 
 // rootLibs — внешние пакеты, которые видит корень домена: порты и значения китов (аудит,
-// хеширование, метрики, часы, лог, outbox, pgkit.Transactor), DI и ID. Это перечень разрешённого:
-// драйвер, транспорт или кит с I/O в корне падает без правки списка.
+// хеширование, метрики, часы, лог, outbox, pgkit.Transactor), чистые киты без I/O (ID,
+// указатели), DI. Это перечень разрешённого: драйвер, транспорт или кит с I/O в корне падает без
+// правки списка.
 var rootLibs = []string{
 	"git.stit.tech/stit-core/golibinfra/auditkit",
 	"git.stit.tech/stit-core/golibinfra/authnkit",
 	"git.stit.tech/stit-core/golibinfra/bizmetric",
 	"git.stit.tech/stit-core/golibinfra/clockkit",
+	"git.stit.tech/stit-core/golibinfra/idkit",
 	"git.stit.tech/stit-core/golibinfra/logkit",
 	"git.stit.tech/stit-core/golibinfra/outboxkit",
 	"git.stit.tech/stit-core/golibinfra/pgkit",
+	"git.stit.tech/stit-core/golibinfra/ptrkit",
 	"github.com/google/uuid",
 	"go.opentelemetry.io/otel/attribute",
 	"go.opentelemetry.io/otel/metric",
