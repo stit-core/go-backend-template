@@ -150,7 +150,9 @@ prod-дефолты, понятный контракт ошибок API, тес�
   источники миграций сверяет boot-тест с группой `pgkit.migrations` графа (строка outbox в
   `TestDomainsAreWired` удаляется); тесты — под строгий `outboxtest`; `openapi.json`
   перегенерирован; `NATS_JETSTREAM_ENABLED=true` и прочие env из аннотации тега — в
-  `.env.example` и Handoff
+  `.env.example` и Handoff; `fx.Invoke(registerHTTP)` — по правилу порядка из аннотации тега
+  (зависимость с хуком, которую берут только хендлеры, не должна стартовать позже HTTP), а
+  boot-тест проверяет, что HTTP-сервер стартует последним и гасится первым
   - Проверка: `make check` → зелёный; `grep -rn "beforeHTTP\|MapErr" --include=*.go .` → пусто;
     fx X6, X11, X15 → пойманы китом, `fx.ValidateApp` или boot-тестом · Закрывает: AC11, AC12 · Зависит от: —
 - [ ] **S2** — DI-канон: зависимости usecase — одной структурой; одна идиома привязки к
