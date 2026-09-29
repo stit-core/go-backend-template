@@ -100,11 +100,14 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
 ### Сначала спросить
 - `migrations/` (skill `/scaffold`, вариант migration), `pkg/policy` + `pkg/tokens`, `internal/platform/authgate/`,
   `go.mod`/`go.sum`, `git tag -a` / `make release` (артефакт вне репо).
+- Ослабить гейт (правка `Makefile`, `scripts/`, `.golangci.yml`, `internal/archtest`,
+  `.claude/settings.json`, `.claude/hooks/`, после которой он проверяет меньше) — только по явной
+  просьбе юзера.
 
 ### Не делать никогда
-- Обходить хуки и гейт: `--no-verify`, `git commit -n`, `SKIP_PREPUSH`, `core.hooksPath`,
-  `GOFLAGS=` (блокируют `permissions.deny` и хук `guard-bash`). Коммитить/цитировать `.env`,
-  `.env.local`, `*.pem`, `*.key` (в репо живут только `*.example`-шаблоны).
+- Обходить хуки и гейт: `--no-verify`, `git commit -n`, `SKIP_PREPUSH`, `core.hooksPath` (блокируют
+  `permissions.deny` и хук `guard-bash`; `make check` не запускается с `-i` и `GOFLAGS`).
+  Коммитить/цитировать `.env`, `.env.local`, `*.pem`, `*.key` (в репо живут только `*.example`-шаблоны).
 - Править сгенерированное руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
 - `fmt.Print*`/`log.*`/`print(ln)`/`slog.*`/`os.Stdout`/`os.Stderr` напрямую. Image-теги `:latest`/`:edge`/lightweight.
 - Deploy-команды (`make bump`, `make ship`, `ssh`, env-прокатка) — выкатка идёт только из

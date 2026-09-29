@@ -85,7 +85,7 @@ DROP TABLE IF EXISTS orders;
 
 Если откат с потерей данных — добавь комментарий:
 ```sql
--- noop: данные удаляются вместе с колонкой; восстановление требует backup-restore
+-- Данные колонки теряются вместе с ней: восстановление — только из backup.
 ALTER TABLE users DROP COLUMN sensitive_data;
 ```
 
@@ -133,9 +133,9 @@ make test-int   # юнит + integration + лесенка up → down → up п�
 
 Integration-тесты поднимают Postgres через `golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))`, который накатывает миграции приложения — твоя свежая попадёт автоматически (kit-таблица нужна тесту → ещё `testkit.WithMigrations(<kit>pg.Migrations)`; `testkit/pgseed` — только seed-хелперы строк поверх).
 
-### 9. CI-проверка
+### 9. gen-check
 
-`make gen-check` проверяет что sqlc-код совпадает с тем что `make gen` производит. Если падает — `make gen` локально и закоммить дельту.
+`make gen-check` (шаг `make check`) проверяет что sqlc-код совпадает с тем что `make gen` производит. Если падает — `make gen` локально и закоммить дельту.
 
 ### 10. Коммит
 
@@ -153,7 +153,8 @@ feat: add NNNN_name migration
 ## Anti-patterns
 
 - ❌ Править существующую миграцию которая уже накатилась в проде. Только новые.
-- ❌ Без `down`-файла — даже если откат бессмысленен, добавь stub.
+- ❌ Без `down`-файла или с пустым `down` — migrations-check не пропустит. Миграция только данных —
+  `down` из `-- noop` + WHY-комментарий.
 - ❌ DDL и DML в одной миграции (например, `ALTER TABLE ... ADD COLUMN` + `UPDATE table SET ...`). Раздели: одна миграция — schema change, следующая — data backfill.
 - ❌ Длинные блокирующие миграции на больших таблицах. Используй `CREATE INDEX CONCURRENTLY`, разбивай на батчи.
-- ❌ `make gen` забыли — gen-check в CI поймает, но локальный flow ломает.
+- ❌ `make gen` забыли — gen-check в `make check` поймает, но локальный flow ломает.

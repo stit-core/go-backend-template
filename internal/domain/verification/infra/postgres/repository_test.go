@@ -29,6 +29,7 @@ func setup(t *testing.T) (verification.Repository, string) {
 }
 
 func TestInsertPasswordResetAndGet(t *testing.T) {
+	t.Parallel()
 	repo, userID := setup(t)
 	ctx := context.Background()
 
@@ -43,6 +44,7 @@ func TestInsertPasswordResetAndGet(t *testing.T) {
 }
 
 func TestGetPasswordReset_UnknownTokenHash(t *testing.T) {
+	t.Parallel()
 	repo, _ := setup(t)
 
 	_, err := repo.GetPasswordReset(context.Background(), "hash:absent")
@@ -50,6 +52,7 @@ func TestGetPasswordReset_UnknownTokenHash(t *testing.T) {
 }
 
 func TestMarkPasswordResetUsed(t *testing.T) {
+	t.Parallel()
 	repo, userID := setup(t)
 	ctx := context.Background()
 
@@ -65,6 +68,7 @@ func TestMarkPasswordResetUsed(t *testing.T) {
 }
 
 func TestInsertEmailVerification_PendingIdempotency(t *testing.T) {
+	t.Parallel()
 	repo, userID := setup(t)
 	ctx := context.Background()
 
@@ -98,6 +102,7 @@ func TestInsertEmailVerification_PendingIdempotency(t *testing.T) {
 }
 
 func TestGetEmailVerification_UnknownTokenHash(t *testing.T) {
+	t.Parallel()
 	repo, _ := setup(t)
 
 	_, err := repo.GetEmailVerification(context.Background(), "hash:absent")

@@ -30,6 +30,7 @@ func setup(t *testing.T) (auth.SessionRepository, string) {
 }
 
 func TestInsertAndGetByJTI(t *testing.T) {
+	t.Parallel()
 	repo, userID := setup(t)
 	ctx := context.Background()
 
@@ -47,6 +48,7 @@ func TestInsertAndGetByJTI(t *testing.T) {
 }
 
 func TestGetByJTI_NotFound(t *testing.T) {
+	t.Parallel()
 	repo, _ := setup(t)
 	ctx := context.Background()
 
@@ -66,6 +68,7 @@ func TestGetByJTI_NotFound(t *testing.T) {
 }
 
 func TestMarkUsed(t *testing.T) {
+	t.Parallel()
 	repo, userID := setup(t)
 	ctx := context.Background()
 
@@ -82,6 +85,7 @@ func TestMarkUsed(t *testing.T) {
 }
 
 func TestMarkUsed_MissingJTI(t *testing.T) {
+	t.Parallel()
 	repo, _ := setup(t)
 
 	// The UPDATE is :exec without rows-affected check: a jti matching no row

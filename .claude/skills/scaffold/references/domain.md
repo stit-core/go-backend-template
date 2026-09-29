@@ -267,14 +267,8 @@ make gen
 make check
 ```
 
-Или поэтапно:
-- `make fmt`
-- `make lint`
-- `make test`
-- `make build`
-- `make gen-check`
-
-Всё green → коммит.
+Отдельные шаги (`make lint`, `make test`, `make build`, `make gen-check`) — для быстрой итерации;
+«готово» и коммит — только по зелёному `make check`.
 
 ### 17. Коммит
 

@@ -23,6 +23,7 @@ func setup(t *testing.T) user.Repository {
 }
 
 func TestInsert(t *testing.T) {
+	t.Parallel()
 	repo := setup(t)
 	ctx := context.Background()
 
@@ -36,6 +37,7 @@ func TestInsert(t *testing.T) {
 }
 
 func TestGetByID(t *testing.T) {
+	t.Parallel()
 	repo := setup(t)
 	ctx := context.Background()
 
@@ -51,6 +53,7 @@ func TestGetByID(t *testing.T) {
 }
 
 func TestList_WithRole(t *testing.T) {
+	t.Parallel()
 	repo := setup(t)
 	ctx := context.Background()
 
@@ -69,6 +72,7 @@ func TestList_WithRole(t *testing.T) {
 }
 
 func TestUpdate_StaleVersion(t *testing.T) {
+	t.Parallel()
 	repo := setup(t)
 	ctx := context.Background()
 

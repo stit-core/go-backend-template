@@ -11,7 +11,8 @@
 make release VERSION=vX.Y.Z
 ```
 
-`scripts/release.sh` одним проходом: confirm-промпт → чистое дерево и `make check` → annotated
+`scripts/release.sh` одним проходом: confirm-промпт → чистое дерево, `make check` и
+`make e2e-smoke` → annotated
 tag (rich changelog — `git tag -a` заранее) → `release-preflight` (ветка/clean/semver/buildx +
 `make doctor`) →
 `docker buildx --push` двух образов lockstep:

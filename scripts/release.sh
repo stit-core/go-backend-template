@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/release.sh — релиз одной командой: confirm → чистое дерево + make check →
+# scripts/release.sh — релиз одной командой: confirm → чистое дерево + make check + e2e-smoke →
 # annotated tag → release-preflight (ветка/clean/semver/buildx + doctor) → buildx
 # api+migrate push lockstep → агрегированный INFRA-HANDOFF → STOP.
 #
@@ -35,9 +35,11 @@ else
     esac
 fi
 
-# --- гейт до тега: тег и образы — только у чистого HEAD, прошедшего make check ---
+# --- гейт до тега: тег и образы — только у чистого HEAD, прошедшего make check и smoke ---
 [ -z "$(git status --porcelain)" ] || { echo "release: working tree dirty — закоммить или stash" >&2; exit 2; }
 make --no-print-directory check
+# Собранный бинарь со стеком в docker (HTTP, Postgres, NATS): то, что юнит и integration не видят.
+make --no-print-directory e2e-smoke
 
 # --- annotated tag, если на HEAD ещё нет ---
 existing=$(git describe --tags --exact-match HEAD 2>/dev/null || true)

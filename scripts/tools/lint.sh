@@ -36,6 +36,8 @@ fi
 # Кеш golangci-lint ключуется путём пакета, а у каждого worktree тот же module path:
 # общий кеш подмешивает в прогон замечания чужого дерева.
 export GOLANGCI_LINT_CACHE="$PWD/.cache/golangci-lint"
+# Патч из окружения оставил бы в отчёте только замечания по нему.
+unset GOLANGCI_DIFF_PROCESSOR_PATCH
 
 # run молча пропускает узлы конфига не на своём месте, а без .golangci.yml берёт
 # дефолтные линтеры — схема ловит и то и другое.

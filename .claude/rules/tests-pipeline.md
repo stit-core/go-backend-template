@@ -22,7 +22,8 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
   данными → table-driven `Test<Method>`; существенно разный arrange (другие моки/фикстуры) или
   одиночный сценарий → `Test<Method>_<Scenario>`. Переиспользуемая таблица семейства методов —
   named type + shared var допустимы.
-- **`t.Parallel()`** — в каждом юнит-тесте и сабтесте (исключение — integration и fuzz).
+- **`t.Parallel()`** — в каждом юнит-тесте и сабтесте; в integration — в каждом тесте (у теста свой
+  контейнер), его сабтесты делят БД и идут подряд. Fuzz — без.
 - Сообщения ошибок в тестах — английский.
 - Часы: `clockkit.NewFixed(time.Date(...))` с литеральной датой — не `NewFixed(time.Now())`.
 

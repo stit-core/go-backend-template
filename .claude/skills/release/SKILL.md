@@ -52,7 +52,7 @@ make release VERSION=vX.Y.Z
 `scripts/release.sh` делает за тебя, по порядку:
 1. валидирует `VERSION` (semver; lightweight/`:latest`/`:edge` отвергаются);
 2. **confirm-промпт** `⚠ confirm release <v> from main@<sha>? [y/N]` (нет TTY/EOF → отмена, accidental release невозможен);
-3. чистое дерево и `make check` — тег и образы только у проверенного HEAD (красный → fail до тега);
+3. чистое дерево, `make check` и `make e2e-smoke` (собранный бинарь со стеком в docker) — тег и образы только у проверенного HEAD (красный → fail до тега);
 4. annotated tag, если на HEAD ещё нет (иначе использует существующий; конфликт версий → fail);
 5. `release-preflight.sh` — ветка=main / clean / annotated semver на HEAD / `docker buildx` / **`make doctor`** (docker-auth, sqlc-drift, непарные миграции — fail-fast);
 6. `docker buildx --platform linux/amd64 --push` двух image'ей lockstep: `<host>/<org>/backend:<v>` (`cmd/api`) и `<host>/<org>/backend-migrate:<v>` (`cmd/migrate` + вшитые SQL, init-контейнер), `VERSION`/`GIT_SHA` зашиты в бинарник;

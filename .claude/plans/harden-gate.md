@@ -103,13 +103,17 @@ blocked-by: —
 - [x] **AC4** — Обходы хуков закрыты. Проверка: в сессии Claude Code `git commit -n`,
   `git commit --no-veri`, `SKIP_PREPUSH=1 git push`, `git -c core.hooksPath=/dev/null push`
   блокируются хуком; pre-push с грязным деревом → отказ; `make setup` выставляет `core.hooksPath`
-  - Подтверждено: `guard-bash.sh` с JSON PreToolUse на stdin — 25 обходов → exit 2 (все четыре
-    из проверки, а ещё `-anm`, `-qn`, `git -C … commit -n`, `--no-verif`, `-c "core.hooksPath=…"`,
-    `GIT_CONFIG_KEY_0=core.hooksPath`, `GOFLAGS=… make check`, `go env -w GOFLAGS`), 24 обычные
-    команды → exit 0 (heredoc-коммиты с этими словами в теле, `-m "… -n …"`, `git push -n`,
-    `git log -n`, grep по `SKIP_PREPUSH`/`core.hooksPath`); ≈10 мс на вызов. В клоне: `make
-    setup` → `core.hookspath=scripts/git-hooks` в `.git/config`; pre-push → отказ на грязном
-    дереве (`?? stray.txt`) и на пуше не-HEAD, чистый HEAD → `make check` → `✓ check clean`
+  - Подтверждено: `guard-bash.sh` с JSON PreToolUse на stdin — наборы валидатора (79) и свой (49):
+    все обходы → exit 2, в том числе многострочные (`git add -A⏎git commit -n`, `git status⏎git
+    push --no-veri`), `git --git-dir .git commit -n`, `git merge --no-veri`, `GIT_CONFIG_KEY_0`;
+    обычные команды (heredoc-коммиты с этими словами, `git push -n`, `git log -n`) → exit 0,
+    ложные — только `git config --get core.hooksPath` и `git grep "SKIP_PREPUSH="`; ≈8 мс. Живьём
+    двухстрочный `git commit -n` заблокирован. `make check` с `-i`, `MAKEFLAGS=i`, `-n`,
+    `GATE=true`, `DETAIL=…`, `MAKE=true` (аргумент и env), `MAKEFLAGS=SHELL=/bin/true`,
+    `.SHELLFLAGS`, `GOFLAGS=-skip=…` (env и файл go env) → «Останов», exit 2. В клоне pre-push на
+    коммите с падающим тестом при `MAKEFLAGS=i`, `…SHELL=/bin/true`, `MAKEFILES` → `FAIL: go test
+    exit 1`; чистый HEAD при `MAKEFLAGS=i` → `✓ check clean`; `make setup` →
+    `core.hookspath=scripts/git-hooks`; грязное дерево и пуш не-HEAD → отказ
 - [ ] **AC5** — Матрица инъекций аудита: пойманы все 24 строки, кроме явно исключённых в
   «Решениях» с причиной. Проверка: повторить инъекции из раздела ENF отчёта → таблица в «Где мы
   сейчас»
@@ -142,54 +146,40 @@ blocked-by: —
   fmt-check и pre-commit падают без инструмента; `make test` показывает ошибки компиляции;
   mockery без INF-шума (ENF-01, ENF-06, ENF-08, ENF-12)
   - Проверка: воспроизведения AC1 → FAIL · Закрывает: AC1 · Зависит от: S1
-  - Сделано: `lint.sh` — `config verify`, затем `run` с `case` по коду выхода, OK только при
-    exit 0 со строкой «0 issues.», JSON-разбор (jq и sed-фолбэк) удалён; кеш
-    `.cache/golangci-lint` своего дерева; `allow-serial-runners` в `.golangci.yml`; `make lint`
-    (и `VERBOSE=1`), pre-commit и `status --full` — через `lint.sh`; fmt-check и pre-commit
-    падают без gofumpt/golangci-lint и на ошибке gofumpt; `test.sh` — `./...` по умолчанию,
-    ошибки сборки и загрузки пакетов в выводе; mockery `log-level: warn`; `status.sh` видит
-    файлы новых каталогов и `cmd/migrate/`; installer golangci-lint — с тега версии. Проверка
-    — AC1; `make check` → `✓ check clean`
+  - Сделано: `lint.sh` — `config verify`, затем `run` с разбором кода выхода, OK только при exit 0
+    со строкой «0 issues.»; кеш `.cache/golangci-lint` своего дерева; `allow-serial-runners`;
+    `make lint`, pre-commit и `status --full` — через `lint.sh`; fmt-check и pre-commit падают без
+    инструментов; `test.sh` показывает ошибки сборки; mockery `log-level: warn`; `status.sh` видит
+    новые каталоги и `cmd/migrate/`; installer golangci-lint — с тега. Проверка — AC1
 - [x] **S3** — `check` игнорирует `PKG`/`VERBOSE`, `COVER_FLOOR :=`; integration-тесты и
   roundtrip миграций в `make check` (docker обязателен, `make doctor` его проверяет); `make test`
   и `-short` приведены к правде (ENF-02, TST-03, ENF-05 частично)
   - Проверка: AC2, AC3 → как описано · Закрывает: AC2, AC3 · Зависит от: S2
-  - Сделано: шаги `check` — через `GATE` (под-make с пустыми `PKG`/`VERBOSE`/`FORMAT`);
-    `override COVER_FLOOR := 75`; шаг `make test-int` (юнит + integration, `-count=1`) вместо
-    `make test`; `cmd/migrate/migrate_test.go` — лесенка up → down → up с отпечатком схемы и
-    `TestDockerRequired`; integration-тест optimistic lock user; `-short` удалён (ничего не
-    делал); vet и lint — с тегом `integration`; `make doctor` проверяет Docker-демон. Проверка —
-    AC2, AC3; `make check` → `✓ check clean`
+  - Сделано: шаги `check` — через `GATE` (под-make с пустыми `PKG`/`VERBOSE`/`FORMAT`), `override
+    COVER_FLOOR := 75`; шаг `make test-int` вместо `make test`; лесенка миграций и
+    `TestDockerRequired` в `cmd/migrate/migrate_test.go`; `-short` удалён; vet и lint с тегом
+    `integration`; `make doctor` проверяет Docker. Проверка — AC2, AC3
 - [x] **S4** — Хуки: `make setup` ставит `core.hooksPath`; pre-push отказывает на грязном дереве;
   commit-msg принимает сообщения, которые генерирует сам git (Revert, fixup); хук Claude Code
   PreToolUse (короткий скрипт) блокирует обходы; `make release*` и `docker buildx*` убраны из
   allow; release гоняет `make check` до тега (ENF-03, ENF-09, ENF-11)
   - Проверка: AC4 → как описано · Закрывает: AC4 · Зависит от: S1
-  - Сделано: `.claude/hooks/guard-bash.sh` (PreToolUse Bash) в `settings.json`; pre-push
-    отказывает на грязном дереве и на пуше не-HEAD; commit-msg пропускает `Revert "…"`,
-    `Reapply "…"`, `fixup!`/`squash!`/`amend!`; `make setup` — `git config core.hooksPath
-    scripts/git-hooks`; `make release*` и `docker buildx*` убраны из allow; `release.sh` — чистое
-    дерево и `make check` до тега. Проверка — AC4; `make check` → `✓ check clean`
+  - Сделано: `guard-bash.sh` (PreToolUse Bash); pre-push — только чистый HEAD; commit-msg
+    пропускает сообщения git; `make setup` — `core.hooksPath`; `make release*`, `docker buildx*`
+    вне allow; `release.sh` — `make check` и `make e2e-smoke` до тега; по замечаниям валидатора —
+    хук построчно, guard `make check`, pre-push без make-флагов вызывающего. Проверка — AC4
 - [x] **S5** — Линтеры: nolintlint с обязательным объяснением, errcheck `check-blank`, forbidigo
   на `log.Print*`, `println`, `print`, запись в `os.Stdout`/`os.Stderr`; testifylint (ENF-07)
   - Проверка: инъекции 2b, 10a, 16 → пойманы · Закрывает: AC5 · Зависит от: S2
-  - Сделано: nolintlint (`require-explanation`, `require-specific`), testifylint, errcheck
-    `check-blank`, forbidigo на `log.*`, `print`/`println`, `os.Stdout`/`os.Stderr`. На текущем
-    коде: testifylint в archtest исправлен (`require.NotContains`); 4 места в `cmd/` (запись в
-    stderr без логгера, отложенные `Close`/`Rollback` в seed-admin) — `//nolint:<линтер> //
-    <причина>`. Проверка: `make lint` — `log.Printf`, `println`, `Fprintf(os.Stderr)` →
-    forbidigo; `_ = uc.repo.SetEmailVerified` → errcheck; `//nolint:depguard` без причины →
-    nolintlint; `make check` → `✓ check clean`
+  - Сделано: nolintlint, testifylint, errcheck `check-blank`, forbidigo на `log.*`, `print(ln)`,
+    `os.Stdout`/`os.Stderr`; 4 места в `cmd/` — `//nolint:<линтер> // <причина>`. Проверка: 2b →
+    forbidigo, 10a → errcheck, 16 (`//nolint:depguard` без причины) → nolintlint
 - [x] **S6** — Миграции: запрет пустого down; деструктивные операторы (`DROP`, `TRUNCATE`,
   `ALTER … TYPE`, `RENAME`) только с маркером `-- infra-handoff:` (ENF-05)
   - Проверка: инъекции 7c, 7d, 8 → пойманы · Закрывает: AC5 · Зависит от: S3
-  - Сделано: `migrations-check.sh` не пускает down без непробельных символов и up с `DROP`,
-    `TRUNCATE`, `ALTER … TYPE`, `RENAME` без строки `-- infra-handoff: <…>` (комментарии и
-    строковые литералы не в счёт); в гейте он идёт до тестов. Проверка: `make check` — пустой
-    down 0003 → FAIL migrations-check; мусорный и разрушительный down 0003 → FAIL лесенки S3;
-    `DROP INDEX` в новом up без маркера → FAIL migrations-check, с маркером → `✓ check clean`;
-    17 синтетических случаев (`ALTER … SET DATA TYPE`, многострочный, `'drop'` в строке) — как
-    ожидалось
+  - Сделано: `migrations-check.sh` — пустой down и разрушительный up без `-- infra-handoff:` →
+    FAIL, в гейте до тестов. Проверка: 7c → migrations-check, 7d → лесенка S3, 8 (`DROP INDEX` без
+    маркера) → migrations-check, с маркером → clean; 17 синтетических случаев — как ожидалось
 
 ### archtest «границы 2.0»
 - [ ] **S7** — Импорты для любого каталога `internal/domain/*` без ручных списков: вне `module/`
@@ -226,81 +216,74 @@ blocked-by: —
   - Проверка: `make check` → `✓ check clean` · Закрывает: AC5, AC6, AC7, AC8, AC9 · Зависит от: S2–S10
 
 ## Решения
-- Integration-тесты — часть `make check`, docker обязателен — владелец хочет, чтобы в SQL не было
-  сюрпризов, а CI нет; единственный гейт должен проверять БД.
-- Изоляция доменов и моков — в archtest вместо ручных списков depguard — покрывает любой новый
-  домен без правки конфигов и упрощает `new-domain.sh`.
-- Новые проверки приходят с явным allowlist текущих нарушений (ID находки на запись) — гейт
-  зелёный на каждом шаге, а долг виден и конечен; опустошает `fix-reference-code`.
-- Отметок владельца по отчёту нет: коллекция `review` и комментарии страницы пусты (29.09) —
-  исключений (`disagree`) и вопросов (`discuss`) нет, в работе все находки программы.
-- Lock golangci-lint — `run.allow-serial-runners: true` в `.golangci.yml`, а не флаг в `lint.sh`
-  — действует на любой запуск (сырой, хуки, `lint.sh`). Второй экземпляр ждёт lock без лимита,
-  поэтому AC1 для lock — «ждёт и проверяет по-настоящему»: дословное `flock … -c 'make lint'`
-  блокирует само себя.
-- `lint.sh` читает текстовый вывод и код выхода golangci-lint вместо JSON — коды 1/3/4/5/6/7
-  различают все пути сбоя, а jq не нужен. «Непустой отчёт» — строка «0 issues.» при exit 0:
-  заодно ловит `run.issues-exit-code: 0` в конфиге.
-- Кеш линтера выставляет `lint.sh` — единственная точка входа lint (`make lint` с любым
-  `FORMAT`/`VERBOSE`, pre-commit, `status --full`); сырой `golangci-lint` остаётся с общим кешем.
-- `test.sh` печатает обычный вывод `go test` без строк прошедших пакетов вместо разбора `-json`
-  — ошибки сборки видны как есть; сводка считает пакеты с тестами, число тестов доступно
-  только из `-json`/`-v`.
+- Integration-тесты — часть `make check`, docker обязателен: CI нет, единственный гейт должен
+  проверять БД (владелец).
+- Изоляция доменов и моков — в archtest вместо ручных списков depguard: любой новый домен покрыт
+  без правки конфигов.
+- Новые проверки приходят с явным allowlist текущих нарушений (ID находки на запись): гейт зелёный
+  на каждом шаге, долг виден и конечен; опустошает `fix-reference-code`.
+- Отметок владельца по отчёту нет (коллекция `review` и комментарии пусты, 29.09): в работе все
+  находки программы.
+- Lock golangci-lint — `run.allow-serial-runners: true` в `.golangci.yml` (действует на любой
+  запуск); второй экземпляр ждёт lock без лимита, поэтому AC1 для lock — «ждёт и проверяет
+  по-настоящему».
+- `lint.sh` читает текст и код выхода golangci-lint вместо JSON (коды 1/3/4/5/6/7 различают сбои,
+  jq не нужен); «непустой отчёт» — строка «0 issues.» при exit 0, заодно ловит
+  `run.issues-exit-code: 0`. Кеш выставляет `lint.sh` — единственная точка входа lint; он же
+  сбрасывает `GOLANGCI_DIFF_PROCESSOR_PATCH` — единственную env golangci-lint, которая меняет набор
+  замечаний (`GL_DEBUG`, `GL_TEST_RUN` — только вывод).
+- `test.sh` печатает обычный вывод `go test` без строк прошедших пакетов: ошибки сборки видны как
+  есть.
 - `cmd/migrate/**` — в эвристике инфра-поверхности (`status.sh`, rule `infra-impact`, skill
   `infra-handoff`): там регистрируются источники миграций (ENF-12).
-- Integration в гейте — шагом `make test-int` (юнит + integration одним прогоном) вместо
-  `make test`: каждый тест бежит один раз; `make test` остаётся быстрым циклом без Docker.
-- `-count=1` у integration: исход зависит от Docker, а не только от кода, и кеш `go test`
-  вернул бы «ok» прогона, где testkit пропустил тесты. Цена — ≈11 с на каждый `make check`.
-- Docker обязателен через тест `TestDockerRequired`, а не через `docker info` в скрипте: он
-  видит Docker так же, как testcontainers (тот игнорирует недоступный `DOCKER_HOST` и берёт
-  сокет по умолчанию), и не требует docker CLI; `make doctor` проверяет демон для диагностики.
-- Лесенка миграций сравнивает отпечаток схемы (колонки, индексы, ограничения, триггеры,
-  функции без объектов расширений) до `up` и после `down`, а не только «up повторно проходит»:
-  иначе пустой или разрушительный down 0003 проходит. Расширения вне отпечатка — `down` их не
-  удаляет по правилу `sqlc-and-migrations`.
-- Integration-тест optimistic lock user (`TestUpdate_StaleVersion`) добавлен здесь, хотя тесты —
-  зона `fix-reference-code`: без него проверка AC3 (мутант M23) невыполнима; остальные методы
-  репозиториев — S11 `fix-reference-code`.
-- `PKG`/`VERBOSE`/`FORMAT` гасятся на под-make, а не `override` в Makefile: в цикле разработки
-  они нужны. `GOFLAGS` из окружения тоже меняет `go test` (вне находок аудита) — префикс
-  `GOFLAGS=` у команд гейта блокирует хук S4.
-- Хук Claude Code проверен прямым запуском с JSON PreToolUse на stdin: живые `git push` и
-  `SKIP_PREPUSH` в сессии запрещены. Хук подхватился в идущей сессии сразу после правки
-  `settings.json` — заблокировал мой grep по `SKIP_PREPUSH`, поэтому `SKIP_PREPUSH=` и
-  `core.hooksPath` блокируются только в команде с `git`, а флаги ищутся вне кавычек и тел heredoc.
-- Хук — страховка от «удобного» обхода, не от обфускации (`git commit '-n'`, `sh -c`, base64
-  его проходят): полный разбор shell в хуке не окупается.
-- pre-push, кроме грязного дерева, отказывает на пуше ref не на HEAD (ENF-03 «не читает пушимые
-  refs»): `make check` проверяет рабочее дерево, и только так оно равно пушимому коммиту. Дешевле
-  временного worktree на пушимом SHA из предложения аудита.
-- В основном репо `core.hooksPath` не менял: он выставлен вручную абсолютным путём и общий с
-  чужим worktree `.claude/worktrees/agent-…`; `make setup` проверен в клоне.
-- Срабатывания S5 на текущем коде — не долг, а законные исключения: запись в stderr, пока нет
-  логгера, и отложенные `Close`/`Rollback` в CLI. Они размечены `//nolint:<линтер> // <причина>`
-  (nolintlint требует оба), а не allowlist с ID находки — чинить там нечего.
-- `//nolint:depguard // <причина>` по-прежнему гасит depguard: причину nolintlint проверить не
-  может. Закрывает S7 — изоляция доменов переезжает в archtest, на который nolint не действует.
-- Пустой down — файл без непробельных символов: `-- noop` с причиной остаётся законным для
-  миграции только данных, а DDL-миграцию с таким down ловит лесенка S3 (схема не вернулась).
+- Integration в гейте — шагом `make test-int` (юнит + integration одним прогоном) с `-count=1`:
+  исход зависит от Docker, кеш вернул бы «ok» прогона с пропущенными тестами. `make test` — быстрый
+  цикл без Docker. Тесты репозиториев — `t.Parallel()` (у каждого свой контейнер).
+- Docker обязателен через `TestDockerRequired`, а не `docker info`: тест видит Docker так же, как
+  testcontainers; `make doctor` проверяет демон для диагностики.
+- Лесенка миграций сравнивает отпечаток схемы (колонки, индексы, ограничения, триггеры, функции
+  без объектов расширений) до `up` и после `down`: иначе пустой или разрушительный down проходит.
+- `TestUpdate_StaleVersion` добавлен здесь, хотя тесты — зона `fix-reference-code`: без него
+  проверка AC3 (M23) невыполнима.
+- `PKG`/`VERBOSE`/`FORMAT` гасятся на под-make, а не `override`: в цикле разработки они нужны.
+- `make check` не запускается (`$(error)` до шагов) с `-i`/`-n`/`-q`/`-t`, с подменой `MAKE`,
+  `SHELL`, `.SHELLFLAGS`, `GATE`, `DETAIL` (аргумент, env, `MAKEFLAGS`) и с `GOFLAGS` (env или
+  `go env -w`): один guard закрывает класс «clean без проверки», включая `MAKE=true` из окружения,
+  — вместо `override` по переменной и правила `GOFLAGS=` в хуке (валидатор, B2). pre-push зовёт
+  `make check` без `MAKEFLAGS`/`MFLAGS`/`GNUMAKEFLAGS`/`MAKEFILES` вызывающего.
+- Хук Claude Code — страховка от «удобного» обхода, не от обфускации (`git commit '-n'`, `sh -c`,
+  скрипт-файл, alias): флаги ищутся построчно, вне кавычек и тел heredoc, `SKIP_PREPUSH=` и
+  `core.hooksPath` — только в команде с `git`. Проверен JSON PreToolUse на stdin и живьём.
+- pre-push отказывает на грязном дереве и на пуше ref не на HEAD: `make check` проверяет рабочее
+  дерево — только так оно равно пушимому коммиту (дешевле временного worktree). pre-commit
+  проверяет дерево, а не индекс (ENF-03) — осознанно: авторитетный гейт — pre-push.
+- В основном репо `core.hooksPath` не менял (выставлен вручную, общий с чужим worktree); `make
+  setup` проверен в клоне.
+- Конфиг гейта — в «Сначала спросить» CLAUDE.md (ENF-02); совет про `//nolint` в triage-failure —
+  `repair-harness` S1.
+- `make e2e-smoke` — шаг `release.sh` после `make check` (TST-03): на этой машине проходит без
+  `.env.local` (5 passed, ≈18 с и venv).
+- Срабатывания S5 на текущем коде — законные исключения (stderr без логгера, отложенные
+  `Close`/`Rollback` в CLI): `//nolint:<линтер> // <причина>`, а не allowlist.
+- `//nolint:depguard // <причина>` гасит depguard (причину nolintlint не проверяет) — закрывает S7:
+  archtest, на который nolint не действует.
+- Пустой down — файл без непробельных символов; `-- noop` с причиной законен для миграции только
+  данных, DDL-миграцию с таким down ловит лесенка.
 - Разрушительный оператор ищется по up-файлу без комментариев и строковых литералов, по
-  операторам между `;`; `ALTER … TYPE` — только смена типа колонки (`ALTER TYPE … ADD VALUE`
-  не ловится). down-файлы не проверяются: их `DROP` — нормальный откат.
-- `migrations-check` в гейте перенесён до тестов: дешёвая статика называет причину раньше
-  долгого integration.
-- Находки fx-аудита вошли в программу по просьбе владельца: проверки (FX-01–FX-04, FX-08, FX-09)
-  — сюда, S7–S10 и AC9; код (FX-05, FX-06, FX-10, FX-11, порядок модулей в `main.go`) —
-  `fix-reference-code` S9–S10; проза (FX-07) — `repair-harness`; дефекты китов — строками в
-  `backlog.md`.
+  операторам между `;`; `ALTER … TYPE` — только смена типа колонки; down-файлы не проверяются.
+  `migrations-check` в гейте — до тестов: дешёвая статика раньше долгого integration.
+- Находки fx-аудита: проверки (FX-01–FX-04, FX-08, FX-09) — сюда (S7–S10, AC9); код (FX-05,
+  FX-06, FX-10, FX-11, порядок модулей) — `fix-reference-code` S9–S10; проза (FX-07) —
+  `repair-harness`; дефекты китов — `backlog.md`.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-Этап «Честный гейт» (S2–S6) закрыт: AC1–AC4 подтверждены. S6: пустой down и разрушительный up
-без `-- infra-handoff:` не проходят migrations-check (он теперь до тестов). `make check` →
-`✓ check clean` за ≈14 с (integration ≈11 с без кеша). Для S10 уже пойманы строки матрицы 2b,
-7c, 7d, 8, 10a, 13c, 13d, 16; `//nolint:depguard` с причиной ещё гасит depguard — до S7. Allowlist
-с ID находок пуст; исключения без долга — 4 `//nolint` с причиной в `cmd/`. План дополнен
-находками fx-аудита: S7–S9 расширены, новый S10 — boot-тест `cmd/api`, итог — S11, критерий AC9.
-Этап S2–S6 проверяет независимый валидатор. Следующий шаг — S7.
+Этап «Честный гейт» (S2–S6) закрыт: AC1–AC4 подтверждены. Замечания валидатора к нему (B1 —
+многострочные обходы хука, B2 — `make -i`, `MAKEFLAGS`, `GOFLAGS`, подмена переменных гейта;
+неблокирующие — diff-патч golangci, конфиг гейта в CLAUDE.md, e2e-smoke в релизе, pre-commit,
+проза гейта, `t.Parallel()` в integration) закрыты коммитом `fix(gate)`; AC4 перепроверен.
+`make check` → `✓ check clean` за ≈7,5 с (тёплый кеш). Для S11 уже пойманы строки матрицы 2b, 7c,
+7d, 8, 10a, 13c, 13d, 16; `//nolint:depguard` с причиной ещё гасит depguard — до S7. Allowlist с ID
+находок пуст; исключения без долга — 4 `//nolint` с причиной в `cmd/`. Следующий шаг — S7.

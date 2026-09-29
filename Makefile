@@ -52,6 +52,18 @@ fmt-check: ## Проверка форматирования без мутаци�
 # Шаги гейта не видят PKG, VERBOSE и FORMAT ни из окружения, ни из командной строки.
 GATE = $(MAKE) --no-print-directory PKG= VERBOSE= FORMAT=
 
+# make check не запускается там, где сказал бы «clean», не проверив всё: -i глушит ошибки шагов,
+# -n/-q/-t их не выполняют, подмена переменных гейта меняет шаги, GOFLAGS (из env или
+# go env -w) — go test и vet.
+ifneq (,$(filter check,$(MAKECMDGOALS)))
+gate_bad := $(foreach f,i n q t,$(if $(findstring $f,$(firstword -$(MAKEFLAGS))),-$f)) \
+	$(foreach v,MAKE SHELL .SHELLFLAGS GATE DETAIL,$(if $(filter command% environment%,$(origin $v)),$v=…)) \
+	$(if $(shell go env GOFLAGS),GOFLAGS=$(shell go env GOFLAGS))
+ifneq (,$(strip $(gate_bad)))
+$(error make check не запускается с $(strip $(gate_bad)) — запусти просто make check)
+endif
+endif
+
 check: ## Канонический gate: fmt-check+vet+lint+migrations+test-int+build+gen-check+cover (pre-push)
 	@echo "→ make fmt-check"
 	@$(GATE) fmt-check
@@ -121,7 +133,7 @@ search: ## Поиск по коду (Q=pattern [P=path]) — rg, fallback grep -
 	fi
 
 ##@ RELEASE
-release: ## release VERSION=vX.Y.Z — confirm→check→tag→preflight(+doctor)→push lockstep→handoff→STOP
+release: ## release VERSION=vX.Y.Z — confirm→check→e2e-smoke→tag→preflight(+doctor)→push lockstep→handoff→STOP
 	@bash scripts/release.sh "$(VERSION)"
 
 ##@ SETUP

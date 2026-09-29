@@ -33,4 +33,5 @@ while read -r local_ref local_sha _ _; do
 done
 
 echo "pre-push: make check"
-exec make check
+# Флаги и makefile'ы вызывающего make (MAKEFLAGS=i, -n…) не доходят до гейта.
+exec env -u MAKEFLAGS -u MFLAGS -u GNUMAKEFLAGS -u MAKEFILES make check

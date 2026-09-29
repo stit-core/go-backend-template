@@ -3,7 +3,7 @@
 - **Роль:** сервис — Go-бэкенд (`<org>/backend`). Работа приходит фазой программы из хаба
   `<org>/infra` (`parent: infra:<slug>`) или прямым заходом. Итог — образы `backend` и
   `backend-migrate` в registry (`/release`); выкатка тега — только из хаба (`make bump SVC=backend`).
-- **Гейт перед «готово»:** `make check` (fmt + vet + lint + test + build + gen-check).
+- **Гейт перед «готово»:** `make check` (состав — CLAUDE.md § Команды; нужен Docker).
 - **Проверка планов:** `make plan-check`; pre-commit проверяет, когда меняется `.claude/plans/`.
 - **Сводка планов:** `make status` → `== Plan ==` (или `make plan-check A=--summary`).
 - **Типовые проверки шагов:** `make test PKG=./internal/domain/<d>/...` → PASS · `make gen-check` →
