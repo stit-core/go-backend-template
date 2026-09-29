@@ -9,6 +9,7 @@ paths:
   - "**/events.go"
   - "**/delivery/nats/**"
   - "cmd/api/**"
+  - "cmd/migrate/**"
   - "go.mod"
 ---
 

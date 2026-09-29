@@ -3,6 +3,7 @@
 .env
 .env.local
 bin/
+/.cache/
 *.test
 *.out
 coverage.*

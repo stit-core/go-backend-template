@@ -1,45 +1,30 @@
 #!/usr/bin/env bash
+# pre-commit: быстрые проверки перед коммитом; полный гейт — pre-push (make check).
+# Нет инструмента — коммит не проходит.
 set -euo pipefail
 
-echo "pre-commit: checking formatting with gofumpt..."
-unformatted=$(gofumpt -l .)
-if [ -n "$unformatted" ]; then
-  echo "ERROR: the following files are not formatted with gofumpt:"
-  echo "$unformatted"
-  echo "Run: gofumpt -w ."
-  exit 1
-fi
+cd "$(git rev-parse --show-toplevel)"
 
-echo "pre-commit: running go vet..."
+echo "pre-commit: make fmt-check"
+make --no-print-directory fmt-check
+
+echo "pre-commit: go vet ./..."
 go vet ./...
 
-echo "pre-commit: running golangci-lint..."
-if command -v golangci-lint &>/dev/null; then
-  golangci-lint run ./...
-else
-  echo "golangci-lint not found, skipping (install from https://golangci-lint.run/usage/install/)"
-fi
+echo "pre-commit: lint"
+bash scripts/tools/lint.sh
 
-echo "pre-commit: validating stack artifacts in docs/stack/..."
 CHANGED_STACK=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^docs/stack/.*\.md$' || true)
 if [ -n "$CHANGED_STACK" ]; then
-    if [ -x scripts/tools/validate-stack-doc.sh ]; then
-        scripts/tools/validate-stack-doc.sh docs/stack
-    else
-        echo "WARN: validate-stack-doc.sh not found or not executable, skipping"
-    fi
+    echo "pre-commit: validate-stack-doc (docs/stack/)"
+    bash scripts/tools/validate-stack-doc.sh docs/stack
 fi
 
-echo "pre-commit: validating plans (.claude/plans/)..."
 CHANGED_PLANS=$(git diff --cached --name-only --diff-filter=ACMRD | grep -E '^\.claude/plans/' || true)
 if [ -n "$CHANGED_PLANS" ]; then
-    if [ -x scripts/tools/validate-plan.sh ]; then
-        scripts/tools/validate-plan.sh
-    else
-        echo "WARN: validate-plan.sh not found or not executable, skipping"
-    fi
+    echo "pre-commit: validate-plan (.claude/plans/)"
+    bash scripts/tools/validate-plan.sh
 fi
 
 echo "pre-commit: all checks passed."
-# Напоминание: формат сообщения коммита (Conventional Commits) проверяется
-# отдельным commit-msg hook (scripts/git-hooks/commit-msg). Установка — `make setup`.
+# Формат сообщения коммита (Conventional Commits) проверяет commit-msg hook.

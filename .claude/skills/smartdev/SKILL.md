@@ -26,7 +26,7 @@ description: Cockpit сессии — гонит `make status`, поднимае
 make status
 ```
 
-(`make status A=--full` — добавит lint count, +~10s; только если нужен lint-обзор.)
+(`make status A=--full` — добавит итог `make lint` (`LINT: OK` / `LINT: FAIL`), +~10s; только если нужен lint-обзор.)
 
 Парси секции: `== Branch ==`, `== Working tree ==`, `== Critical ==` (BUILD/SQLC/MIGRATIONS/STACK-DRAFTS), `== Infra-touch ==`, `== Plan ==` (активные планы: статус, прогресс шагов и критериев, **следующий шаг**; число пунктов бэклога), `== Domains ==`, `== Recent commits ==`, `== TODOs in changed files ==`. Последняя строка — `OK` или `ATTENTION:<что>`: это твой сигнал ветвления.
 
@@ -47,7 +47,7 @@ make status
 
 | Сигнал из status / задачи | Действие — чейн |
 |---|---|
-| `ATTENTION:` build / sqlc-drift / красный тест | → `triage-failure` (red-арм, RED→GREEN разбор) |
+| `ATTENTION:` build / sqlc-drift / lint / красный тест | → `triage-failure` (red-арм, RED→GREEN разбор) |
 | `== Infra-touch ==` не `none` (или правишь env/секрет/миграцию/cross-service/go.mod) | → `infra-handoff` (оформить INFRA-HANDOFF до claim/коммита) |
 | Активный план `in-progress` | Продолжай со следующего открытого шага; перед остановкой обнови «Где мы сейчас» (skill `plan`) |
 | Юзер дал задачу, big (меняет схему/интерфейс/security, >5 шагов, >1 слой) | → `plan` (декомпозиция; planner спрашивает, не угадывает) |

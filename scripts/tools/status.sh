@@ -3,7 +3,7 @@
 #
 # Использование:
 #   scripts/tools/status.sh          # быстрая сводка + критичный детект (~2s)
-#   scripts/tools/status.sh --full   # + golangci-lint count (тяжёлое, ~10s)
+#   scripts/tools/status.sh --full   # + итог make lint (тяжёлое, ~10s)
 #
 # Критичный детект (build/sqlc-drift/непарные миграции/draft/infra-touch)
 # гонится ВСЕГДА — не за --full. Каждая секция `== Name ==` для парсинга
@@ -114,8 +114,9 @@ echo
 
 # === Infra-touch === (незакоммиченный diff по инфра-поверхности → infra-handoff)
 echo "== Infra-touch =="
-INFRA_RE='(^|/)\.env\.example|^internal/platform/config/|^migrations/|/events\.go$|/delivery/nats/|^cmd/api/|^go\.mod$'
-INFRA_HITS=$(git status --porcelain 2>/dev/null | awk '{print $2}' | grep -E "$INFRA_RE" || true)
+INFRA_RE='(^|/)\.env\.example|^internal/platform/config/|^migrations/|/events\.go$|/delivery/nats/|^cmd/api/|^cmd/migrate/|^go\.mod$'
+# -uall: файлы внутри новых каталогов по одному; $NF — новый путь у переименования.
+INFRA_HITS=$(git status --porcelain -uall 2>/dev/null | awk '{print $NF}' | grep -E "$INFRA_RE" || true)
 if [ -n "$INFRA_HITS" ]; then
     echo "незакоммиченные изменения задевают инфра-поверхность:"
     echo "$INFRA_HITS" | sed 's|^|  |'
@@ -166,12 +167,11 @@ echo
 # === Lint === (тяжёлое, opt-in)
 if [ "$FULL" -eq 1 ]; then
     echo "== Lint =="
-    if command -v golangci-lint >/dev/null 2>&1; then
-        ISSUES=$(golangci-lint run --output.json.path=/dev/stdout ./... 2>/dev/null \
-            | grep -oE '"FromLinter":' | wc -l | tr -d ' ')
-        echo "issues: $ISSUES"
+    if [ "$(bash scripts/tools/lint.sh | tail -1)" = "OK" ]; then
+        echo "LINT: OK"
     else
-        echo "(golangci-lint не установлен — make setup)"
+        echo "LINT: FAIL — make lint для диагноза"
+        ATTN="$ATTN lint"
     fi
     echo
 fi

@@ -16,7 +16,8 @@ help: ## сгруппированный список команд
 
 ##@ LOOP
 # test/lint/build: concise-by-default (scripts/tools/* за make). FORMAT=detailed
-# — расширенный разбор фейлов; VERBOSE=1 — сырой инструмент. PKG= — подмножество
+# — расширенный разбор фейлов; VERBOSE=1 — сырой инструмент (lint и тогда идёт
+# через lint.sh: config verify, кеш дерева, fail-closed). PKG= — подмножество
 # (default ./...). test.sh сам гейтит -race по CGO_ENABLED.
 test: ## Юнит-тесты concise (PKG=./x/... FORMAT=detailed VERBOSE=1)
 	@if [ -n "$(VERBOSE)" ]; then \
@@ -25,12 +26,8 @@ test: ## Юнит-тесты concise (PKG=./x/... FORMAT=detailed VERBOSE=1)
 		bash scripts/tools/test.sh $(if $(filter detailed,$(FORMAT)),--format=detailed) $(if $(PKG),$(PKG),./...); \
 	fi
 
-lint: ## golangci-lint concise (PKG=./x/... FORMAT=detailed VERBOSE=1)
-	@if [ -n "$(VERBOSE)" ]; then \
-		golangci-lint run $(PKG); \
-	else \
-		bash scripts/tools/lint.sh $(if $(filter detailed,$(FORMAT)),--format=detailed) $(PKG); \
-	fi
+lint: ## golangci-lint concise (PKG=./x/... FORMAT=detailed или VERBOSE=1 — полный вывод)
+	@bash scripts/tools/lint.sh $(if $(or $(VERBOSE),$(filter detailed,$(FORMAT))),--format=detailed) $(PKG)
 
 build: ## Сборка бинарника bin/api concise (VERBOSE=1 — сырой go build)
 	@if [ -n "$(VERBOSE)" ]; then \
@@ -44,7 +41,8 @@ fmt: ## gofumpt -w .
 	gofumpt -w .
 
 fmt-check: ## Проверка форматирования без мутации дерева (gate)
-	@files=$$(gofumpt -l .); \
+	@command -v gofumpt >/dev/null || { echo "FAIL: gofumpt не найден — make setup"; exit 1; }
+	@files=$$(gofumpt -l .) || { echo "FAIL: gofumpt не разобрал дерево (ошибка выше)"; exit 1; }; \
 	if [ -n "$$files" ]; then \
 		echo "$$files" | sed 's/^/  /'; \
 		echo "FAIL: fmt — файлы не отформатированы, запусти make fmt"; exit 1; \

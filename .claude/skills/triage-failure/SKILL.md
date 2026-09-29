@@ -24,7 +24,7 @@ description: Разбор падения — красный тест, lint, buil
 | Тип | Признаки | Где смотреть |
 |---|---|---|
 | **Build** | `cannot find package`, `undefined: ...`, `cannot use ... as ...` | `make build` — первая ошибка обычно главная |
-| **Lint** | `golangci-lint` сообщения с `[linter]` тегом | `make lint` — топ замечаний по severity |
+| **Lint** | `golangci-lint` сообщения с `(linter)` в конце строки; `FAIL: golangci-lint exit N` — линтер не отработал | `make lint` — по строке на замечание, `FORMAT=detailed` — все, со строками кода |
 | **Unit test** | `--- FAIL: TestX`, assertion failure | `make test PKG=<pkg> FORMAT=detailed` |
 | **Integration test** | падает только под `make test-int` | проблемы в БД-state, миграциях, testcontainers |
 | **Race** | `WARNING: DATA RACE` | `go test -race -run TestX` — стек двух горутин |

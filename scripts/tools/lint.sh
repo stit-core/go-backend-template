@@ -1,95 +1,81 @@
 #!/usr/bin/env bash
-# tools/lint.sh — обёртка над golangci-lint со сжатым выводом.
+# tools/lint.sh — golangci-lint для гейта: fail-closed, сжатый вывод.
 #
 # Использование:
-#   scripts/tools/lint.sh [paths…]
-#   scripts/tools/lint.sh --format=detailed
+#   scripts/tools/lint.sh [--format=detailed] [pkg…]      (по умолчанию ./...)
 #
-# Топ замечаний (по умолчанию 20), сгруппированных по файлу, отсортированных
-# по severity. На зелёном — одна строка. Status-line: `OK` / `FAIL: N issues`.
+# Сначала `golangci-lint config verify`, затем `run`. OK — только exit 0 вместе со строкой
+# отчёта «0 issues.». Замечания — по строке на каждое, до 40 строк (detailed — все, со
+# строками кода); любой другой исход (битый конфиг, неизвестный линтер, таймаут,
+# несуществующий пакет) — хвост вывода линтера и его код выхода. Последняя строка — `OK` /
+# `FAIL: <причина>`.
 
 set -uo pipefail
 
-FORMAT="concise"
-TOP=20
-PATHS=("./...")
-PATHS_SET=0
-
+FORMAT=concise
+PKGS=()
 for arg in "$@"; do
     case "$arg" in
-        --format=*) FORMAT="${arg#--format=}";;
-        --top=*) TOP="${arg#--top=}";;
-        -h|--help)
-            sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
-            exit 0;;
-        *)
-            if [ "$PATHS_SET" -eq 0 ]; then
-                PATHS=()
-                PATHS_SET=1
-            fi
-            PATHS+=("$arg");;
+        --format=*) FORMAT="${arg#--format=}" ;;
+        -h | --help)
+            sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) PKGS+=("$arg") ;;
     esac
 done
+[ ${#PKGS[@]} -gt 0 ] || PKGS=(./...)
 
-cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$(git rev-parse --show-toplevel)" || exit 1
 
 if ! command -v golangci-lint >/dev/null 2>&1; then
-    echo "FAIL: golangci-lint не установлен. Запусти: make setup" >&2
-    echo "FAIL: golangci-lint not installed"
+    echo "FAIL: golangci-lint не установлен — make setup"
     exit 1
 fi
 
-TMP=$(mktemp)
-trap 'rm -f "$TMP"' EXIT
+# Кеш golangci-lint ключуется путём пакета, а у каждого worktree тот же module path:
+# общий кеш подмешивает в прогон замечания чужого дерева.
+export GOLANGCI_LINT_CACHE="$PWD/.cache/golangci-lint"
 
-# JSON-вывод: { "Issues": [{"FromLinter": "...", "Text": "...", "Severity": "...", "Pos": {"Filename": "...", "Line": N, "Column": N}}, ...] }
-golangci-lint run --output.json.path "$TMP" "${PATHS[@]}" >/dev/null 2>&1
-EXIT=$?
-
-if [ ! -s "$TMP" ]; then
-    echo "OK: lint чисто"
-    echo "OK"
-    exit 0
+# run молча пропускает узлы конфига не на своём месте, а без .golangci.yml берёт
+# дефолтные линтеры — схема ловит и то и другое.
+if ! out=$(golangci-lint config verify 2>&1); then
+    echo "$out"
+    echo "FAIL: .golangci.yml не прошёл golangci-lint config verify"
+    exit 1
 fi
 
-# Считаем issues через простой grep (jq может быть не установлен).
-TOTAL=$(grep -oE '"FromLinter":' "$TMP" | wc -l | tr -d ' ')
-
-if [ "$TOTAL" -eq 0 ]; then
-    echo "OK"
-    exit 0
-fi
-
-echo "FAIL: $TOTAL issue(s)"
-echo
-
-# Простой парсер: вытаскиваем нужные поля построчно.
-# Если есть jq — используем его (детерминированный порядок).
-if command -v jq >/dev/null 2>&1; then
-    LIMIT="$TOP"
-    [ "$FORMAT" = "detailed" ] && LIMIT=10000
-    SEVERITY_ORDER='{"error":0,"warning":1,"info":2}'
-    jq -r --argjson n "$LIMIT" --argjson sev "$SEVERITY_ORDER" '
-        .Issues
-        | sort_by([($sev[.Severity // "warning"] // 1), .Pos.Filename, .Pos.Line])
-        | .[:$n]
-        | group_by(.Pos.Filename)
-        | .[]
-        | (.[0].Pos.Filename + ":") as $f
-        | $f, (.[] | "  " + (.Pos.Line|tostring) + ":" + (.Pos.Column|tostring) + " [" + .FromLinter + "] " + .Text)
-    ' "$TMP"
+if [ "$FORMAT" = detailed ]; then
+    ARGS=(--max-issues-per-linter=0 --max-same-issues=0)
 else
-    # Fallback без jq: сырая выжимка через sed.
-    grep -oE '"Pos":\{"Filename":"[^"]+","Offset":[0-9]+,"Line":[0-9]+,"Column":[0-9]+\},"FromLinter":"[^"]+","Text":"[^"]+"' "$TMP" \
-        | head -n "$TOP" \
-        | sed 's/.*"Filename":"\([^"]*\)".*"Line":\([0-9]*\),"Column":\([0-9]*\).*"FromLinter":"\([^"]*\)","Text":"\([^"]*\)".*/\1:\2:\3 [\4] \5/'
+    ARGS=(--output.text.print-issued-lines=false)
 fi
+out=$(golangci-lint run "${ARGS[@]}" "${PKGS[@]}" 2>&1)
+code=$?
 
-if [ "$FORMAT" = "concise" ] && [ "$TOTAL" -gt "$TOP" ]; then
-    echo
-    echo "... ещё $((TOTAL - TOP)) issues. --format=detailed для полного списка."
-fi
-
-echo
-echo "FAIL: $TOTAL issue(s)"
+case "$code" in
+    0)
+        # exit 0 без строки отчёта — прогон не дошёл до отчёта или код выхода занижен
+        # конфигом (run.issues-exit-code).
+        if grep -qx '0 issues\.' <<<"$out"; then
+            echo "OK"
+            exit 0
+        fi
+        echo "$out"
+        echo "FAIL: golangci-lint вышел с 0 без строки «0 issues.»"
+        ;;
+    1)
+        if [ "$FORMAT" = detailed ]; then
+            echo "$out"
+        else
+            head -n 40 <<<"$out"
+            [ "$(wc -l <<<"$out")" -le 40 ] || echo "… полный список: make lint FORMAT=detailed"
+        fi
+        echo "FAIL: lint — замечания выше"
+        ;;
+    *)
+        tail -n 20 <<<"$out"
+        echo "FAIL: golangci-lint exit $code — линтер не отработал, причина выше"
+        ;;
+esac
 exit 1

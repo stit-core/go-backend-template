@@ -1,4 +1,5 @@
 all: false
+log-level: warn
 dir: '{{.InterfaceDir}}/mocks'
 filename: '{{.InterfaceName | snakecase}}.go'
 pkgname: 'mocks'

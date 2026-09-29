@@ -61,14 +61,15 @@ go_install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
 go_install "github.com/vektra/mockery/v3@${MOCKERY_VERSION}" "mockery"
 
 # golangci-lint ставится через свой installer (статическая сборка,
-# не через `go install`). Сравниваем версию — апгрейдим если pin изменился.
+# не через `go install`), взятый с тега той же версии, а не с HEAD.
+# Сравниваем версию — апгрейдим если pin изменился.
 GOLANGCI_LINT_PIN="${GOLANGCI_LINT_VERSION#v}"
 if command -v golangci-lint >/dev/null 2>&1 \
    && golangci-lint --version 2>/dev/null | grep -q "version $GOLANGCI_LINT_PIN "; then
   echo "✓ golangci-lint ($GOLANGCI_LINT_VERSION) уже установлен"
 else
   echo "→ installing golangci-lint ${GOLANGCI_LINT_VERSION}"
-  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+  curl -sSfL "https://raw.githubusercontent.com/golangci/golangci-lint/${GOLANGCI_LINT_VERSION}/install.sh" \
     | sh -s -- -b "$GOBIN" "${GOLANGCI_LINT_VERSION}"
 fi
 

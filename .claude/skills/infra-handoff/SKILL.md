@@ -10,7 +10,7 @@ description: Оформить INFRA-HANDOFF-блок для хаба `<org>/infr
 ## Когда применять
 
 - `make status` → `== Infra-touch ==` не `none` (cockpit чейнит сюда)
-- Правишь: `.env.example*`, `internal/platform/config/**`, `migrations/**` (destructive/lock/backfill/extension), `**/events.go` или `**/delivery/nats/**` (cross-service subject), порт/server-wiring в `cmd/api/**`, `go.mod` (новая runtime-зависимость)
+- Правишь: `.env.example*`, `internal/platform/config/**`, `migrations/**` или источники миграций в `cmd/migrate/**` (destructive/lock/backfill/extension), `**/events.go` или `**/delivery/nats/**` (cross-service subject), порт/server-wiring в `cmd/api/**`, `go.mod` (новая runtime-зависимость)
 - Юзер спрашивает, задевает ли изменение инфру или нужен ли новый секрет
 
 ## Когда НЕ применять

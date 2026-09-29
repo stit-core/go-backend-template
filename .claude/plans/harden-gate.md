@@ -61,10 +61,20 @@ blocked-by: —
 - Правки `../golibinfra` — только строкой в `backlog.md`.
 
 ## Критерии приёмки
-- [ ] **AC1** — Линтер не может пройти молча: при занятом lock, битом `.golangci.yml`,
-  неизвестном линтере, таймауте и несуществующем `PKG` и `make lint`, и `make check` падают.
-  Проверка: воспроизведения из ENF-01 (`flock "$TMPDIR/golangci-lint.lock" -c 'make lint'`,
-  копия конфига с ошибкой, `--timeout=100ms`) → exit ≠ 0 и понятное сообщение
+- [x] **AC1** — Линтер не может пройти молча: при битом `.golangci.yml`, неизвестном линтере,
+  таймауте и несуществующем `PKG` и `make lint`, и `make check` падают; при занятом lock lint
+  ждёт его и затем проверяет по-настоящему — «OK» без прогона невозможен.
+  Проверка: воспроизведения из ENF-01 (копия конфига с ошибкой, `--timeout=100ms`, опечатка в
+  `PKG`; lock держит фоновый `flock "$TMPDIR/golangci-lint.lock" sleep 15`) → exit ≠ 0 и
+  понятное сообщение, при lock — ожидание и настоящий вердикт
+  - Подтверждено: в scratch-worktree `make lint` и `make check` → exit 2 и `FAIL: …` на битом
+    YAML с `fmt.Println` в usecase (13c) и на узле depguard не на своём месте (13d) — оба
+    `config verify`; на удалённом `.golangci.yml` — `config verify` exit 6; неизвестный линтер
+    — `golangci-lint exit 3`; `PKG='--timeout=100ms ./...'` — `exit 4`; `PKG=./intenral/...` —
+    `exit 7`; `run.issues-exit-code: 0` с нарушением — «вышел с 0 без строки «0 issues.»».
+    Lock 15 с: `make lint` ждёт ≈15 с и даёт forbidigo-FAIL (с нарушением) или `OK` (без),
+    `make check` так же; дословное `flock … -c 'make lint'` — взаимная блокировка, `timeout 30`
+    → exit 124 без «OK». Контроль: чистое дерево → `OK` / `✓ check clean`
 - [ ] **AC2** — Гейт не сужается и не ослабляется из окружения. Проверка: `make check
   PKG=./internal/domain/auth/...` и `COVER_FLOOR=0 make check` при нарушении в другом домене →
   FAIL
@@ -96,11 +106,19 @@ blocked-by: —
     сейчас»; `git status` чистый
 
 ### Честный гейт
-- [ ] **S2** — `lint.sh` fail-closed (код выхода, непустой отчёт, `--allow-serial-runners`,
+- [x] **S2** — `lint.sh` fail-closed (код выхода, непустой отчёт, `--allow-serial-runners`,
   `golangci-lint config verify`); отдельный `GOLANGCI_LINT_CACHE` внутри репо (gitignored);
   fmt-check и pre-commit падают без инструмента; `make test` показывает ошибки компиляции;
   mockery без INF-шума (ENF-01, ENF-06, ENF-08, ENF-12)
   - Проверка: воспроизведения AC1 → FAIL · Закрывает: AC1 · Зависит от: S1
+  - Сделано: `lint.sh` — `config verify`, затем `run` с `case` по коду выхода, OK только при
+    exit 0 со строкой «0 issues.», JSON-разбор (jq и sed-фолбэк) удалён; кеш
+    `.cache/golangci-lint` своего дерева; `allow-serial-runners` в `.golangci.yml`; `make lint`
+    (и `VERBOSE=1`), pre-commit и `status --full` — через `lint.sh`; fmt-check и pre-commit
+    падают без gofumpt/golangci-lint и на ошибке gofumpt; `test.sh` — `./...` по умолчанию,
+    ошибки сборки и загрузки пакетов в выводе; mockery `log-level: warn`; `status.sh` видит
+    файлы новых каталогов и `cmd/migrate/`; installer golangci-lint — с тега версии. Проверка
+    — AC1; `make check` → `✓ check clean`
 - [ ] **S3** — `check` игнорирует `PKG`/`VERBOSE`, `COVER_FLOOR :=`; integration-тесты и
   roundtrip миграций в `make check` (docker обязателен, `make doctor` его проверяет); `make test`
   и `-short` приведены к правде (ENF-02, TST-03, ENF-05 частично)
@@ -150,12 +168,28 @@ blocked-by: —
   зелёный на каждом шаге, а долг виден и конечен; опустошает `fix-reference-code`.
 - Отметок владельца по отчёту нет: коллекция `review` и комментарии страницы пусты (29.09) —
   исключений (`disagree`) и вопросов (`discuss`) нет, в работе все находки программы.
+- Lock golangci-lint — `run.allow-serial-runners: true` в `.golangci.yml`, а не флаг в `lint.sh`
+  — действует на любой запуск (сырой, хуки, `lint.sh`). Второй экземпляр ждёт lock без лимита,
+  поэтому AC1 для lock — «ждёт и проверяет по-настоящему»: дословное `flock … -c 'make lint'`
+  блокирует само себя.
+- `lint.sh` читает текстовый вывод и код выхода golangci-lint вместо JSON — коды 1/3/4/5/6/7
+  различают все пути сбоя, а jq не нужен. «Непустой отчёт» — строка «0 issues.» при exit 0:
+  заодно ловит `run.issues-exit-code: 0` в конфиге.
+- Кеш линтера выставляет `lint.sh` — единственная точка входа lint (`make lint` с любым
+  `FORMAT`/`VERBOSE`, pre-commit, `status --full`); сырой `golangci-lint` остаётся с общим кешем.
+- `test.sh` печатает обычный вывод `go test` без строк прошедших пакетов вместо разбора `-json`
+  — ошибки сборки видны как есть; сводка считает пакеты с тестами, число тестов доступно
+  только из `-json`/`-v`.
+- `cmd/migrate/**` — в эвристике инфра-поверхности (`status.sh`, rule `infra-impact`, skill
+  `infra-handoff`): там регистрируются источники миграций (ENF-12).
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S1 закрыт. Базовая линия на `b15a893`: `make check` → `✓ check clean` (181 тест в 38 пакетах,
-покрытие 75.1% при пороге 75; ≈2 с на тёплых кешах, ≈3.7 с с холодным кешем тестов);
-`make test-int` зелёный за ≈10 с (три пакета `infra/postgres` по 6–9 с параллельно); сырой
-`golangci-lint run ./...` и `golangci-lint config verify` → exit 0. Следующий шаг — S2.
+S2 закрыт: lint fail-closed (AC1 подтверждён воспроизведениями в scratch-worktree), кеш
+линтера своего дерева, fmt-check, pre-commit и `status --full` без мягких путей, `make test`
+показывает ошибки сборки, mockery молчит. Обнаружено: `config verify` ловит и строку матрицы 13d
+(узел конфига не на своём месте) — учесть в S10; на тёплом кеше `--timeout=100ms` падает ещё на
+загрузке пакетов (exit 4 без «0 issues.»). `make check` → `✓ check clean` за ≈2 с на тёплых
+кешах; сводка тестов — «13 пакет(ов) с тестами». Следующий шаг — S3.
