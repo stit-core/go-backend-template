@@ -268,12 +268,12 @@ blocked-by: —
   `NewTicker`, `Sleep` — NB7) — по таблице импортов файла (алиас, dot-import), без go/types: тот
   же охват без загрузки пакетов. Владелец таблицы — единственный домен, чьи запросы её трогают (таблицы — из
   `CREATE TABLE` в `migrations/`); запрос трогает таблицу, если её имя стоит в позиции таблицы:
-  после FROM, JOIN, INTO, UPDATE, USING и в списке FROM через запятую (схема, кавычки, алиас) —
-  так видны неявный JOIN, подзапрос и `"users"`, а колонка `orders.notes` при таблице `notes`
-  соседа — не обращение (N2, B2-B1). Ключевое слово и список разбираются отдельно: однострочная
-  регулярка принимает `JOIN` без алиаса за алиас и теряет таблицу. kit-таблиц в запросах нет —
-  схема sqlc только `migrations/`. Allowlist — один тип
-  `allowlist.List` (`internal/testkit/allowlist`) в archtest и `cmd/api`: нарушение → ID
+  после FROM запроса, JOIN, INTO, UPDATE, USING и через запятую в списке FROM, в том числе после
+  `JOIN … ON …` (схема, кавычки, алиас). SQL разбирается по словам с уровнями скобок: список FROM
+  открыт до WHERE, GROUP, ORDER и т. п., FROM внутри выражения (`TRIM(… FROM x)`, `IS DISTINCT
+  FROM`) — не таблица; так колонка `orders.notes` при таблице `notes` соседа — не обращение (N2,
+  B2-B1, перепроверка). kit-таблиц в запросах нет — схема sqlc только `migrations/`. Allowlist —
+  один тип `allowlist.List` (`internal/testkit/allowlist`) в archtest и `cmd/api`: нарушение → ID
   находки; запись без нарушения или без ID валит тест, проверка AC7 — grep по ID (N4). ID
   находок — только в значениях allowlist (там они данные); в Go-комментариях их нет: ссылка на
   задачу повиснет после программы (rule `comments`, NB8).
@@ -348,8 +348,9 @@ B1 (таблица запроса — в позиции таблицы), NB1 (у
 NB5 (closure с `(T, error)`), NB6 (AC8 с чистым кешем), NB8 (ID только в allowlist); NB2 и NB3
 переносит в планы дирижёр. Дыры шагов S7–S8 из его NB7 и перепроверки закрываются фиксами:
 корень домена — по перечню разрешённого (`nats-root`, `cache-root` → FAIL); часы — все функции
-настенного времени (`time-since` → FAIL); дальше — SQL-разбор, хелперы второго уровня, маршруты
-спецификации huma. Строки матрицы ENF:
+настенного времени (`time-since` → FAIL); SQL — по словам с уровнями скобок (`k-mixed` → FAIL,
+`k-func-from`, `k-distinct-from` → clean); дальше — хелперы второго уровня, маршруты спецификации
+huma. Строки матрицы ENF:
 15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Allowlist (опустошает
 `fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
 `verification/module/module.go`; ADP-03 — `internal/platform/shared` в

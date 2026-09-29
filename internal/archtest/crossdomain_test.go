@@ -101,11 +101,12 @@ func typePackage(expr ast.Expr) string {
 
 var (
 	createTable = regexp.MustCompile(`(?i)\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:"?public"?\.)?"?(\w+)`)
-	// tableKeyword — за ним идёт таблица; tableItem — таблица (схема, кавычки, алиас) и запятая,
-	// если список FROM продолжается.
-	tableKeyword = regexp.MustCompile(`(?i)\b(?:from|join|into|update|using)\s+(?:only\s+)?`)
-	tableItem    = regexp.MustCompile(`^(?:"?\w+"?\.)?"?(\w+)"?(?:\s+(?:as\s+)?\w+)?(\s*,\s*)?`)
-	sqlNoise     = regexp.MustCompile(`--[^\n]*|/\*[\s\S]*?\*/|'(?:[^']|'')*'`)
+	// sqlToken — слово (с кавычками и схемой) или скобка, запятая, точка с запятой: остальное для
+	// поиска таблиц не нужно.
+	sqlToken = regexp.MustCompile(`"?\w+"?(?:\."?\w+"?)?|[(),;]`)
+	// fromEnds — предложения, которыми кончается список FROM.
+	fromEnds = []string{"where", "group", "having", "order", "limit", "offset", "returning", "union", "intersect", "except", "window", "for"}
+	sqlNoise = regexp.MustCompile(`--[^\n]*|/\*[\s\S]*?\*/|'(?:[^']|'')*'`)
 )
 
 // TestQueriesUseOwnTables: таблица приложения (CREATE TABLE в migrations/) принадлежит одному
@@ -134,19 +135,38 @@ func TestQueriesUseOwnTables(t *testing.T) {
 	}
 }
 
-// queriedTables — имена в позиции таблицы: после FROM, JOIN, INTO, UPDATE, USING и через запятую
-// в списке FROM. Колонка с именем чужой таблицы (orders.notes) — не обращение к ней.
+// queriedTables — имена в позиции таблицы: после FROM запроса, JOIN, INTO, UPDATE, USING и через
+// запятую в списке FROM, в том числе после JOIN … ON …. Колонка с именем таблицы (orders.notes)
+// и FROM внутри выражения (TRIM(… FROM notes), IS DISTINCT FROM notes) — не обращение к таблице.
 func queriedTables(sql string) []string {
+	type scope struct{ query, from bool } // уровень скобок: идёт запрос, открыт список FROM
+	scopes := []scope{{}}
 	var names []string
-	for _, kw := range tableKeyword.FindAllStringIndex(sql, -1) {
-		rest := sql[kw[1]:]
-		for m := tableItem.FindStringSubmatch(rest); m != nil; m = tableItem.FindStringSubmatch(rest) {
-			names = append(names, strings.ToLower(m[1]))
-			if m[2] == "" {
-				break
-			}
-			rest = rest[len(m[0]):]
+	table, prev := false, ""
+	for _, tok := range sqlToken.FindAllString(sql, -1) {
+		cur := &scopes[len(scopes)-1]
+		word := strings.ToLower(tok)
+		switch {
+		case tok == "(":
+			scopes, table = append(scopes, scope{}), false
+		case tok == ")":
+			scopes, table = scopes[:max(len(scopes)-1, 1)], false
+		case tok == ";":
+			scopes, table = []scope{{}}, false
+		case tok == ",":
+			table = cur.from
+		case table && word != "only" && word != "lateral":
+			names, table = append(names, strings.Trim(word[strings.LastIndex(word, ".")+1:], `"`)), false
+		case word == "select" || word == "delete":
+			cur.query = true
+		case word == "from" && cur.query && prev != "distinct":
+			cur.from, table = true, true
+		case word == "join" || word == "into" || word == "update" || word == "using":
+			cur.query, table = true, true
+		case slices.Contains(fromEnds, word):
+			cur.from = false
 		}
+		prev = word
 	}
 	return names
 }
