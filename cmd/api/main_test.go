@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"os"
 	"reflect"
 	"regexp"
@@ -9,8 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
-
-	"git.stit.tech/stit-core/golibinfra/logkit"
 
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
 )
@@ -20,15 +17,7 @@ import (
 // natskit.StreamBus. ValidateApp проверяет wiring без запуска lifecycle и без
 // обращения к pg/nats.
 func TestFxGraphValidates(t *testing.T) {
-	err := fx.ValidateApp(
-		infraModules,
-		platformModules,
-		domainModules,
-		fx.Invoke(func(context.Context, logkit.Logger) {}),
-	)
-	if err != nil {
-		t.Fatalf("fx graph invalid: %v", err)
-	}
+	require.NoError(t, fx.ValidateApp(service, fx.NopLogger), "fx graph invalid")
 }
 
 // envAllowlist — required-переменные конфигов, которых нет в .env.example: переменная → ID

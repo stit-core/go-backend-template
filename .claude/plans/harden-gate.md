@@ -13,24 +13,18 @@ blocked-by: —
 Идёт первой, чтобы всю дальнейшую работу уже проверяла машина.
 
 ## Контекст
-- **Отчёт аудита** (источник всех находок, ID вида `ENF-01`):
-  https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE — читать инструментом Artifact
-  (`action: read`); локальная копия, пока жив worktree догфудера:
-  `.claude/worktrees/agent-a261317a598ac6483/bin/audit-report.html`. Оценки на HEAD `03b57d2`:
-  обвязка 6.5–7, код 6, тесты 5, адаптеры 5.5, принуждение 5.5, security 5, догфудинг 7–8,
-  жизненный цикл 4.5.
+- **Отчёт аудита** (ID вида `ENF-01`): https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE
+  (Artifact `action: read`). Оценки на `03b57d2`: обвязка 6.5–7, код 6, тесты 5, адаптеры 5.5,
+  принуждение 5.5, security 5, догфудинг 7–8, жизненный цикл 4.5.
 - **Отметки владельца по находкам** — `ArtifactData` `list`, `url` отчёта, `collection: review`
   (`disagree` — не чинить, `discuss` — спросить, `note` — учесть); итог S1 — в «Решениях».
 - **Следующие части:** `fix-reference-code` (эталонный код, security, тесты, покрытие) и
   `repair-harness` (проза обвязки, жизненный цикл, повторный аудит) — стартуют после этой.
-- **Принципы программы** (задание владельца): всё найденное починить, но без оверинжиниринга —
-  понятный, красивый, консистентный код, который приятно читать и развивать; никаких
-  «заскриптованных-перескриптованных» решений: короткие читаемые скрипты или Go-тесты, один
-  канонический способ на каждую вещь; удалить лучше, чем добавить; машина держит то, что важно.
-  Владелец разрешил правки в зонах «Сначала спросить» (migrations, pkg/policy, pkg/tokens,
-  authgate, конфиг гейта) в рамках программы. Новые миграции — только новыми файлами, уже
-  существующие не править. Коммит на каждый шаг (Conventional Commits); push — только с OK
-  владельца.
+- **Принципы программы** (владелец): всё найденное починить без оверинжиниринга — понятный,
+  консистентный код; короткие скрипты или Go-тесты, один канонический способ; удалить лучше, чем
+  добавить; машина держит важное. Правки зон «Сначала спросить» (migrations, pkg/policy,
+  pkg/tokens, authgate, конфиг гейта) в рамках программы разрешены; миграции — только новыми
+  файлами. Коммит на шаг (Conventional Commits); push — с OK владельца.
 - **Находки этой части** (подробности и `file:line` — в отчёте): гейт и хуки — ENF-01–ENF-03,
   ENF-05–ENF-09, ENF-11, ENF-12, TST-03 (закрыты S2–S6); границы — ENF-04 (ручные списки
   depguard и `mocks-isolation`), TST-05 (дыры archtest: имена файлов, точное совпадение
@@ -38,17 +32,15 @@ blocked-by: —
   доменов), ADP-03 (мост через platform, sqlc-типы в домене, JOIN к чужой таблице), SEC-03 (ручка
   без `Security` публична), COD-05 (дубль имени типа в huma — panic при регистрации, которую
   `fx.ValidateApp` не видит); самопроверка обвязки — HAR-11, DOG-02, SEC-10.
-- **Эксперименты аудита для перепроверки** — в разделах ENF и ADP отчёта: матрица из 24
-  инъекций (поймано 10) и 14 нарушений в адаптерах (поймано 1.5 из 8 обязательных).
-- **fx-аудит** (отдельный агент, 29.09; DI — 6/10): полный отчёт —
+- **Эксперименты аудита для перепроверки** — разделы ENF и ADP отчёта: матрица из 24 инъекций
+  (поймано 10) и 14 нарушений в адаптерах (поймано 1.5 из 8 обязательных).
+- **fx-аудит** (29.09; DI — 6/10):
   `/home/mm/.cache/tmp/claude-1000/-home-mm-git-stit-core-go-backend-template/62f196b7-5be8-49bb-ba1f-05d2c3d76bb0/scratchpad/fx-audit.md`,
-  скрипты и прототип boot-теста — `fxexp/` рядом. Статический граф держит `TestFxGraphValidates`;
-  запуск (конструкторы, `Invoke`, lifecycle-хуки) не проверяет ничего: из 20 поломок DI (таблица
-  «Эксперименты», X1–X17) гейт ловит 7. Находки этой части: FX-02 (нет boot-теста), FX-03 (без
-  `AuthExtractor` httpkit пропускает авторизацию; client-IP без тега группы молча выключает
-  brute-force), FX-04 (`timerkit.Module` нужен outbox неявно), FX-01 (HTTP останавливается после
-  пула БД — 500 запросам в полёте), FX-08 (коллизия METHOD+path не паникует; забытый модуль
-  домена или `fx.Invoke(Register)` проходит), FX-09 (outbox домена можно смонтировать чужим).
+  прототипы и скрипты — `fxexp/` рядом. Из 20 поломок DI (X1–X17) гейт ловил 7: запуск (конструкторы, `Invoke`, хуки)
+  не проверял никто. Находки части: FX-02 (нет boot-теста), FX-03 (без `AuthExtractor` —
+  авторизация пропущена; client-IP без группы — brute-force выключен), FX-04 (timerkit нужен
+  outbox неявно), FX-01 (HTTP гасится после пула), FX-08 (коллизия METHOD+path, забытый модуль
+  или `Register`), FX-09 (чужой outbox).
 
 ## Не входит
 - Исправление кода доменов, security и тестов — `fix-reference-code`; сюда входят только проверки
@@ -85,18 +77,13 @@ blocked-by: —
 - [x] **AC4** — Обходы хуков закрыты. Проверка: в сессии Claude Code `git commit -n`,
   `git commit --no-veri`, `SKIP_PREPUSH=1 git push`, `git -c core.hooksPath=/dev/null push`
   блокируются хуком; pre-push с грязным деревом → отказ; `make setup` выставляет `core.hooksPath`
-  - Подтверждено: `guard-bash.sh` с JSON PreToolUse на stdin — наборы валидатора (79) и свой (49):
-    все обходы git-хуков → exit 2 (make- и `GOFLAGS`-кейсы хук пропускает намеренно — их
-    останавливают `make check` и pre-push), в том числе многострочные (`git add -A⏎git commit -n`, `git status⏎git
-    push --no-veri`), `git --git-dir .git commit -n`, `git merge --no-veri`, `GIT_CONFIG_KEY_0`;
-    обычные команды (heredoc-коммиты с этими словами, `git push -n`, `git log -n`) → exit 0,
-    ложные — только `git config --get core.hooksPath` и `git grep "SKIP_PREPUSH="`; ≈8 мс. Живьём
-    двухстрочный `git commit -n` заблокирован. `make check` с `-i`, `MAKEFLAGS=i`, `-n`,
-    `GATE=true`, `DETAIL=…`, `MAKE=true` (аргумент и env), `MAKEFLAGS=SHELL=/bin/true`,
-    `.SHELLFLAGS`, `GOFLAGS=-skip=…` (env и файл go env) → «Останов», exit 2. В клоне pre-push на
-    коммите с падающим тестом при `MAKEFLAGS=i`, `…SHELL=/bin/true`, `MAKEFILES` → `FAIL: go test
-    exit 1`; чистый HEAD при `MAKEFLAGS=i` → `✓ check clean`; `make setup` →
-    `core.hookspath=scripts/git-hooks`; грязное дерево и пуш не-HEAD → отказ
+  - Подтверждено: `guard-bash.sh` на наборах валидатора (79) и своём (49) — все обходы git-хуков
+    → exit 2, в том числе многострочные, `--git-dir`, `git merge --no-veri`, `GIT_CONFIG_KEY_0`;
+    обычные команды → exit 0 (ложные — `git config --get core.hooksPath`, `git grep
+    "SKIP_PREPUSH="`); make- и `GOFLAGS`-кейсы останавливает `make check` («Останов»: `-i`, `-n`,
+    `GATE=…`, `MAKE=true`, `SHELL`, `.SHELLFLAGS`, `GOFLAGS` из env и go env). В клоне pre-push на
+    падающем коммите при `MAKEFLAGS=i`, `…SHELL=/bin/true`, `MAKEFILES` → FAIL; чистый HEAD → `✓`;
+    `make setup` → `core.hookspath=scripts/git-hooks`; грязное дерево и не-HEAD → отказ
 - [ ] **AC5** — Матрица инъекций аудита: пойманы все 24 строки, кроме явно исключённых в
   «Решениях» с причиной. Проверка: повторить инъекции из раздела ENF отчёта → таблица в «Где мы
   сейчас»
@@ -108,11 +95,16 @@ blocked-by: —
   `fix-reference-code`). Проверка: `grep -rn "allowlist" internal/archtest cmd` → записи с ID
 - [ ] **AC8** — Гейт зелёный. Проверка: `make check` → `✓ check clean`, сырой
   `golangci-lint run ./...` → exit 0
-- [ ] **AC9** — Поломки DI, которые видны только при запуске, ловит гейт: boot-тест поднимает
+- [x] **AC9** — Поломки DI, которые видны только при запуске, ловит гейт: boot-тест поднимает
   `cmd/api` целиком — без cookie 401, перебор паролей 429, событие доходит до подписчика, HTTP
   останавливается раньше пула БД (или allowlist FX-01). Проверка: повторить эксперименты
   fx-аудита X4–X16 → пойманы все, кроме X16 (закрывает `fix-reference-code`) и явно исключённых
   в «Решениях»
+  - Подтверждено: `make check` в worktree — X4 («didn't start cleanly»), X5b (паника huma), X5c,
+    X9, X10, X10b, X11 (403 вместо 200/401), X12 (нет 429), X13, X14 (ошибка конструктора), X15
+    (событие не доходит) → FAIL `TestBoot` (и статических проверок S7–S9, где они есть); X6
+    невозможен по построению (`beforeHTTP`), а без `beforeHTTP` порядок остановки валит
+    `TestBoot`; X16 — `fix-reference-code`
 
 ## Шаги
 ### Подготовка
@@ -199,12 +191,16 @@ blocked-by: —
     `PG_DSN` из `.env.example` → FAIL с точной причиной
 
 ### Запуск приложения
-- [ ] **S10** — Boot-тест `cmd/api` (integration, контейнеры testkit): тот же набор fx-опций, что
+- [x] **S10** — Boot-тест `cmd/api` (integration, контейнеры testkit): тот же набор fx-опций, что
   в `main`, реально стартует и останавливается; без cookie 401; перебор паролей → 429; событие
   доходит до подписчика; HTTP останавливается раньше пула БД — дешёвый обход на стороне шаблона
   или allowlist FX-01 до правки httpkit; миграции — тем же списком источников, что `cmd/migrate`
   (FX-02, FX-03, FX-04, FX-01)
   - Проверка: fx X4, X5b, X5c, X6, X9–X12, X14, X15 → пойманы · Закрывает: AC9 · Зависит от: S3
+  - Сделано: `cmd/api/boot_test.go` — граф `service` (общий с `main` и `TestFxGraphValidates`) на
+    Postgres, NATS и Redis из testkit, миграции — `sources.Kits` (`cmd/migrate/sources`, общий с
+    `cmd/migrate`) и каталог приложения; `beforeHTTP` поднимает пул, NATS и Redis раньше HTTP.
+    Проверка — AC9
 
 ### Итог
 - [ ] **S11** — Повторить матрицу инъекций, эксперимент ADP и эксперименты fx-аудита, записать
@@ -213,9 +209,8 @@ blocked-by: —
 
 ## Решения
 - Integration-тесты — часть `make check`, docker обязателен: CI нет, гейт должен проверять БД.
-- Новые проверки приходят с явным allowlist текущих нарушений (ID находки на запись): гейт зелёный
-  на каждом шаге, долг виден и конечен; опустошает `fix-reference-code`.
-- Отметок владельца по отчёту нет (`review` и комментарии пусты, 29.09): в работе все находки.
+  Новые проверки — с allowlist текущих нарушений (ID находки на запись): гейт зелёный на каждом
+  шаге, долг виден и конечен. Отметок владельца по отчёту нет (29.09): в работе все находки.
 - Lock golangci-lint — `run.allow-serial-runners: true` (любой запуск); второй экземпляр ждёт lock
   без лимита, поэтому AC1 для lock — «ждёт и проверяет по-настоящему».
 - `lint.sh` читает текст и код выхода golangci-lint вместо JSON (коды 1/3/4/5/6/7 различают сбои,
@@ -223,18 +218,15 @@ blocked-by: —
   `run.issues-exit-code: 0`. Кеш выставляет `lint.sh` — единственная точка входа lint; он же
   сбрасывает `GOLANGCI_DIFF_PROCESSOR_PATCH` — единственную env golangci-lint, которая меняет набор
   замечаний (`GL_DEBUG`, `GL_TEST_RUN` — только вывод).
-- `test.sh` — обычный вывод `go test` без строк прошедших пакетов: ошибки сборки видны как есть.
-  `cmd/migrate/**` — в эвристике инфра-поверхности: там источники миграций (ENF-12).
-- Integration в гейте — шагом `make test-int` (юнит + integration одним прогоном) с `-count=1`:
-  исход зависит от Docker, кеш вернул бы «ok» прогона с пропущенными тестами. `make test` — быстрый
-  цикл без Docker. Тесты репозиториев — `t.Parallel()` (у каждого свой контейнер).
-- Docker обязателен через `TestDockerRequired`, а не `docker info`: тест видит Docker так же, как
-  testcontainers; `make doctor` проверяет демон для диагностики.
+- `test.sh` — вывод `go test` без строк прошедших пакетов; `cmd/migrate/**` — в эвристике
+  инфра-поверхности (ENF-12).
+- Integration — шагом `make test-int` (юнит + integration одним прогоном) с `-count=1`: исход
+  зависит от Docker, кеш вернул бы «ok» прогона с пропущенными тестами; тесты с контейнером —
+  `t.Parallel()`. Docker обязателен через `TestDockerRequired` (видит Docker как testcontainers).
 - Лесенка миграций сравнивает отпечаток схемы (колонки, индексы, ограничения, триггеры, функции
   без объектов расширений) до `up` и после `down`: иначе пустой или разрушительный down проходит.
-- `TestUpdate_StaleVersion` добавлен здесь, хотя тесты — зона `fix-reference-code`: без него
-  проверка AC3 (M23) невыполнима.
-- `PKG`/`VERBOSE`/`FORMAT` гасятся на под-make, а не `override`: в цикле разработки они нужны.
+- `TestUpdate_StaleVersion` добавлен здесь (зона `fix-reference-code`): без него AC3 (M23) не
+  проверить. `PKG`/`VERBOSE`/`FORMAT` гасятся на под-make, а не `override`: в цикле они нужны.
 - `make check` не запускается (`$(error)` до шагов) с `-i`/`-n`/`-q`/`-t`, с подменой `MAKE`,
   `SHELL`, `.SHELLFLAGS`, `GATE`, `DETAIL` (аргумент, env, `MAKEFLAGS`) и с `GOFLAGS` (env или
   `go env -w`): один guard закрывает класс «clean без проверки», включая `MAKE=true` из окружения,
@@ -250,8 +242,7 @@ blocked-by: —
   дерево — только так оно равно пушимому коммиту (дешевле временного worktree). pre-commit
   проверяет дерево, а не индекс (ENF-03) — осознанно: авторитетный гейт — pre-push.
 - `core.hooksPath` основного репо не менял (общий с чужим worktree); `make setup` — в клоне.
-- Конфиг гейта — в «Сначала спросить» CLAUDE.md (ENF-02); совет про `//nolint` в triage-failure —
-  `repair-harness` S1.
+  Конфиг гейта — в «Сначала спросить» CLAUDE.md (ENF-02); `//nolint` в triage-failure — `repair-harness` S1.
 - `make e2e-smoke` — шаг `release.sh` после `make check` (TST-03): на этой машине проходит без
   `.env.local` (5 passed, ≈18 с и venv).
 - Срабатывания S5 на текущем коде — законные исключения (stderr без логгера, отложенные
@@ -274,6 +265,13 @@ blocked-by: —
   `cmd/api` (проверка AC7 расширена на `cmd`).
 - Скелет `make new-domain` без подключения в `cmd/api` валит `TestDomainsAreWired` (как и покрытие,
   TST-04): подключение скелета — `fix-reference-code` S11 (AC10).
+- FX-01 — дешёвым обходом, без allowlist: `beforeHTTP` поднимает пул, NATS и Redis раньше сервера,
+  и fx гасит HTTP до них (запросы в полёте не ловят закрытых клиентов); порядок больше не зависит
+  от места `pgkit.Module`. HTTP по-прежнему гасится после подписчика и джобов — это запросам не
+  мешает; «HTTP первым» — после golibinfra-httpkit-fx (`backlog.md`).
+- Boot-тест — не параллельный (`t.Setenv`: конфиг из env, как у `main`), ≈4 с; `make check`
+  ≈10,5 с. `TestFxGraphValidates` — с `fx.NopLogger`: лог событий fx на провале забивал вывод
+  гейта (обрезка 25000 байт) и прятал соседние падения.
 - depguard удалён целиком: изоляцию доменов и моков держит archtest без списков доменов в
   конфигах, `//nolint` на него не действует. Правила импортов — для не-тестового кода: тесты
   берут фикстуры откуда угодно, моки — только тесты. `io`/`bufio` в usecase разрешены (поток —
@@ -291,10 +289,11 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S2–S9 закрыты, замечания валидатора к S2–S6 — коммитами `fix(gate)`. S9: проза без мёртвых целей
-и путей, подключение доменов к `cmd/api` и `cmd/migrate`, required env в `.env.example` — под
-гейтом. Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
+S2–S10 закрыты, AC1–AC4 и AC9 подтверждены; замечания валидатора к S2–S6 — коммитами
+`fix(gate)`. S10: boot-тест поднимает граф `main` на контейнерах; пул, NATS и Redis гасятся после
+HTTP. Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
 `auth/module/module.go` и `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
 `docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. `make
-check` → `✓ check clean` за ≈8 с. Уже пойманы строки матрицы 1b, 2b, 3b, 7c, 7d, 8, 10a, 12, 13,
-13c, 13d, 16, M; ADP b, c, g, h, i, k; fx X5b, X5c, X9, X10, X10b, X13; M22. Следующий шаг — S10.
+check` → `✓ check clean` за ≈10,5 с. Уже пойманы строки матрицы 1b, 2b, 3b, 7c, 7d, 8, 10a, 12,
+13, 13c, 13d, 16, M; ADP b, c, g, h, i, k; fx X4–X15 (X6 — по построению); M22. Следующий шаг —
+S11 (OpenAPI-контракт), затем итог S12.

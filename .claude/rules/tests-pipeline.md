@@ -39,6 +39,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `infra/postgres/repository.go` | integration per-домен (build-tag) |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp` |
 | HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь |
+| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, 401, 429, событие до подписчика, HTTP гасится раньше пула, NATS и Redis |
 
 ## TDD для багфиксов — обязательно
 

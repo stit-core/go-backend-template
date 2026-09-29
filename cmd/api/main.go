@@ -49,6 +49,10 @@ var kitConfigs = []any{
 	pgkit.NewReplicaConfig,
 }
 
+// beforeHTTP поднимает пул, NATS и Redis раньше сервера HTTP: fx останавливает хуки в обратном
+// порядке, и HTTP гасится до них — запросам в полёте не достаются закрытые клиенты (FX-01).
+var beforeHTTP = fx.Module("before-http", fx.Invoke(func(*pgkit.ReadWriteDB, *natskit.Client, cachekit.Cache) {}))
+
 var (
 	infraModules = fx.Options(
 		// Конфиг только из env: настройки/секреты приходят из окружения
@@ -64,9 +68,10 @@ var (
 		// не поднимается: log.LoggerProvider в графе отсутствует.
 		logkit.Module,
 		pgkit.Module,
-		httpkit.Module,
 		natskit.Module(""),
 		cachekit.Module,
+		beforeHTTP,
+		httpkit.Module,
 		flagkit.Module,
 		timerkit.Module,
 	)
@@ -97,13 +102,16 @@ var (
 	commit  = "unknown"
 )
 
+// service — граф сервиса целиком: его запускает main, его же поднимает boot-тест.
+var service = fx.Options(
+	infraModules,
+	platformModules,
+	domainModules,
+	fx.Invoke(func(ctx context.Context, log logkit.Logger) {
+		log.Info(ctx, "starting", "component", "api", "version", version, "commit", commit)
+	}),
+)
+
 func main() {
-	fx.New(
-		infraModules,
-		platformModules,
-		domainModules,
-		fx.Invoke(func(ctx context.Context, log logkit.Logger) {
-			log.Info(ctx, "starting", "component", "api", "version", version, "commit", commit)
-		}),
-	).Run()
+	fx.New(service).Run()
 }

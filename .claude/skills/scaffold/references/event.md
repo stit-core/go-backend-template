@@ -74,7 +74,7 @@ err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
 
 `uc.events` — это `outboxkit.Publisher` (`Publish(ctx, subject, payload) error`), инжектится в `UsecaseDeps` (поле `Events`). Сериализация в JSON — внутри `outboxkit.Bus.Publish`.
 
-Если домен-источник **ещё не публикует** события — заведи ему per-domain outbox: `internal/domain/<source>/infra/outbox/outbox.go` с `const Table = "outbox_<source>"`, `var Migrations = outboxpg.TableMigrations(Table)` и `var Providers = events.OutboxFor("<source>", Table)`; включи `Providers` в `<source>/module/module.go` (даёт приватный `outboxkit.Publisher`); добавь `<source>outbox.Migrations` в список источников `cmd/migrate/main.go` (схема kit-owned, в `migrations/` не дублируется — образец `internal/domain/user/infra/outbox/outbox.go`); если subject-префикс новый — добавь стрим в `NATS_JS_STREAM_NAMES` (инфра-handoff).
+Если домен-источник **ещё не публикует** события — заведи ему per-domain outbox: `internal/domain/<source>/infra/outbox/outbox.go` с `const Table = "outbox_<source>"`, `var Migrations = outboxpg.TableMigrations(Table)` и `var Providers = events.OutboxFor("<source>", Table)`; включи `Providers` в `<source>/module/module.go` (даёт приватный `outboxkit.Publisher`); добавь `<source>outbox.Migrations` в `sources.Kits` (`cmd/migrate/sources/sources.go`; схема kit-owned, в `migrations/` не дублируется — образец `internal/domain/user/infra/outbox/outbox.go`); если subject-префикс новый — добавь стрим в `NATS_JS_STREAM_NAMES` (инфра-handoff).
 
 ### 4. Subscriber in-domain (`internal/domain/<consumer>/delivery/nats/`)
 

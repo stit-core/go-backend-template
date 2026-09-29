@@ -5,7 +5,8 @@
 - **golibinfra-httpkit-fx** — httpkit: хук HTTP-сервера регистрировать в `fx.Invoke` модуля
   (HTTP стартует последним, останавливается первым — FX-01); без `AuthExtractor` — ошибка
   старта, а не пропуск авторизации (FX-03); порядок middleware из группы детерминирован или
-  описан в доке (FX-12). Триггер: следующий релиз golibinfra; после — снять allowlist FX-01.
+  описан в доке (FX-12). Триггер: следующий релиз golibinfra; после — убрать `beforeHTTP` из
+  `cmd/api/main.go` и требовать в boot-тесте, что HTTP гасится первым.
 - **golibinfra-timerkit-dep** — outboxkit явно требует timerkit, чтобы без `timerkit.Module` граф
   не собирался, а не outbox молча стоял (FX-04). Триггер: следующий релиз golibinfra.
 - **golibinfra-fxlogger** — `logkit.FxLogger`: события fx в структурный лог, причина падения

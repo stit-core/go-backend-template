@@ -1,20 +1,18 @@
 // Command migrate — прогон миграций отдельным шагом (lockstep с образом api).
-// Источники: киты golibinfra (bruteforcekit, auditkit, per-domain outbox-таблицы)
-// и каталог приложения PG_MIGRATIONS_PATH; у каждого — своя таблица версий
-// schema_migrations_<source>, новая миграция кита не сдвигает версии приложения.
+// Источники: kit-owned таблицы (sources.Kits) и каталог приложения PG_MIGRATIONS_PATH; у
+// каждого — своя таблица версий schema_migrations_<source>, новая миграция кита не сдвигает
+// версии приложения.
 package main
 
 import (
 	"context"
 	"os"
+	"slices"
 
-	auditpg "git.stit.tech/stit-core/golibinfra/auditkit/pgstore"
-	bruteforcepg "git.stit.tech/stit-core/golibinfra/bruteforcekit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 
-	useroutbox "git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/outbox"
-	verifoutbox "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/infra/outbox"
+	"git.stit.tech/stit-core/go-backend-template/cmd/migrate/sources"
 )
 
 var (
@@ -55,21 +53,14 @@ func run(ctx context.Context, log logkit.Logger) int {
 		return 1
 	}
 	app := pgkit.DirSource(pgkit.AppSourceName, cfg.Path)
-	// Киты раньше приложения: миграции приложения могут опираться на их таблицы.
-	sources := []pgkit.Source{
-		bruteforcepg.Migrations,
-		auditpg.Migrations,
-		useroutbox.Migrations,
-		verifoutbox.Migrations,
-		app,
-	}
+	all := append(slices.Clone(sources.Kits), app)
 
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
 	switch os.Args[1] {
 	case "up":
-		if err := pgkit.MigrateUpAll(ctx, dsn, sources...); err != nil {
+		if err := pgkit.MigrateUpAll(ctx, dsn, all...); err != nil {
 			log.Error(ctx, "migrate up failed", "err", err)
 			return 1
 		}
@@ -84,7 +75,7 @@ func run(ctx context.Context, log logkit.Logger) int {
 		log.Info(ctx, "migrate down: ok")
 
 	case "version":
-		for _, src := range sources {
+		for _, src := range all {
 			v, dirty, err := pgkit.MigrateVersion(ctx, dsn, src)
 			if err != nil {
 				log.Error(ctx, "migrate version failed", "source", src.Name, "version", v, "dirty", dirty, "err", err)
