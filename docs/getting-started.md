@@ -66,7 +66,7 @@
 чеклист — `.claude/skills/de-template/references/prune.md`, его выполняет `/de-template`):
 - `internal/domain/{auth,user,verification}/` (DDD-артефактов в docs у них нет — code-only).
 - блоки в `sqlc.yaml` и `.mockery.yml`, их `migrations/` (свои — перенумеровать подряд с `0001`),
-  fx-wiring в `cmd/api`, depguard-правила в `.golangci.yml`.
+  fx-wiring в `cmd/api`.
 - их e2e-сценарии в `test/` и `cmd/seed-admin`.
 
 ## 7. Готово

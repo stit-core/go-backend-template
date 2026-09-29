@@ -61,10 +61,12 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
 
 - **gofumpt** обязателен (`make fmt`).
 - **golangci-lint** (`.golangci.yml`): **forbidigo** — нельзя `fmt.Print*`/`log.*`/`print(ln)`/
-  `slog.*` и запись в `os.Stdout`/`os.Stderr`, только `logkit.Logger`; **depguard** — бизнес-домены
-  не импортят друг друга, cross-domain через порты + адаптеры в `<domain>/module/adapters.go`.
+  `slog.*` и запись в `os.Stdout`/`os.Stderr`, только `logkit.Logger`.
   errcheck (и `_ = f()`)/errorlint/gosec/govet/contextcheck/noctx/rowserrcheck/bodyclose
   /sqlclosecheck/testifylint — на; `//nolint` — только с именем линтера и объяснением (nolintlint).
+- **archtest** (`internal/archtest`, шаг тестов; `//nolint` на него не действует) — границы любого
+  домена: чужой домен — только через порт и адаптер в `<domain>/module/adapters.go`, моки — только
+  из тестов, `platform` и `pkg` доменов не знают.
 - Ошибки — `%w` + `errors.Is/As`; sentinel в `errors.go` корня домена.
 - Комментарии — только WHY (rule `comments`).
 - **Не городить велосипеды**: переиспользуемый/инфра-примитив (generic util, HTTP-client,

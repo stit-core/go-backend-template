@@ -76,30 +76,24 @@ blocked-by: —
   Проверка: воспроизведения из ENF-01 (копия конфига с ошибкой, `--timeout=100ms`, опечатка в
   `PKG`; lock держит фоновый `flock "$TMPDIR/golangci-lint.lock" sleep 15`) → exit ≠ 0 и
   понятное сообщение, при lock — ожидание и настоящий вердикт
-  - Подтверждено: в scratch-worktree `make lint` и `make check` → exit 2 и `FAIL: …` на битом
-    YAML с `fmt.Println` в usecase (13c) и на узле depguard не на своём месте (13d) — оба
-    `config verify`; на удалённом `.golangci.yml` — `config verify` exit 6; неизвестный линтер
-    — `golangci-lint exit 3`; `PKG='--timeout=100ms ./...'` — `exit 4`; `PKG=./intenral/...` —
-    `exit 7`; `run.issues-exit-code: 0` с нарушением — «вышел с 0 без строки «0 issues.»».
-    Lock 15 с: `make lint` ждёт ≈15 с и даёт forbidigo-FAIL (с нарушением) или `OK` (без),
-    `make check` так же; дословное `flock … -c 'make lint'` — взаимная блокировка, `timeout 30`
-    → exit 124 без «OK». Контроль: чистое дерево → `OK` / `✓ check clean`
+  - Подтверждено: `make lint` и `make check` → exit 2 и `FAIL: …`: битый YAML с `fmt.Println` (13c)
+    и узел depguard не на месте (13d) — `config verify`; нет `.golangci.yml` — exit 6; неизвестный
+    линтер — exit 3; `--timeout=100ms` — exit 4; `PKG=./intenral/...` — exit 7;
+    `issues-exit-code: 0` — «без строки «0 issues.»». Lock 15 с: ждёт и даёт настоящий вердикт;
+    `flock … -c 'make lint'` — взаимная блокировка без «OK». Чистое дерево → `OK`/`✓ check clean`
 - [x] **AC2** — Гейт не сужается и не ослабляется из окружения. Проверка: `make check
   PKG=./internal/domain/auth/...` и `COVER_FLOOR=0 make check` при нарушении в другом домене →
   FAIL
-  - Подтверждено: в scratch-worktree с `fmt.Println` в user `make check
-    PKG=./internal/domain/auth/...` и то же с `VERBOSE=1 FORMAT=detailed` → `FAIL: lint`; с
-    падающим тестом в user и `PKG=auth` → `FAIL: go test exit 1`; с 60 непокрытыми
-    statement'ами в user `COVER_FLOOR=0 make check` → `FAIL: coverage 68.2% < floor 75%`, `make
-    cover-check COVER_FLOOR=0` из командной строки → тоже FAIL
+  - Подтверждено: с `fmt.Println` в user `make check PKG=…auth…` (и с `VERBOSE=1 FORMAT=detailed`)
+    → `FAIL: lint`; с падающим тестом → `FAIL: go test exit 1`; с 60 непокрытыми statement'ами
+    `COVER_FLOOR=0 make check` и `make cover-check COVER_FLOOR=0` → `FAIL: coverage 68.2% < 75%`
 - [x] **AC3** — `make check` гоняет integration-тесты и roundtrip миграций up → down → up; без
   docker падает с понятным сообщением. Проверка: `make check` → в выводе шаг integration;
   мутация `users.sql` (`version=$3 OR TRUE`) → FAIL
-  - Подтверждено: `make check` → шаг `→ make test-int (юнит + integration)`, `✓ check clean`;
-    мутация M23 (`users.sql:23`) + `make gen` → `TestUpdate_StaleVersion/profile` FAIL; Docker
-    скрыт (`unshare -rm` + bind `/dev/null` на сокет) → `TestDockerRequired`: «Docker is
-    unavailable: make check requires integration tests». Лесенка ловит пустой, мусорный,
-    деструктивный (`DROP TABLE users CASCADE`) и `-- noop` down и down 0001 без `DROP FUNCTION`
+  - Подтверждено: `make check` → шаг `make test-int`, `✓ check clean`; M23 + `make gen` →
+    `TestUpdate_StaleVersion/profile` FAIL; без Docker (`unshare -rm`) → `TestDockerRequired`
+    FAIL; лесенка ловит пустой, мусорный, `DROP TABLE users CASCADE`, `-- noop` down 0003 и down
+    0001 без `DROP FUNCTION`
 - [x] **AC4** — Обходы хуков закрыты. Проверка: в сессии Claude Code `git commit -n`,
   `git commit --no-veri`, `SKIP_PREPUSH=1 git push`, `git -c core.hooksPath=/dev/null push`
   блокируются хуком; pre-push с грязным деревом → отказ; `make setup` выставляет `core.hooksPath`
@@ -182,7 +176,7 @@ blocked-by: —
     маркера) → migrations-check, с маркером → clean; 17 синтетических случаев — как ожидалось
 
 ### archtest «границы 2.0»
-- [ ] **S7** — Импорты для любого каталога `internal/domain/*` без ручных списков: вне `module/`
+- [x] **S7** — Импорты для любого каталога `internal/domain/*` без ручных списков: вне `module/`
   и тестов — никаких чужих доменов; `module/` импортирует чужой домен только корневым пакетом;
   `delivery` не импортирует `infra`; `infra/postgres/db` — только из `infra/postgres`; `platform`
   и `pkg` не импортируют домены; `*/mocks` — только из `_test.go`; IO-пакеты по префиксу, все
@@ -190,6 +184,14 @@ blocked-by: —
   Удалить per-domain depguard и `mocks-isolation` из `.golangci.yml` и `new-domain.sh` (ENF-04,
   ADP-03, TST-05, FX-09)
   - Проверка: инъекции 1b, 13, M, ADP b, c, g, h, i и fx X9 → пойманы · Закрывает: AC5, AC6 · Зависит от: S3
+  - Сделано: `internal/archtest/imports_test.go` — `TestImportBoundaries` (все правила шага для
+    не-тестового кода), `TestDomainRootIsTransportAgnostic` (все файлы корня: транспорт, драйверы,
+    `os`/`net`/`syscall`/`database/sql` по префиксу), `TestPureLayersHaveNoIO` по префиксу;
+    depguard удалён из `.golangci.yml` и `new-domain.sh`, проза и комментарии — про archtest.
+    Проверка (`make check` в worktree): 1b, 13 (= ADP i), M, ADP b, c, g, h, fx X9, TST-05
+    (`policy.go` с `net/http/httputil` и `os/signal`, `rules.go`, `service.go`), 12
+    (`os.Getenv` в usecase) и сосед под `//nolint:depguard // причина` → FAIL archtest; чистое
+    дерево и скелет `make new-domain` → зелёные. Allowlist не понадобился
 - [ ] **S8** — Поведенческие инварианты: `time.Now` через типы (алиасы не проходят); запрет
   identity-closure для портов между доменами в `module/`; у каждой huma-операции `Security` или
   запись в явном списке публичных; уникальность всех экспортируемых типов `delivery/http`; тест,
@@ -265,8 +267,9 @@ blocked-by: —
   `.env.local` (5 passed, ≈18 с и venv).
 - Срабатывания S5 на текущем коде — законные исключения (stderr без логгера, отложенные
   `Close`/`Rollback` в CLI): `//nolint:<линтер> // <причина>`, а не allowlist.
-- `//nolint:depguard // <причина>` гасит depguard (причину nolintlint не проверяет) — закрывает S7:
-  archtest, на который nolint не действует.
+- depguard удалён целиком: изоляцию держит archtest, на который `//nolint` не действует. Правила
+  импортов — для не-тестового кода: тесты берут фикстуры откуда угодно, моки — только тесты.
+  `io`/`bufio` в usecase разрешены (поток — данные, не I/O), в чистых слоях — нет.
 - Пустой down — файл без непробельных символов; `-- noop` с причиной законен для миграции только
   данных, DDL-миграцию с таким down ловит лесенка.
 - Разрушительный оператор ищется по up-файлу без комментариев и строковых литералов, по
@@ -280,10 +283,9 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-Этап «Честный гейт» (S2–S6) закрыт: AC1–AC4 подтверждены. Замечания валидатора к нему (B1 —
-многострочные обходы хука, B2 — `make -i`, `MAKEFLAGS`, `GOFLAGS`, подмена переменных гейта;
-неблокирующие — diff-патч golangci, конфиг гейта в CLAUDE.md, e2e-smoke в релизе, pre-commit,
-проза гейта, `t.Parallel()` в integration) закрыты коммитом `fix(gate)`; AC4 перепроверен.
-`make check` → `✓ check clean` за ≈7,5 с (тёплый кеш). Для S11 уже пойманы строки матрицы 2b, 7c,
-7d, 8, 10a, 13c, 13d, 16; `//nolint:depguard` с причиной ещё гасит depguard — до S7. Allowlist с ID
-находок пуст; исключения без долга — 4 `//nolint` с причиной в `cmd/`. Следующий шаг — S7.
+Этап «Честный гейт» (S2–S6) закрыт, замечания валидатора к нему — коммитом `fix(gate)`, AC4
+перепроверен. S7 закрыт: границы импортов любого домена держит archtest, depguard удалён;
+инъекции шага пойманы, allowlist пуст. `make check` → `✓ check clean` за ≈8 с (тёплый кеш). Уже
+пойманы строки матрицы 1b, 2b, 7c, 7d, 8, 10a, 12, 13, 13c, 13d, 16, M и ADP b, c, g, h, i, fx X9.
+Исключения без долга — 4 `//nolint` с причиной в `cmd/`. Следующее — мелочи валидатора к
+`72bb8ca` (`fix(gate)`), затем S8.

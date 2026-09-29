@@ -128,7 +128,7 @@
 | `reference (by ID)` | хранится только ID; для чтения — port + adapter |
 | `uses` | вызов через port (cross-context use-case или policy) |
 
-depguard в `.golangci.yml` блокирует прямые импорты между бизнес-доменами; всё cross-context идёт через `module/adapters.go`.
+`internal/archtest` блокирует прямые импорты между бизнес-доменами; всё cross-context идёт через `module/adapters.go`.
 
 ## Migrations
 

@@ -65,8 +65,8 @@ internal/domain/<name>/
 └── module/
     └── module.go
 ```
-+ правило `<name>-domain-isolation` в `.golangci.yml` и интерфейсы `Repository`, `Authorizer`,
-`delivery/http.Usecase` в `.mockery.yml`.
++ интерфейсы `Repository`, `Authorizer`, `delivery/http.Usecase` в `.mockery.yml`. Границы
+нового домена держит `internal/archtest` — правка конфигов не нужна.
 
 Остальные файлы появляются вместе с содержимым (таблица обязательности —
 `docs/reference/architecture.md`): `delivery/http/dto.go` и `view.go` — с первым endpoint'ом,
@@ -177,7 +177,7 @@ var (
 
 ### 10. Adapters (если нужны cross-domain)
 
-Если domain нужны данные другого домена — порт в `usecase.go`, адаптер в `module/adapters.go` (`references/port.md`). depguard блокирует прямые импорты.
+Если domain нужны данные другого домена — порт в `usecase.go`, адаптер в `module/adapters.go` (`references/port.md`). archtest блокирует прямые импорты.
 
 ### 11. fx-модуль
 
@@ -238,29 +238,7 @@ make gen
 
 Минимальный набор — happy path + основная error path.
 
-### 15. depguard правило
-
-`scripts/new-domain.sh` **сам вписывает** правило строгой изоляции в `.golangci.yml`
-(умбрелла: deny всего префикса `internal/domain` + allow только своего поддерева →
-любой сосед, включая будущие, блокируется автоматически; `module/` и `*_test.go`
-исключены). Если домен создавался вручную — блок такой:
-```yaml
-<name>-domain-isolation:
-  list-mode: lax
-  files:
-    - "**/internal/domain/<name>/**"
-    - "!**/*_test.go"
-    - "!**/internal/domain/<name>/module/**"
-  allow:
-    - "<module-path>/internal/domain/<name>"
-  deny:
-    - pkg: "<module-path>/internal/domain"
-      desc: "cross-domain imports are forbidden; use a port + adapter in module/"
-```
-
-Чужие блоки трогать не нужно — каждый домен самодостаточно изолирует себя.
-
-### 16. Верификация
+### 15. Верификация
 
 Перед claim "готово":
 ```bash
@@ -270,7 +248,7 @@ make check
 Отдельные шаги (`make lint`, `make test`, `make build`, `make gen-check`) — для быстрой итерации;
 «готово» и коммит — только по зелёному `make check`.
 
-### 17. Коммит
+### 16. Коммит
 
 `feat(<name>): scaffold <name> domain with CRUD`
 

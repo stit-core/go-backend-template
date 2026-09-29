@@ -1,6 +1,6 @@
 # scaffold › port — cross-domain порт + адаптер
 
-Кросс-доменный вызов через порт + адаптер. Прямой импорт между бизнес-доменами заблокирован depguard'ом — это enforce-ит границу.
+Кросс-доменный вызов через порт + адаптер. Прямой импорт между бизнес-доменами запрещает `internal/archtest` — это enforce-ит границу.
 
 См. `.claude/rules/domain-architecture.md` для бэкграунда (автогрузится при работе с `internal/domain/`).
 
@@ -17,7 +17,7 @@
 
 - Вызов внутри одного домена — просто метод usecase.
 - Вызов в `golibinfra/*` — это уже port-слой.
-- Вызов из адаптера в `module/adapters.go` в другой домен — ОК, файлы `module/` исключены из depguard.
+- Вызов из адаптера в `module/adapters.go` в другой домен — ОК: `module/` вправе импортировать корневой пакет чужого домена (archtest).
 
 ## Шаги
 
@@ -41,7 +41,7 @@ type <Provider>Reader interface {
 
 Имя — что-то вроде `<Provider>Reader`, `<Provider>Writer`, `<Resource><Verb>er`. Сужай интерфейс до **минимально нужных методов**, не копируй весь Repository.
 
-DTO — **локальные** типы консьюмера, не utility-типы провайдера. Если auth нужны 3 поля от user — заведи `auth.User` с этими 3 полями. Не возвращай `*user.User`. Порт переносит решения, а не сырьё: вычисленное свойство (`CanLogin bool`) вместо сырого статуса чужого enum'а. Ошибки порта — sentinel'ы **потребителя** (`Err<Provider>NotFound` в его `errors.go`): чужие sentinel'ы потребитель не может `errors.Is` (depguard).
+DTO — **локальные** типы консьюмера, не utility-типы провайдера. Если auth нужны 3 поля от user — заведи `auth.User` с этими 3 полями. Не возвращай `*user.User`. Порт переносит решения, а не сырьё: вычисленное свойство (`CanLogin bool`) вместо сырого статуса чужого enum'а. Ошибки порта — sentinel'ы **потребителя** (`Err<Provider>NotFound` в его `errors.go`): чужие sentinel'ы потребитель не может `errors.Is` (archtest).
 
 ### 3. Инжектируй порт в usecase
 
@@ -98,7 +98,7 @@ func (a *<provider>ReaderAdapter) GetByID(ctx context.Context, id string) (*<con
     return <provider>To<Consumer>(src), nil
 }
 
-// Ports carry consumer-domain sentinels: callers can't errors.Is against <provider>'s (depguard).
+// Ports carry consumer-domain sentinels: callers can't errors.Is against <provider>'s (archtest).
 func map<Provider>Err(err error) error {
     if errors.Is(err, <provider>.ErrNotFound) {
         return <consumer>.Err<Provider>NotFound
@@ -115,7 +115,7 @@ func <provider>To<Consumer>(s *<provider>.<Entity>) *<consumer>.<DTO> {
 }
 ```
 
-`module/adapters.go` имеет право импортить другой домен — depguard для пути `module/**` исключён. Время в адаптере — только через инжектированный `clockkit.Clock`, не `time.Now()`.
+`module/adapters.go` имеет право импортить корневой пакет другого домена (не его `infra`/`delivery`). Время в адаптере — только через инжектированный `clockkit.Clock`, не `time.Now()`.
 
 Если в провайдере нет `LookupByID`-метода (т.е. publicly не выставлен) — добавь его в `<provider>/usecase.go`. Lookup-методы без проверки policy — нормальная практика для cross-domain (вызывающий уже сделал свою проверку).
 
@@ -134,16 +134,14 @@ var Module = fx.Module(
 
 Inline identity-closure (`func(uc *<provider>.Usecase) <consumer>.<Port> { return uc }`) — только когда провайдер удовлетворяет порт как есть, без маппинга.
 
-### 7. Проверить depguard
+### 7. Проверить границы
 
 ```bash
-make lint PKG=./internal/domain/<consumer>/...
+make test PKG=./internal/archtest/...
 ```
 
-Если ругается — значит ты импортировал провайдер не из `module/`, а из самого домена. Перенеси код.
-
-Если `<consumer>` — **новый** домен, заведи ему правило `<consumer>-domain-isolation` в
-`.golangci.yml` (паттерн — `scaffold/references/domain.md`), иначе depguard его границу не стережёт.
+`TestImportBoundaries` красный — провайдер импортирован не из `module/` или не корневым пакетом.
+Перенеси код. Новый домен покрыт автоматически.
 
 ### 8. Тесты
 
@@ -169,6 +167,5 @@ make gen-check
 - ❌ Возвращать из адаптера тип провайдера (`*user.User` в auth-коде). Адаптер маппит в локальный DTO потребителя.
 - ❌ Широкий порт «на вырост» (10 методов "вдруг пригодится"). Сузь до того что реально нужно сейчас.
 - ❌ Двусторонняя зависимость A↔B через два порта. Это сигнал, что границы доменов кривые. Подумай о третьем домене или объединении.
-- ❌ Адаптер в `<consumer>/adapters.go` (в корне домена) вместо `<consumer>/module/adapters.go`. depguard заблокирует импорт другого домена из корня.
-- ❌ Bypass depguard через `//nolint:depguard`. Это не способ. Сделай порт.
+- ❌ Адаптер в `<consumer>/adapters.go` (в корне домена) вместо `<consumer>/module/adapters.go`. archtest заблокирует импорт другого домена из корня.
 - ❌ Mockery-конфиг не обновлён → моков нет → юниты не пишутся, или пишутся через ручные fake'и.

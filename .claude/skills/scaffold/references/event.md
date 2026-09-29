@@ -78,7 +78,7 @@ err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
 
 ### 4. Subscriber in-domain (`internal/domain/<consumer>/delivery/nats/`)
 
-Subscriber лежит **внутри** потребляющего домена, рядом с `delivery/http/`. depguard не пускает прямой импорт `<source>`-домена из `<consumer>` — поэтому payload-тип события объявляется **локально** в `delivery/nats/dto.go`, даже если он 1:1 совпадает с типом из источника. Subject — тоже локальная константа. Если `<consumer>` — новый домен, заведи ему правило `<consumer>-domain-isolation` в `.golangci.yml` (`scaffold/references/domain.md`).
+Subscriber лежит **внутри** потребляющего домена, рядом с `delivery/http/`. archtest не пускает прямой импорт `<source>`-домена из `<consumer>` — поэтому payload-тип события объявляется **локально** в `delivery/nats/dto.go`, даже если он 1:1 совпадает с типом из источника. Subject — тоже локальная константа.
 
 ```go
 // internal/domain/<consumer>/delivery/nats/dto.go

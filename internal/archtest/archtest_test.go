@@ -1,17 +1,18 @@
-// Package archtest машинно проверяет слоевые инварианты доменов
-// (rule domain-architecture): чистоту entity/policy/dto/errors/events,
-// транспортную изоляцию usecase, huma-уникальность HTTP-DTO, владение
-// subject-литералами и запрет time.Now() в доменном коде.
+// Package archtest машинно держит границы и слоевые инварианты доменов (rule
+// domain-architecture) для любого каталога internal/domain/*: импорты между доменами и
+// слоями, чистоту корня домена, huma-уникальность HTTP-DTO, владение subject-литералами и
+// запрет time.Now(). На archtest //nolint не действует.
 package archtest
 
 import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -55,72 +56,57 @@ func parseImports(t *testing.T, path string) []string {
 	return out
 }
 
-// ioStdlib — stdlib с сайд-эффектами: чистым слоям запрещён даже он
-// (net/mail и net/url — парсеры, им можно).
-var ioStdlib = []string{"net", "net/http", "net/smtp", "os", "io", "bufio", "database/sql", "syscall", "os/exec"}
-
-// pureLayerAllowed — что можно импортить из entity/policy/dto/errors/events:
-// side-effect-free stdlib + платформенные value-примитивы. Всё остальное — запрещено.
-func pureLayerAllowed(imp string) bool {
-	switch {
-	case !strings.Contains(imp, "."):
-		return !slices.Contains(ioStdlib, imp) // side-effect-free stdlib only
-	case imp == module+"/internal/platform/identity",
-		imp == module+"/internal/platform/shared",
-		imp == module+"/pkg/policy":
-		return true
-	}
-	return false
+// goFile — Go-файл репо: путь и каталог пакета от корня репо (через "/") и его импорты.
+type goFile struct {
+	path    string
+	pkg     string
+	test    bool
+	imports []string
 }
 
-func TestPureLayersHaveNoIO(t *testing.T) {
-	t.Parallel()
+// goFiles — все .go-файлы репо вне скрытых каталогов (.git, .cache, worktree'ы в .claude).
+func goFiles(t *testing.T) []goFile {
+	t.Helper()
 	root := repoRoot(t)
-	pure := []string{"entity.go", "policy.go", "dto.go", "errors.go", "events.go"}
-	for _, d := range domains(t) {
-		for _, name := range pure {
-			path := filepath.Join(root, "internal", "domain", d, name)
-			if _, err := os.Stat(path); err != nil {
-				continue // optional file (rule domain-architecture: existence table)
-			}
-			for _, imp := range parseImports(t, path) {
-				require.True(t, pureLayerAllowed(imp),
-					"%s/%s imports %q — pure layers allow stdlib + platform/{identity,shared} + pkg/policy only", d, name, imp)
-			}
+	var files []goFile
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return err
+		case d.IsDir() && p != root && strings.HasPrefix(d.Name(), "."):
+			return filepath.SkipDir
+		case d.IsDir() || !strings.HasSuffix(p, ".go"):
+			return nil
 		}
-	}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		files = append(files, goFile{
+			path:    rel,
+			pkg:     path.Dir(rel),
+			test:    strings.HasSuffix(rel, "_test.go"),
+			imports: parseImports(t, p),
+		})
+		return nil
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	return files
 }
 
-// usecaseForbidden — транспорт и низкоуровневая инфраструктура, которых
-// usecase не должен видеть (ctx-геттеры — через platform/identity).
-var usecaseForbidden = []string{
-	"git.stit.tech/stit-core/golibinfra/httpkit",
-	"git.stit.tech/stit-core/golibinfra/natskit",
-	"github.com/danielgtaylor/huma",
-	"github.com/jackc/pgx",
-	"net/http",
+// splitDomain разбирает путь пакета от корня репо на домен и подпакет:
+// internal/domain/user/infra/postgres → "user", "infra/postgres", true.
+func splitDomain(pkg string) (string, string, bool) {
+	rest, ok := strings.CutPrefix(pkg, "internal/domain/")
+	domain, sub, _ := strings.Cut(rest, "/")
+	return domain, sub, ok
 }
 
-func TestUsecaseIsTransportAgnostic(t *testing.T) {
-	t.Parallel()
-	root := repoRoot(t)
-	for _, d := range domains(t) {
-		matches, err := filepath.Glob(filepath.Join(root, "internal", "domain", d, "usecase*.go"))
-		require.NoError(t, err)
-		for _, path := range matches {
-			if strings.HasSuffix(path, "_test.go") {
-				continue
-			}
-			for _, imp := range parseImports(t, path) {
-				for _, bad := range usecaseForbidden {
-					require.False(t, strings.HasPrefix(imp, bad),
-						"%s imports %q — usecase must not know transport/driver packages", path, imp)
-				}
-				require.NotContains(t, imp, "/internal/domain/"+d+"/",
-					"%s imports own subpackage %q — usecase depends on ports, not delivery/infra", path, imp)
-			}
-		}
-	}
+// under — путь p совпадает с dir или лежит внутри него.
+func under(p, dir string) bool {
+	return p == dir || strings.HasPrefix(p, dir+"/")
 }
 
 // TestHTTPDTONamesGloballyUnique ловит huma-коллизию на этапе теста, а не

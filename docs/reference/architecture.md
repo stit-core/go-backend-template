@@ -62,7 +62,7 @@
 | `errors.go` | всё, кроме sentinel-`var` и error-типов домена (`ForbiddenError` живёт здесь, не в usecase) |
 | `events.go` | всё, кроме payload-типов и unexported subject-констант |
 | `usecase.go` | прямой транспорт: `httpkit`/`natskit`/huma/`net/http`; ctx-геттеры транспорта — только через `internal/platform/identity`; inline-константы правил (место — `policy.go`) |
-| `delivery/*` | бизнес-решения (все ветвления — в usecase), импорт чужих доменов (depguard) |
+| `delivery/*` | бизнес-решения (все ветвления — в usecase), импорт чужих доменов и своего `infra/` (archtest) |
 | `infra/postgres` | бизнес-логика в SQL (сложные CASE-ветвления политик); запросы держат CRUD/фильтры |
 | `module/` | бизнес-логика; только wiring + маппинг типов/ошибок между доменами |
 
@@ -105,12 +105,13 @@
 
 ## Ports & adapters (cross-domain)
 
-depguard в `.golangci.yml` строго изолирует бизнес-домены: правило `<domain>-domain-isolation`
-запрещает домену импортить что-либо **вне своего поддерева** `internal/domain/<domain>/` —
-deny префикса `internal/domain` + allow только своего поддерева (`list-mode: lax`,
-longest-prefix override: свой импорт ловит более длинный allow, любой сосед ловит umbrella-deny).
-Любой соседний домен, включая ещё не созданные, блокируется автоматически — без перечисления
-по имени. Исключения: `module/` (адаптеры) и `*_test.go`. Когда домену A нужны данные из B —
+`internal/archtest` (`TestImportBoundaries`, шаг тестов) строго изолирует бизнес-домены: для
+любого каталога `internal/domain/*`, включая ещё не созданные, импорт чужого домена запрещён —
+без перечисления доменов в конфигах. Исключения: `module/` (адаптеры; чужой домен — только
+корневым пакетом) и `*_test.go`. Там же держатся слои: `delivery` не импортирует `infra`,
+`infra/postgres/db` — только `infra/postgres`, корень домена — ни своих подпакетов, ни
+транспорта, драйверов и I/O ОС, `infra/outbox` — только свой `module/` и `cmd/migrate`, моки —
+только из тестов, `platform` и `pkg` доменов не знают. Когда домену A нужны данные из B —
 объявляешь **порт** (интерфейс) в A (`usecase.go`) и **адаптер** в `A/module/adapters.go`,
 который оборачивает B. Адаптер в `module/` имеет право импортить B; usecase — нет. Cross-domain
 DTO в порте — локальные (не re-export из B).
@@ -123,7 +124,7 @@ DTO в порте — локальные (не re-export из B).
   тип **и его конструктор** — в `adapters.go` (не расщеплять между module.go/adapters.go).
 - **Sentinel-маппинг обязателен:** порт возвращает sentinel'ы домена-потребителя
   (`user.ErrNotFound` → `verification.ErrUserNotFound` в адаптере) — usecase-потребитель
-  не может `errors.Is` по чужим sentinel'ам (depguard).
+  не может `errors.Is` по чужим sentinel'ам (archtest).
 - **Порт переносит решения, не сырьё:** вычисленное свойство (`Active bool`,
   `CanLogin() bool`) вместо сырого статуса-строки чужого enum'а.
 - Времени в адаптерах нет: `clockkit.Clock` инжектится так же, как в usecase.
@@ -156,7 +157,7 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   рядом с `delivery/http/` — равноправные «входы» в usecase (`natskit.SubscribeStreamJSON`,
   стрим+durable → `Subscription`, `Drain` на OnStop; `ErrJetStreamDisabled` → graceful-skip
   для local-dev без `-js`). Объявляют
-  **локальный** payload-DTO (depguard запрещает импорт домена-источника). Регистрируются в
+  **локальный** payload-DTO (archtest запрещает импорт домена-источника). Регистрируются в
   `module/module.go` consumer'а.
 - **Idempotency.** JetStream = at-least-once → subscriber обязан быть идемпотентен (`ON
   CONFLICT DO NOTHING`, `UPDATE … WHERE status='pending'`, idempotency-key). Не «вряд ли

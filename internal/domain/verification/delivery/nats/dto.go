@@ -3,7 +3,7 @@ package nats
 import "time"
 
 // UserRegisteredEvent — локальная схема user.events.registered payload'а.
-// Anti-corruption layer: depguard запрещает verification импортить user, и
+// Anti-corruption layer: archtest запрещает verification импортить user, и
 // верификация владеет своей версией интеграционного контракта. При изменении
 // схемы у user — оба домена должны мигрировать (новый subject + co-existence).
 type UserRegisteredEvent struct {

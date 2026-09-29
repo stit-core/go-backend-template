@@ -18,10 +18,11 @@ paths:
   (payload + unexported subject-const) · `metrics.go` (`biz_<domain>_*`, nil-safe) ·
   `delivery/{http,nats}/` · `infra/postgres/` · `module/`. Файл существует только вместе со
   своим содержимым (таблица обязательности — architecture.md); мёртвые типы/файлы удаляются.
-- **Cross-domain — только порты + адаптеры.** depguard (`<domain>-domain-isolation`) запрещает
-  импортить что-либо вне своего поддерева `internal/domain/<domain>/`: deny префикса
-  `internal/domain` + allow только своего поддерева → любой сосед, включая будущие, блокируется
-  автоматически. Исключения — `module/` и `*_test.go`. Порт объявляешь в домене-потребителе
+- **Cross-domain — только порты + адаптеры.** archtest (`internal/archtest`) держит импорты
+  любого каталога `internal/domain/*`: чужой домен — только из `module/` и только корневым
+  пакетом (и из `*_test.go`); `delivery` не импортирует `infra`; `infra/postgres/db` — только
+  `infra/postgres`; корень домена — ни своих подпакетов, ни транспорта, драйверов и I/O ОС;
+  `infra/outbox` — только свой `module/` и `cmd/migrate`. Порт объявляешь в домене-потребителе
   (`usecase.go`), адаптер — в `<consumer>/module/adapters.go`. DTO в порте — локальные; порт
   возвращает **sentinel'ы потребителя** (адаптер мапит чужие) и **вычисленные свойства**
   (`Active bool`), не сырые чужие enum'ы. Identity-closure (`return uc`) — только без логики;

@@ -39,7 +39,7 @@ func (a *userReaderAdapter) GetByEmail(ctx context.Context, email string) (*auth
 	return userToAuth(u), nil
 }
 
-// Ports carry consumer-domain sentinels: callers can't errors.Is against user's (depguard).
+// Ports carry consumer-domain sentinels: callers can't errors.Is against user's (archtest).
 func mapUserErr(err error) error {
 	if errors.Is(err, user.ErrNotFound) {
 		return auth.ErrUserNotFound

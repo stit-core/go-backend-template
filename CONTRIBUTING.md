@@ -21,7 +21,7 @@
   HTTP-client, middleware, любой «kit») идёт в `golibinfra`, не в локальную
   полукалеку. Граница — `docs/reference/architecture.md § Граница с golibinfra`.
 - **Cross-domain — только порты + адаптеры.** Бизнес-домены не импортят друг друга
-  напрямую (depguard enforce'ит). Логи — только `logkit.Logger`, не `fmt.Print*`/`slog.*`.
+  напрямую (держит `internal/archtest`). Логи — только `logkit.Logger`, не `fmt.Print*`/`slog.*`.
 - **Хосты не зашиты.** Registry образов выводится из `git remote get-url origin`,
   хост приватных модулей — из module path `go.mod`. Конфиг и секреты — обычные env.
 - **Forward-only документация.** Текст описывает текущее состояние, без «было/стало» —

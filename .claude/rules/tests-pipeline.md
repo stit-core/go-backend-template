@@ -49,7 +49,7 @@ RED→GREEN: падающий тест, воспроизводящий баг �
 - Конфиг — `.mockery.yml`: интерфейсы из `usecase.go` **и** `delivery/*` (Usecase-порты).
   Файлы: `mocks/<interface_snake>.go` (пакет `mocks`, тип `Mock<Interface>`). Регенерация —
   `make gen`; `make gen-check` ловит дрейф и untracked-моки.
-- **Изоляция (depguard `mocks-isolation`)**: `*/mocks` импортируется только из `*_test.go`.
+- **Изоляция (archtest)**: пакет `mocks` любого домена импортируется только из `*_test.go`.
 - Template `testify` даёт `EXPECT()`-API; `t` в конструкторе — авто-`AssertExpectations`.
 - **Fixture usecase-теста — functional options**: `newUC(t, opts...)` + `withX(...)`;
   дефолтные моки — именованные хелперы (`defaultPolicy(t, ...)`). Policy-дефолт —

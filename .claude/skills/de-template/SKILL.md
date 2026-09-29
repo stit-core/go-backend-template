@@ -93,7 +93,7 @@ go mod tidy
 
 ### A.5 Prune reference-доменов
 
-`auth`/`user`/`verification` — учебные. Удаляются по полному чеклисту (8 точек) —
+`auth`/`user`/`verification` — учебные. Удаляются по полному чеклисту (7 точек) —
 см. **`references/prune.md`**. Делай это **после** того как свои домены спроектированы (в
 соседнем strategy-репо) и сгенерированы (иначе теряешь живой образец). Если свои домены ещё не
 скаффолжены — сначала `scaffold` (вариант domain) по stable-артефактам strategy-репо, потом prune.
@@ -126,7 +126,7 @@ make check      # перед claim «готово»: полный gate (CLAUDE.m
 
 ## См. также
 
-- `references/prune.md` — удаление reference-доменов (8 точек).
+- `references/prune.md` — удаление reference-доменов (7 точек).
 - `references/wiring.md` — doc-driven wiring 6 `Generates`-kinds.
 - `docs/stack/README.md` — контракт 8 артефактов и их `Generates`.
 - `.claude/skills/init-service/SKILL.md` — оркестратор, чейнит сюда последним шагом.

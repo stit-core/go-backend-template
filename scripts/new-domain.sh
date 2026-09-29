@@ -7,8 +7,9 @@
 #
 # Создаёт минимальную структуру по канону `.claude/rules/domain-architecture.md`
 # (обязательность файлов, naming, policy.Decision, subject-const) и сам вписывает
-# domain-isolation в .golangci.yml и интерфейсы в .mockery.yml. Дальше дописывает
-# skill `scaffold` (вариант domain): полноценный usecase, sqlc, handler, миграция.
+# интерфейсы в .mockery.yml; границы нового домена держит internal/archtest без правки
+# конфигов. Дальше дописывает skill `scaffold` (вариант domain): полноценный usecase, sqlc,
+# handler, миграция.
 
 set -euo pipefail
 
@@ -357,26 +358,6 @@ EOF
 
 # ── авто-вписывание конфигов ──────────────────────────────────────────────
 
-echo "→ вписываю ${NAME}-domain-isolation в .golangci.yml"
-awk -v name="$NAME" -v mod="$MODULE_PATH" '
-{ print }
-/^    depguard:$/ { in_depguard = 1 }
-in_depguard && /^      rules:$/ && !done {
-    print "        " name "-domain-isolation:"
-    print "          list-mode: lax"
-    print "          files:"
-    print "            - \"**/internal/domain/" name "/**\""
-    print "            - \"!**/*_test.go\""
-    print "            - \"!**/internal/domain/" name "/module/**\""
-    print "          allow:"
-    print "            - \"" mod "/internal/domain/" name "\""
-    print "          deny:"
-    print "            - pkg: \"" mod "/internal/domain\""
-    print "              desc: \"cross-domain imports are forbidden; use a port + adapter in module/\""
-    done = 1
-}
-' "$ROOT/.golangci.yml" >"$ROOT/.golangci.yml.tmp" && mv "$ROOT/.golangci.yml.tmp" "$ROOT/.golangci.yml"
-
 echo "→ вписываю интерфейсы в .mockery.yml"
 cat >>"$ROOT/.mockery.yml" <<EOF
   ${MODULE_PATH}/internal/domain/${NAME}:
@@ -389,7 +370,7 @@ cat >>"$ROOT/.mockery.yml" <<EOF
 EOF
 
 echo
-echo "✓ создан $DOMAIN_DIR/ + конфиги вписаны (.golangci.yml, .mockery.yml)"
+echo "✓ создан $DOMAIN_DIR/ + интерфейсы вписаны в .mockery.yml"
 echo
 echo "Дальше (см. .claude/skills/scaffold/references/domain.md):"
 echo "  1. Миграция: migrations/NNNN_${NAME}.{up,down}.sql (нумерация непрерывна — migrations-check)"
@@ -399,4 +380,4 @@ echo "  4. Usecase/handler/тесты; HTTP-DTO в delivery/http/dto.go (${TITLE
 echo "     view.go — когда появится тело ответа; events.go (payload + unexported subject-const)"
 echo "     + infra/outbox/outbox.go — при первой публикации (rule events-and-messaging)"
 echo "  5. Подключи модуль в cmd/api/main.go (domainModules)"
-echo "  6. make check (fmt+vet+lint+test+build+gen-check+migrations+cover)"
+echo "  6. make check (нужен Docker)"

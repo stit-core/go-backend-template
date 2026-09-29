@@ -39,7 +39,7 @@ paths:
   `ErrJetStreamDisabled` → лог+skip (local-dev без `-js`); на OnStop — `sub.Drain(ctx)`
   (дообработать полученное), и только потом отмена ctx подписки.
 - Объявляют **локальный** payload-DTO (`delivery/nats/dto.go`) — прямой импорт домена-
-  источника запрещён depguard. Регистрируются в `module/module.go` потребителя.
+  источника запрещён archtest. Регистрируются в `module/module.go` потребителя.
 - **Идемпотентность обязательна** (at-least-once), и она — свойство **схемы, не удачи**:
   unique-индекс под natural key + `ON CONFLICT DO NOTHING` (`:execrows`; 0 rows → skip
   side-effects: письмо/событие не повторяются), либо `UPDATE … WHERE status='pending'`,

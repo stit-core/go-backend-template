@@ -88,7 +88,7 @@ description: Оркестратор онбординга форка go-backend-t
 
 Когда свои домены спроектированы (в strategy-репо) и сгенерированы (этап 4) — убрать учебные
 `auth`/`user`/`verification` по чеклисту `.claude/skills/de-template/references/prune.md`
-(пакеты, блоки `sqlc.yaml`/`.mockery.yml`, миграции, fx-wiring, depguard, e2e, `cmd/seed-admin`);
+(пакеты, блоки `sqlc.yaml`/`.mockery.yml`, миграции, fx-wiring, e2e, `cmd/seed-admin`);
 его выполняет `de-template` (Phase A.5).
 
 ### 6. Финал
