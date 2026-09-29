@@ -303,7 +303,8 @@ blocked-by: —
   утверждения — провал (пустышка поднимала покрытие 75,1 → 75,6%). Утверждение — `require`,
   `assert`, `Assert*`/`Require*` тестового кита (пакет из `testkit`) и testify/mock
   (`AssertExpectationsForObjects`) или хелпер пакета: функция без результатов или общая таблица
-  (var) с утверждением, в том числе через другой хелпер;
+  (var — по её значению, а не по всему блоку `var (…)`) с утверждением, в том числе через другой
+  хелпер;
   фикстура с `require` (`newUC`) возвращает значение и не в счёт — иначе пустышка на фикстуре
   проходила бы (NB1). Хелпер без результатов с одним setup-`require` засчитывается: по синтаксису
   он не отличим от утверждающего (`t15-setup-fn`). Исключены: строка 9 (статус в хендлере) — где живёт
@@ -362,7 +363,7 @@ NB5 (closure с `(T, error)`), NB6 (AC8 с чистым кешем), NB8 (ID т�
 `ptrkit-root` → clean); часы — все функции
 настенного времени (`time-since` → FAIL); SQL — по словам с уровнями скобок (`k-mixed` → FAIL,
 `k-func-from`, `k-distinct-from` → clean); хелпер второго уровня и `Require*` кита — утверждения
-(`t15-2level`, `t15-kit-require`, `t15-mock-assert` → clean); маршруты спецификации huma — из её конфига (`docs-path`
+(`t15-2level`, `t15-kit-require`, `t15-mock-assert` → clean, `t15-var-block` → FAIL); маршруты спецификации huma — из её конфига (`docs-path`
 → clean, `hidden-op` → FAIL с точной причиной). Строки матрицы ENF: 15 закрыта (`TestTestsAssert`),
 9 и 11 исключены («Решения»). Allowlist (опустошает
 `fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и

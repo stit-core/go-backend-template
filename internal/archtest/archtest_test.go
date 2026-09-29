@@ -280,8 +280,8 @@ func TestTestsAssert(t *testing.T) {
 			grew = false
 			for _, f := range files {
 				for _, decl := range f.file.Decls {
-					for _, name := range helperNames(decl) {
-						if !helpers[name] && asserts(decl, f.byName, helpers) {
+					for name, node := range helperDecls(decl) {
+						if !helpers[name] && asserts(node, f.byName, helpers) {
 							helpers[name], grew = true, true
 						}
 					}
@@ -300,25 +300,25 @@ func TestTestsAssert(t *testing.T) {
 	}
 }
 
-// helperNames — имена декларации, которая может быть утверждающим хелпером: функция без получателя
-// и результатов или переменная пакета.
-func helperNames(decl ast.Decl) []string {
-	var names []string
+// helperDecls — кандидаты в утверждающие хелперы декларации: тело функции без получателя и
+// результатов, значение каждой переменной пакета — своё, а не всего блока var.
+func helperDecls(decl ast.Decl) map[string]ast.Node {
+	nodes := map[string]ast.Node{}
 	switch d := decl.(type) {
 	case *ast.FuncDecl:
 		if d.Recv == nil && d.Type.Results == nil {
-			names = append(names, d.Name.Name)
+			nodes[d.Name.Name] = d.Body
 		}
 	case *ast.GenDecl:
 		for _, spec := range d.Specs {
-			if vs, ok := spec.(*ast.ValueSpec); ok {
-				for _, name := range vs.Names {
-					names = append(names, name.Name)
+			if vs, ok := spec.(*ast.ValueSpec); ok && len(vs.Values) == len(vs.Names) {
+				for i, name := range vs.Names {
+					nodes[name.Name] = vs.Values[i]
 				}
 			}
 		}
 	}
-	return names
+	return nodes
 }
 
 // asserts — в узле есть testify require/assert, Assert*/Require* тестового кита (пакета из testkit)
