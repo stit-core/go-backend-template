@@ -252,34 +252,68 @@ func TestNoTimeNowInDomains(t *testing.T) {
 }
 
 // TestTestsAssert: покрытие считает исполненный код, поэтому тест домена или платформы без
-// единого утверждения поднимает его, ничего не проверив (TST-04).
+// единого утверждения поднимает его, ничего не проверив.
 func TestTestsAssert(t *testing.T) {
 	t.Parallel()
+	type testFile struct {
+		path   string
+		file   *ast.File
+		byName map[string]string
+	}
+	byPkg := map[string][]testFile{}
 	for _, f := range goFiles(t) {
-		if !f.test || !under(f.pkg, "internal/domain") && !under(f.pkg, "internal/platform") {
-			continue
+		if f.test && (under(f.pkg, "internal/domain") || under(f.pkg, "internal/platform")) {
+			file := parseGo(t, f.path)
+			byPkg[f.pkg] = append(byPkg[f.pkg], testFile{f.path, file, importsByName(file)})
 		}
-		file := parseGo(t, f.path)
-		byName := importsByName(file)
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if ok && fn.Recv == nil && strings.HasPrefix(fn.Name.Name, "Test") && fn.Name.Name != "TestMain" && !asserts(fn, byName) {
-				t.Errorf("%s: %s has no require, assert or handlertest.Assert* call (rule tests-pipeline): an assertion-free test raises coverage without checking anything", f.path, fn.Name.Name)
+	}
+	for _, files := range byPkg {
+		// Утверждающий хелпер пакета — функция без результатов или общая таблица (var) с
+		// утверждением: фикстура с require (newUC) возвращает значение, тест на ней одной — пустышка.
+		helpers := map[string]bool{}
+		for _, f := range files {
+			for _, decl := range f.file.Decls {
+				switch d := decl.(type) {
+				case *ast.FuncDecl:
+					if d.Recv == nil && d.Type.Results == nil && asserts(d.Body, f.byName, nil) {
+						helpers[d.Name.Name] = true
+					}
+				case *ast.GenDecl:
+					for _, spec := range d.Specs {
+						if vs, ok := spec.(*ast.ValueSpec); ok && asserts(vs, f.byName, nil) {
+							for _, name := range vs.Names {
+								helpers[name.Name] = true
+							}
+						}
+					}
+				}
+			}
+		}
+		for _, f := range files {
+			for _, decl := range f.file.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if ok && fn.Recv == nil && strings.HasPrefix(fn.Name.Name, "Test") && fn.Name.Name != "TestMain" &&
+					!asserts(fn.Body, f.byName, helpers) {
+					t.Errorf("%s: %s asserts nothing — no require, assert, Assert* of a test kit or helper of the package that asserts (rule tests-pipeline): such a test raises coverage without checking anything", f.path, fn.Name.Name)
+				}
 			}
 		}
 	}
 }
 
-// asserts — тело теста (с замыканиями t.Run) обращается к testify require/assert или handlertest.Assert*.
-func asserts(fn *ast.FuncDecl, byName map[string]string) bool {
+// asserts — в узле есть testify require/assert, Assert* тестового кита или утверждающий хелпер.
+func asserts(node ast.Node, byName map[string]string, helpers map[string]bool) bool {
 	found := false
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		if sel, ok := n.(*ast.SelectorExpr); ok {
-			if id, ok := sel.X.(*ast.Ident); ok {
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.SelectorExpr:
+			if id, ok := x.X.(*ast.Ident); ok {
 				pkg := byName[id.Name]
 				found = found || pkg == "github.com/stretchr/testify/require" || pkg == "github.com/stretchr/testify/assert" ||
-					path.Base(pkg) == "handlertest" && strings.HasPrefix(sel.Sel.Name, "Assert")
+					pkg != "" && strings.HasPrefix(x.Sel.Name, "Assert")
 			}
+		case *ast.Ident:
+			found = found || helpers[x.Name]
 		}
 		return !found
 	})
