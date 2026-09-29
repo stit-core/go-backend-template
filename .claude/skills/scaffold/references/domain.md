@@ -219,7 +219,8 @@ domainModules = fx.Options(
 
 `cmd/api/http.go` — HTTP-вход: поле `<Name> *<name>http.Handler` в `httpHandlers` и
 `<name>http.Register(api, h.<Name>)` в `registerHTTP`. Публичная операция (без `Security`) —
-ещё и в `publicOperations` (`cmd/api/api_test.go`).
+ещё и в `publicOperations` (`cmd/api/api_test.go`). Неподключённый домен (модуль, HTTP- или
+NATS-вход, outbox-таблица в `cmd/migrate`) валит `TestDomainsAreWired`.
 
 ### 13. Моки
 

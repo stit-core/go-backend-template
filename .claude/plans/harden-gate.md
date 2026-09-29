@@ -105,7 +105,7 @@ blocked-by: —
   повторить эксперимент → таблица
 - [ ] **AC7** — Каждая новая проверка, которая срабатывает на текущем коде, имеет явный
   allowlist с ID находки на каждую запись; итоговый список в «Где мы сейчас» (его опустошает
-  `fix-reference-code`). Проверка: `grep -rn "allowlist" internal/archtest` → записи с ID
+  `fix-reference-code`). Проверка: `grep -rn "allowlist" internal/archtest cmd` → записи с ID
 - [ ] **AC8** — Гейт зелёный. Проверка: `make check` → `✓ check clean`, сырой
   `golangci-lint run ./...` → exit 0
 - [ ] **AC9** — Поломки DI, которые видны только при запуске, ловит гейт: boot-тест поднимает
@@ -173,34 +173,30 @@ blocked-by: —
   Удалить per-domain depguard и `mocks-isolation` из `.golangci.yml` и `new-domain.sh` (ENF-04,
   ADP-03, TST-05, FX-09)
   - Проверка: инъекции 1b, 13, M, ADP b, c, g, h, i и fx X9 → пойманы · Закрывает: AC5, AC6 · Зависит от: S3
-  - Сделано: `internal/archtest/imports_test.go` — `TestImportBoundaries` (все правила шага для
-    не-тестового кода), `TestDomainRootIsTransportAgnostic` (все файлы корня: транспорт, драйверы,
-    `os`/`net`/`syscall`/`database/sql` по префиксу), `TestPureLayersHaveNoIO` по префиксу;
-    depguard удалён из `.golangci.yml` и `new-domain.sh`, проза и комментарии — про archtest.
-    Проверка (`make check` в worktree): 1b, 13 (= ADP i), M, ADP b, c, g, h, fx X9, TST-05
-    (`policy.go` с `net/http/httputil` и `os/signal`, `rules.go`, `service.go`), 12
-    (`os.Getenv` в usecase) и сосед под `//nolint:depguard // причина` → FAIL archtest; чистое
-    дерево и скелет `make new-domain` → зелёные. Allowlist не понадобился
+  - Сделано: `imports_test.go` — `TestImportBoundaries`, `TestDomainRootIsTransportAgnostic` (весь
+    корень), `TestPureLayersHaveNoIO` (по префиксу); depguard удалён. Проверка (`make check`): 1b,
+    13 (= ADP i), M, ADP b, c, g, h, fx X9, TST-05 (`net/http/httputil` и `os/signal` в
+    `policy.go`, `rules.go`, `service.go`), 12 и сосед под `//nolint:depguard` → FAIL archtest
 - [x] **S8** — Поведенческие инварианты: `time.Now` через типы (алиасы не проходят); запрет
   identity-closure для портов между доменами в `module/`; у каждой huma-операции `Security` или
   запись в явном списке публичных; уникальность всех экспортируемых типов `delivery/http`; тест,
   регистрирующий все хендлеры на одном huma API, с уникальностью пары (method, path); запросы в
   `queries/*.sql` — только к таблицам своего домена (SEC-03, ADP-02, COD-05, ADP-03, FX-08)
   - Проверка: инъекция 3b, ADP k, мутант M22 (убран Security), fx X5b и X5c → пойманы · Закрывает: AC5, AC6, AC7 · Зависит от: S7
-  - Сделано: archtest — `time.Now` по таблице импортов файла (алиас и dot-import),
-    `TestNoCrossDomainIdentityClosure` с allowlist ADP-02, уникальность всех экспортируемых типов
-    `delivery/http` кроме `Handler`/`Usecase`, `TestQueriesUseOwnTables`. HTTP-операции всех
-    доменов регистрирует `registerHTTP` (`cmd/api/http.go`), не модули доменов;
-    `cmd/api/api_test.go` собирает по нему API как сервис (httpkit, `authgate.SecurityScheme`) без
-    БД и проверяет `Security`/`publicOperations`, метод+путь и панику huma. Проверка (`make
-    check`): 3b и dot-import, ADP k (JOIN `users` из verification + `make gen`), M22, X5b («duplicate
-    operation ID»), X5c и тот же маршрут с другим именем параметра, `UserView` в двух доменах
-    (COD-05), новая closure и лишняя запись allowlist → FAIL с точной причиной
-- [ ] **S9** — Самопроверка обвязки (небольшой Go-тест или скрипт в `make check`): упомянутые в
+  - Сделано: archtest — `time.Now` по импортам файла, `TestNoCrossDomainIdentityClosure`,
+    уникальность типов `delivery/http`, `TestQueriesUseOwnTables`; `registerHTTP` в `cmd/api` и
+    `cmd/api/api_test.go` (API как у сервиса без БД). Проверка (`make check`): 3b и dot-import,
+    ADP k, M22, X5b, X5c и тот же маршрут с другим параметром, `UserView` в двух доменах (COD-05),
+    новая closure, лишняя запись allowlist → FAIL с точной причиной
+- [x] **S9** — Самопроверка обвязки (небольшой Go-тест или скрипт в `make check`): упомянутые в
   прозе make-цели и пути существуют; required envconfig ⊆ `.env.example`; каждый домен с
   `infra/outbox` зарегистрирован в `cmd/migrate`; модуль каждого домена подключён в `cmd/api`, а
   его delivery зарегистрирован (`fx.Invoke(Register)`) (HAR-11, DOG-02, SEC-10, FX-08)
   - Проверка: удалить цель из Makefile, источник из `cmd/migrate`, модуль домена из `cmd/api` → FAIL · Закрывает: AC5 · Зависит от: S3
+  - Сделано: `harness_test.go` — `TestProseReferencesExist`, `TestDomainsAreWired`;
+    `cmd/api/main_test.go` — `TestEnvExampleHasRequired`. Проверка (`make check`): удалены цель
+    `plan-check` и `docs/reference/release.md`, X13, X10, X10b, `fx.Invoke(verifnats.Register)`,
+    `PG_DSN` из `.env.example` → FAIL с точной причиной
 
 ### Запуск приложения
 - [ ] **S10** — Boot-тест `cmd/api` (integration, контейнеры testkit): тот же набор fx-опций, что
@@ -270,6 +266,14 @@ blocked-by: —
 - `time.Now` — по таблице импортов файла (алиас, dot-import), без go/types: тот же охват без
   загрузки пакетов. Владелец таблицы — единственный домен, чьи запросы её трогают (таблицы — из
   `CREATE TABLE` в `migrations/`). Allowlist — `map[нарушение]ID`; запись без нарушения валит тест.
+- Самопроверка обвязки — Go-тесты, не скрипт: кто на что ссылается в Go-коде (AST) и какие env
+  required (reflect конфигов) надёжнее grep. Проза — только в коде (inline и fenced): цели `make`
+  и пути от каталогов корня; плейсхолдеры (`<d>`, `NNNN`, `*`) — не ссылки; цели хаба (`bump`,
+  `ps`, `ship`) — своим списком; `docs/stack/<kind>.md` — по шаблону. Env-проверка — в `cmd/api`
+  рядом с `kitConfigs` (стал списком конструкторов), поэтому allowlist'ы — в `internal/archtest` и
+  `cmd/api` (проверка AC7 расширена на `cmd`).
+- Скелет `make new-domain` без подключения в `cmd/api` валит `TestDomainsAreWired` (как и покрытие,
+  TST-04): подключение скелета — `fix-reference-code` S11 (AC10).
 - depguard удалён целиком: изоляцию доменов и моков держит archtest без списков доменов в
   конфигах, `//nolint` на него не действует. Правила импортов — для не-тестового кода: тесты
   берут фикстуры откуда угодно, моки — только тесты. `io`/`bufio` в usecase разрешены (поток —
@@ -287,10 +291,10 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S2–S8 закрыты, замечания валидатора к S2–S6 — коммитами `fix(gate)`. S8: `time.Now` через
-алиас, identity-closure между доменами, типы `delivery/http`, таблицы чужого домена, `Security` и
-маршруты всех операций (`cmd/api/api_test.go` поверх общего `registerHTTP`) — под гейтом.
-Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
-`auth/module/module.go` и `verification/module/module.go`. `make check` → `✓ check clean` за
-≈8 с. Уже пойманы строки матрицы 1b, 2b, 3b, 7c, 7d, 8, 10a, 12, 13, 13c, 13d, 16, M; ADP b, c, g,
-h, i, k; fx X5b, X5c, X9; M22. Следующий шаг — S9.
+S2–S9 закрыты, замечания валидатора к S2–S6 — коммитами `fix(gate)`. S9: проза без мёртвых целей
+и путей, подключение доменов к `cmd/api` и `cmd/migrate`, required env в `.env.example` — под
+гейтом. Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
+`auth/module/module.go` и `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
+`docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. `make
+check` → `✓ check clean` за ≈8 с. Уже пойманы строки матрицы 1b, 2b, 3b, 7c, 7d, 8, 10a, 12, 13,
+13c, 13d, 16, M; ADP b, c, g, h, i, k; fx X5b, X5c, X9, X10, X10b, X13; M22. Следующий шаг — S10.

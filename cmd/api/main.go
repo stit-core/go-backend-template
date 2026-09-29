@@ -32,12 +32,10 @@ import (
 	appevents "git.stit.tech/stit-core/go-backend-template/internal/platform/events"
 )
 
-// kitConfigs — конфиги китов из ENV: Module'ы golibinfra свои конфиги не
-// читают, их провайдит приложение. pgkit.PoolConfig и httpkit.Config приходят
+// kitConfigs — конструкторы конфигов китов из ENV: Module'ы golibinfra свои конфиги
+// не читают, их провайдит приложение. pgkit.PoolConfig и httpkit.Config приходят
 // из App-структуры (appconfig).
-var kitConfigs = fx.Provide(
-	context.Background,
-
+var kitConfigs = []any{
 	logkit.NewConfig,
 	logkit.NewRedactConfig,
 	flagkit.NewConfig,
@@ -49,14 +47,15 @@ var kitConfigs = fx.Provide(
 	outboxkit.NewConfig,
 	outboxpg.NewConfig,
 	pgkit.NewReplicaConfig,
-)
+}
 
 var (
 	infraModules = fx.Options(
 		// Конфиг только из env: настройки/секреты приходят из окружения
 		// (compose/.env проектной инфры).
 		config.Module,
-		kitConfigs,
+		fx.Provide(context.Background),
+		fx.Provide(kitConfigs...),
 		// metric.Meter — глобальный no-op: MeterProvider не сконфигурирован,
 		// поэтому business-counter'ы доменов (biz_*) инертны и никуда не
 		// экспортируются. Держится, чтобы DI доменных Metrics резолвился.
