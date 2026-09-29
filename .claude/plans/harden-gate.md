@@ -19,12 +19,15 @@ blocked-by: —
 - **Отметки владельца по находкам** — `ArtifactData` `list`, `url` отчёта, `collection: review`
   (`disagree` — не чинить, `discuss` — спросить, `note` — учесть); итог S1 — в «Решениях».
 - **Следующие части:** `fix-reference-code` (эталонный код, security, тесты, покрытие) и
-  `repair-harness` (проза обвязки, жизненный цикл, повторный аудит) — стартуют после этой.
+  `repair-harness` (проза обвязки, жизненный цикл, повторный аудит) — стартуют после этой;
+  golibinfra меняется параллельно своими планами. Порядок, метод и решения владельца —
+  `.claude/plans/audit-program.md`.
 - **Принципы программы** (владелец): всё найденное починить без оверинжиниринга — понятный,
   консистентный код; короткие скрипты или Go-тесты, один канонический способ; удалить лучше, чем
   добавить; машина держит важное. Правки зон «Сначала спросить» (migrations, pkg/policy,
-  pkg/tokens, authgate, конфиг гейта) в рамках программы разрешены; миграции — только новыми
-  файлами. Коммит на шаг (Conventional Commits); push — с OK владельца.
+  pkg/tokens, authgate, конфиг гейта, bump golibinfra в `go.mod`) в рамках программы разрешены;
+  миграции — только новыми файлами. Коммит на шаг (Conventional Commits); push — по политике
+  программы (`audit-program`).
 - **Находки этой части** (подробности и `file:line` — в отчёте): гейт и хуки — ENF-01–ENF-03,
   ENF-05–ENF-09, ENF-11, ENF-12, TST-03 (закрыты S2–S6); границы — ENF-04 (ручные списки
   depguard и `mocks-isolation`), TST-05 (дыры archtest: имена файлов, точное совпадение
@@ -35,7 +38,7 @@ blocked-by: —
 - **Эксперименты аудита для перепроверки** — разделы ENF и ADP отчёта: матрица из 24 инъекций
   (поймано 10) и 14 нарушений в адаптерах (поймано 1.5 из 8 обязательных).
 - **fx-аудит** (29.09; DI — 6/10):
-  `/home/mm/.cache/tmp/claude-1000/-home-mm-git-stit-core-go-backend-template/62f196b7-5be8-49bb-ba1f-05d2c3d76bb0/scratchpad/fx-audit.md`,
+  `/home/mm/.cache/stit-audit-program/fx-audit.md`,
   прототипы и скрипты — `fxexp/` рядом. Из 20 поломок DI (X1–X17) гейт ловил 7: запуск
   (конструкторы, `Invoke`, хуки) не проверял никто. Находки: FX-02 (нет boot-теста), FX-03 (нет
   `AuthExtractor` — авторизации нет; client-IP без группы — нет brute-force), FX-04 (timerkit нужен
@@ -47,7 +50,8 @@ blocked-by: —
   и явные allowlist'ы текущих нарушений.
 - Правки прозы обвязки и жизненный цикл шаблона — `repair-harness` (кроме строк, без которых
   новые проверки непонятны).
-- Правки `../golibinfra` — только строкой в `backlog.md`.
+- Правки golibinfra — планами в `../golibinfra` (партии, теги v1.2.0+); здесь — проверки и
+  дешёвые обходы на стороне шаблона, их снимает bump в `fix-reference-code` (S1, S9).
 
 ## Критерии приёмки
 - [x] **AC1** — Линтер не может пройти молча: при битом `.golangci.yml`, неизвестном линтере,
@@ -93,7 +97,7 @@ blocked-by: —
   `golangci-lint run ./...` → exit 0
 - [x] **AC9** — Поломки DI, которые видны только при запуске, ловит гейт: boot-тест поднимает
   `cmd/api` целиком — без cookie 401, перебор паролей 429, событие доходит до подписчика, HTTP
-  останавливается раньше пула БД (или allowlist FX-01). Проверка: повторить эксперименты
+  останавливается раньше пула БД (до httpkit v1.2.0 — обходом `beforeHTTP`). Проверка: повторить эксперименты
   fx-аудита X4–X16 → пойманы все, кроме X16 (закрывает `fix-reference-code`) и явно исключённых
   в «Решениях»
   - Подтверждено: `make check` в worktree — X4 («didn't start cleanly»), X5b (паника huma), X5c,
@@ -189,7 +193,7 @@ blocked-by: —
 - [x] **S10** — Boot-тест `cmd/api` (integration, контейнеры testkit): тот же набор fx-опций, что
   в `main`, реально стартует и останавливается; без cookie 401; перебор паролей → 429; событие
   доходит до подписчика; HTTP останавливается раньше пула БД — дешёвый обход на стороне шаблона
-  или allowlist FX-01 до правки httpkit; миграции — тем же списком источников, что `cmd/migrate`
+  до httpkit v1.2.0; миграции — тем же списком источников, что `cmd/migrate`
   (FX-02, FX-03, FX-04, FX-01)
   - Проверка: fx X4, X5b, X5c, X6, X9–X12, X14, X15 → пойманы · Закрывает: AC9 · Зависит от: S3
   - Сделано: `cmd/api/boot_test.go` — граф `service` (общий с `main`) на контейнерах testkit,
@@ -252,7 +256,9 @@ blocked-by: —
   NATS-подписки остаются в модулях: к контракту API они не относятся.
 - Проверки операций — в `cmd/api` рядом с `registerHTTP`, не в archtest: пакет `main` не
   импортируется. `publicOperations` — перечень публичных по замыслу, не долг; запись без
-  операции — провал. `authgate.SecurityScheme` вынесен из `Module`, чтобы собрать API без JWT.
+  операции — провал; после httpkit v1.3.0 список заменяют пометки `httpkit.Public` в `Register`
+  доменов (`fix-reference-code` S9). `authgate.SecurityScheme` вынесен из `Module`, чтобы собрать
+  API без JWT.
 - `time.Now` — по таблице импортов файла (алиас, dot-import), без go/types: тот же охват без
   загрузки пакетов. Владелец таблицы — единственный домен, чьи запросы её трогают (таблицы — из
   `CREATE TABLE` в `migrations/`). Allowlist — `map[нарушение]ID`; запись без нарушения валит тест.
@@ -263,11 +269,11 @@ blocked-by: —
   планы и память stack-deep-dive (там и будущие файлы) не проверяются. Env — в `cmd/api` рядом с
   `kitConfigs` (стал списком конструкторов): allowlist'ы — в `internal/archtest` и `cmd/api`.
 - Скелет `make new-domain` без подключения в `cmd/api` валит `TestDomainsAreWired` (как и покрытие,
-  TST-04): подключение скелета — `fix-reference-code` S11 (AC10).
+  TST-04): подключение скелета — `fix-reference-code` S12 (AC10).
 - FX-01 — дешёвым обходом, без allowlist: `beforeHTTP` поднимает пул, NATS и Redis раньше сервера,
   и fx гасит HTTP до них (запросы в полёте не ловят закрытых клиентов); порядок больше не зависит
   от места `pgkit.Module`. HTTP по-прежнему гасится после подписчика и джобов — это запросам не
-  мешает; «HTTP первым» — после golibinfra-httpkit-fx (`backlog.md`).
+  мешает; «HTTP первым» и снятие `beforeHTTP` — bump httpkit v1.2.0 в `fix-reference-code` S1.
 - Boot-тест — не параллельный (`t.Setenv`: конфиг из env, как у `main`), ≈4 с; `make check` ≈10,5 с.
   `TestFxGraphValidates` — с `fx.NopLogger`: лог fx на провале прятал соседние падения.
 - `openapi.json` — в корне репо: одна спецификация сервиса рядом с `go.mod`, каталог `api/` ради
@@ -282,18 +288,26 @@ blocked-by: —
 - Пустой down — без непробельных символов (`-- noop` с причиной законен для миграции данных, DDL
   с таким down ловит лесенка). Разрушительный оператор — по up без комментариев и строк;
   `ALTER … TYPE` — смена типа колонки; down не проверяется. `migrations-check` — до тестов.
-- Находки fx-аудита: проверки (FX-01–FX-04, FX-08, FX-09) — сюда (S7–S10, AC9); код (FX-05,
-  FX-06, FX-10, FX-11, порядок модулей) — `fix-reference-code` S9–S10; проза (FX-07) —
-  `repair-harness`; дефекты китов — `backlog.md`.
+- Находки fx-аудита: проверки (FX-01–FX-04, FX-08, FX-09) — сюда (S7–S10, AC9); код: FX-01 и
+  FX-05 — кит (golibinfra v1.2.0) и `fix-reference-code` S1; FX-06, FX-10, FX-11 —
+  `fix-reference-code` S2; проза (FX-07) — `repair-harness`; дефекты китов — планы `../golibinfra`.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены; замечания валидатора к S2–S6 — коммитами
-`fix(gate)`. S11: `openapi.json` в корне — контракт API из `registerHTTP`, дрейф ловят шаг тестов и
-`gen-check`, живой сервис отдаёт тот же документ. Allowlist (опустошает `fix-reference-code`):
-ADP-02 — 4 identity-closure в `auth/module/module.go` и `verification/module/module.go`; ADP-03 —
-`internal/platform/shared` в `docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET`
-нет в `.env.example`. `make check` → `✓ check clean` за ≈10,5 с. Следующий шаг — S12: повторить
-матрицу 24 инъекций, эксперимент ADP и fx X1–X17, таблицы — сюда.
+S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Этап S2–S6 провалидирован: PASS после фиксов
+`fix(gate)`. Этап S7–S11: валидатор — FAIL, проверен частично (отчёт —
+`/home/mm/.cache/stit-audit-program/validation-harden-gate-B.md`, кейсы — `valb/inj.py` рядом).
+Блокирующий: `TestProseReferencesExist` сверяет ссылки прозы с рабочим деревом (`os.Stat`), а
+`test/README.md:92` ссылается на игнорируемый `test/.venv` — в свежем клоне или worktree `make
+check` красный; чинить сверкой с отслеживаемыми путями (`git ls-files`) плюс проверка «чистый
+worktree → гейт зелёный». Неблокирующие N1–N4 — в отчёте. Не проверено: инъекции ENF, ADP, fx,
+M22, COD-05, OpenAPI и S9; ложные срабатывания (`make new-domain NAME=probe`, проза после prune
+учебных доменов); `TestBoot -count=3`; `make gen`/`status`/pre-commit; сверка «Сделано».
+Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
+`auth/module/module.go` и `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
+`docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. Обходы
+до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Следующее: фикс
+блокирующего (и N1–N4 по решению) → довалидация этапа S7–S11 → S12 отдельным агентом → закрыть
+план, push шаблона.
