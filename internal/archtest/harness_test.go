@@ -18,7 +18,8 @@ import (
 )
 
 // TestDomainsAreWired: домен, не подключённый к сервису, молчит тихо — граф валиден и тесты
-// зелёные, а ручки отвечают 404, подписчик не слушает, outbox-таблицы нет.
+// зелёные, а ручки отвечают 404, подписчик не слушает. Outbox-таблицы домена в cmd/migrate
+// сверяет TestBoot (cmd/api) с графом сервиса.
 func TestDomainsAreWired(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -29,7 +30,6 @@ func TestDomainsAreWired(t *testing.T) {
 			{"module", "cmd/api", "Module", "its fx module is not in domainModules of cmd/api"},
 			{"delivery/http", "cmd/api", "Register", "its HTTP operations are not registered by registerHTTP (cmd/api/http.go)"},
 			{"delivery/nats", pkg + "/module", "Register", "its NATS subscriber is not invoked by its module (fx.Invoke(Register))"},
-			{"infra/outbox", "cmd/migrate", "Migrations", "its outbox table is not among the migration sources of cmd/migrate"},
 		} {
 			if _, err := os.Stat(filepath.Join(root, pkg, w.sub)); err != nil {
 				continue

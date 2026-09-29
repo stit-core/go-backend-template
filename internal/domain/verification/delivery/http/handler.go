@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -54,45 +53,27 @@ func Register(api huma.API, h *Handler) {
 
 func (h *Handler) requestPasswordReset(ctx context.Context, in *PasswordResetRequestInput) (*struct{}, error) {
 	if err := h.uc.RequestPasswordReset(ctx, in.Body.Email); err != nil {
-		return nil, mapErr(err)
+		return nil, verificationErrors.Map(err)
 	}
 	return nil, nil
 }
 
 func (h *Handler) confirmPasswordReset(ctx context.Context, in *PasswordResetConfirmInput) (*struct{}, error) {
 	if err := h.uc.ConfirmPasswordReset(ctx, in.Body.Token, in.Body.Password); err != nil {
-		return nil, mapErr(err)
+		return nil, verificationErrors.Map(err)
 	}
 	return nil, nil
 }
 
 func (h *Handler) confirmEmail(ctx context.Context, in *EmailVerifyInput) (*struct{}, error) {
 	if err := h.uc.ConfirmEmail(ctx, in.Body.Token); err != nil {
-		return nil, mapErr(err)
+		return nil, verificationErrors.Map(err)
 	}
 	return nil, nil
 }
 
-func mapErr(err error) error {
-	return httpkit.MapErr(
-		err,
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, verification.ErrInvalidResetToken) },
-			Code:   "VERIFICATION_INVALID_RESET_TOKEN",
-			Status: http.StatusBadRequest,
-			Detail: "invalid or expired reset token",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, verification.ErrInvalidVerificationToken) },
-			Code:   "VERIFICATION_INVALID_VERIFICATION_TOKEN",
-			Status: http.StatusBadRequest,
-			Detail: "invalid or expired verification token",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, verification.ErrWeakPassword) },
-			Code:   "VERIFICATION_WEAK_PASSWORD",
-			Status: http.StatusBadRequest,
-			Detail: "password too weak",
-		},
-	)
-}
+var verificationErrors = httpkit.NewErrorMap(
+	httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "invalid or expired reset token"},
+	httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "invalid or expired verification token"},
+	httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusBadRequest, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "password too weak"},
+)

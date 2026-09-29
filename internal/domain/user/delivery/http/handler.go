@@ -90,7 +90,7 @@ func (h *Handler) register(ctx context.Context, in *UserRegisterInput) (*UserReg
 		Name:     in.Body.Name,
 	})
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, userErrors.Map(err)
 	}
 	out := &UserRegisterOutput{}
 	out.Body.Data.FromEntity(u)
@@ -100,7 +100,7 @@ func (h *Handler) register(ctx context.Context, in *UserRegisterInput) (*UserReg
 func (h *Handler) getByID(ctx context.Context, in *UserGetInput) (*UserGetOutput, error) {
 	u, err := h.uc.GetByID(ctx, in.ID)
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, userErrors.Map(err)
 	}
 	out := &UserGetOutput{}
 	out.Body.Data.FromEntity(u)
@@ -110,7 +110,7 @@ func (h *Handler) getByID(ctx context.Context, in *UserGetInput) (*UserGetOutput
 func (h *Handler) me(ctx context.Context, _ *struct{}) (*UserMeOutput, error) {
 	u, err := h.uc.Me(ctx)
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, userErrors.Map(err)
 	}
 	out := &UserMeOutput{}
 	out.Body.Data.FromEntity(u)
@@ -131,7 +131,7 @@ func (h *Handler) list(ctx context.Context, in *UserListInput) (*UserListOutput,
 
 	list, total, err := h.uc.List(ctx, filter, pg)
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, userErrors.Map(err)
 	}
 
 	out := &UserListOutput{}
@@ -152,7 +152,7 @@ func (h *Handler) update(ctx context.Context, in *UserUpdateInput) (*UserUpdateO
 		Version: in.Body.Version,
 	})
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, userErrors.Map(err)
 	}
 	out := &UserUpdateOutput{}
 	out.Body.Data.FromEntity(u)
@@ -161,64 +161,23 @@ func (h *Handler) update(ctx context.Context, in *UserUpdateInput) (*UserUpdateO
 
 func (h *Handler) delete(ctx context.Context, in *UserDeleteInput) (*struct{}, error) {
 	if err := h.uc.Delete(ctx, in.ID); err != nil {
-		return nil, mapErr(err)
+		return nil, userErrors.Map(err)
 	}
 	return nil, nil
 }
 
-func mapErr(err error) error {
-	return httpkit.MapErr(
-		err,
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, user.ErrAlreadyExists) },
-			Code:   "USER_ALREADY_EXISTS",
-			Status: http.StatusConflict,
-			Detail: "email already taken",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, user.ErrInvalidEmail) },
-			Code:   "USER_INVALID_EMAIL",
-			Status: http.StatusBadRequest,
-			Detail: "invalid email",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, user.ErrInvalidRole) },
-			Code:   "USER_INVALID_ROLE",
-			Status: http.StatusBadRequest,
-			Detail: "invalid role",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, user.ErrWeakPassword) },
-			Code:   "USER_WEAK_PASSWORD",
-			Status: http.StatusBadRequest,
-			Detail: "password too weak",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, user.ErrNotFound) },
-			Code:   "USER_NOT_FOUND",
-			Status: http.StatusNotFound,
-			Detail: "user not found",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, user.ErrConcurrentUpdate) },
-			Code:   "USER_CONCURRENT_UPDATE",
-			Status: http.StatusConflict,
-			Detail: "concurrent update detected",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, user.ErrNoUpdateFields) },
-			Code:   "USER_NO_UPDATE_FIELDS",
-			Status: http.StatusBadRequest,
-			Detail: "at least one of name or status must be provided",
-		},
-		httpkit.ErrorMapping{
-			Match: func(e error) bool {
-				var fe *user.ForbiddenError
-				return errors.As(e, &fe)
-			},
-			Code:   "FORBIDDEN",
-			Status: http.StatusForbidden,
-			Detail: "forbidden",
-		},
-	)
+var userErrors = httpkit.NewErrorMap(
+	httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"},
+	httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusBadRequest, Code: "USER_INVALID_EMAIL", Detail: "invalid email"},
+	httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusBadRequest, Code: "USER_INVALID_ROLE", Detail: "invalid role"},
+	httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusBadRequest, Code: "USER_WEAK_PASSWORD", Detail: "password too weak"},
+	httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"},
+	httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"},
+	httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"},
+	httpkit.ErrorRule{Match: isForbidden, Status: http.StatusForbidden, Code: "FORBIDDEN", Detail: "forbidden"},
+)
+
+func isForbidden(err error) bool {
+	var fe *user.ForbiddenError
+	return errors.As(err, &fe)
 }

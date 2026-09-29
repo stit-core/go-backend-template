@@ -131,12 +131,14 @@ func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 	return p
 }
 
-func defaultGuard(t *testing.T) *mocks.MockLoginGuard {
+// loginGuard ждёт ровно одну попытку входа subject до проверки пароля и, если succeeded, — один успех.
+func loginGuard(t *testing.T, subject string, succeeded bool) *mocks.MockLoginGuard {
 	t.Helper()
 	g := mocks.NewMockLoginGuard(t)
-	g.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
-	g.EXPECT().RecordFailure(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
-	g.EXPECT().RecordSuccess(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	g.EXPECT().Attempt(mock.Anything, subject, "").Return(nil, nil).Once()
+	if succeeded {
+		g.EXPECT().RecordSuccess(mock.Anything, subject, "").Return(nil).Once()
+	}
 	return g
 }
 
@@ -203,7 +205,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		o.policy = defaultPolicy(t, false)
 	}
 	if o.guard == nil {
-		o.guard = defaultGuard(t)
+		o.guard = mocks.NewMockLoginGuard(t)
 	}
 	aud := &audittest.Recorder{}
 
@@ -237,7 +239,7 @@ func TestLogin(t *testing.T) {
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
 			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}, nil,
 		)
-		f := newUC(t, withUsers(users))
+		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)))
 
 		out, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
@@ -252,7 +254,7 @@ func TestLogin(t *testing.T) {
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
 			&auth.User{ID: "u1", PasswordHash: "hash:correct", CanLogin: true}, nil,
 		)
-		f := newUC(t, withUsers(users))
+		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", false)))
 
 		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "wrong"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
@@ -265,7 +267,7 @@ func TestLogin(t *testing.T) {
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
 			&auth.User{ID: "u1", PasswordHash: "hash:pass1234", CanLogin: false}, nil,
 		)
-		f := newUC(t, withUsers(users))
+		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", false)))
 
 		out, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
@@ -278,7 +280,7 @@ func TestLogin(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, auth.ErrUserNotFound)
-		f := newUC(t, withUsers(users))
+		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "x@y.com", false)))
 
 		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
@@ -288,7 +290,7 @@ func TestLogin(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, errors.New("db down"))
-		f := newUC(t, withUsers(users))
+		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "x@y.com", false)))
 
 		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
 		require.Error(t, err)
@@ -299,8 +301,8 @@ func TestLogin(t *testing.T) {
 	t.Run("account locked", func(t *testing.T) {
 		t.Parallel()
 		g := mocks.NewMockLoginGuard(t)
-		g.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).
-			Return(&auth.LockState{Until: fixedNow.Add(15 * time.Minute)}, nil)
+		g.EXPECT().Attempt(mock.Anything, "a@b.com", "").
+			Return(&auth.LockState{Until: fixedNow.Add(15 * time.Minute)}, nil).Once()
 		f := newUC(t, withGuard(g))
 
 		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "p"})

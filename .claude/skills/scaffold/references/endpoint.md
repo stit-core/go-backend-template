@@ -72,7 +72,7 @@ type UserNewMethodOutput struct {
 func (h *Handler) newMethod(ctx context.Context, in *UserNewMethodInput) (*UserNewMethodOutput, error) {
     res, err := h.uc.NewMethod(ctx, /* mapping */)
     if err != nil {
-        return nil, mapErr(err)
+        return nil, userErrors.Map(err)
     }
     out := &UserNewMethodOutput{}
     out.Body.Data.FromEntity(res)
@@ -96,17 +96,14 @@ huma.Register(api, huma.Operation{
 
 ### 7. Error mapping
 
-Если usecase возвращает новые sentinel-ошибки — добавь их в `mapErr()`:
+Если usecase возвращает новые sentinel-ошибки — добавь правила в таблицу домена
+(`httpkit.NewErrorMap` в `handler.go`, например `userErrors`):
 
 ```go
-httpkit.ErrorMapping{
-    Match:  func(e error) bool { return errors.Is(e, user.ErrXyz) },
-    Code:   "USER_XYZ",
-    Status: http.StatusBadRequest,
-    Detail: "...",
-},
+httpkit.ErrorRule{Err: user.ErrXyz, Status: http.StatusBadRequest, Code: "USER_XYZ", Detail: "..."},
 ```
 
+Первое совпавшее правило выигрывает; правило, которое затеняет правило выше, — panic при сборке.
 `ForbiddenError` уже покрыт — не дублируй.
 
 ### 8. Тест в `handler_test.go`
@@ -136,6 +133,6 @@ make build
 
 - ❌ Бизнес-логика в handler-методе. Handler только: парсит вход, вызывает usecase, мапит ошибки.
 - ❌ Прямое использование `pgx`/`sqlc` из handler. Только через usecase.
-- ❌ Свой формат ошибок мимо `httpkit.MapErr` — нарушит единый shape ответа.
+- ❌ Свой формат ошибок мимо `httpkit.ErrorMap` — нарушит единый контракт ошибок (problem+json с `code`).
 - ❌ Забыть `Security:` для авторизованного endpoint — он публичен в рантайме; `TestHTTPOperations` (`cmd/api`) не пропустит операцию без `Security` вне `publicOperations`.
 - ❌ `_, _ = ctx, in` в handler без вызова usecase — компилятор пропустит, но это dead-handler.

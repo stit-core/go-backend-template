@@ -22,6 +22,7 @@ import (
 	"go.uber.org/fx/fxtest"
 
 	"git.stit.tech/stit-core/golibinfra/httpkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit"
 
 	"git.stit.tech/stit-core/go-backend-template/cmd/migrate/sources"
@@ -61,10 +62,18 @@ func TestBoot(t *testing.T) {
 	}
 
 	hooks := &hookOrder{}
-	var srv *httpkit.Server
+	var (
+		srv        *httpkit.Server
+		kitSources []pgkit.Source
+	)
 	app := fxtest.New(t, service,
-		fx.WithLogger(func() fxevent.Logger { return hooks }), fx.RecoverFromPanics(), fx.Populate(&srv))
+		fx.WithLogger(func() fxevent.Logger { return hooks }), fx.Populate(&srv),
+		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
 	app.RequireStart()
+
+	// cmd/migrate — отдельный бинарь без графа сервиса: его список обязан совпасть с kit-таблицами графа.
+	require.ElementsMatch(t, sourceNames(sources.Kits), sourceNames(kitSources),
+		"sources.Kits (cmd/migrate) differs from the kit tables of the service graph (group %s)", pgkit.MigrationsGroup)
 
 	base := "http://" + srv.Addr().String()
 	call := func(c *http.Client, method, path, body string) int {
@@ -140,14 +149,18 @@ func TestBoot(t *testing.T) {
 	}
 
 	app.RequireStop()
-	stops := func(kit string) int {
-		i := slices.IndexFunc(hooks.stop, func(caller string) bool { return strings.Contains(caller, "/golibinfra/"+kit+".") })
-		require.NotEqual(t, -1, i, "no OnStop hook of %s among %v", kit, hooks.stop)
-		return i
+	// Запросы в полёте держат всё, что стартовало раньше HTTP: сервер слушает последним и гасится первым.
+	const httpHook = "/golibinfra/httpkit."
+	require.Contains(t, hooks.start[len(hooks.start)-1], httpHook, "HTTP must start last (OnStart: %v)", hooks.start)
+	require.Contains(t, hooks.stop[0], httpHook, "HTTP must stop first (OnStop: %v)", hooks.stop)
+}
+
+func sourceNames(srcs []pgkit.Source) []string {
+	names := make([]string, len(srcs))
+	for i, s := range srcs {
+		names[i] = s.Name
 	}
-	for _, kit := range []string{"pgkit", "natskit", "cachekit"} {
-		require.Less(t, stops("httpkit"), stops(kit), "HTTP stops before %s: requests in flight keep it (OnStop: %v)", kit, hooks.stop)
-	}
+	return names
 }
 
 // humaSpecRoute — маршрут спецификации или документации, который huma вешает на роутер сам по

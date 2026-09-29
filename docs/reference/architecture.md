@@ -162,9 +162,9 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   Subject — литерал `<domain>.events.<event>`; источник его не экспортит. Poison-строка
   (исчерпан `OUTBOX_MAX_ATTEMPTS`) метится dead и больше не вычитывается.
 - **Subscriber'ы in-domain.** Durable JetStream-консьюмеры в `<consumer>/delivery/nats/`
-  рядом с `delivery/http/` — равноправные «входы» в usecase (`natskit.SubscribeStreamJSON`,
-  стрим+durable → `Subscription`, `Drain` на OnStop; `ErrJetStreamDisabled` → graceful-skip
-  для local-dev без `-js`). Объявляют
+  рядом с `delivery/http/` — равноправные «входы» в usecase (`natskit.SubscribeOnStart` +
+  `natskit.SubscribeStreamJSON`: стрим+durable, подписка в OnStart, `Drain` в OnStop; ошибка
+  подписки и выключенный JetStream валят старт). Объявляют
   **локальный** payload-DTO (archtest запрещает импорт домена-источника). Регистрируются в
   `module/module.go` consumer'а.
 - **Idempotency.** JetStream = at-least-once → subscriber обязан быть идемпотентен (`ON
@@ -180,8 +180,10 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 - **Таблицы.** `audit_log`/`bruteforce_attempts`/`outbox_<domain>` — схему держит
   golibinfra-kit (`auditpg.Migrations`, `bruteforcepg.Migrations`,
   `outboxpg.TableMigrations(Table)` из `infra/outbox/outbox.go`); источники перечислены в
-  `cmd/migrate`, таблица версий у каждого своя (`schema_migrations_<source>`, приложение —
-  `schema_migrations_app`). Default-таблица `outbox` не используется.
+  `cmd/migrate` (`sources.Kits`: отдельный бинарь графа сервиса не собирает — `TestBoot`
+  сверяет список с kit-таблицами графа, группой `pgkit.migrations`), таблица версий у каждого
+  своя (`schema_migrations_<source>`, приложение — `schema_migrations_app`). Default-таблица
+  `outbox` не используется.
 
 Terse-инварианты — `.claude/rules/{events-and-messaging,domain-architecture,sqlc-and-migrations}.md`.
 

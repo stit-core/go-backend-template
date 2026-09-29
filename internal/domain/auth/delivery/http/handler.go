@@ -72,7 +72,7 @@ func (h *Handler) login(ctx context.Context, in *LoginInput) (*LoginOutput, erro
 		Password: in.Body.Password,
 	})
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, authErrors.Map(err)
 	}
 	out := &LoginOutput{
 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, result.RefreshToken, h.cookieCfg),
@@ -83,11 +83,11 @@ func (h *Handler) login(ctx context.Context, in *LoginInput) (*LoginOutput, erro
 
 func (h *Handler) refresh(ctx context.Context, in *RefreshInput) (*RefreshOutput, error) {
 	if in.RefreshCookie.Value == "" {
-		return nil, mapRefreshErr(auth.ErrRefreshExpired)
+		return nil, refreshErrors.Map(auth.ErrRefreshExpired)
 	}
 	result, err := h.uc.Refresh(ctx, in.RefreshCookie.Value)
 	if err != nil {
-		return nil, mapRefreshErr(err)
+		return nil, refreshErrors.Map(err)
 	}
 	return &RefreshOutput{
 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, result.RefreshToken, h.cookieCfg),
@@ -100,7 +100,7 @@ func (h *Handler) logout(ctx context.Context, in *LogoutInput) (*LogoutOutput, e
 			// Битый/просроченный/reused refresh — всё равно очищаем cookies и отвечаем 204
 			// (logout идемпотентен с точки зрения клиента).
 			if !errors.Is(err, auth.ErrRefreshExpired) && !errors.Is(err, auth.ErrRefreshReused) {
-				return nil, mapErr(err)
+				return nil, authErrors.Map(err)
 			}
 		}
 	}
@@ -109,70 +109,26 @@ func (h *Handler) logout(ctx context.Context, in *LogoutInput) (*LogoutOutput, e
 
 func (h *Handler) changePassword(ctx context.Context, in *ChangePasswordInput) (*struct{}, error) {
 	if err := h.uc.ChangePassword(ctx, in.Body.UserID, in.Body.OldPassword, in.Body.NewPassword); err != nil {
-		return nil, mapErr(err)
+		return nil, authErrors.Map(err)
 	}
 	return nil, nil
 }
 
-func mapErr(err error) error {
-	return httpkit.MapErr(
-		err,
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, auth.ErrInvalidCredentials) },
-			Code:   "AUTH_INVALID_CREDENTIALS",
-			Status: http.StatusUnauthorized,
-			Detail: "invalid email or password",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, auth.ErrRefreshExpired) },
-			Code:   "AUTH_REFRESH_EXPIRED",
-			Status: http.StatusUnauthorized,
-			Detail: "refresh token expired",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, auth.ErrRefreshReused) },
-			Code:   "AUTH_REFRESH_REUSED",
-			Status: http.StatusUnauthorized,
-			Detail: "refresh token reused",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, auth.ErrAccountLocked) },
-			Code:   "AUTH_ACCOUNT_LOCKED",
-			Status: http.StatusTooManyRequests,
-			Detail: "account temporarily locked",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, auth.ErrWeakPassword) },
-			Code:   "AUTH_WEAK_PASSWORD",
-			Status: http.StatusBadRequest,
-			Detail: "password too weak",
-		},
-		httpkit.ErrorMapping{
-			Match: func(e error) bool {
-				var fe *auth.ForbiddenError
-				return errors.As(e, &fe)
-			},
-			Code:   "FORBIDDEN",
-			Status: http.StatusForbidden,
-			Detail: "forbidden",
-		},
-	)
-}
+var authErrors = httpkit.NewErrorMap(
+	httpkit.ErrorRule{Err: auth.ErrInvalidCredentials, Status: http.StatusUnauthorized, Code: "AUTH_INVALID_CREDENTIALS", Detail: "invalid email or password"},
+	httpkit.ErrorRule{Err: auth.ErrRefreshExpired, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_EXPIRED", Detail: "refresh token expired"},
+	httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "refresh token reused"},
+	httpkit.ErrorRule{Err: auth.ErrAccountLocked, Status: http.StatusTooManyRequests, Code: "AUTH_ACCOUNT_LOCKED", Detail: "account temporarily locked"},
+	httpkit.ErrorRule{Err: auth.ErrWeakPassword, Status: http.StatusBadRequest, Code: "AUTH_WEAK_PASSWORD", Detail: "password too weak"},
+	httpkit.ErrorRule{Match: isForbidden, Status: http.StatusForbidden, Code: "FORBIDDEN", Detail: "forbidden"},
+)
 
-func mapRefreshErr(err error) error {
-	return httpkit.MapErr(
-		err,
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, auth.ErrRefreshExpired) },
-			Code:   "AUTH_REFRESH_EXPIRED",
-			Status: http.StatusUnauthorized,
-			Detail: "refresh token expired or missing",
-		},
-		httpkit.ErrorMapping{
-			Match:  func(e error) bool { return errors.Is(e, auth.ErrRefreshReused) },
-			Code:   "AUTH_REFRESH_REUSED",
-			Status: http.StatusUnauthorized,
-			Detail: "refresh token reused",
-		},
-	)
+var refreshErrors = httpkit.NewErrorMap(
+	httpkit.ErrorRule{Err: auth.ErrRefreshExpired, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_EXPIRED", Detail: "refresh token expired or missing"},
+	httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "refresh token reused"},
+)
+
+func isForbidden(err error) bool {
+	var fe *auth.ForbiddenError
+	return errors.As(err, &fe)
 }

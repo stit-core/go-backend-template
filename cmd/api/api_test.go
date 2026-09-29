@@ -89,7 +89,7 @@ func TestHTTPOperations(t *testing.T) {
 	record := func(c *huma.Config) {
 		c.OnAddOperation = append(c.OnAddOperation, func(_ *huma.OpenAPI, op *huma.Operation) { ops = append(ops, op) })
 	}
-	buildAPI(t, fx.Supply(fx.Annotated{Group: httpkit.HumaConfigGroup, Target: record}))
+	buildAPI(t, fx.Supply(httpkit.HumaConfigs{record}))
 	require.NotEmpty(t, ops)
 
 	routes := map[string]string{}

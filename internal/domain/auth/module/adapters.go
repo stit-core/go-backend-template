@@ -103,19 +103,12 @@ func newLoginGuardAdapter(g bruteforcekit.Guard) auth.LoginGuard {
 	return &loginGuardAdapter{guard: g}
 }
 
-func (a *loginGuardAdapter) Check(ctx context.Context, subject, ip string) (*auth.LockState, error) {
-	lock, err := a.guard.Check(ctx, subject, ip)
+func (a *loginGuardAdapter) Attempt(ctx context.Context, subject, ip string) (*auth.LockState, error) {
+	lock, err := a.guard.Attempt(ctx, subject, ip)
 	if err != nil || lock == nil {
 		return nil, err
 	}
 	return &auth.LockState{Until: lock.Until}, nil
-}
-
-func (a *loginGuardAdapter) RecordFailure(ctx context.Context, subject, ip string) error {
-	// Состояние блокировки после неудачи домену не нужно: следующий Login
-	// увидит её через Check.
-	_, err := a.guard.RecordFailure(ctx, subject, ip)
-	return err
 }
 
 func (a *loginGuardAdapter) RecordSuccess(ctx context.Context, subject, ip string) error {

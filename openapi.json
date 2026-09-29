@@ -1,6 +1,57 @@
 {
   "components": {
     "schemas": {
+      "APIError": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/APIError.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "code": {
+            "description": "Stable machine-readable error code. Operation codes are listed in the response description; generic ones include VALIDATION_FAILED, BAD_REQUEST, UNAUTHORIZED, NOT_FOUND, METHOD_NOT_ALLOWED, BODY_TOO_LARGE, RATE_LIMITED, INTERNAL, UNAVAILABLE",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Human-readable explanation of this occurrence; may be absent, and a 5xx never carries its internal cause",
+            "type": "string"
+          },
+          "errors": {
+            "description": "What is wrong in the request, field by field",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "request_id": {
+            "description": "Request ID (X-Request-ID); the server logs carry the same ID",
+            "type": "string"
+          },
+          "status": {
+            "description": "HTTP status code",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "HTTP status text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
       "AuthUserView": {
         "additionalProperties": false,
         "properties": {
@@ -149,85 +200,27 @@
         ],
         "type": "object"
       },
-      "ErrorDetail": {
+      "FieldError": {
         "additionalProperties": false,
         "properties": {
+          "code": {
+            "description": "Machine-readable code of this field error",
+            "type": "string"
+          },
           "location": {
-            "description": "Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'",
+            "description": "Where in the request: body.\u003cfield\u003e, path.\u003cname\u003e, query.\u003cname\u003e, header.\u003cname\u003e",
             "type": "string"
           },
           "message": {
-            "description": "Error message text",
-            "type": "string"
-          },
-          "value": {
-            "description": "The value at the given location"
-          }
-        },
-        "type": "object"
-      },
-      "ErrorModel": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/ErrorModel.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "detail": {
-            "description": "A human-readable explanation specific to this occurrence of the problem.",
-            "examples": [
-              "Property foo is required but is missing."
-            ],
-            "type": "string"
-          },
-          "errors": {
-            "description": "Optional list of individual error details",
-            "items": {
-              "$ref": "#/components/schemas/ErrorDetail"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "instance": {
-            "description": "A URI reference that identifies the specific occurrence of the problem.",
-            "examples": [
-              "https://example.com/error-log/abc123"
-            ],
-            "format": "uri",
-            "type": "string"
-          },
-          "status": {
-            "description": "HTTP status code",
-            "examples": [
-              400
-            ],
-            "format": "int64",
-            "type": "integer"
-          },
-          "title": {
-            "description": "A short, human-readable summary of the problem type. This value should not change between occurrences of the error.",
-            "examples": [
-              "Bad Request"
-            ],
-            "type": "string"
-          },
-          "type": {
-            "default": "about:blank",
-            "description": "A URI reference to human-readable documentation for the error.",
-            "examples": [
-              "https://example.com/errors/example"
-            ],
-            "format": "uri",
+            "description": "Human-readable message",
             "type": "string"
           }
         },
+        "required": [
+          "location",
+          "code",
+          "message"
+        ],
         "type": "object"
       },
       "HealthBody": {
@@ -643,11 +636,21 @@
           "204": {
             "description": "No Content"
           },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Unauthorized: UNAUTHORIZED"
+          },
           "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -686,7 +689,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -734,7 +737,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -774,7 +777,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -808,7 +811,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -842,7 +845,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -882,7 +885,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -923,7 +926,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -987,11 +990,21 @@
             },
             "description": "OK"
           },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Unauthorized: UNAUTHORIZED"
+          },
           "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -1023,11 +1036,21 @@
             },
             "description": "OK"
           },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Unauthorized: UNAUTHORIZED"
+          },
           "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -1062,11 +1085,21 @@
           "204": {
             "description": "No Content"
           },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Unauthorized: UNAUTHORIZED"
+          },
           "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -1106,11 +1139,21 @@
             },
             "description": "OK"
           },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Unauthorized: UNAUTHORIZED"
+          },
           "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -1160,11 +1203,21 @@
             },
             "description": "OK"
           },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Unauthorized: UNAUTHORIZED"
+          },
           "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -1200,7 +1253,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },
@@ -1229,7 +1282,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/APIError"
                 }
               }
             },

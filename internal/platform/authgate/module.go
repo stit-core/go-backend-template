@@ -52,9 +52,7 @@ var Module = fx.Module(
 	SecurityScheme,
 	fx.Provide(
 		NewExtractor,
-
 		func(e *Extractor) httpkit.AuthExtractor { return e.Extract },
-		fx.Annotate(newClientIPMiddleware, fx.ResultTags(`group:"`+httpkit.MiddlewareGroup+`"`)),
 	),
 	fx.Invoke(registerIdentityLogAttr),
 )

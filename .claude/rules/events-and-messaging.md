@@ -34,10 +34,10 @@ paths:
 ## Subscribers (in-domain)
 
 - Durable JetStream-консьюмеры в `<consumer>/delivery/nats/` рядом с `delivery/http/` —
-  равноправные входы в usecase: `natskit.SubscribeStreamJSON(bus, ctx, <stream>, <subject>,
-  <durable>, handler)` → `(Subscription, error)`, `bus` — `natskit.StreamBus`;
-  `ErrJetStreamDisabled` → лог+skip (local-dev без `-js`); на OnStop — `sub.Drain(ctx)`
-  (дообработать полученное), и только потом отмена ctx подписки.
+  равноправные входы в usecase: `natskit.SubscribeOnStart(lc, func(ctx) { return
+  natskit.SubscribeStreamJSON(bus, ctx, <stream>, <subject>, <durable>, handler) })`, `bus` —
+  `natskit.StreamBus`. Кит подписывает в OnStart и дренит подписку в OnStop раньше остановки
+  её зависимостей; ошибка подписки, в том числе выключенный JetStream, валит старт.
 - Объявляют **локальный** payload-DTO (`delivery/nats/dto.go`) — прямой импорт домена-
   источника запрещён archtest. Регистрируются в `module/module.go` потребителя.
 - **Идемпотентность обязательна** (at-least-once), и она — свойство **схемы, не удачи**:

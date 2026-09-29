@@ -103,7 +103,6 @@ package nats
 
 import (
     "context"
-    "errors"
     "fmt"
 
     "go.uber.org/fx"
@@ -140,31 +139,15 @@ func (h *Handler) on<Event>(ctx context.Context, e <Event>Event) error {
 }
 
 func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
-    ctx, cancel := context.WithCancel(context.Background())
-    var sub natskit.Subscription
-    lc.Append(fx.Hook{
-        OnStart: func(_ context.Context) error {
-            s, err := natskit.SubscribeStreamJSON(bus, ctx, stream<Event>, Subject<Event>, durable<Event>, h.on<Event>)
-            if errors.Is(err, natskit.ErrJetStreamDisabled) {
-                h.log.Warn(ctx, "jetstream disabled: <event> intake off", "subject", Subject<Event>)
-                return nil // local-dev без -js: сервис стартует, событие не потребляется
-            }
-            if err != nil {
-                return fmt.Errorf("subscribe %s: %w", Subject<Event>, err)
-            }
-            sub = s
-            return nil
-        },
-        OnStop: func(stopCtx context.Context) error {
-            defer cancel() // Drain раньше отмены ctx: обработчики в работе успевают Ack
-            if sub == nil {
-                return nil
-            }
-            return sub.Drain(stopCtx)
-        },
+    natskit.SubscribeOnStart(lc, func(ctx context.Context) (natskit.Subscription, error) {
+        return natskit.SubscribeStreamJSON(bus, ctx, stream<Event>, Subject<Event>, durable<Event>, h.on<Event>)
     })
 }
 ```
+
+`natskit.SubscribeOnStart` подписывает в OnStart и дренит подписку в OnStop, раньше остановки её
+зависимостей (обработчики в работе успевают Ack). Ошибка подписки валит старт, в том числе
+выключенный JetStream: нужны `NATS_JETSTREAM_ENABLED=true` и стрим в `NATS_JS_STREAM_NAMES`.
 
 ### 5. Регистрация в `<consumer>/module/module.go`
 
@@ -197,7 +180,7 @@ Redelivery-кейс покрой юнит-тестом (шаг 7).
 
 ### 7. Тесты
 
-- В домене-публикаторе: `usecase_test.go` с фейком `golibinfra/testkit/outboxtest.Recorder` в `UsecaseDeps.Events` — проверяй subject и payload в `Recorder.All()`.
+- В домене-публикаторе: `usecase_test.go` с фейком `golibinfra/testkit/outboxtest.Recorder` в `UsecaseDeps.Events` и `pgtest.Identity{}` (`golibinfra/testkit/pgtest`) в `Tx` — проверяй subject и payload в `Recorder.All()`. Публикация мимо транзакции даёт `outboxkit.ErrNoTx`, как в проде.
 - Subscriber: unit-тест на handler-метод с моком `Usecase`-порта (добавь `delivery/nats` в `.mockery.yml` → `make gen`): happy path, error path (usecase вернул err → handler вернул err, сообщение уйдёт на redelivery) и дубль-доставка.
 - Integration: если есть end-to-end — отдельный тест под `//go:build integration` с реальным NATS через testcontainers.
 

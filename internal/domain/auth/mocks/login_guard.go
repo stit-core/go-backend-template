@@ -38,12 +38,12 @@ func (_m *MockLoginGuard) EXPECT() *MockLoginGuard_Expecter {
 	return &MockLoginGuard_Expecter{mock: &_m.Mock}
 }
 
-// Check provides a mock function for the type MockLoginGuard
-func (_mock *MockLoginGuard) Check(ctx context.Context, subject string, ip string) (*auth.LockState, error) {
+// Attempt provides a mock function for the type MockLoginGuard
+func (_mock *MockLoginGuard) Attempt(ctx context.Context, subject string, ip string) (*auth.LockState, error) {
 	ret := _mock.Called(ctx, subject, ip)
 
 	if len(ret) == 0 {
-		panic("no return value specified for Check")
+		panic("no return value specified for Attempt")
 	}
 
 	var r0 *auth.LockState
@@ -66,20 +66,20 @@ func (_mock *MockLoginGuard) Check(ctx context.Context, subject string, ip strin
 	return r0, r1
 }
 
-// MockLoginGuard_Check_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Check'
-type MockLoginGuard_Check_Call struct {
+// MockLoginGuard_Attempt_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Attempt'
+type MockLoginGuard_Attempt_Call struct {
 	*mock.Call
 }
 
-// Check is a helper method to define mock.On call
+// Attempt is a helper method to define mock.On call
 //   - ctx context.Context
 //   - subject string
 //   - ip string
-func (_e *MockLoginGuard_Expecter) Check(ctx interface{}, subject interface{}, ip interface{}) *MockLoginGuard_Check_Call {
-	return &MockLoginGuard_Check_Call{Call: _e.mock.On("Check", ctx, subject, ip)}
+func (_e *MockLoginGuard_Expecter) Attempt(ctx interface{}, subject interface{}, ip interface{}) *MockLoginGuard_Attempt_Call {
+	return &MockLoginGuard_Attempt_Call{Call: _e.mock.On("Attempt", ctx, subject, ip)}
 }
 
-func (_c *MockLoginGuard_Check_Call) Run(run func(ctx context.Context, subject string, ip string)) *MockLoginGuard_Check_Call {
+func (_c *MockLoginGuard_Attempt_Call) Run(run func(ctx context.Context, subject string, ip string)) *MockLoginGuard_Attempt_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -102,75 +102,12 @@ func (_c *MockLoginGuard_Check_Call) Run(run func(ctx context.Context, subject s
 	return _c
 }
 
-func (_c *MockLoginGuard_Check_Call) Return(lockState *auth.LockState, err error) *MockLoginGuard_Check_Call {
+func (_c *MockLoginGuard_Attempt_Call) Return(lockState *auth.LockState, err error) *MockLoginGuard_Attempt_Call {
 	_c.Call.Return(lockState, err)
 	return _c
 }
 
-func (_c *MockLoginGuard_Check_Call) RunAndReturn(run func(ctx context.Context, subject string, ip string) (*auth.LockState, error)) *MockLoginGuard_Check_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// RecordFailure provides a mock function for the type MockLoginGuard
-func (_mock *MockLoginGuard) RecordFailure(ctx context.Context, subject string, ip string) error {
-	ret := _mock.Called(ctx, subject, ip)
-
-	if len(ret) == 0 {
-		panic("no return value specified for RecordFailure")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = returnFunc(ctx, subject, ip)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockLoginGuard_RecordFailure_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordFailure'
-type MockLoginGuard_RecordFailure_Call struct {
-	*mock.Call
-}
-
-// RecordFailure is a helper method to define mock.On call
-//   - ctx context.Context
-//   - subject string
-//   - ip string
-func (_e *MockLoginGuard_Expecter) RecordFailure(ctx interface{}, subject interface{}, ip interface{}) *MockLoginGuard_RecordFailure_Call {
-	return &MockLoginGuard_RecordFailure_Call{Call: _e.mock.On("RecordFailure", ctx, subject, ip)}
-}
-
-func (_c *MockLoginGuard_RecordFailure_Call) Run(run func(ctx context.Context, subject string, ip string)) *MockLoginGuard_RecordFailure_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockLoginGuard_RecordFailure_Call) Return(err error) *MockLoginGuard_RecordFailure_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockLoginGuard_RecordFailure_Call) RunAndReturn(run func(ctx context.Context, subject string, ip string) error) *MockLoginGuard_RecordFailure_Call {
+func (_c *MockLoginGuard_Attempt_Call) RunAndReturn(run func(ctx context.Context, subject string, ip string) (*auth.LockState, error)) *MockLoginGuard_Attempt_Call {
 	_c.Call.Return(run)
 	return _c
 }

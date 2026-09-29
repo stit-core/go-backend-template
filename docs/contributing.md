@@ -40,7 +40,7 @@ prompt → /smartdev (cockpit: make status, читает активные пла
 | git-хуки | `scripts/git-hooks/` (подключает `make setup` через `core.hooksPath`): commit-msg (Conventional Commits), pre-commit (fmt-check+vet+lint+validate-stack/plan), pre-push (`make check` на чистом дереве, только HEAD) | **детерминированно** |
 | permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-verify`, force-push, reset --hard, правка `*.pem`/`*.key`/generated) |
 | Хук Claude Code | `.claude/hooks/guard-bash.sh` (PreToolUse, Bash) | **детерминированно** (блок `git commit -n`, `--no-veri…`, `SKIP_PREPUSH`, `core.hooksPath`; команда проверяется построчно) |
-| Самопроверка обвязки | `internal/archtest/harness_test.go`, `cmd/api/main_test.go` (шаг тестов) | **детерминированно** (make-цели и пути репо в прозе существуют; модуль, HTTP- и NATS-входы и outbox-таблица каждого домена подключены в `cmd/api` и `cmd/migrate`; required env конфигов — в `.env.example`) |
+| Самопроверка обвязки | `internal/archtest/harness_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели и пути репо в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`) |
 | Самозащита гейта | `Makefile` (`make check`), pre-push | **детерминированно** (`make check` не запускается с `-i`/`-n`, подменой своих переменных и `GOFLAGS`; pre-push не передаёт гейту флаги make) |
 | Path-scoped rules | `.claude/rules/*.md` | контекстная подсказка |
 | CLAUDE.md | repo root | always-on advisory |

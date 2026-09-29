@@ -19,10 +19,3 @@ func ClientIP(trustProxy bool) func(http.Handler) http.Handler {
 		})
 	}
 }
-
-// newClientIPMiddleware: trustProxy — HTTP_RATE_LIMIT_TRUST_PROXY, тот же флаг,
-// что у rate-limiter'а httpkit: один ответ на вопрос «стоит ли перед сервисом
-// доверенный прокси».
-func newClientIPMiddleware(cfg httpkit.Config) func(http.Handler) http.Handler {
-	return ClientIP(cfg.RateLimit.TrustProxy)
-}

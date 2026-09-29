@@ -142,7 +142,7 @@ prod-дефолты, понятный контракт ошибок API, тес�
 
 ## Шаги
 ### Фундамент
-- [ ] **S1** — Bump golibinfra до v1.2.0 по аннотации тега (`git -C ../golibinfra cat-file -p
+- [x] **S1** — Bump golibinfra до v1.2.0 по аннотации тега (`git -C ../golibinfra cat-file -p
   v1.2.0`: Breaking, Поведение) и снять то, что взял кит: `beforeHTTP` (порядок хуков держит
   httpkit, FX-01); client-IP — в `httpkit.Middlewares`; `HumaConfigGroup` → `httpkit.HumaConfigs`;
   маппинг ошибок хендлеров — `httpkit.ErrorMap`; логин — `Guard.Attempt` до проверки пароля и
@@ -156,6 +156,12 @@ prod-дефолты, понятный контракт ошибок API, тес�
   boot-тест проверяет, что HTTP-сервер стартует последним и гасится первым
   - Проверка: `make check` → зелёный; `grep -rn "beforeHTTP\|MapErr" --include=*.go .` → пусто;
     fx X6, X11, X15 → пойманы китом, `fx.ValidateApp` или boot-тестом · Закрывает: AC11, AC12 · Зависит от: —
+  - Сделано: `make check` → `✓ check clean`, grep пусто. X6 (`pgkit.Module` ниже `httpkit.Module`) —
+    порядок держит кит: HTTP стартует последним, гасится первым, пул закрывается последним; X11 —
+    старт падает `ErrAuthNotConfigured` (кит); X15 — `TestFxGraphValidates` (`missing type:
+    timerkit.scheduler`). `TestBoot` ловит и X12, X13 (новая сверка `sources.Kits` с группой
+    `pgkit.migrations`), и `registerHTTP` в корне после `httpkit.Module` при зависимости с хуком
+    только у хендлеров (T-C валидатора); логи — `fdn-s1-*.log` в материалах программы
 - [ ] **S2** — DI-канон: зависимости usecase — одной структурой; одна идиома привязки к
   интерфейсу; имя модуля — путь пакета; конфиги китов — через их `NewConfig`, `App` — только
   конфиги приложения; без `context.Context` в графе; flagkit и cachekit вне графа до первого
@@ -253,6 +259,18 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - flagkit и cachekit — вне графа до первого потребителя (FX-10): сервис и `/ready` без Redis.
 - bump golibinfra в `go.mod` разрешён владельцем; изменения env из аннотаций тегов — в INFRA-HANDOFF.
 - Мутации, D02 и пустые allowlist'ы — одним итоговым шагом S15.
+- S1: `registerHTTP` и `httpkit.Middlewares` — в `fx.Module("cmd/api")` (`httpModule`): Invoke
+  модулей fx выполняет раньше корневого хука сервера, поэтому зависимость с хуком, которую берут
+  только хендлеры, стартует до HTTP при любом месте модуля; `TestBoot` требует `httpkit.serve`
+  последним на старте и первым на остановке. `Middlewares` провайдит приложение, а не `authgate`:
+  значение одно на граф, порядок цепочки — решение сервиса.
+- S1: `ErrorMap` — таблица на прежнюю функцию маппинга (`authErrors`, `refreshErrors`,
+  `userErrors`, `verificationErrors`), хендлер зовёт `Map` сам; `Declare` — в S8 вместе с точными
+  таблицами операций: доменная таблица на каждой операции объявила бы в `openapi.json` чужие ошибки.
+- S1: порт `auth.LoginGuard` повторяет кит (`Attempt` + `RecordSuccess`); ошибка guard, как и
+  раньше, только в лог — fail-closed для логина делает S10 (SEC-05).
+- S1: подписчик без JetStream валит старт — `NATS_JETSTREAM_ENABLED` и `NATS_JS_STREAM_NAMES` в
+  «Required» `.env.example`, `make local-deps-up` поднимает NATS с `-js`.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, envelope `data`, problem+json с машинным `code`,
@@ -265,8 +283,16 @@ prod-дефолты, понятный контракт ошибок API, тес�
   прокси) — по аннотациям v1.2.0 и v1.3.0; `REDIS_URL` сервису не нужен; `OTEL_*` — если метрики
   экспортируются через telemetry.
 - Образы от nonroot с закреплённой базой.
+- Лёг S1 (golibinfra v1.2.0, новых внешних зависимостей нет): `NATS_JETSTREAM_ENABLED=true` и
+  стрим `user` в `NATS_JS_STREAM_NAMES` нужны для старта (подписчик verification);
+  `LOG_REDACT_ENABLED` не читается — маскирование логов включено всегда, выключатель
+  `LOG_REDACT_DISABLED=true` (в проде не ставить); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64
+  (полный адрес — 128), блокировки со старым ключом теряются не дольше
+  `BRUTEFORCE_LOCK_DURATION`; ошибки API — problem+json с `code` и `request_id` (без
+  `type`/`instance`), 404/405 — в той же форме.
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-golibinfra v1.2.0 в origin; v1.3.0 — после базового аудита китов (идёт). Шаблон поднимает версию
-на S1 и S9. Следующий шаг — S1.
+S1 закрыт: шаблон на golibinfra v1.2.0, обход `beforeHTTP` снят, порядок хуков держит httpkit и
+проверяет `TestBoot`. v1.3.0 — после базового аудита китов (идёт), bump — S9. Следующий шаг — S2
+(DI-канон).

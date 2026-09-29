@@ -49,9 +49,9 @@ type Authorizer interface {
 	CanChangePassword(ctx context.Context, caller identity.Identity, targetID string) policy.Decision
 }
 
+// LoginGuard: Attempt учитывает попытку до проверки пароля — неудача отдельной записи не требует.
 type LoginGuard interface {
-	Check(ctx context.Context, subject, ip string) (*LockState, error)
-	RecordFailure(ctx context.Context, subject, ip string) error
+	Attempt(ctx context.Context, subject, ip string) (*LockState, error)
 	RecordSuccess(ctx context.Context, subject, ip string) error
 }
 
@@ -113,9 +113,9 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, error) {
 	ip := identity.IPFrom(ctx)
 
-	lock, guardErr := uc.guard.Check(ctx, in.Email, ip)
+	lock, guardErr := uc.guard.Attempt(ctx, in.Email, ip)
 	if guardErr != nil {
-		uc.log.Error(ctx, "guard check", "err", guardErr)
+		uc.log.Error(ctx, "guard attempt", "err", guardErr)
 	} else if lock != nil {
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_locked", "locked")
 		uc.metrics.RecordLogin(ctx, "locked")
@@ -130,9 +130,6 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 		// Холостая проверка: ответ на неизвестный email стоит столько же, сколько
 		// проверка пароля — наличие учётной записи не выдаётся таймингом.
 		uc.hasher.VerifyDummy(ctx)
-		if recordErr := uc.guard.RecordFailure(ctx, in.Email, ip); recordErr != nil {
-			uc.log.Error(ctx, "guard record failure", "err", recordErr)
-		}
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_failed", "invalid_credentials")
 		uc.metrics.RecordLogin(ctx, "invalid_credentials")
 		return nil, ErrInvalidCredentials
@@ -140,9 +137,6 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 
 	if !u.CanLogin {
 		uc.hasher.VerifyDummy(ctx)
-		if recordErr := uc.guard.RecordFailure(ctx, in.Email, ip); recordErr != nil {
-			uc.log.Error(ctx, "guard record failure", "err", recordErr)
-		}
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_failed", "blocked")
 		uc.metrics.RecordLogin(ctx, "blocked")
 		return nil, ErrInvalidCredentials
@@ -150,9 +144,6 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 
 	ok, err := uc.hasher.Verify(ctx, in.Password, u.PasswordHash)
 	if err != nil || !ok {
-		if recordErr := uc.guard.RecordFailure(ctx, in.Email, ip); recordErr != nil {
-			uc.log.Error(ctx, "guard record failure", "err", recordErr)
-		}
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_failed", "invalid_credentials")
 		uc.metrics.RecordLogin(ctx, "invalid_credentials")
 		return nil, ErrInvalidCredentials

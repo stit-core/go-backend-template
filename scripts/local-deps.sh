@@ -37,7 +37,7 @@ up() {
       --name "$NATS_CONTAINER" \
       --restart unless-stopped \
       -p 4222:4222 \
-      nats:2.10-alpine
+      nats:2.10-alpine -js
   else
     echo "✓ $NATS_CONTAINER уже запущен"
   fi
@@ -57,6 +57,8 @@ up() {
   echo ""
   echo "  PG_DSN=postgres://app:app@localhost:5432/app?sslmode=disable"
   echo "  NATS_URL=nats://localhost:4222"
+  echo "  NATS_JETSTREAM_ENABLED=true"
+  echo "  NATS_JS_STREAM_NAMES=user,verification"
   echo "  REDIS_URL=redis://localhost:6379"
   echo ""
 }
