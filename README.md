@@ -72,8 +72,8 @@ Module path, README, фундамент и удаление reference-домен
 - **DDD** — артефакты доменов в соседнем strategy-репо; маппинг в Go —
   [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
 - **Тесты** — unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
-- **Gate** — `make check` = fmt-check + vet + lint + test-int (юнит + integration, нужен Docker)
-  + build + gen-check + migrations-check + cover-check ≥75% (pre-push хук).
+- **Gate** — `make check` = fmt-check + vet + lint + migrations-check + test-int (юнит +
+  integration, нужен Docker) + build + gen-check + cover-check ≥75% (pre-push хук).
 
 ## Команды
 

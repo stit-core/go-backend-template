@@ -62,6 +62,10 @@ CREATE TABLE orders (
 CREATE INDEX idx_orders_user_id ON orders(user_id);
 ```
 
+Разрушительный оператор (`DROP`, `TRUNCATE`, `ALTER … TYPE`, `RENAME`) — добавь в up строку
+`-- infra-handoff: <что сделать инфре>` и оформи блок (skill `infra-handoff`), иначе
+`make check` упадёт на migrations-check.
+
 ### 4. Down-миграция
 
 `migrations/NNNN_name.down.sql` — обратимая.

@@ -52,21 +52,21 @@ fmt-check: ## Проверка форматирования без мутаци�
 # Шаги гейта не видят PKG, VERBOSE и FORMAT ни из окружения, ни из командной строки.
 GATE = $(MAKE) --no-print-directory PKG= VERBOSE= FORMAT=
 
-check: ## Канонический gate: fmt-check+vet+lint+test-int+build+gen-check+migrations+cover (pre-push)
+check: ## Канонический gate: fmt-check+vet+lint+migrations+test-int+build+gen-check+cover (pre-push)
 	@echo "→ make fmt-check"
 	@$(GATE) fmt-check
 	@echo "→ go vet -tags=integration ./..."
 	@go vet -tags=integration ./...
 	@echo "→ make lint"
 	@$(GATE) lint
+	@echo "→ migrations-check"
+	@bash scripts/tools/migrations-check.sh
 	@echo "→ make test-int (юнит + integration)"
 	@$(GATE) test-int
 	@echo "→ make build"
 	@$(GATE) build
 	@echo "→ make gen-check"
 	@$(GATE) gen-check
-	@echo "→ migrations-check"
-	@bash scripts/tools/migrations-check.sh
 	@echo "→ make cover-check"
 	@$(GATE) cover-check
 	@echo "✓ check clean"

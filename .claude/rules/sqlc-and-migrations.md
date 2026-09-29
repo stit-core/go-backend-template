@@ -17,11 +17,15 @@ paths:
 
 - Файлы парные: `migrations/NNNN_name.up.sql` + `NNNN_name.down.sql`. Нумерация —
   последовательная четырёхзначная (`0001`…), имя snake_case (`0006_bruteforce_partial_index`).
-  Парность+непрерывность enforce'ит `scripts/tools/migrations-check.sh` (шаг `make check`).
+  Парность+непрерывность enforce'ит `scripts/tools/migrations-check.sh` (шаг `make check`); он
+  же не пускает пустой `down` и разрушительный `up` без маркера (ниже).
 - Каждая миграция **обратима** через `down`: он возвращает схему к состоянию до `up` (данные —
   нет: drop колонки откатывается её пересозданием). Держит лесенка up → down → up по каждой
   версии в `make check` (`cmd/migrate/migrate_test.go`). Миграция только данных схему не
   меняет — её `down` может быть `-- noop` + WHY-комментарий.
+- Разрушительный `up` (`DROP`, `TRUNCATE`, `ALTER … TYPE`, `RENAME`) — только со строкой
+  `-- infra-handoff: <что сделать инфре>` в файле и INFRA-HANDOFF-блоком (rule `infra-impact`):
+  выкатке нужен порядок или окно.
 - **Не правь уже накатившуюся в боевой среде миграцию.** Только новая.
 - `make migrate-up` / `make migrate-down` (нужна `PG_DSN`); `down` откатывает одну миграцию
   приложения, схему китов ведёт golibinfra. Integration-тесты (`make test-int`, шаг

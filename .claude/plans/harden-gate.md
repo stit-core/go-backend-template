@@ -166,9 +166,16 @@ blocked-by: —
     <причина>`. Проверка: `make lint` — `log.Printf`, `println`, `Fprintf(os.Stderr)` →
     forbidigo; `_ = uc.repo.SetEmailVerified` → errcheck; `//nolint:depguard` без причины →
     nolintlint; `make check` → `✓ check clean`
-- [ ] **S6** — Миграции: запрет пустого down; деструктивные операторы (`DROP`, `TRUNCATE`,
+- [x] **S6** — Миграции: запрет пустого down; деструктивные операторы (`DROP`, `TRUNCATE`,
   `ALTER … TYPE`, `RENAME`) только с маркером `-- infra-handoff:` (ENF-05)
   - Проверка: инъекции 7c, 7d, 8 → пойманы · Закрывает: AC5 · Зависит от: S3
+  - Сделано: `migrations-check.sh` не пускает down без непробельных символов и up с `DROP`,
+    `TRUNCATE`, `ALTER … TYPE`, `RENAME` без строки `-- infra-handoff: <…>` (комментарии и
+    строковые литералы не в счёт); в гейте он идёт до тестов. Проверка: `make check` — пустой
+    down 0003 → FAIL migrations-check; мусорный и разрушительный down 0003 → FAIL лесенки S3;
+    `DROP INDEX` в новом up без маркера → FAIL migrations-check, с маркером → `✓ check clean`;
+    17 синтетических случаев (`ALTER … SET DATA TYPE`, многострочный, `'drop'` в строке) — как
+    ожидалось
 
 ### archtest «границы 2.0»
 - [ ] **S7** — Импорты для любого каталога `internal/domain/*` без ручных списков: вне `module/`
@@ -250,13 +257,20 @@ blocked-by: —
   (nolintlint требует оба), а не allowlist с ID находки — чинить там нечего.
 - `//nolint:depguard // <причина>` по-прежнему гасит depguard: причину nolintlint проверить не
   может. Закрывает S7 — изоляция доменов переезжает в archtest, на который nolint не действует.
+- Пустой down — файл без непробельных символов: `-- noop` с причиной остаётся законным для
+  миграции только данных, а DDL-миграцию с таким down ловит лесенка S3 (схема не вернулась).
+- Разрушительный оператор ищется по up-файлу без комментариев и строковых литералов, по
+  операторам между `;`; `ALTER … TYPE` — только смена типа колонки (`ALTER TYPE … ADD VALUE`
+  не ловится). down-файлы не проверяются: их `DROP` — нормальный откат.
+- `migrations-check` в гейте перенесён до тестов: дешёвая статика называет причину раньше
+  долгого integration.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S2–S5 закрыты. S5: nolintlint, testifylint, errcheck `check-blank` и forbidigo на `log.*`,
-`print(ln)`, `os.Stdout`/`os.Stderr` — инъекции 2b, 10a, 16 пойманы. Allowlist с ID находок пока
-пуст; исключения без долга — 4 `//nolint` с причиной в `cmd/migrate` и `cmd/seed-admin`.
-`make check` → `✓ check clean` за ≈14 с (integration ≈11 с без кеша). Для S10: `config verify`
-закрыл строку матрицы 13d; `//nolint:depguard` с причиной ещё проходит — до S7. Следующий шаг — S6.
+Этап «Честный гейт» (S2–S6) закрыт: AC1–AC4 подтверждены. S6: пустой down и разрушительный up
+без `-- infra-handoff:` не проходят migrations-check (он теперь до тестов). `make check` →
+`✓ check clean` за ≈14 с (integration ≈11 с без кеша). Для S10 уже пойманы строки матрицы 2b,
+7c, 7d, 8, 10a, 13c, 13d, 16; `//nolint:depguard` с причиной ещё гасит depguard — до S7. Allowlist
+с ID находок пуст; исключения без долга — 4 `//nolint` с причиной в `cmd/`. Следующий шаг — S7.
