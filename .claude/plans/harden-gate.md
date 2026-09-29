@@ -286,8 +286,15 @@ blocked-by: —
   nil }`: иначе такая closure прячется, а allowlist велит удалить её запись как устаревшую (NB5).
 - Сырой маршрут chi (`Router().Get`, `Mount`) обходит `Security` и `openapi.json`: `TestBoot`
   требует, чтобы каждый маршрут роутера был операцией контракта или маршрутом спецификации huma
-  (`humaSpecRoutes`); вебхук, SSE и выгрузка — тоже операции huma (`RawBody`, `StreamResponse`)
-  (NB4).
+  — их пути берутся из её конфига, свой `DocsPath` форка законен; вебхук, SSE и выгрузка — тоже
+  операции huma (`RawBody`, `StreamResponse`) (NB4). `Hidden: true` вне канона: скрытую операцию
+  не видят ни контракт, ни `TestHTTPOperations` (huma не зовёт для неё `OnAddOperation` —
+  `Security` не проверен), `TestBoot` называет это прямо (`hidden-op`); скрытая ручка — отдельное
+  решение с проверкой её `Security`.
+- `TestHTTPDTONamesGloballyUnique` остаётся рядом с паникой `buildAPI`: его требует S8, сообщение
+  называет оба файла, и он видит типы вне операций. `//nolint:<выключенный линтер> // причина` —
+  не обход: такой линтер не работает, archtest директив не читает, а nolintlint видит лишние
+  директивы только у включённых линтеров; мёртвая директива — хвост (NB9, `16-reason`).
 - `gen-check` — как остальные шаги: вывод только на провале, последняя строка `OK`/`FAIL` (N5).
   Порог покрытия не трогаю и тестов доменов не дописываю (N7): запас ≈1 statement, но тесты —
   `fix-reference-code` (S13 — канон и happy-path, S14 — широкий scope, порог 90), а тесты к
@@ -348,16 +355,18 @@ S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Эта
 — `/home/mm/.cache/stit-audit-program/validation-harden-gate-B2.md`, кейсы — `valb2/` рядом):
 B1 (таблица запроса — в позиции таблицы), NB1 (утверждение в хелпере), NB4 (маршрут мимо huma),
 NB5 (closure с `(T, error)`), NB6 (AC8 с чистым кешем), NB8 (ID только в allowlist); NB2 и NB3
-переносит в планы дирижёр. Дыры шагов S7–S8 из его NB7 и перепроверки закрываются фиксами:
+переносит в планы дирижёр. Дыры шагов S7–S8 из его NB7 и перепроверки закрыты:
 корень домена — по перечню разрешённого (`nats-root`, `cache-root` → FAIL); часы — все функции
 настенного времени (`time-since` → FAIL); SQL — по словам с уровнями скобок (`k-mixed` → FAIL,
 `k-func-from`, `k-distinct-from` → clean); хелпер второго уровня и `Require*` кита — утверждения
-(`t15-2level`, `t15-kit-require` → clean); дальше — маршруты спецификации huma. Строки матрицы ENF:
-15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Allowlist (опустошает
+(`t15-2level`, `t15-kit-require` → clean); маршруты спецификации huma — из её конфига (`docs-path`
+→ clean, `hidden-op` → FAIL с точной причиной). Строки матрицы ENF: 15 закрыта (`TestTestsAssert`),
+9 и 11 исключены («Решения»). Allowlist (опустошает
 `fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
 `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
 `docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. Обходы
 до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Хвост: запас покрытия
 ≈1 statement (75,1% при пороге 75%) — первый шаг `fix-reference-code` с непокрытым кодом упрётся в
 `cover-check`; снимают S13–S14 там, и там же — покрытие по функциям или диффу (строка 11).
-Следующее: фиксы дыр S7–S8 → S12 отдельным агентом → закрыть план, push шаблона.
+Мёртвую `//nolint:<выключенный линтер>` гейт не ловит — чистка директив (`repair-harness`).
+Следующее: S12 отдельным агентом → закрыть план, push шаблона.

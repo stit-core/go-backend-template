@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -43,9 +44,6 @@ func (h *hookOrder) LogEvent(e fxevent.Event) {
 		h.stop = append(h.stop, ev.CallerName)
 	}
 }
-
-// humaSpecRoutes — маршруты спецификации и документации, которые huma вешает на роутер сам.
-var humaSpecRoutes = []string{"/docs", "/openapi.json", "/openapi.yaml", "/openapi-3.0.json", "/openapi-3.0.yaml", "/schemas/{schema}"}
 
 // TestBoot поднимает сервис набором опций main поверх Postgres, NATS и Redis в контейнерах:
 // конструкторы, Invoke и хуки выполняются по-настоящему, чего fx.ValidateApp не делает.
@@ -123,17 +121,19 @@ func TestBoot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(spec), live.String()+"\n", "the running service serves openapi.json")
 
-	// Сырой маршрут chi (Router().Get, Mount) обходит Security и openapi.json: каждый маршрут
-	// роутера — операция контракта или маршрут спецификации huma.
+	// Сырой маршрут chi (Router().Get, Mount) и Hidden-операция huma обходят проверку Security и
+	// openapi.json: каждый маршрут роутера — операция контракта или маршрут спецификации huma.
 	var contract struct {
 		Paths map[string]map[string]any `json:"paths"`
 	}
 	require.NoError(t, json.Unmarshal(spec, &contract))
+	humaAPI, ok := srv.API().(interface{ Config() huma.Config })
+	require.True(t, ok, "the huma API exposes its Config")
 	for _, route := range srv.Router().Routes() {
 		for method := range route.Handlers {
 			_, op := contract.Paths[route.Pattern][strings.ToLower(method)]
-			require.True(t, op || method == http.MethodGet && slices.Contains(humaSpecRoutes, route.Pattern),
-				"route %s %s is not a huma operation: it bypasses Security and openapi.json", method, route.Pattern)
+			require.True(t, op || method == http.MethodGet && humaSpecRoute(humaAPI.Config(), route.Pattern),
+				"route %s %s is not in openapi.json: a raw chi route or a Hidden huma operation escapes the Security check and the API contract", method, route.Pattern)
 		}
 	}
 
@@ -146,4 +146,14 @@ func TestBoot(t *testing.T) {
 	for _, kit := range []string{"pgkit", "natskit", "cachekit"} {
 		require.Less(t, stops("httpkit"), stops(kit), "HTTP stops before %s: requests in flight keep it (OnStop: %v)", kit, hooks.stop)
 	}
+}
+
+// humaSpecRoute — маршрут спецификации или документации, который huma вешает на роутер сам по
+// своему конфигу: OpenAPIPath с расширением, DocsPath, SchemasPath/{schema}.
+func humaSpecRoute(cfg huma.Config, route string) bool {
+	if cfg.DocsPath != "" && route == cfg.DocsPath || cfg.SchemasPath != "" && route == cfg.SchemasPath+"/{schema}" {
+		return true
+	}
+	suffix, ok := strings.CutPrefix(route, cfg.OpenAPIPath)
+	return cfg.OpenAPIPath != "" && ok && slices.Contains([]string{".json", ".yaml", "-3.0.json", "-3.0.yaml"}, suffix)
 }
