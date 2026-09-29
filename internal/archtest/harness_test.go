@@ -142,7 +142,12 @@ func repoTopDirs(t *testing.T, root string) []string {
 	return dirs
 }
 
-// proseFiles — .md репо, кроме планов (они описывают будущие файлы) и чужих деревьев.
+// workDocs — рабочие документы проекта: планы, память stack-deep-dive, чужие worktree. Они
+// описывают и файлы, которых ещё нет, поэтому проверка прозы их не касается.
+var workDocs = []string{".claude/plans", ".claude/skills/stack-deep-dive/state", ".claude/worktrees"}
+
+// proseFiles — .md обвязки: без рабочих документов, артефактов стека docs/stack/<kind>.md и
+// скрытых каталогов.
 func proseFiles(t *testing.T, root string) []string {
 	t.Helper()
 	var docs []string
@@ -156,10 +161,12 @@ func proseFiles(t *testing.T, root string) []string {
 		}
 		rel = filepath.ToSlash(rel)
 		switch {
-		case d.IsDir() && rel != "." && strings.HasPrefix(d.Name(), ".") && rel != ".claude",
-			d.IsDir() && (rel == ".claude/plans" || rel == ".claude/worktrees"):
+		case d.IsDir() && (slices.Contains(workDocs, rel) ||
+			rel != "." && rel != ".claude" && strings.HasPrefix(d.Name(), ".")):
 			return filepath.SkipDir
-		case !d.IsDir() && path.Ext(rel) == ".md":
+		case d.IsDir() || path.Ext(rel) != ".md":
+		case path.Dir(rel) == "docs/stack" && rel != "docs/stack/README.md":
+		default:
 			docs = append(docs, rel)
 		}
 		return nil

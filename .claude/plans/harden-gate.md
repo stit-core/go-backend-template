@@ -36,11 +36,11 @@ blocked-by: —
   (поймано 10) и 14 нарушений в адаптерах (поймано 1.5 из 8 обязательных).
 - **fx-аудит** (29.09; DI — 6/10):
   `/home/mm/.cache/tmp/claude-1000/-home-mm-git-stit-core-go-backend-template/62f196b7-5be8-49bb-ba1f-05d2c3d76bb0/scratchpad/fx-audit.md`,
-  прототипы и скрипты — `fxexp/` рядом. Из 20 поломок DI (X1–X17) гейт ловил 7: запуск (конструкторы, `Invoke`, хуки)
-  не проверял никто. Находки части: FX-02 (нет boot-теста), FX-03 (без `AuthExtractor` —
-  авторизация пропущена; client-IP без группы — brute-force выключен), FX-04 (timerkit нужен
-  outbox неявно), FX-01 (HTTP гасится после пула), FX-08 (коллизия METHOD+path, забытый модуль
-  или `Register`), FX-09 (чужой outbox).
+  прототипы и скрипты — `fxexp/` рядом. Из 20 поломок DI (X1–X17) гейт ловил 7: запуск
+  (конструкторы, `Invoke`, хуки) не проверял никто. Находки: FX-02 (нет boot-теста), FX-03 (нет
+  `AuthExtractor` — авторизации нет; client-IP без группы — нет brute-force), FX-04 (timerkit нужен
+  outbox неявно), FX-01 (HTTP гасится после пула), FX-08 (коллизия METHOD+path, забытый модуль или
+  `Register`), FX-09 (чужой outbox).
 
 ## Не входит
 - Исправление кода доменов, security и тестов — `fix-reference-code`; сюда входят только проверки
@@ -124,8 +124,8 @@ blocked-by: —
   fmt-check и pre-commit падают без инструмента; `make test` показывает ошибки компиляции;
   mockery без INF-шума (ENF-01, ENF-06, ENF-08, ENF-12)
   - Проверка: воспроизведения AC1 → FAIL · Закрывает: AC1 · Зависит от: S1
-  - Сделано: `lint.sh` fail-closed (`config verify`, код выхода, «0 issues.»), кеш своего дерева,
-    fmt-check и pre-commit без инструмента — FAIL, ошибки сборки видны, mockery тихий. Проверка — AC1
+  - Сделано: `lint.sh` fail-closed (`config verify`, код выхода, «0 issues.»), свой кеш; fmt-check
+    и pre-commit без инструмента — FAIL; ошибки сборки видны; mockery тихий. Проверка — AC1
 - [x] **S3** — `check` игнорирует `PKG`/`VERBOSE`, `COVER_FLOOR :=`; integration-тесты и
   roundtrip миграций в `make check` (docker обязателен, `make doctor` его проверяет); `make test`
   и `-short` приведены к правде (ENF-02, TST-03, ENF-05 частично)
@@ -241,8 +241,8 @@ blocked-by: —
 - pre-push отказывает на грязном дереве и на пуше ref не на HEAD: `make check` проверяет рабочее
   дерево — только так оно равно пушимому коммиту (дешевле временного worktree). pre-commit
   проверяет дерево, а не индекс (ENF-03) — осознанно: авторитетный гейт — pre-push.
-- `core.hooksPath` основного репо не менял (общий с чужим worktree); `make setup` — в клоне.
-  Конфиг гейта — в «Сначала спросить» CLAUDE.md (ENF-02); `//nolint` в triage-failure — `repair-harness` S1.
+- `core.hooksPath` основного репо не менял (общий с чужим worktree); `make setup` — в клоне. Конфиг
+  гейта — в «Сначала спросить» CLAUDE.md (ENF-02); `//nolint` в triage-failure — `repair-harness`.
 - `make e2e-smoke` — шаг `release.sh` после `make check` (TST-03): проходит без `.env.local`.
 - Срабатывания S5 на текущем коде — законные исключения (stderr без логгера, отложенные
   `Close`/`Rollback` в CLI): `//nolint:<линтер> // <причина>`, а не allowlist.
@@ -259,9 +259,9 @@ blocked-by: —
 - Самопроверка обвязки — Go-тесты, не скрипт: кто на что ссылается в Go-коде (AST) и какие env
   required (reflect конфигов) надёжнее grep. Проза — только в коде (inline и fenced): цели `make`
   и пути от каталогов корня; плейсхолдеры (`<d>`, `NNNN`, `*`) — не ссылки; цели хаба (`bump`,
-  `ps`, `ship`) — своим списком; `docs/stack/<kind>.md` — по шаблону. Env-проверка — в `cmd/api`
-  рядом с `kitConfigs` (стал списком конструкторов), поэтому allowlist'ы — в `internal/archtest` и
-  `cmd/api` (проверка AC7 расширена на `cmd`).
+  `ps`, `ship`) — своим списком; ссылка на `docs/stack/<kind>.md` — по шаблону, а артефакты стека,
+  планы и память stack-deep-dive (там и будущие файлы) не проверяются. Env — в `cmd/api` рядом с
+  `kitConfigs` (стал списком конструкторов): allowlist'ы — в `internal/archtest` и `cmd/api`.
 - Скелет `make new-domain` без подключения в `cmd/api` валит `TestDomainsAreWired` (как и покрытие,
   TST-04): подключение скелета — `fix-reference-code` S11 (AC10).
 - FX-01 — дешёвым обходом, без allowlist: `beforeHTTP` поднимает пул, NATS и Redis раньше сервера,
