@@ -1,7 +1,7 @@
 ---
-status: blocked
+status: in-progress
 parent: —
-blocked-by: тег golibinfra v1.2.0 в origin
+blocked-by: —
 ---
 
 # fix-reference-code — эталонный код, безопасность, контракт ошибок, тесты, покрытие 90–95%
@@ -142,15 +142,16 @@ prod-дефолты, понятный контракт ошибок API, тес�
 
 ## Шаги
 ### Фундамент
-- [ ] **S1** — Bump golibinfra до v1.2.0 по Handoff первой партии и снять то, что взял кит:
-  `beforeHTTP` (порядок хуков держит httpkit, FX-01); client-IP — в `httpkit.Middlewares`;
+- [ ] **S1** — Bump golibinfra до v1.2.0 по аннотации тега (`git -C ../golibinfra cat-file -p
+  v1.2.0`: Breaking, Поведение) и снять то, что взял кит: `beforeHTTP` (порядок хуков держит
+  httpkit, FX-01); client-IP — в `httpkit.Middlewares`; `HumaConfigGroup` → `httpkit.HumaConfigs`;
   маппинг ошибок хендлеров — `httpkit.ErrorMap`; логин — `Guard.Attempt` до проверки пароля и
   `RecordSuccess`; подписчик verification — `natskit.SubscribeOnStart`, шаблон подписчика в
   `event.md` — тем же коммитом; `logkit.FxLogger` и `fx.RecoverFromPanics` в `service` (FX-05);
   источники миграций сверяет boot-тест с группой `pgkit.migrations` графа (строка outbox в
   `TestDomainsAreWired` удаляется); тесты — под строгий `outboxtest`; `openapi.json`
-  перегенерирован; `NATS_JETSTREAM_ENABLED=true` и прочие env из аннотации тега — в
-  `.env.example` и Handoff; `fx.Invoke(registerHTTP)` — по правилу порядка из аннотации тега
+  перегенерирован; `NATS_JETSTREAM_ENABLED=true`, `LOG_REDACT_DISABLED` и прочие env из аннотации
+  тега — в `.env.example` и Handoff; `fx.Invoke(registerHTTP)` — по правилу порядка из аннотации тега
   (зависимость с хуком, которую берут только хендлеры, не должна стартовать позже HTTP), а
   boot-тест проверяет, что HTTP-сервер стартует последним и гасится первым
   - Проверка: `make check` → зелёный; `grep -rn "beforeHTTP\|MapErr" --include=*.go .` → пусто;
@@ -267,6 +268,5 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-План составлен по итогам аудита и fx-аудита. golibinfra меняется своими партиями: v1.2.0 — в
-работе, v1.3.0 — после базового аудита китов; шаблон поднимает версию на S1 и S9. Стартует после
-тега v1.2.0 в origin. Следующий шаг — S1.
+golibinfra v1.2.0 в origin; v1.3.0 — после базового аудита китов (идёт). Шаблон поднимает версию
+на S1 и S9. Следующий шаг — S1.

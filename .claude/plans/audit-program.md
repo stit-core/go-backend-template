@@ -73,9 +73,13 @@ blocked-by: —
     S14) и `repair-harness` (S1–S3, S8, S9); план удалён, шаблон запушен
 
 ### golibinfra: партия 1
-- [ ] **S2** — `harden-kits` S2–S15 (исполнитель) → валидатор → `make gate-clean` → тег v1.2.0 →
+- [x] **S2** — `harden-kits` S2–S15 (исполнитель) → валидатор → `make gate-clean` → тег v1.2.0 →
   push
   - Проверка: валидатор → PASS; `git ls-remote --tags origin v1.2.0` → есть · Закрывает: AC2 · Зависит от: —
+  - Сделано: этапы S1–S9, httpkit S10–S14 и релиз S15 — PASS (`validation-harden-kits-A.md`,
+    `-B.md`, с кругом фиксов перед релизом по находкам базового аудита KDOC-01, KSEC-01/02);
+    тег v1.2.0 → `b134c5e`, `make gate-clean` и `make test-full` зелёные; план закрыт, `main` и
+    тег в origin
 
 ### Шаблон: эталон и аудит китов
 - [ ] **S3** — `fix-reference-code` по этапам плана (S1 — bump v1.2.0, S9 — bump v1.3.0), каждый
@@ -120,8 +124,8 @@ blocked-by: —
   Отчёты углов — `kits-audit/` в материалах, ID находок `K<угол>-NN`.
 
 ## Где мы сейчас
-S1 закрыт: `harden-gate` выполнен и удалён, шаблон запушен. S2 идёт: golibinfra `harden-kits`,
-этап S1–S9 — фиксы замечаний валидатора на перепроверке (`validation-harden-kits-A.md`), дальше
-этап httpkit S10–S14, затем S15, валидатор партии, тег v1.2.0 и push. S3 (`fix-reference-code`)
-ждёт тег v1.2.0 в origin. Промпты — `prompts.md`, оперативные заметки дирижёра —
-`orchestrator-todo.md` (оба — в каталоге материалов).
+S1 и S2 закрыты: `harden-gate` удалён, golibinfra v1.2.0 в origin. S3 идёт: `fix-reference-code`
+разблокирован, первый этап — «Фундамент» (S1 — bump v1.2.0). S4 идёт: базовый аудит golibinfra —
+часть 1 (все киты, кроме httpkit и handlertest) готова в `kits-audit/`, часть 2 (httpkit и
+handlertest на v1.2.0) идёт; затем сводка и план партии 2. Промпты — `prompts.md`, оперативные
+заметки дирижёра — `orchestrator-todo.md` (оба — в каталоге материалов).
