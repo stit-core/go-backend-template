@@ -8,8 +8,8 @@ cd "$(git rev-parse --show-toplevel)"
 echo "pre-commit: make fmt-check"
 make --no-print-directory fmt-check
 
-echo "pre-commit: go vet ./..."
-go vet ./...
+echo "pre-commit: go vet -tags=integration ./..."
+go vet -tags=integration ./...
 
 echo "pre-commit: lint"
 bash scripts/tools/lint.sh

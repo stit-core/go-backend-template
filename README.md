@@ -72,8 +72,8 @@ Module path, README, фундамент и удаление reference-домен
 - **DDD** — артефакты доменов в соседнем strategy-репо; маппинг в Go —
   [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
 - **Тесты** — unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
-- **Gate** — `make check` = fmt-check + vet + lint + test + build + gen-check + migrations-check
-  + cover-check ≥75% (pre-push хук).
+- **Gate** — `make check` = fmt-check + vet + lint + test-int (юнит + integration, нужен Docker)
+  + build + gen-check + migrations-check + cover-check ≥75% (pre-push хук).
 
 ## Команды
 
@@ -81,7 +81,7 @@ Module path, README, фундамент и удаление reference-домен
 Полный гайд агента — [`CLAUDE.md`](CLAUDE.md); точка входа в сессию — `/smartdev`.
 
 ```bash
-make check        # полный gate перед push (fmt, vet, lint, test, build, gen, миграции, coverage)
+make check        # полный gate перед push (fmt, vet, lint, тесты с integration, build, gen, миграции, coverage)
 make gen          # регенерация sqlc + mockery
 make e2e          # поднять docker-стек → pytest → снести
 make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /release)

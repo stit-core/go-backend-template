@@ -5,7 +5,7 @@
 #   scripts/tools/doctor.sh            # все проверки
 #
 # Read-only: ничего не мутирует (mocks-drift — через make check/gen-check).
-# FAIL-класс (exit 2): docker-registry auth, sqlc-drift, непарные миграции.
+# FAIL-класс (exit 2): docker-демон, docker-registry auth, sqlc-drift, непарные миграции.
 # WARN-класс (exit 0): .env.local ключи, draft-артефакты.
 # Канонический status-line в конце: `OK: ...` / `FAIL: N blocking`.
 
@@ -19,7 +19,14 @@ warn() { echo "WARN : $*"; WARN=$((WARN + 1)); }
 fail() { echo "FAIL : $*"; FAIL=$((FAIL + 1)); }
 info() { echo "INFO : $*"; }
 
-# 1. docker-registry auth — частая боль: make release падает на unauthorized
+# 1. docker-демон — make check гоняет integration-тесты (testcontainers).
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    ok "docker: демон доступен"
+else
+    fail "docker: демон недоступен — make check гоняет integration-тесты (testcontainers)"
+fi
+
+# 2. docker-registry auth — частая боль: make release падает на unauthorized
 #    в середине пуша. Проверяем ПРИСУТСТВИЕ кред, не валидность токена
 #    (валидность — только сетевым запросом; здесь fail-fast по факту логина).
 HOST=$(git remote get-url origin 2>/dev/null | sed -E 's#^(git@|https?://)([^:/]+)[:/].*#\2#')
@@ -38,7 +45,7 @@ else
     fi
 fi
 
-# 2. .env.local ключи (имя ключа, без значения — см. .claude/rules/env-local.md)
+# 3. .env.local ключи (имя ключа, без значения — см. .claude/rules/env-local.md)
 if [ -f .env.local ]; then
     for k in E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD; do
         if grep -qE "^(export +)?$k=" .env.local; then
@@ -51,7 +58,7 @@ else
     info ".env.local отсутствует (опционален для make e2e — есть дефолты seed-admin)"
 fi
 
-# 3. sqlc drift — read-only (sqlc diff не пишет файлы). mocks-drift мутирует
+# 4. sqlc drift — read-only (sqlc diff не пишет файлы). mocks-drift мутирует
 #    дерево регеном, поэтому здесь не проверяем — это делает make check.
 if command -v sqlc >/dev/null 2>&1; then
     if sqlc diff >/dev/null 2>&1; then
@@ -64,7 +71,7 @@ else
 fi
 info "mocks-drift проверяется make check/gen-check (doctor read-only)"
 
-# 4. непарные up/down миграции
+# 5. непарные up/down миграции
 if [ -d migrations ]; then
     unpaired=""
     for up in migrations/*.up.sql; do
@@ -82,7 +89,7 @@ if [ -d migrations ]; then
     fi
 fi
 
-# 5. draft-артефакты stack (companion README/_templates исключены).
+# 6. draft-артефакты stack (companion README/_templates исключены).
 # Домены живут в соседнем strategy-репо (../strategy); их draft-статус — забота того репо.
 if [ -d docs/stack ]; then
     sdrafts=$(grep -rl '^status: draft' docs/stack --include='*.md' 2>/dev/null \

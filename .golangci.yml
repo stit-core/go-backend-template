@@ -3,6 +3,9 @@ version: "2"
 run:
   timeout: 3m
   go: "1.26"
+  # integration-тесты — шаг make check: линтуются вместе с остальным кодом.
+  build-tags:
+    - integration
   # Параллельные прогоны (агенты в worktree, хуки) ждут общий lock, а не падают с exit 3.
   allow-serial-runners: true
 

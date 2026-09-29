@@ -60,7 +60,8 @@ RED→GREEN: падающий тест, воспроизводящий баг �
 
 ## Интеграционные
 
-- Build-tag `//go:build integration` сверху файла; `make test-int` (нужен Docker).
+- Build-tag `//go:build integration` сверху файла; гоняются в `make check` (шаг `make test-int`).
+  Docker обязателен: без него `TestDockerRequired` роняет гейт, а не пропускает integration.
 - Контейнер+миграции+пул — `golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(path))`
   (нужна kit-таблица → ещё `testkit.WithMigrations(<kit>pg.Migrations)`);
   канон — `internal/domain/user/infra/postgres/repository_test.go`. Seed-хелперы строк

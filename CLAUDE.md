@@ -36,10 +36,11 @@ DDD-артефакты доменов живут в **соседнем strategy-
 ## Команды
 
 Единый интерфейс `make <verb>`; `make help` — полный список. Конциз-by-default
-(`FORMAT=detailed`/`VERBOSE=1` — полно; `PKG=./x/...` — подмножество). Канонический gate перед
-claim «готово» / push — **`make check`** (fmt-check + vet + lint + test + build + gen-check +
-migrations-check + cover-check ≥75%). `make gen` — регенерация sqlc+mockery. Реализация за
-таргетами — `scripts/tools/*` (напрямую не зови).
+(`FORMAT=detailed`/`VERBOSE=1` — полно; `PKG=./x/...` — подмножество; `make check` их не читает).
+Канонический gate перед claim «готово» / push — **`make check`** (fmt-check + vet + lint +
+test-int (юнит + integration, нужен Docker) + build + gen-check + migrations-check + cover-check
+≥75%). `make gen` — регенерация sqlc+mockery. Реализация за таргетами — `scripts/tools/*`
+(напрямую не зови).
 
 ## Карта: где что
 

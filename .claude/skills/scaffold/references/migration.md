@@ -124,7 +124,7 @@ make build
 Если миграция семантически меняет поведение — добавь тест.
 
 ```bash
-make test
+make test-int   # юнит + integration + лесенка up → down → up по всем миграциям (Docker)
 ```
 
 Integration-тесты поднимают Postgres через `golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))`, который накатывает миграции приложения — твоя свежая попадёт автоматически (kit-таблица нужна тесту → ещё `testkit.WithMigrations(<kit>pg.Migrations)`; `testkit/pgseed` — только seed-хелперы строк поверх).

@@ -18,12 +18,14 @@ paths:
 - Файлы парные: `migrations/NNNN_name.up.sql` + `NNNN_name.down.sql`. Нумерация —
   последовательная четырёхзначная (`0001`…), имя snake_case (`0006_bruteforce_partial_index`).
   Парность+непрерывность enforce'ит `scripts/tools/migrations-check.sh` (шаг `make check`).
-- Каждая миграция **обратима** через `down`. Откат бессмыслен (drop колонки с данными) —
-  `down` всё равно есть: минимум `-- noop` + WHY-комментарий.
+- Каждая миграция **обратима** через `down`: он возвращает схему к состоянию до `up` (данные —
+  нет: drop колонки откатывается её пересозданием). Держит лесенка up → down → up по каждой
+  версии в `make check` (`cmd/migrate/migrate_test.go`). Миграция только данных схему не
+  меняет — её `down` может быть `-- noop` + WHY-комментарий.
 - **Не правь уже накатившуюся в боевой среде миграцию.** Только новая.
 - `make migrate-up` / `make migrate-down` (нужна `PG_DSN`); `down` откатывает одну миграцию
-  приложения, схему китов ведёт golibinfra. В CI — автоматически перед integration-тестами
-  (testcontainers с чистой БД).
+  приложения, схему китов ведёт golibinfra. Integration-тесты (`make test-int`, шаг
+  `make check`) накатывают миграции на чистую БД в testcontainers.
 
 ## sqlc
 

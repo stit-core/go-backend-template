@@ -15,19 +15,20 @@ help: ## сгруппированный список команд
 		/^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 ##@ LOOP
-# test/lint/build: concise-by-default (scripts/tools/* за make). FORMAT=detailed
-# — расширенный разбор фейлов; VERBOSE=1 — сырой инструмент (lint и тогда идёт
-# через lint.sh: config verify, кеш дерева, fail-closed). PKG= — подмножество
-# (default ./...). test.sh сам гейтит -race по CGO_ENABLED.
-test: ## Юнит-тесты concise (PKG=./x/... FORMAT=detailed VERBOSE=1)
-	@if [ -n "$(VERBOSE)" ]; then \
-		go test -short $$([ "$$(go env CGO_ENABLED)" = "1" ] && echo -race) $(if $(PKG),$(PKG),./...); \
-	else \
-		bash scripts/tools/test.sh $(if $(filter detailed,$(FORMAT)),--format=detailed) $(if $(PKG),$(PKG),./...); \
-	fi
+# test/lint/build: concise-by-default (scripts/tools/* за make). FORMAT=detailed или
+# VERBOSE=1 — полный вывод (у build VERBOSE=1 — сырой go build). PKG= — подмножество
+# (default ./...). test.sh сам гейтит -race по CGO_ENABLED. make check эти переменные
+# не читает — гейт всегда проверяет всё дерево.
+DETAIL = $(if $(or $(VERBOSE),$(filter detailed,$(FORMAT))),--format=detailed)
 
-lint: ## golangci-lint concise (PKG=./x/... FORMAT=detailed или VERBOSE=1 — полный вывод)
-	@bash scripts/tools/lint.sh $(if $(or $(VERBOSE),$(filter detailed,$(FORMAT))),--format=detailed) $(PKG)
+test: ## Юнит-тесты без Docker (PKG=./x/... FORMAT=detailed)
+	@bash scripts/tools/test.sh $(DETAIL) $(PKG)
+
+test-int: ## Юнит + integration (testcontainers, нужен Docker) — шаг make check (PKG= FORMAT=)
+	@bash scripts/tools/test.sh --integration $(DETAIL) $(PKG)
+
+lint: ## golangci-lint concise (PKG=./x/... FORMAT=detailed)
+	@bash scripts/tools/lint.sh $(DETAIL) $(PKG)
 
 build: ## Сборка бинарника bin/api concise (VERBOSE=1 — сырой go build)
 	@if [ -n "$(VERBOSE)" ]; then \
@@ -48,23 +49,26 @@ fmt-check: ## Проверка форматирования без мутаци�
 		echo "FAIL: fmt — файлы не отформатированы, запусти make fmt"; exit 1; \
 	fi
 
-check: ## Канонический gate: fmt-check+vet+lint+test+build+gen-check+migrations (pre-push)
+# Шаги гейта не видят PKG, VERBOSE и FORMAT ни из окружения, ни из командной строки.
+GATE = $(MAKE) --no-print-directory PKG= VERBOSE= FORMAT=
+
+check: ## Канонический gate: fmt-check+vet+lint+test-int+build+gen-check+migrations+cover (pre-push)
 	@echo "→ make fmt-check"
-	@$(MAKE) fmt-check
-	@echo "→ go vet ./..."
-	@go vet ./...
+	@$(GATE) fmt-check
+	@echo "→ go vet -tags=integration ./..."
+	@go vet -tags=integration ./...
 	@echo "→ make lint"
-	@$(MAKE) lint
-	@echo "→ make test"
-	@$(MAKE) test
+	@$(GATE) lint
+	@echo "→ make test-int (юнит + integration)"
+	@$(GATE) test-int
 	@echo "→ make build"
-	@$(MAKE) build
+	@$(GATE) build
 	@echo "→ make gen-check"
-	@$(MAKE) gen-check
+	@$(GATE) gen-check
 	@echo "→ migrations-check"
 	@bash scripts/tools/migrations-check.sh
 	@echo "→ make cover-check"
-	@$(MAKE) cover-check
+	@$(GATE) cover-check
 	@echo "✓ check clean"
 
 ##@ GEN
@@ -147,9 +151,6 @@ local-deps-down: ## Снести локальные зависимости
 	@bash scripts/local-deps.sh down
 
 ##@ EXTRA
-test-int: ## Только integration (testcontainers); требует docker
-	go test -race -tags=integration ./...
-
 test-fuzz: ## Короткие fuzz-прогоны (10s на цель; go test -fuzz работает per-пакет)
 	@pkgs=$$(grep -rl 'func Fuzz' --include='*_test.go' internal/ | xargs -r -n1 dirname | sort -u); \
 	[ -z "$$pkgs" ] && { echo "OK: fuzz-целей нет"; exit 0; }; \
@@ -162,15 +163,16 @@ test-bench: ## Бенчмарки
 	go test -run=^$$ -bench=. -benchmem ./internal/domain/...
 
 test-cover: ## Coverage по доменным пакетам (полный отчёт, без gate)
-	go test -short -coverprofile=coverage.out ./internal/domain/... ./internal/platform/...
+	go test -coverprofile=coverage.out ./internal/domain/... ./internal/platform/...
 	go tool cover -func=coverage.out | tail -1
 
 # Gate меряет юнит-тестируемое: domain-core + delivery + platform-примитивы.
 # Вне scope: сгенерированное (mocks, sqlc db), integration-канон (infra/postgres),
 # fx-обвязка (module/, infra/outbox, platform/events) — их держат integration/e2e/ValidateApp.
-COVER_FLOOR ?= 75
+# Порог — константа гейта: ни окружение, ни командная строка его не меняют.
+override COVER_FLOOR := 75
 cover-check: ## Coverage-gate: юнит-профиль ≥ $(COVER_FLOOR)% (шаг make check)
-	@go test -short -coverprofile=coverage.out ./internal/domain/... ./internal/platform/... >/dev/null
+	@go test -coverprofile=coverage.out ./internal/domain/... ./internal/platform/... >/dev/null
 	@grep -v -e '/mocks/' -e '/infra/' -e '/module/' -e '/platform/events/' coverage.out > coverage.gate.out
 	@total=$$(go tool cover -func=coverage.gate.out | tail -1 | awk '{gsub("%","",$$NF); print $$NF}'); \
 	LC_ALL=C awk -v t="$$total" -v f="$(COVER_FLOOR)" 'BEGIN { \

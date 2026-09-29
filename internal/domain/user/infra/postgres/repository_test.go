@@ -67,3 +67,35 @@ func TestList_WithRole(t *testing.T) {
 	require.Equal(t, identity.RoleClient, roleByEmail[u1.Email])
 	require.Equal(t, identity.RoleAdmin, roleByEmail[u2.Email])
 }
+
+func TestUpdate_StaleVersion(t *testing.T) {
+	repo := setup(t)
+	ctx := context.Background()
+
+	updates := []struct {
+		name   string
+		update func(id string, version int) (*user.User, error)
+	}{
+		{"profile", func(id string, version int) (*user.User, error) {
+			return repo.UpdateProfile(ctx, id, "renamed", version)
+		}},
+		{"status", func(id string, version int) (*user.User, error) {
+			return repo.UpdateStatus(ctx, id, user.StatusBlocked, version)
+		}},
+		{"password", func(id string, version int) (*user.User, error) {
+			return repo.UpdatePassword(ctx, id, "new-hash", version)
+		}},
+	}
+	for _, tc := range updates {
+		t.Run(tc.name, func(t *testing.T) {
+			u := pgseed.InsertUser(t, repo)
+
+			got, err := tc.update(u.ID, u.Version)
+			require.NoError(t, err)
+			require.Equal(t, u.Version+1, got.Version)
+
+			_, err = tc.update(u.ID, u.Version)
+			require.ErrorIs(t, err, user.ErrConcurrentUpdate)
+		})
+	}
+}

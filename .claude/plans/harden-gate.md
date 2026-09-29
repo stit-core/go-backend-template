@@ -75,12 +75,22 @@ blocked-by: —
     Lock 15 с: `make lint` ждёт ≈15 с и даёт forbidigo-FAIL (с нарушением) или `OK` (без),
     `make check` так же; дословное `flock … -c 'make lint'` — взаимная блокировка, `timeout 30`
     → exit 124 без «OK». Контроль: чистое дерево → `OK` / `✓ check clean`
-- [ ] **AC2** — Гейт не сужается и не ослабляется из окружения. Проверка: `make check
+- [x] **AC2** — Гейт не сужается и не ослабляется из окружения. Проверка: `make check
   PKG=./internal/domain/auth/...` и `COVER_FLOOR=0 make check` при нарушении в другом домене →
   FAIL
-- [ ] **AC3** — `make check` гоняет integration-тесты и roundtrip миграций up → down → up; без
+  - Подтверждено: в scratch-worktree с `fmt.Println` в user `make check
+    PKG=./internal/domain/auth/...` и то же с `VERBOSE=1 FORMAT=detailed` → `FAIL: lint`; с
+    падающим тестом в user и `PKG=auth` → `FAIL: go test exit 1`; с 60 непокрытыми
+    statement'ами в user `COVER_FLOOR=0 make check` → `FAIL: coverage 68.2% < floor 75%`, `make
+    cover-check COVER_FLOOR=0` из командной строки → тоже FAIL
+- [x] **AC3** — `make check` гоняет integration-тесты и roundtrip миграций up → down → up; без
   docker падает с понятным сообщением. Проверка: `make check` → в выводе шаг integration;
   мутация `users.sql` (`version=$3 OR TRUE`) → FAIL
+  - Подтверждено: `make check` → шаг `→ make test-int (юнит + integration)`, `✓ check clean`;
+    мутация M23 (`users.sql:23`) + `make gen` → `TestUpdate_StaleVersion/profile` FAIL; Docker
+    скрыт (`unshare -rm` + bind `/dev/null` на сокет) → `TestDockerRequired`: «Docker is
+    unavailable: make check requires integration tests». Лесенка ловит пустой, мусорный,
+    деструктивный (`DROP TABLE users CASCADE`) и `-- noop` down и down 0001 без `DROP FUNCTION`
 - [ ] **AC4** — Обходы хуков закрыты. Проверка: в сессии Claude Code `git commit -n`,
   `git commit --no-veri`, `SKIP_PREPUSH=1 git push`, `git -c core.hooksPath=/dev/null push`
   блокируются хуком; pre-push с грязным деревом → отказ; `make setup` выставляет `core.hooksPath`
@@ -119,10 +129,16 @@ blocked-by: —
     ошибки сборки и загрузки пакетов в выводе; mockery `log-level: warn`; `status.sh` видит
     файлы новых каталогов и `cmd/migrate/`; installer golangci-lint — с тега версии. Проверка
     — AC1; `make check` → `✓ check clean`
-- [ ] **S3** — `check` игнорирует `PKG`/`VERBOSE`, `COVER_FLOOR :=`; integration-тесты и
+- [x] **S3** — `check` игнорирует `PKG`/`VERBOSE`, `COVER_FLOOR :=`; integration-тесты и
   roundtrip миграций в `make check` (docker обязателен, `make doctor` его проверяет); `make test`
   и `-short` приведены к правде (ENF-02, TST-03, ENF-05 частично)
   - Проверка: AC2, AC3 → как описано · Закрывает: AC2, AC3 · Зависит от: S2
+  - Сделано: шаги `check` — через `GATE` (под-make с пустыми `PKG`/`VERBOSE`/`FORMAT`);
+    `override COVER_FLOOR := 75`; шаг `make test-int` (юнит + integration, `-count=1`) вместо
+    `make test`; `cmd/migrate/migrate_test.go` — лесенка up → down → up с отпечатком схемы и
+    `TestDockerRequired`; integration-тест optimistic lock user; `-short` удалён (ничего не
+    делал); vet и lint — с тегом `integration`; `make doctor` проверяет Docker-демон. Проверка —
+    AC2, AC3; `make check` → `✓ check clean`
 - [ ] **S4** — Хуки: `make setup` ставит `core.hooksPath`; pre-push отказывает на грязном дереве;
   commit-msg принимает сообщения, которые генерирует сам git (Revert, fixup); хук Claude Code
   PreToolUse (короткий скрипт) блокирует обходы; `make release*` и `docker buildx*` убраны из
@@ -182,14 +198,30 @@ blocked-by: —
   только из `-json`/`-v`.
 - `cmd/migrate/**` — в эвристике инфра-поверхности (`status.sh`, rule `infra-impact`, skill
   `infra-handoff`): там регистрируются источники миграций (ENF-12).
+- Integration в гейте — шагом `make test-int` (юнит + integration одним прогоном) вместо
+  `make test`: каждый тест бежит один раз; `make test` остаётся быстрым циклом без Docker.
+- `-count=1` у integration: исход зависит от Docker, а не только от кода, и кеш `go test`
+  вернул бы «ok» прогона, где testkit пропустил тесты. Цена — ≈11 с на каждый `make check`.
+- Docker обязателен через тест `TestDockerRequired`, а не через `docker info` в скрипте: он
+  видит Docker так же, как testcontainers (тот игнорирует недоступный `DOCKER_HOST` и берёт
+  сокет по умолчанию), и не требует docker CLI; `make doctor` проверяет демон для диагностики.
+- Лесенка миграций сравнивает отпечаток схемы (колонки, индексы, ограничения, триггеры,
+  функции без объектов расширений) до `up` и после `down`, а не только «up повторно проходит»:
+  иначе пустой или разрушительный down 0003 проходит. Расширения вне отпечатка — `down` их не
+  удаляет по правилу `sqlc-and-migrations`.
+- Integration-тест optimistic lock user (`TestUpdate_StaleVersion`) добавлен здесь, хотя тесты —
+  зона `fix-reference-code`: без него проверка AC3 (мутант M23) невыполнима; остальные методы
+  репозиториев — S11 `fix-reference-code`.
+- `PKG`/`VERBOSE`/`FORMAT` гасятся на под-make, а не `override` в Makefile: в цикле разработки
+  они нужны. `GOFLAGS` из окружения тоже меняет `go test` (вне находок аудита) — префикс
+  `GOFLAGS=` у команд гейта блокирует хук S4.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S2 закрыт: lint fail-closed (AC1 подтверждён воспроизведениями в scratch-worktree), кеш
-линтера своего дерева, fmt-check, pre-commit и `status --full` без мягких путей, `make test`
-показывает ошибки сборки, mockery молчит. Обнаружено: `config verify` ловит и строку матрицы 13d
-(узел конфига не на своём месте) — учесть в S10; на тёплом кеше `--timeout=100ms` падает ещё на
-загрузке пакетов (exit 4 без «0 issues.»). `make check` → `✓ check clean` за ≈2 с на тёплых
-кешах; сводка тестов — «13 пакет(ов) с тестами». Следующий шаг — S3.
+S2 и S3 закрыты. S3: гейт не читает `PKG`/`VERBOSE`/`FORMAT`, порог покрытия — константа,
+integration и лесенка миграций — шаг `make test-int` в `make check`, без Docker гейт падает на
+`TestDockerRequired`. `make check` → `✓ check clean` за ≈14 с (integration ≈11 с всегда без
+кеша; остальное — ≈3 с на тёплых кешах); сводка — «17 пакет(ов) с тестами». Обнаружено: в S2
+`config verify` закрыл и строку матрицы 13d — учесть в S10. Следующий шаг — S4.
