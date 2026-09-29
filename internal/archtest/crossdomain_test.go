@@ -52,7 +52,8 @@ func TestNoCrossDomainIdentityClosure(t *testing.T) {
 	closureAllowlist.Check(t, found, "a port between domains is implemented by a typed adapter in module/adapters.go that maps errors and types")
 }
 
-// identityFunc распознаёт функцию вида func(x T) R { return x } и возвращает типы T и R.
+// identityFunc распознаёт функцию вида func(x T) R { return x } или func(x T) (R, error)
+// { return x, nil } (конструктор fx с ошибкой) и возвращает типы T и R.
 func identityFunc(n ast.Node) (ast.Expr, ast.Expr, bool) {
 	var fn *ast.FuncType
 	var body *ast.BlockStmt
@@ -64,19 +65,25 @@ func identityFunc(n ast.Node) (ast.Expr, ast.Expr, bool) {
 	default:
 		return nil, nil, false
 	}
-	if body == nil || len(body.List) != 1 || fn.Results == nil || len(fn.Results.List) != 1 ||
-		len(fn.Params.List) != 1 || len(fn.Params.List[0].Names) != 1 {
+	if body == nil || len(body.List) != 1 || fn.Results == nil || len(fn.Params.List) != 1 || len(fn.Params.List[0].Names) != 1 {
 		return nil, nil, false
 	}
 	ret, ok := body.List[0].(*ast.ReturnStmt)
-	if !ok || len(ret.Results) != 1 {
+	results := fn.Results.List
+	switch {
+	case !ok || len(ret.Results) != len(results) || len(results) > 2:
+		return nil, nil, false
+	case len(results) == 2 && (!isIdent(results[1].Type, "error") || !isIdent(ret.Results[1], "nil")):
+		return nil, nil, false
+	case !isIdent(ret.Results[0], fn.Params.List[0].Names[0].Name):
 		return nil, nil, false
 	}
-	id, ok := ret.Results[0].(*ast.Ident)
-	if !ok || id.Name != fn.Params.List[0].Names[0].Name {
-		return nil, nil, false
-	}
-	return fn.Params.List[0].Type, fn.Results.List[0].Type, true
+	return fn.Params.List[0].Type, results[0].Type, true
+}
+
+func isIdent(expr ast.Expr, name string) bool {
+	id, ok := expr.(*ast.Ident)
+	return ok && id.Name == name
 }
 
 // typePackage — имя пакета в типе вида pkg.T или *pkg.T; "" — тип без пакета.

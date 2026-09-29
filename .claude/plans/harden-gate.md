@@ -278,6 +278,8 @@ blocked-by: —
   `cmd/…`, `internal/testkit`) домену недоступен, а `cmd/` и `internal/testkit` (`pgseed`)
   импортируют домены (N1). Столкновение `userView` с `UserView` ловит `buildAPI` (паника huma
   `duplicate name` в `TestHTTPOperations` и `TestOpenAPISpec`) — archtest его не дублирует (N3).
+  Identity-closure видна и в форме конструктора fx с ошибкой `func(x T) (R, error) { return x,
+  nil }`: иначе такая closure прячется, а allowlist велит удалить её запись как устаревшую (NB5).
 - `gen-check` — как остальные шаги: вывод только на провале, последняя строка `OK`/`FAIL` (N5).
   Порог покрытия не трогаю и тестов доменов не дописываю (N7): запас ≈1 statement, но тесты —
   `fix-reference-code` (S13 — канон и happy-path, S14 — широкий scope, порог 90), а тесты к
@@ -335,7 +337,8 @@ S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Эта
 S7–S11, AC9, AC10 и фиксы прошлого круга (проза по путям git, N1–N5, строка 15) он воспроизвёл.
 Его блокирующий B1 исправлен: таблица запроса — только в позиции таблицы, колонка с именем
 чужой таблицы гейт не роняет (кейсы `k*` → FAIL, `k-column` → clean). NB1 исправлен: утверждение
-в хелпере засчитывается (`t15-helper` → clean, `t15` → FAIL). NB4, NB5, NB6 (AC8), NB8 — следующими
+в хелпере засчитывается (`t15-helper` → clean, `t15` → FAIL). NB5 исправлен: closure с `(T,
+error)` видна (`closure-err-clean`, `closure-new-err` → FAIL). NB4, NB6 (AC8), NB8 — следующими
 фиксами; NB2 и NB3 переносит в планы дирижёр. Строки матрицы ENF:
 15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Allowlist (опустошает
 `fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
@@ -344,5 +347,5 @@ S7–S11, AC9, AC10 и фиксы прошлого круга (проза по �
 до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Хвост: запас покрытия
 ≈1 statement (75,1% при пороге 75%) — первый шаг `fix-reference-code` с непокрытым кодом упрётся в
 `cover-check`; снимают S13–S14 там, и там же — покрытие по функциям или диффу (строка 11).
-Следующее: фиксы NB4–NB6, NB8 → перепроверка валидатором B2 → S12 отдельным агентом →
+Следующее: фиксы NB4, NB6, NB8 → перепроверка валидатором B2 → S12 отдельным агентом →
 закрыть план, push шаблона.
