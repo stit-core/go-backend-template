@@ -83,7 +83,7 @@ var (
 )
 
 // TestProseReferencesExist: make-цели и пути репо в коде прозы (CLAUDE.md, README, docs/,
-// .claude/rules и skills) есть в репо — иначе агент идёт по мёртвой ссылке (HAR-11). Репо — то,
+// .claude/rules и skills) есть в репо — иначе агент идёт по мёртвой ссылке. Репо — то,
 // что отслеживает git: локальное (test/.venv, неотслеживаемый файл) есть не в каждом клоне.
 // Плейсхолдеры (<d>, NNNN, *) — не ссылки; артефакт docs/stack/<kind>.md — по его шаблону.
 func TestProseReferencesExist(t *testing.T) {

@@ -272,7 +272,9 @@ blocked-by: —
   регулярка принимает `JOIN` без алиаса за алиас и теряет таблицу. kit-таблиц в запросах нет —
   схема sqlc только `migrations/`. Allowlist — один тип
   `allowlist.List` (`internal/testkit/allowlist`) в archtest и `cmd/api`: нарушение → ID
-  находки; запись без нарушения или без ID валит тест, проверка AC7 — grep по ID (N4).
+  находки; запись без нарушения или без ID валит тест, проверка AC7 — grep по ID (N4). ID
+  находок — только в значениях allowlist (там они данные); в Go-комментариях их нет: ссылка на
+  задачу повиснет после программы (rule `comments`, NB8).
 - Мост к чужому домену закрыт слоями, а не списком импортёров: домен вне доменов импортирует только
   `internal/platform` и `pkg`, а они — только друг друга; пакет-мост (`internal/<каталог>`,
   `cmd/…`, `internal/testkit`) домену недоступен, а `cmd/` и `internal/testkit` (`pgseed`)
@@ -343,8 +345,8 @@ S7–S11, AC9, AC10 и фиксы прошлого круга (проза по �
 чужой таблицы гейт не роняет (кейсы `k*` → FAIL, `k-column` → clean). NB1 исправлен: утверждение
 в хелпере засчитывается (`t15-helper` → clean, `t15` → FAIL). NB5 исправлен: closure с `(T,
 error)` видна (`closure-err-clean`, `closure-new-err` → FAIL). NB4 исправлен: маршрут мимо huma
-валит `TestBoot` (`raw-route`, `raw-route-live`, `Mount` → FAIL). NB6 (AC8) и NB8 — следующими
-фиксами; NB2 и NB3 переносит в планы дирижёр. Строки матрицы ENF:
+валит `TestBoot` (`raw-route`, `raw-route-live`, `Mount` → FAIL). NB8 исправлен: ID находок —
+только в записях allowlist. NB6 (AC8) — следующим фиксом; NB2 и NB3 переносит в планы дирижёр. Строки матрицы ENF:
 15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Allowlist (опустошает
 `fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
 `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
@@ -352,5 +354,5 @@ error)` видна (`closure-err-clean`, `closure-new-err` → FAIL). NB4 исп
 до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Хвост: запас покрытия
 ≈1 statement (75,1% при пороге 75%) — первый шаг `fix-reference-code` с непокрытым кодом упрётся в
 `cover-check`; снимают S13–S14 там, и там же — покрытие по функциям или диффу (строка 11).
-Следующее: фиксы NB6, NB8 → перепроверка валидатором B2 → S12 отдельным агентом →
+Следующее: фикс NB6 → перепроверка валидатором B2 → S12 отдельным агентом →
 закрыть план, push шаблона.

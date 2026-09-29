@@ -1,5 +1,5 @@
 // Package allowlist — известные нарушения новой проверки гейта: гейт зелёный, а долг виден и
-// конечен. Списки опустошает fix-reference-code.
+// конечен.
 package allowlist
 
 import (
@@ -25,7 +25,7 @@ func (l List) Check(t testing.TB, violations []string, rule string) {
 	for v, id := range l {
 		switch {
 		case !findingID.MatchString(id):
-			t.Errorf("allowlist entry %q needs the ID of its audit finding (ADP-02), got %q", v, id)
+			t.Errorf("allowlist entry %q needs an audit finding ID such as ADP-02, got %q", v, id)
 		case !slices.Contains(violations, v):
 			t.Errorf("allowlist entry %q (%s) matches no violation: remove it", v, id)
 		}

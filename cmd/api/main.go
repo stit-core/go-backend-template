@@ -50,7 +50,7 @@ var kitConfigs = []any{
 }
 
 // beforeHTTP поднимает пул, NATS и Redis раньше сервера HTTP: fx останавливает хуки в обратном
-// порядке, и HTTP гасится до них — запросам в полёте не достаются закрытые клиенты (FX-01).
+// порядке, и HTTP гасится до них — запросам в полёте не достаются закрытые клиенты.
 var beforeHTTP = fx.Module("before-http", fx.Invoke(func(*pgkit.ReadWriteDB, *natskit.Client, cachekit.Cache) {}))
 
 var (

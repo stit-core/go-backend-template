@@ -80,7 +80,7 @@ var publicOperations = []string{
 
 var pathParam = regexp.MustCompile(`\{[^}]*\}`)
 
-// TestHTTPOperations: операция без Security публична в рантайме (SEC-03), поэтому она либо
+// TestHTTPOperations: операция без Security публична в рантайме, поэтому она либо
 // под Security, либо в publicOperations. Метод и путь уникальны: huma и chi молча
 // перезаписывают маршрут, а дубль OperationID huma роняет паникой — она здесь и видна.
 func TestHTTPOperations(t *testing.T) {

@@ -25,7 +25,7 @@ var closureAllowlist = allowlist.List{
 }
 
 // TestNoCrossDomainIdentityClosure: `func(uc *user.Usecase) auth.Port { return uc }` отдаёт
-// потребителю чужие ошибки и типы мимо маппинга (ADP-02) — порт между доменами реализует
+// потребителю чужие ошибки и типы мимо маппинга — порт между доменами реализует
 // типовой адаптер в module/adapters.go.
 func TestNoCrossDomainIdentityClosure(t *testing.T) {
 	t.Parallel()
