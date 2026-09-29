@@ -39,7 +39,8 @@ DDD-артефакты доменов живут в **соседнем strategy-
 (`FORMAT=detailed`/`VERBOSE=1` — полно; `PKG=./x/...` — подмножество; `make check` их не читает).
 Канонический gate перед claim «готово» / push — **`make check`** (fmt-check + vet + lint +
 migrations-check + test-int (юнит + integration, нужен Docker) + build + gen-check + cover-check
-≥75%). `make gen` — регенерация sqlc+mockery. Реализация за таргетами — `scripts/tools/*`
+≥75%). `make gen` — регенерация sqlc, mockery и `openapi.json` (контракт API из регистраций huma, без
+запуска сервиса). Реализация за таргетами — `scripts/tools/*`
 (напрямую не зови).
 
 ## Карта: где что
@@ -96,7 +97,7 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
   входит в твой отчёт хабу, прямой заход — попроси юзера передать его туда (rule `infra-impact` +
   skill `/infra-handoff`).
 - Cross-domain — только порты + адаптеры. Логи — `logkit.Logger`. Generic-примитив → `golibinfra`.
-- `make gen` после правки `queries/`, `migrations/` или интерфейсов из `.mockery.yml`.
+- `make gen` после правки `queries/`, `migrations/`, интерфейсов из `.mockery.yml` или HTTP-операций.
 - Conventional Commits. Дёргай `make <verb>`, не скрипты напрямую.
 
 ### Сначала спросить

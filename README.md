@@ -82,7 +82,7 @@ Module path, README, фундамент и удаление reference-домен
 
 ```bash
 make check        # полный gate перед push (fmt, vet, lint, тесты с integration, build, gen, миграции, coverage)
-make gen          # регенерация sqlc + mockery
+make gen          # регенерация sqlc, mockery и openapi.json
 make e2e          # поднять docker-стек → pytest → снести
 make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /release)
 ```

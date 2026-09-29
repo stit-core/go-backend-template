@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
+	"os"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -32,6 +36,39 @@ func buildAPI(t *testing.T, opts ...fx.Option) huma.API {
 	)
 	require.NoError(t, app.Err())
 	return api
+}
+
+var update = flag.Bool("update", false, "rewrite openapi.json from the registered operations (make gen)")
+
+// openAPIFile — контракт API в корне репо: одна спецификация на сервис.
+const openAPIFile = "../../openapi.json"
+
+// TestOpenAPISpec: openapi.json пишет make gen (-update) из тех же регистраций, что у сервиса,
+// при конфиге по умолчанию; без флага тест ловит расхождение файла с кодом.
+func TestOpenAPISpec(t *testing.T) {
+	unsetHTTPEnv(t)
+	spec, err := json.MarshalIndent(buildAPI(t).OpenAPI(), "", "  ")
+	require.NoError(t, err)
+	spec = append(spec, '\n')
+	if *update {
+		require.NoError(t, os.WriteFile(openAPIFile, spec, 0o644))
+		return
+	}
+	file, err := os.ReadFile(openAPIFile)
+	require.NoError(t, err)
+	require.Equal(t, string(file), string(spec), "openapi.json is out of date: run make gen")
+}
+
+// unsetHTTPEnv убирает HTTP_* из окружения на время теста: спецификация — при конфиге по умолчанию,
+// а не при том, что выставлено в шелле.
+func unsetHTTPEnv(t *testing.T) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		if key, _, _ := strings.Cut(kv, "="); strings.HasPrefix(key, "HTTP_") {
+			t.Setenv(key, "") // вернёт прежнее значение после теста
+			require.NoError(t, os.Unsetenv(key))
+		}
+	}
 }
 
 // publicOperations — операции без Security: пробы kit'а, вход и восстановление доступа.

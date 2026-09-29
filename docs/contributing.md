@@ -74,7 +74,7 @@ string-replace edit.
 | Path-scoped rule не грузится | frontmatter `paths:` (не `globs:`!) — проверить glob |
 | CLAUDE.md игнорируется | длина >200 строк, либо конфликт инструкций между секциями |
 | Коммит reject'нут | `scripts/git-hooks/commit-msg` — type ∈ {feat,fix,refactor,docs,test,chore,meta} |
-| `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса |
+| `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса или HTTP-операции (`openapi.json`) |
 | `make lint` → `FAIL: golangci-lint exit N` | линтер не отработал, причина — в хвосте вывода: 3 — конфиг или неизвестный линтер, 4 — таймаут, 5 — нет Go-файлов, 7 — ошибка в логе (например, пакет не найден) |
 | Замечания lint по файлам, которых нет | кеш анализа своего дерева — `.cache/golangci-lint`; удалить каталог |
 | `validate-plan` / `validate-stack` падает | структура артефакта — см. соответствующий `README`/skill |

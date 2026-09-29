@@ -84,13 +84,15 @@ check: ## Канонический gate: fmt-check+vet+lint+migrations+test-int+
 	@echo "✓ check clean"
 
 ##@ GEN
-gen: ## Регенерация сгенерированного кода: sqlc + mockery
+gen: ## Регенерация сгенерированного: sqlc, mockery, openapi.json (без запуска сервиса)
 	sqlc generate
 	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
 	mockery
+	go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 -args -update
 
-gen-check: ## Проверка, что sqlc/mocks актуальны (для check/CI)
+gen-check: ## Проверка, что sqlc, моки и openapi.json актуальны (шаг make check)
 	sqlc diff
+	go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1
 	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
 	mockery
 	@git diff --exit-code -- '**/mocks/*.go' || { echo "mocks out of date — run make gen"; exit 1; }

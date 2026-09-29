@@ -40,7 +40,8 @@ Reference даёт variant-специфичные шаги; этот ритм о
    коды ошибок) — детали уточняющих вопросов в reference.
 2. **Сделать изменение** по шагам reference (scaffold-файлы / правка слоёв).
 3. **`make gen`** — обязателен, если тронул `migrations/`, `queries/*.sql`, интерфейсы из
-   `.mockery.yml`. Сгенерированное (`infra/postgres/db/*`, `**/mocks/*`) руками не правь.
+   `.mockery.yml` или HTTP-операции (`openapi.json`). Сгенерированное (`infra/postgres/db/*`,
+   `**/mocks/*`, `openapi.json`) руками не правь.
 4. **Тесты по RED→GREEN.** Где появляется логика — сначала тест (red по нужной причине), потом
    код до green. Какие файлы/пакеты — в reference.
 5. **Верифицируй перед claim «готово»:** `make check` (полный gate, см. CLAUDE.md § Команды). Точечно —

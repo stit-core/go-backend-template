@@ -46,7 +46,7 @@ make check    # канонический gate: fmt-check + vet + lint + test + b
 Зелёный `make check` — gate пройден (его же гоняет git-хук `pre-push`).
 
 - После правки `queries/`, `migrations/` или интерфейсов из `.mockery.yml` →
-  `make gen` (sqlc + mockery). Сгенерированное руками не правим.
+  `make gen` (sqlc, mockery, openapi.json). Сгенерированное руками не правим.
 - **Conventional Commits** (хук `commit-msg`): `<type>(<scope>)?: <subject>`,
   subject ≤72. Типы: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `meta`.
   Пример: `feat(user): add email change endpoint`.

@@ -38,8 +38,8 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `delivery/nats` | unit handler-функции (мок Usecase-порта) — включая дубль-доставку |
 | `infra/postgres/repository.go` | integration per-домен (build-tag) |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp` |
-| HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь |
-| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, 401, 429, событие до подписчика, HTTP гасится раньше пула, NATS и Redis |
+| HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь; `openapi.json` совпадает с кодом |
+| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, 401, 429, событие до подписчика, `/openapi.json` = `openapi.json`, HTTP гасится раньше пула, NATS и Redis |
 
 ## TDD для багфиксов — обязательно
 

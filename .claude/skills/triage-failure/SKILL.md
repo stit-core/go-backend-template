@@ -93,6 +93,7 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 | **Race detector** | прочти оба стека целиком; найди shared state без синхронизации. Минимальный фикс — sync.Mutex или channel; идеальный — устрани shared state. |
 | **mocks drift** (`make gen-check`) | `make gen` локально, закоммить дельту. Если в `_test.go` остались устаревшие EXPECT'ы — обнови. |
 | **sqlc drift** (`make gen-check`) | `make gen`, проверь дельту в `infra/postgres/db/*`, закоммить. |
+| **openapi drift** (`TestOpenAPISpec`, `make gen-check`) | `make gen`: `openapi.json` — контракт API; дельта показывает, что поменялось в операциях и схемах, закоммить её вместе с кодом. |
 
 ### 6. Если корневая причина в чужом коде
 

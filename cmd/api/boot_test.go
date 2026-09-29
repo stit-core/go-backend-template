@@ -3,8 +3,12 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -46,6 +50,7 @@ func TestBoot(t *testing.T) {
 	pg := testkit.StartPostgres(t, testkit.WithMigrations(sources.Kits...), testkit.WithMigrationsDir(repopath.Migrations()))
 	nats := testkit.StartNATS(t, testkit.WithJetStream())
 	redis := testkit.StartRedis(t)
+	unsetHTTPEnv(t)
 	for k, v := range map[string]string{
 		"PG_DSN": pg.DSN, "NATS_URL": nats.URL, "REDIS_URL": redis.URL,
 		"NATS_JETSTREAM_ENABLED": "true", "NATS_JS_STREAM_NAMES": "user,verification",
@@ -101,6 +106,19 @@ func TestBoot(t *testing.T) {
 	require.NoError(t, db.QueryRow(t.Context(),
 		`SELECT count(*) FROM outbox_verification WHERE subject LIKE 'verification.%'`).Scan(&own))
 	require.Positive(t, own, "verification publishes into its own outbox")
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/openapi.json", nil)
+	require.NoError(t, err)
+	resp, err := anon.Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	var live bytes.Buffer
+	require.NoError(t, json.Indent(&live, body, "", "  "))
+	spec, err := os.ReadFile(openAPIFile)
+	require.NoError(t, err)
+	require.Equal(t, string(spec), live.String()+"\n", "the running service serves openapi.json")
 
 	app.RequireStop()
 	stops := func(kit string) int {

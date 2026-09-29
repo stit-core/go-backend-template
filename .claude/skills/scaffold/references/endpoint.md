@@ -122,6 +122,7 @@ httpkit.ErrorMapping{
 ### 9. Верификация
 
 ```bash
+make gen          # openapi.json — контракт API — подхватывает новую операцию
 make test PKG=./internal/domain/<name>/...
 make lint PKG=./internal/domain/<name>/...
 make build
