@@ -10,7 +10,6 @@ enforce'ится детерминированно, как вмешаться. (�
 | Ядро + роутер | `CLAUDE.md` (реальный файл) | всегда, каждый запуск | advisory |
 | Path-scoped правила | `.claude/rules/*.md` с `paths:` | когда matching-файл в контексте | advisory |
 | Skills (процедуры) | `.claude/skills/<name>/SKILL.md` | по `description` или `/<name>` | procedural |
-| Subagent'ы | `.claude/agents/*.md` | когда основной агент делегирует | role-specific |
 | Settings / permissions | `.claude/settings.json` | старт сессии | детерминированно (deny) |
 
 Progressive disclosure: на холодном старте — только имена+описания; тела skills/rules и
@@ -26,7 +25,7 @@ prompt → /smartdev (cockpit: make status, читает активные пла
        → plan (planning-first: изменение идёт через план — файл в .claude/plans/)
        → act (RED→GREEN→REFACTOR; инфра-поверхность задета → infra-handoff)
        → verify (make test/lint/build; claim «готово» → make check)
-       → review (опц. subagent reviewer)
+       → review (опц. /code-review)
        → commit (Conventional Commits)
 ```
 
@@ -70,8 +69,6 @@ string-replace edit.
 |---|---|
 | Skill не активируется | `description` в frontmatter: ключевой сценарий первым, категории намерений вместо списка фраз; `description` + `when_to_use` ≤ 1536 символов (дальше листинг обрезает) |
 | Path-scoped rule не грузится | frontmatter `paths:` (не `globs:`!) — проверить glob |
-| Subagent не подхватывается | frontmatter агента без `name` — файл считается документацией |
-| Subagent ушёл надолго | `tools` в frontmatter — урезать до read-only |
 | CLAUDE.md игнорируется | длина >200 строк, либо конфликт инструкций между секциями |
 | Коммит reject'нут | `scripts/git-hooks/commit-msg` — type ∈ {feat,fix,refactor,docs,test,chore,meta} |
 | `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса |

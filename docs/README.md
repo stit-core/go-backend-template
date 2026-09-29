@@ -6,7 +6,7 @@
 - [getting-started.md](getting-started.md) — пошаговый путь: форк → проектирование → `/de-template` → свой проект. **[META]** — удаляется при де-темплейтизации.
 
 ## Контрибьютору шаблона
-- [contributing.md](contributing.md) — как устроена `.claude`-система (rules/skills/agents/settings), что enforce'ится, как вмешаться, troubleshooting. **[META]**.
+- [contributing.md](contributing.md) — как устроена `.claude`-система (rules/skills/settings), что enforce'ится, как вмешаться, troubleshooting. **[META]**.
 
 ## Reference (переезжает в проект)
 - [reference/architecture.md](reference/architecture.md) — слои домена, ports/adapters, fx, outbox, non-goals, граница с golibinfra.
