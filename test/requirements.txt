@@ -6,7 +6,6 @@ pydantic==2.10.4
 ruff==0.8.6
 mypy==1.14.1
 
-# infra-интроспекция (pg/nats/redis)
+# infra-интроспекция (pg/nats)
 psycopg[binary]==3.2.3
 nats-py==2.9.0
-redis==5.2.1

@@ -54,25 +54,25 @@ type <Aggregate><PastEvent> struct {
 }
 ```
 
-Поля **без json-тегов**: wire = Go-имена, смена формата = новый subject `….v2`. `At` — `uc.clock.Now()` (или время из сохранённой сущности). Subject — unexported const рядом с payload: не inline-литерал в usecase и не экспорт; consumer заводит свою константу (шаг 4).
+Поля **без json-тегов**: wire = Go-имена, смена формата = новый subject `….v2`. `At` — `uc.d.Clock.Now()` (или время из сохранённой сущности). Subject — unexported const рядом с payload: не inline-литерал в usecase и не экспорт; consumer заводит свою константу (шаг 4).
 
 ### 3. Публикация в usecase
 
 В usecase-методе, **внутри той же tx что и основное изменение**, через `pgkit.Transactor.WithTx` (tx живёт в `context`, передаётся в repo и outbox через `txCtx`):
 
 ```go
-err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
-    if err := uc.repo.UpdateX(txCtx, ...); err != nil {
+err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+    if err := uc.d.Repo.UpdateX(txCtx, ...); err != nil {
         return err
     }
-    return uc.events.Publish(txCtx, subject<Aggregate><PastEvent>, <Aggregate><PastEvent>{
+    return uc.d.Events.Publish(txCtx, subject<Aggregate><PastEvent>, <Aggregate><PastEvent>{
         <Aggregate>ID: ...,
-        At:            uc.clock.Now(),
+        At:            uc.d.Clock.Now(),
     })
 })
 ```
 
-`uc.events` — это `outboxkit.Publisher` (`Publish(ctx, subject, payload) error`), инжектится в `UsecaseDeps` (поле `Events`). Сериализация в JSON — внутри `outboxkit.Bus.Publish`.
+`uc.d.Events` — `outboxkit.Publisher` (`Publish(ctx, subject, payload) error`), поле `Events` в `UsecaseDeps`. Сериализация в JSON — внутри `outboxkit.Bus.Publish`.
 
 Если домен-источник **ещё не публикует** события — заведи ему per-domain outbox: `internal/domain/<source>/infra/outbox/outbox.go` с `const Table = "outbox_<source>"`, `var Migrations = outboxpg.TableMigrations(Table)` и `var Providers = events.OutboxFor("<source>", Table)`; включи `Providers` в `<source>/module/module.go` (даёт приватный `outboxkit.Publisher`); добавь `<source>outbox.Migrations` в `sources.Kits` (`cmd/migrate/sources/sources.go`; схема kit-owned, в `migrations/` не дублируется — образец `internal/domain/user/infra/outbox/outbox.go`); если subject-префикс новый — добавь стрим в `NATS_JS_STREAM_NAMES` (инфра-handoff).
 
@@ -157,7 +157,7 @@ import (
 )
 
 var Module = fx.Module(
-    "<consumer>",
+    "internal/domain/<consumer>/module",
     fx.Provide(
         // …существующие провайдеры…
         natsdelivery.NewHandler,

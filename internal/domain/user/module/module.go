@@ -10,11 +10,11 @@ import (
 )
 
 var Module = fx.Module(
-	"user",
+	"internal/domain/user/module",
 	useroutbox.Providers,
 	fx.Provide(
 		userpg.NewRepository,
-		fx.Annotate(user.NewPolicy, fx.As(new(user.Authorizer))),
+		user.NewPolicy,
 		user.NewMetrics,
 		user.NewUsecase,
 		userhttp.NewHandler,

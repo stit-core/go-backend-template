@@ -82,12 +82,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
     TST-08 — мелочи.
 - **Мутации для перепроверки:** 34 мутации из раздела TST отчёта (сейчас гейт убивает 9) и D02
   из раздела DOG (Publish вне транзакции).
-- **fx-аудит** (29.09; полный отчёт —
-  `/home/mm/.cache/stit-audit-program/fx-audit.md`).
-  FX-01 и FX-05 закрывает кит (S1); FX-06 — `Usecase` перечисляет зависимости трижды, забытое
-  `metrics: d.Metrics` молча выключает метрики (эксперимент X16); FX-10 — flagkit в графе без
-  потребителя, `context.Context` в графе, cachekit только ради `/ready`; FX-11 — две идиомы
-  привязки к интерфейсу, три схемы имён модулей, два механизма конфигов (S2).
+- **fx-аудит** (29.09; полный отчёт — `/home/mm/.cache/stit-audit-program/fx-audit.md`): FX-01
+  и FX-05 закрыл кит (S1), FX-06 (X16), FX-10 и FX-11 — S2.
 
 ## Не входит
 - Проза обвязки, рецепты, жизненный цикл шаблона — `repair-harness`.
@@ -127,12 +123,14 @@ prod-дефолты, понятный контракт ошибок API, тес�
   нет (`beforeHTTP`, client-IP middleware, `pkg/tokens`, `publicOperations`); гейт зелёный.
   Проверка: `grep -rn "beforeHTTP\|WithIP\|pkg/tokens\|publicOperations" --include=*.go .` → пусто;
   `make check` → `✓ check clean`
-- [ ] **AC12** — Сборка DI единообразна: одна идиома привязки к интерфейсу, имя модуля — путь
+- [x] **AC12** — Сборка DI единообразна: одна идиома привязки к интерфейсу, имя модуля — путь
   пакета, конфиги китов — через их `NewConfig`, `main`, тест графа и boot-тест собирают один
   `service`, зависимости usecase — одной структурой, события fx — в logkit, порядок старта и
   остановки держит httpkit, таймауты старта и остановки явные; в графе нет `context.Context`,
   flagkit и cachekit. Проверка: boot-тест зелёный; fx X16 невозможен по построению; X6 и X15
   ловят кит или `fx.ValidateApp`
+  - Подтверждено: `TestBoot` зелёный без Redis; X16 невозможен (`Usecase{d UsecaseDeps}`); X6 —
+    порядок держит httpkit, X15 — `fx.ValidateApp`; `fx.As`, `context.Context`, flagkit, cachekit нет
 - [ ] **AC13** — Контракт ошибок API: каждая ошибка — problem+json (RFC 9457) со стабильным
   машинным `code`; 422 перечисляет поля (путь, код, сообщение); 401 и 403 различают «войти
   заново», «обновить сессию» и «нет прав»; 429 несёт `Retry-After`; 409 — код конфликта; 5xx без
@@ -156,19 +154,19 @@ prod-дефолты, понятный контракт ошибок API, тес�
   boot-тест проверяет, что HTTP-сервер стартует последним и гасится первым
   - Проверка: `make check` → зелёный; `grep -rn "beforeHTTP\|MapErr" --include=*.go .` → пусто;
     fx X6, X11, X15 → пойманы китом, `fx.ValidateApp` или boot-тестом · Закрывает: AC11, AC12 · Зависит от: —
-  - Сделано: `make check` → `✓ check clean`, grep пусто. X6 (`pgkit.Module` ниже `httpkit.Module`) —
-    порядок держит кит: HTTP стартует последним, гасится первым, пул закрывается последним; X11 —
-    старт падает `ErrAuthNotConfigured` (кит); X15 — `TestFxGraphValidates` (`missing type:
-    timerkit.scheduler`). `TestBoot` ловит и X12, X13 (новая сверка `sources.Kits` с группой
-    `pgkit.migrations`), и `registerHTTP` в корне после `httpkit.Module` при зависимости с хуком
-    только у хендлеров (T-C валидатора); логи — `fdn-s1-*.log` в материалах программы
-- [ ] **S2** — DI-канон: зависимости usecase — одной структурой; одна идиома привязки к
+  - Сделано: `make check` → `✓ check clean`, grep пусто; X6 — порядок держит кит (HTTP последним
+    и первым при любом месте `pgkit.Module`), X11 — старт падает `ErrAuthNotConfigured`, X15 —
+    `TestFxGraphValidates`; `TestBoot` ловит и X12, X13, и `registerHTTP` в корне при зависимости с
+    хуком только у хендлеров (T-C); логи — `fdn-s1-*.log` в материалах программы
+- [x] **S2** — DI-канон: зависимости usecase — одной структурой; одна идиома привязки к
   интерфейсу; имя модуля — путь пакета; конфиги китов — через их `NewConfig`, `App` — только
   конфиги приложения; без `context.Context` в графе; flagkit и cachekit вне графа до первого
   потребителя — `/ready`, boot-тест, e2e-стек и local-deps без Redis; явные
   `fx.StartTimeout`/`fx.StopTimeout`; раздел «fx» в `architecture.md` тем же коммитом (FX-06,
   FX-10, FX-11)
   - Проверка: AC12 → выполнен · Закрывает: AC12 · Зависит от: S1
+  - Сделано: AC12 подтверждён, `make check` → `✓ check clean`; X6, X15 повторены (`fdn-s2-*.log`);
+    скелет `make new-domain` по новому канону собирается, lint и его тесты зелёные
 - [ ] **S3** — Общие примитивы без лишнего: `ForbiddenError` и его маппинг в одном месте,
   единственный источник правила пароля, тип пагинации, константы исходов метрик, ID — через
   `idkit` (COD-06)
@@ -259,18 +257,18 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - flagkit и cachekit — вне графа до первого потребителя (FX-10): сервис и `/ready` без Redis.
 - bump golibinfra в `go.mod` разрешён владельцем; изменения env из аннотаций тегов — в INFRA-HANDOFF.
 - Мутации, D02 и пустые allowlist'ы — одним итоговым шагом S15.
-- S1: `registerHTTP` и `httpkit.Middlewares` — в `fx.Module("cmd/api")` (`httpModule`): Invoke
-  модулей fx выполняет раньше корневого хука сервера, поэтому зависимость с хуком, которую берут
-  только хендлеры, стартует до HTTP при любом месте модуля; `TestBoot` требует `httpkit.serve`
-  последним на старте и первым на остановке. `Middlewares` провайдит приложение, а не `authgate`:
-  значение одно на граф, порядок цепочки — решение сервиса.
-- S1: `ErrorMap` — таблица на прежнюю функцию маппинга (`authErrors`, `refreshErrors`,
-  `userErrors`, `verificationErrors`), хендлер зовёт `Map` сам; `Declare` — в S8 вместе с точными
-  таблицами операций: доменная таблица на каждой операции объявила бы в `openapi.json` чужие ошибки.
-- S1: порт `auth.LoginGuard` повторяет кит (`Attempt` + `RecordSuccess`); ошибка guard, как и
-  раньше, только в лог — fail-closed для логина делает S10 (SEC-05).
-- S1: подписчик без JetStream валит старт — `NATS_JETSTREAM_ENABLED` и `NATS_JS_STREAM_NAMES` в
-  «Required» `.env.example`, `make local-deps-up` поднимает NATS с `-js`.
+- S1: `registerHTTP` и `httpkit.Middlewares` — в `fx.Module("cmd/api")`: Invoke модулей fx
+  выполняет раньше корневого хука сервера — зависимость с хуком, нужная только хендлерам,
+  стартует до HTTP; `Middlewares` провайдит приложение (значение одно на граф), не `authgate`.
+- S1: `ErrorMap` — таблица на прежнюю функцию маппинга, хендлер зовёт `Map`; `Declare` — в S8 с
+  точными таблицами операций: доменная таблица объявила бы операции в `openapi.json` чужие ошибки.
+- S1: порт `auth.LoginGuard` повторяет кит (`Attempt` + `RecordSuccess`); ошибка guard по-прежнему
+  только в лог — fail-closed для логина делает S10 (SEC-05).
+- S2: порт — тип результата провайдера (`NewPolicy` → `Authorizer`, как `NewRepository`),
+  identity-closure — delivery-порты и типы китов; без `fx.As`: closure видит archtest.
+- S2: `App` (Cookie) читает envconfig без `golibinfra/config` — `config.Load` требует ctx; строка
+  старта — `context.Background()` корня процесса в `cmd/api` (правило tests-pipeline уточнено).
+  `fx.StopTimeout` 30s = HTTP 15s + NATS 10s + запас. Неиспользуемая фикстура `redis` e2e удалена.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, envelope `data`, problem+json с машинным `code`,
@@ -283,16 +281,16 @@ prod-дефолты, понятный контракт ошибок API, тес�
   прокси) — по аннотациям v1.2.0 и v1.3.0; `REDIS_URL` сервису не нужен; `OTEL_*` — если метрики
   экспортируются через telemetry.
 - Образы от nonroot с закреплённой базой.
-- Лёг S1 (golibinfra v1.2.0, новых внешних зависимостей нет): `NATS_JETSTREAM_ENABLED=true` и
-  стрим `user` в `NATS_JS_STREAM_NAMES` нужны для старта (подписчик verification);
-  `LOG_REDACT_ENABLED` не читается — маскирование логов включено всегда, выключатель
-  `LOG_REDACT_DISABLED=true` (в проде не ставить); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64
-  (полный адрес — 128), блокировки со старым ключом теряются не дольше
-  `BRUTEFORCE_LOCK_DURATION`; ошибки API — problem+json с `code` и `request_id` (без
-  `type`/`instance`), 404/405 — в той же форме.
+- Лёг S1 (golibinfra v1.2.0): `NATS_JETSTREAM_ENABLED=true` и стрим `user` в
+  `NATS_JS_STREAM_NAMES` нужны для старта; `LOG_REDACT_ENABLED` не читается — маскирование логов
+  включено всегда, выключатель `LOG_REDACT_DISABLED=true` (в проде не ставить);
+  `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64 — блокировки со старым ключом теряются не дольше
+  `BRUTEFORCE_LOCK_DURATION`; ошибки API — problem+json с `code` и `request_id`, без `type`/`instance`.
+- Лёг S2: Redis сервису не нужен (`REDIS_URL` не читается, `go-redis` ушёл из `go.mod`),
+  `FEATURE_FLAGS` не читается; `PG_*`/`HTTP_*` — без вариантов с приставкой `POSTGRES_`/`HTTP_HTTP_`;
+  остановка — до 30s (`fx.StopTimeout`): контейнеру `stop_grace_period` ≥ 35s (docker ждёт 10s).
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-S1 закрыт: шаблон на golibinfra v1.2.0, обход `beforeHTTP` снят, порядок хуков держит httpkit и
-проверяет `TestBoot`. v1.3.0 — после базового аудита китов (идёт), bump — S9. Следующий шаг — S2
-(DI-канон).
+S1–S2 закрыты: шаблон на golibinfra v1.2.0, обход `beforeHTTP` снят, DI по канону (AC12). v1.3.0 —
+после базового аудита китов (идёт), bump — S9. Следующий шаг — S3 (общие примитивы).

@@ -11,10 +11,10 @@
 | Стек | `stack/` | docker-compose + креды seed-admin (bash). `up.sh`/`down.sh`, `lib.sh`, `compose.yml`, `Dockerfile.local`. |
 | Транспорт+модели | `client/` | типизированная httpx-обёртка + pydantic-DTO (зеркало huma). |
 | Сценарии | `scenarios/` | переиспользуемые step-функции над `client` (без ассертов). |
-| Infra-интроспекция | `infra/` | типизированный доступ к side-effects: `pg.py` (psycopg, users/refresh_sessions/bruteforce/email_verifications), `outbox.py` (per-domain `outbox_<domain>`), `nats.py` (core-NATS collector), `redis.py` (cache-probe). |
+| Infra-интроспекция | `infra/` | типизированный доступ к side-effects: `pg.py` (psycopg, users/refresh_sessions/bruteforce/email_verifications), `outbox.py` (per-domain `outbox_<domain>`), `nats.py` (core-NATS collector). |
 | Smoke-тесты | `smoke/` | boot + критический happy-path, `@pytest.mark.smoke`. |
 | E2E-тесты | `e2e/` | сценарии по доменам, `@pytest.mark.e2e`. |
-| Фикстуры | `conftest.py` | session-стек, `endpoints` (резолвнутые адреса), `api`, `user`, `admin`, `other_user`, `pg`, `redis`, `nats_collector`. |
+| Фикстуры | `conftest.py` | session-стек, `endpoints` (резолвнутые адреса), `api`, `user`, `admin`, `other_user`, `pg`, `nats_collector`. |
 
 Папки `smoke/`/`e2e/` организуют, маркеры селектят: `pytest -m smoke` / `pytest -m e2e`.
 
@@ -29,7 +29,7 @@ outbox-таблицу `outbox_<domain>` (детерминированно, на 
 реплея), поэтому подписывается **до** HTTP-действия; `outbox.wait_for(..., published=True)`
 подтверждает дрен.
 Showcase полного async-пути — `e2e/test_event_flow.py`. Bruteforce-счётчики
-в Postgres (`bruteforcekit/pgstore`), не Redis.
+в Postgres (`bruteforcekit/pgstore`).
 
 ## Admin-принципал
 
@@ -73,7 +73,7 @@ point форка.
   `up.sh` после `compose up` резолвит фактические порты и пишет
   `stack/.e2e-endpoints.env` (gitignored, чистится `down.sh`). `conftest`
   читает его: фикстура `stack` отдаёт `E2E_API_BASE_URL`, фикстуры
-  `pg`/`redis`/`nats_collector` инжектят DSN/URL явным аргументом
+  `pg`/`nats_collector` инжектят DSN/URL явным аргументом
   (module-дефолты `infra/*.py` замораживаются на import — обход через
   фикстуру обязателен).
 - Один и тот же репо параллельно сам с собой не поддерживается: имя

@@ -1,37 +1,32 @@
 package config
 
 import (
-	"context"
+	"fmt"
 
+	"github.com/kelseyhightower/envconfig"
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
-	"git.stit.tech/stit-core/golibinfra/config"
-	"git.stit.tech/stit-core/golibinfra/httpkit"
-	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 
+// App — конфиги самого приложения; конфиги китов читают их <kit>.NewConfig.
 type App struct {
-	Postgres pgkit.PoolConfig
-	HTTP     httpkit.Config
-	Cookie   authgate.CookieConfig
+	Cookie authgate.CookieConfig
 }
 
 var Module = fx.Module(
-	"appconfig",
+	"internal/platform/config",
 	fx.Provide(
 		Load,
-
-		func(a *App) pgkit.PoolConfig { return a.Postgres },
-		func(a *App) httpkit.Config { return a.HTTP },
 		func(a *App) authgate.CookieConfig { return a.Cookie },
 	),
 )
 
-func Load(ctx context.Context, srcs []config.Source) (*App, error) {
+// Load читает App из ENV тем же envconfig, что и конфиги китов.
+func Load() (*App, error) {
 	var cfg App
-	if err := config.Load(ctx, &cfg, srcs...); err != nil {
-		return nil, err
+	if err := envconfig.Process("", &cfg); err != nil {
+		return nil, fmt.Errorf("app config: %w", err)
 	}
 	return &cfg, nil
 }

@@ -75,185 +75,158 @@ type UsecaseDeps struct {
 }
 
 type Usecase struct {
-	users    UserReader
-	pwVer    PasswordVerifier
-	pwSet    PasswordSetter
-	hasher   authnkit.Hasher
-	tokens   Tokens
-	tparser  TokenParser
-	sessions SessionRepository
-	tx       pgkit.Transactor
-	policy   Authorizer
-	guard    LoginGuard
-	audit    auditkit.Logger
-	log      logkit.Logger
-	clock    clockkit.Clock
-	metrics  *Metrics
+	d UsecaseDeps
 }
 
 func NewUsecase(d UsecaseDeps) *Usecase {
-	return &Usecase{
-		users:    d.Users,
-		pwVer:    d.PasswordVerify,
-		pwSet:    d.PasswordSet,
-		hasher:   d.Hasher,
-		tokens:   d.Tokens,
-		tparser:  d.TokenParser,
-		sessions: d.Sessions,
-		tx:       d.Tx,
-		policy:   d.Policy,
-		guard:    d.Guard,
-		audit:    d.Audit,
-		log:      d.Log.With("domain", "auth"),
-		clock:    d.Clock,
-		metrics:  d.Metrics,
-	}
+	d.Log = d.Log.With("domain", "auth")
+	return &Usecase{d: d}
 }
 
 func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, error) {
 	ip := identity.IPFrom(ctx)
 
-	lock, guardErr := uc.guard.Attempt(ctx, in.Email, ip)
+	lock, guardErr := uc.d.Guard.Attempt(ctx, in.Email, ip)
 	if guardErr != nil {
-		uc.log.Error(ctx, "guard attempt", "err", guardErr)
+		uc.d.Log.Error(ctx, "guard attempt", "err", guardErr)
 	} else if lock != nil {
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_locked", "locked")
-		uc.metrics.RecordLogin(ctx, "locked")
+		uc.d.Metrics.RecordLogin(ctx, "locked")
 		return nil, ErrAccountLocked
 	}
 
-	u, err := uc.users.GetByEmail(ctx, in.Email)
+	u, err := uc.d.Users.GetByEmail(ctx, in.Email)
 	if err != nil {
 		if !errors.Is(err, ErrUserNotFound) {
 			return nil, fmt.Errorf("lookup user: %w", err)
 		}
 		// Холостая проверка: ответ на неизвестный email стоит столько же, сколько
 		// проверка пароля — наличие учётной записи не выдаётся таймингом.
-		uc.hasher.VerifyDummy(ctx)
+		uc.d.Hasher.VerifyDummy(ctx)
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_failed", "invalid_credentials")
-		uc.metrics.RecordLogin(ctx, "invalid_credentials")
+		uc.d.Metrics.RecordLogin(ctx, "invalid_credentials")
 		return nil, ErrInvalidCredentials
 	}
 
 	if !u.CanLogin {
-		uc.hasher.VerifyDummy(ctx)
+		uc.d.Hasher.VerifyDummy(ctx)
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_failed", "blocked")
-		uc.metrics.RecordLogin(ctx, "blocked")
+		uc.d.Metrics.RecordLogin(ctx, "blocked")
 		return nil, ErrInvalidCredentials
 	}
 
-	ok, err := uc.hasher.Verify(ctx, in.Password, u.PasswordHash)
+	ok, err := uc.d.Hasher.Verify(ctx, in.Password, u.PasswordHash)
 	if err != nil || !ok {
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_failed", "invalid_credentials")
-		uc.metrics.RecordLogin(ctx, "invalid_credentials")
+		uc.d.Metrics.RecordLogin(ctx, "invalid_credentials")
 		return nil, ErrInvalidCredentials
 	}
 
-	if recordErr := uc.guard.RecordSuccess(ctx, in.Email, ip); recordErr != nil {
-		uc.log.Error(ctx, "guard record success", "err", recordErr)
+	if recordErr := uc.d.Guard.RecordSuccess(ctx, in.Email, ip); recordErr != nil {
+		uc.d.Log.Error(ctx, "guard record success", "err", recordErr)
 	}
 
-	access, err := uc.tokens.IssueAccess(ctx, u)
+	access, err := uc.d.Tokens.IssueAccess(ctx, u)
 	if err != nil {
 		return nil, fmt.Errorf("issue access token: %w", err)
 	}
-	refresh, jti, expiresAt, err := uc.tokens.IssueRefresh(ctx, u.ID)
+	refresh, jti, expiresAt, err := uc.d.Tokens.IssueRefresh(ctx, u.ID)
 	if err != nil {
 		return nil, fmt.Errorf("issue refresh token: %w", err)
 	}
-	if err := uc.sessions.Insert(ctx, jti, u.ID, expiresAt); err != nil {
+	if err := uc.d.Sessions.Insert(ctx, jti, u.ID, expiresAt); err != nil {
 		return nil, fmt.Errorf("insert refresh session: %w", err)
 	}
 
-	uc.log.Info(ctx, "user logged in", "user_id", u.ID)
+	uc.d.Log.Info(ctx, "user logged in", "user_id", u.ID)
 
-	if auditErr := uc.audit.Log(ctx, auditkit.Entry{
+	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
 		ActorID:    u.ID,
 		Action:     "login",
 		Resource:   "user",
 		ResourceID: u.ID,
-		At:         uc.clock.Now(),
+		At:         uc.d.Clock.Now(),
 		IP:         ip,
 		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
-		uc.log.Error(ctx, "audit login", "err", auditErr)
+		uc.d.Log.Error(ctx, "audit login", "err", auditErr)
 	}
-	uc.metrics.RecordLogin(ctx, "ok")
+	uc.d.Metrics.RecordLogin(ctx, "ok")
 
 	return &LoginOutput{AccessToken: access, RefreshToken: refresh, User: u}, nil
 }
 
 func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*LoginOutput, error) {
-	userID, oldJTI, err := uc.tparser.ParseRefresh(ctx, refreshToken)
+	userID, oldJTI, err := uc.d.TokenParser.ParseRefresh(ctx, refreshToken)
 	if err != nil {
 		if errors.Is(err, ErrTokenExpired) {
-			uc.metrics.RecordRefresh(ctx, "expired")
+			uc.d.Metrics.RecordRefresh(ctx, "expired")
 			return nil, ErrRefreshExpired
 		}
-		uc.metrics.RecordRefresh(ctx, "invalid")
+		uc.d.Metrics.RecordRefresh(ctx, "invalid")
 		return nil, ErrInvalidCredentials
 	}
 
-	session, err := uc.sessions.GetByJTI(ctx, oldJTI)
+	session, err := uc.d.Sessions.GetByJTI(ctx, oldJTI)
 	if err != nil {
 		if errors.Is(err, ErrSessionNotFound) {
-			uc.metrics.RecordRefresh(ctx, "invalid")
+			uc.d.Metrics.RecordRefresh(ctx, "invalid")
 			return nil, ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("get refresh session: %w", err)
 	}
 	if session.UserID != userID {
-		uc.metrics.RecordRefresh(ctx, "invalid")
+		uc.d.Metrics.RecordRefresh(ctx, "invalid")
 		return nil, ErrInvalidCredentials
 	}
 	if session.UsedAt != nil {
 		uc.writeRefreshReusedAudit(ctx, userID, oldJTI)
-		uc.metrics.RecordRefresh(ctx, "reused")
+		uc.d.Metrics.RecordRefresh(ctx, "reused")
 		return nil, ErrRefreshReused
 	}
-	if uc.clock.Now().After(session.ExpiresAt) {
-		uc.metrics.RecordRefresh(ctx, "expired")
+	if uc.d.Clock.Now().After(session.ExpiresAt) {
+		uc.d.Metrics.RecordRefresh(ctx, "expired")
 		return nil, ErrRefreshExpired
 	}
 
-	u, err := uc.users.GetByID(ctx, userID)
+	u, err := uc.d.Users.GetByID(ctx, userID)
 	if err != nil {
 		if !errors.Is(err, ErrUserNotFound) {
 			return nil, fmt.Errorf("lookup user: %w", err)
 		}
-		uc.metrics.RecordRefresh(ctx, "invalid")
+		uc.d.Metrics.RecordRefresh(ctx, "invalid")
 		return nil, ErrInvalidCredentials
 	}
 
-	access, err := uc.tokens.IssueAccess(ctx, u)
+	access, err := uc.d.Tokens.IssueAccess(ctx, u)
 	if err != nil {
 		return nil, fmt.Errorf("issue access token: %w", err)
 	}
-	newRefresh, newJTI, newExpiresAt, err := uc.tokens.IssueRefresh(ctx, u.ID)
+	newRefresh, newJTI, newExpiresAt, err := uc.d.Tokens.IssueRefresh(ctx, u.ID)
 	if err != nil {
 		return nil, fmt.Errorf("issue refresh token: %w", err)
 	}
 
-	if err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
-		if err := uc.sessions.MarkUsed(txCtx, oldJTI, newJTI); err != nil {
+	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		if err := uc.d.Sessions.MarkUsed(txCtx, oldJTI, newJTI); err != nil {
 			return err
 		}
-		return uc.sessions.Insert(txCtx, newJTI, u.ID, newExpiresAt)
+		return uc.d.Sessions.Insert(txCtx, newJTI, u.ID, newExpiresAt)
 	}); err != nil {
 		return nil, fmt.Errorf("rotate refresh session: %w", err)
 	}
-	uc.metrics.RecordRefresh(ctx, "ok")
+	uc.d.Metrics.RecordRefresh(ctx, "ok")
 
 	return &LoginOutput{AccessToken: access, RefreshToken: newRefresh, User: u}, nil
 }
 
 func (uc *Usecase) Logout(ctx context.Context, refreshToken string) error {
-	userID, jti, parseErr := uc.tparser.ParseRefresh(ctx, refreshToken)
+	userID, jti, parseErr := uc.d.TokenParser.ParseRefresh(ctx, refreshToken)
 	if parseErr != nil {
 		return nil //nolint:nilerr // logout is idempotent: a broken/expired token is already logged out
 	}
 
-	session, err := uc.sessions.GetByJTI(ctx, jti)
+	session, err := uc.d.Sessions.GetByJTI(ctx, jti)
 	if err != nil {
 		if errors.Is(err, ErrSessionNotFound) {
 			return nil
@@ -264,75 +237,75 @@ func (uc *Usecase) Logout(ctx context.Context, refreshToken string) error {
 		return nil
 	}
 
-	if err := uc.sessions.MarkUsed(ctx, jti, ""); err != nil {
+	if err := uc.d.Sessions.MarkUsed(ctx, jti, ""); err != nil {
 		return fmt.Errorf("mark refresh session used: %w", err)
 	}
 
-	if auditErr := uc.audit.Log(ctx, auditkit.Entry{
+	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
 		ActorID:    userID,
 		Action:     "logout",
 		Resource:   "user",
 		ResourceID: userID,
-		At:         uc.clock.Now(),
+		At:         uc.d.Clock.Now(),
 		IP:         identity.IPFrom(ctx),
 		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
-		uc.log.Error(ctx, "audit logout", "err", auditErr)
+		uc.d.Log.Error(ctx, "audit logout", "err", auditErr)
 	}
-	uc.metrics.RecordLogout(ctx)
+	uc.d.Metrics.RecordLogout(ctx)
 	return nil
 }
 
 func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) error {
 	caller, ok := identity.From(ctx)
 	if !ok {
-		uc.metrics.RecordPasswordChange(ctx, "forbidden")
+		uc.d.Metrics.RecordPasswordChange(ctx, "forbidden")
 		return &ForbiddenError{Reason: "no identity"}
 	}
-	if d := uc.policy.CanChangePassword(ctx, caller, userID); !d.IsAllowed {
-		uc.metrics.RecordPasswordChange(ctx, "forbidden")
+	if d := uc.d.Policy.CanChangePassword(ctx, caller, userID); !d.IsAllowed {
+		uc.d.Metrics.RecordPasswordChange(ctx, "forbidden")
 		return &ForbiddenError{Reason: d.Reason}
 	}
 
 	if !PasswordStrengthOK(newPassword) {
-		uc.metrics.RecordPasswordChange(ctx, "weak")
+		uc.d.Metrics.RecordPasswordChange(ctx, "weak")
 		return ErrWeakPassword
 	}
 
-	verified, err := uc.pwVer.VerifyPassword(ctx, userID, oldPassword)
+	verified, err := uc.d.PasswordVerify.VerifyPassword(ctx, userID, oldPassword)
 	if err != nil {
 		return fmt.Errorf("verify old password: %w", err)
 	}
 	if !verified {
-		uc.metrics.RecordPasswordChange(ctx, "invalid_old")
+		uc.d.Metrics.RecordPasswordChange(ctx, "invalid_old")
 		return ErrInvalidCredentials
 	}
 
-	current, err := uc.users.GetByID(ctx, userID)
+	current, err := uc.d.Users.GetByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("load user: %w", err)
 	}
 
-	hash, err := uc.hasher.Hash(ctx, newPassword)
+	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
 	if err != nil {
 		return fmt.Errorf("hash new password: %w", err)
 	}
-	if err := uc.pwSet.UpdatePassword(ctx, userID, hash, current.Version); err != nil {
+	if err := uc.d.PasswordSet.UpdatePassword(ctx, userID, hash, current.Version); err != nil {
 		return err
 	}
 
-	if auditErr := uc.audit.Log(ctx, auditkit.Entry{
+	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
 		ActorID:    caller.UserID,
 		Action:     "change_password",
 		Resource:   "user",
 		ResourceID: userID,
-		At:         uc.clock.Now(),
+		At:         uc.d.Clock.Now(),
 		IP:         identity.IPFrom(ctx),
 		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
-		uc.log.Error(ctx, "audit change_password", "err", auditErr)
+		uc.d.Log.Error(ctx, "audit change_password", "err", auditErr)
 	}
-	uc.metrics.RecordPasswordChange(ctx, "ok")
+	uc.d.Metrics.RecordPasswordChange(ctx, "ok")
 
 	return nil
 }
@@ -342,13 +315,13 @@ func (uc *Usecase) writeLoginFailedAudit(ctx context.Context, email, action, rea
 		Action:     action,
 		Resource:   "user",
 		ResourceID: email,
-		At:         uc.clock.Now(),
+		At:         uc.d.Clock.Now(),
 		IP:         identity.IPFrom(ctx),
 		RequestID:  identity.RequestIDFrom(ctx),
 		Metadata:   map[string]any{"reason": reason},
 	}
-	if auditErr := uc.audit.Log(ctx, entry); auditErr != nil {
-		uc.log.Error(ctx, "audit "+action, "err", auditErr)
+	if auditErr := uc.d.Audit.Log(ctx, entry); auditErr != nil {
+		uc.d.Log.Error(ctx, "audit "+action, "err", auditErr)
 	}
 }
 
@@ -358,11 +331,11 @@ func (uc *Usecase) writeRefreshReusedAudit(ctx context.Context, userID, jti stri
 		Action:     "refresh_reused",
 		Resource:   "refresh_session",
 		ResourceID: jti,
-		At:         uc.clock.Now(),
+		At:         uc.d.Clock.Now(),
 		IP:         identity.IPFrom(ctx),
 		RequestID:  identity.RequestIDFrom(ctx),
 	}
-	if auditErr := uc.audit.Log(ctx, entry); auditErr != nil {
-		uc.log.Error(ctx, "audit refresh_reused", "err", auditErr)
+	if auditErr := uc.d.Audit.Log(ctx, entry); auditErr != nil {
+		uc.d.Log.Error(ctx, "audit refresh_reused", "err", auditErr)
 	}
 }

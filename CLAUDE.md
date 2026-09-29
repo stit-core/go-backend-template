@@ -1,7 +1,7 @@
 # go-backend-template — гайд для агентов
 
 Шаблон Go HTTP-бэкенда stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + `golibinfra`
-(logging, authn, outbox, brute-force, cache, NATS, audit, clock).
+(logging, authn, outbox, brute-force, NATS, audit, clock).
 
 Этот файл — **ядро (always-on) + роутер**. Детали — в `docs/`, контекстные правила — в
 `.claude/rules/` (path-scoped, грузятся когда matching-файл в контексте), процедуры — в

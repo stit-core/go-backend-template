@@ -68,7 +68,7 @@ Module path, README, фундамент и удаление reference-домен
 - **DI** — uber/fx. Один runtime-бинарь `cmd/api` (HTTP + outbox-drain + NATS-subs
   + jobs); `cmd/migrate` — отдельный image, init-контейнер.
 - **Платформа** — [`golibinfra`](https://git.stit.tech/stit-core/golibinfra):
-  structured logging, JWT/session authn, outbox, brute-force, cache, NATS, audit, clock.
+  structured logging, JWT/session authn, outbox, brute-force, NATS, audit, clock.
 - **DDD** — артефакты доменов в соседнем strategy-репо; маппинг в Go —
   [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
 - **Тесты** — unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
@@ -99,7 +99,7 @@ make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /r
 ## E2E
 
 Типизированный pytest-харнес `test/` поверх docker-compose стека
-(postgres/nats/redis/migrate/api). Нужен Docker и `./.env.local`
+(postgres/nats/migrate/api). Нужен Docker и `./.env.local`
 (`E2E_ADMIN_*`; шаблон — `.env.local.example`). Детали — `test/README.md`.
 
 ```bash

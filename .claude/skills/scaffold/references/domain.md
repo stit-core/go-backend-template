@@ -171,8 +171,8 @@ var (
 ### 9. Usecase
 
 `usecase.go`:
-- Объяви интерфейсы зависимостей (порты).
-- Структура `Usecase` с зависимостями.
+- Объяви интерфейсы зависимостей (порты) и `UsecaseDeps{fx.In}`; `Usecase` хранит deps целиком
+  (`uc.d.Repo`), `NewUsecase` меняет только `d.Log`.
 - Методы — бизнес-логика; мутирующие инструментированы `metrics.Record*` (`metrics.go`).
 
 ### 10. Adapters (если нужны cross-domain)
@@ -186,10 +186,10 @@ var (
 package module
 
 var Module = fx.Module(
-    "<name>",
+    "internal/domain/<name>/module",
     fx.Provide(
         <name>pg.NewRepository,
-        fx.Annotate(<name>.NewPolicy, fx.As(new(<name>.Authorizer))),
+        <name>.NewPolicy,
         <name>.NewMetrics,
         <name>.NewUsecase,
         <name>http.NewHandler,
@@ -198,6 +198,8 @@ var Module = fx.Module(
 )
 ```
 
+Имя модуля — путь пакета; порт в графе — тип результата провайдера (`NewPolicy` возвращает
+`Authorizer`), `fx.As` не нужен (`docs/reference/architecture.md` § fx).
 Дальше дополняй его провайдерами по мере роста: адаптеры портов (`new<Port>Adapter` из
 `adapters.go`), `outbox.Providers` домена-публикатора, NATS-handler (`references/event.md`).
 HTTP-операции домен сам не регистрирует — это делает `registerHTTP` в `cmd/api` (шаг 12).

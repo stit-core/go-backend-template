@@ -12,7 +12,7 @@ import (
 )
 
 var Module = fx.Module(
-	"verification",
+	"internal/domain/verification/module",
 	verifoutbox.Providers,
 	fx.Provide(
 		verifpg.NewRepository,

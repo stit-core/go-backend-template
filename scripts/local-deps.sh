@@ -3,7 +3,6 @@ set -euo pipefail
 
 POSTGRES_CONTAINER="local-deps-postgres"
 NATS_CONTAINER="local-deps-nats"
-REDIS_CONTAINER="local-deps-redis"
 
 check_docker() {
   if ! command -v docker &>/dev/null; then
@@ -42,16 +41,6 @@ up() {
     echo "✓ $NATS_CONTAINER уже запущен"
   fi
 
-  if ! docker inspect "$REDIS_CONTAINER" >/dev/null 2>&1; then
-    docker run -d \
-      --name "$REDIS_CONTAINER" \
-      --restart unless-stopped \
-      -p 6379:6379 \
-      redis:7-alpine
-  else
-    echo "✓ $REDIS_CONTAINER уже запущен"
-  fi
-
   echo ""
   echo "All containers started. Recommended environment variables:"
   echo ""
@@ -59,7 +48,6 @@ up() {
   echo "  NATS_URL=nats://localhost:4222"
   echo "  NATS_JETSTREAM_ENABLED=true"
   echo "  NATS_JS_STREAM_NAMES=user,verification"
-  echo "  REDIS_URL=redis://localhost:6379"
   echo ""
 }
 
@@ -70,7 +58,6 @@ down() {
 
   docker rm -f "$POSTGRES_CONTAINER" 2>/dev/null || true
   docker rm -f "$NATS_CONTAINER" 2>/dev/null || true
-  docker rm -f "$REDIS_CONTAINER" 2>/dev/null || true
 
   echo "All containers removed."
 }

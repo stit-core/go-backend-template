@@ -88,7 +88,7 @@ import (
 
 type Policy struct{}
 
-func NewPolicy() *Policy { return &Policy{} }
+func NewPolicy() Authorizer { return &Policy{} }
 
 func (p *Policy) CanCreate(_ context.Context, caller identity.Identity) policy.Decision {
 	if caller.Role == identity.RoleAdmin {
@@ -165,21 +165,12 @@ type UsecaseDeps struct {
 }
 
 type Usecase struct {
-	repo    Repository
-	policy  Authorizer
-	log     logkit.Logger
-	clock   clockkit.Clock
-	metrics *Metrics
+	d UsecaseDeps
 }
 
 func NewUsecase(d UsecaseDeps) *Usecase {
-	return &Usecase{
-		repo:    d.Repo,
-		policy:  d.Policy,
-		log:     d.Log.With("domain", "$NAME"),
-		clock:   d.Clock,
-		metrics: d.Metrics,
-	}
+	d.Log = d.Log.With("domain", "$NAME")
+	return &Usecase{d: d}
 }
 EOF
 
@@ -340,10 +331,10 @@ import (
 )
 
 var Module = fx.Module(
-	"$NAME",
+	"internal/domain/$NAME/module",
 	fx.Provide(
 		${NAME}pg.NewRepository,
-		fx.Annotate(${NAME}.NewPolicy, fx.As(new(${NAME}.Authorizer))),
+		${NAME}.NewPolicy,
 		${NAME}.NewMetrics,
 		${NAME}.NewUsecase,
 		${NAME}http.NewHandler,

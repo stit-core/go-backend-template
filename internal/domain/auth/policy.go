@@ -13,7 +13,7 @@ func PasswordStrengthOK(plain string) bool { return len(plain) >= minPasswordLen
 
 type Policy struct{}
 
-func NewPolicy() *Policy { return &Policy{} }
+func NewPolicy() Authorizer { return &Policy{} }
 
 func (p *Policy) CanChangePassword(_ context.Context, caller identity.Identity, targetID string) policy.Decision {
 	if caller.Role == identity.RoleAdmin {

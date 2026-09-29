@@ -31,6 +31,6 @@ func OutboxFor(name, table string) fx.Option {
 // произвольные таблицы; tx-guard (OUTBOX_REQUIRE_TX) и retention у всех
 // инстансов общие.
 var Module = fx.Module(
-	"platform.events",
+	"internal/platform/events",
 	outboxpg.FactoryModule,
 )

@@ -16,7 +16,6 @@ from client.http import Api
 from client.models import LoginRequest, RegisterRequest
 from infra.nats import NatsCollector
 from infra.pg import Pg
-from infra.redis import RedisInspect
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _ENDPOINTS_FILE = _REPO_ROOT / "test" / "stack" / ".e2e-endpoints.env"
@@ -134,12 +133,6 @@ def endpoints(stack: str) -> dict[str, str]:
 def pg(endpoints: dict[str, str]) -> Iterator[Pg]:
     with Pg(dsn=endpoints["E2E_PG_DSN"]) as p:
         yield p
-
-
-@pytest.fixture
-def redis(endpoints: dict[str, str]) -> Iterator[RedisInspect]:
-    with RedisInspect(url=endpoints["E2E_REDIS_URL"]) as r:
-        yield r
 
 
 @pytest.fixture

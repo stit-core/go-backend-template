@@ -9,7 +9,7 @@ import (
 
 type Policy struct{}
 
-func NewPolicy() *Policy { return &Policy{} }
+func NewPolicy() Authorizer { return &Policy{} }
 
 func selfOrAdmin(caller identity.Identity, targetID string) policy.Decision {
 	if caller.Role == identity.RoleAdmin {

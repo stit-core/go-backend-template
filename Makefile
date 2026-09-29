@@ -157,7 +157,7 @@ validate-stack-docs: ## Валидатор stack-артефактов docs/stack
 	@bash scripts/tools/validate-stack-doc.sh docs/stack
 
 ##@ DEV
-local-deps-up: ## Поднять локальные зависимости (postgres/nats/redis) для go run
+local-deps-up: ## Поднять локальные зависимости (postgres/nats) для go run
 	@bash scripts/local-deps.sh up
 
 local-deps-down: ## Снести локальные зависимости

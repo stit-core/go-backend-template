@@ -10,13 +10,13 @@ import (
 )
 
 var Module = fx.Module(
-	"auth",
+	"internal/domain/auth/module",
 	fx.Provide(
 		newUserReaderAdapter,
 		func(uc *user.Usecase) auth.PasswordVerifier { return uc },
 		func(uc *user.Usecase) auth.PasswordSetter { return uc },
 		authpg.NewRepository,
-		fx.Annotate(auth.NewPolicy, fx.As(new(auth.Authorizer))),
+		auth.NewPolicy,
 		newTokensAdapter,
 		newTokenParserAdapter,
 		newLoginGuardAdapter,

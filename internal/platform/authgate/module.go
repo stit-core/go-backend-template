@@ -47,7 +47,7 @@ var SecurityScheme = fx.Provide(
 )
 
 var Module = fx.Module(
-	"authgate",
+	"internal/platform/authgate",
 	authnProviders,
 	SecurityScheme,
 	fx.Provide(

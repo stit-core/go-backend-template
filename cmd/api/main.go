@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -11,10 +12,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
 	bruteforcepg "git.stit.tech/stit-core/golibinfra/bruteforcekit/pgstore"
-	"git.stit.tech/stit-core/golibinfra/cachekit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
-	"git.stit.tech/stit-core/golibinfra/config"
-	"git.stit.tech/stit-core/golibinfra/flagkit"
 	"git.stit.tech/stit-core/golibinfra/healthkit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
@@ -33,28 +31,23 @@ import (
 )
 
 // kitConfigs — конструкторы конфигов китов из ENV: Module'ы golibinfra свои конфиги
-// не читают, их провайдит приложение. pgkit.PoolConfig и httpkit.Config приходят
-// из App-структуры (appconfig).
+// не читают, их провайдит приложение.
 var kitConfigs = []any{
 	logkit.NewConfig,
 	logkit.NewRedactConfig,
-	flagkit.NewConfig,
-	cachekit.NewConfig,
+	pgkit.NewPoolConfig,
+	pgkit.NewReplicaConfig,
+	httpkit.NewConfig,
 	natskit.NewConfig,
 	authnkit.NewArgon2idParams,
 	authnkit.NewJWTConfig,
 	bruteforcekit.NewConfig,
 	outboxkit.NewConfig,
 	outboxpg.NewConfig,
-	pgkit.NewReplicaConfig,
 }
 
 var (
 	infraModules = fx.Options(
-		// Конфиг только из env: настройки/секреты приходят из окружения
-		// (compose/.env проектной инфры).
-		config.Module,
-		fx.Provide(context.Background),
 		fx.Provide(kitConfigs...),
 		// metric.Meter — глобальный no-op: MeterProvider не сконфигурирован,
 		// поэтому business-counter'ы доменов (biz_*) инертны и никуда не
@@ -65,9 +58,7 @@ var (
 		logkit.Module,
 		pgkit.Module,
 		natskit.Module(""),
-		cachekit.Module,
 		httpkit.Module,
-		flagkit.Module,
 		timerkit.Module,
 	)
 
@@ -81,7 +72,6 @@ var (
 		// /ready отвечает 503, пока хоть одна зависимость не отвечает.
 		healthkit.Provide(pgkit.Probe),
 		healthkit.Provide(natskit.Probe),
-		healthkit.Provide(cachekit.Probe),
 	)
 
 	domainModules = fx.Options(
@@ -96,18 +86,24 @@ var (
 	commit  = "unknown"
 )
 
-// service — граф сервиса целиком: его запускает main, его же поднимает boot-тест.
+// service — граф сервиса целиком: его запускает main, его же собирают тест графа и boot-тест.
 var service = fx.Options(
 	logkit.FxLogger,
 	fx.RecoverFromPanics(),
+	fx.StartTimeout(15*time.Second),
+	// HTTP_SHUTDOWN_TIMEOUT (15s) + NATS_DRAIN_TIMEOUT (10s) + запас; оркестратор ждёт дольше.
+	fx.StopTimeout(30*time.Second),
 	infraModules,
 	platformModules,
 	domainModules,
 	httpModule,
-	fx.Invoke(func(ctx context.Context, log logkit.Logger) {
-		log.Info(ctx, "starting", "component", "api", "version", version, "commit", commit)
-	}),
+	fx.Invoke(logStart),
 )
+
+// logStart: контекста запроса при сборке графа нет — корень процесса.
+func logStart(log logkit.Logger) {
+	log.Info(context.Background(), "starting", "component", "api", "version", version, "commit", commit)
+}
 
 func main() {
 	fx.New(service).Run()

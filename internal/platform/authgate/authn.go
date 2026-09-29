@@ -10,11 +10,9 @@ import (
 // HS256-JWT. authnkit.Module не подключается: он собирает ещё и TOTP, а тот
 // требует обязательный TOTP_ISSUER — required-env ради неиспользуемой фичи.
 var authnProviders = fx.Provide(
-	fx.Annotate(authnkit.NewArgon2idHasher, fx.As(new(authnkit.Hasher))),
-	fx.Annotate(newJWT, fx.As(new(authnkit.JWTSigner)), fx.As(new(authnkit.JWTParser))),
+	authnkit.NewArgon2idHasher,
+	func(h *authnkit.Argon2idHasher) authnkit.Hasher { return h },
+	authnkit.NewHS256JWT,
+	func(j *authnkit.HS256JWT) authnkit.JWTSigner { return j },
+	func(j *authnkit.HS256JWT) authnkit.JWTParser { return j },
 )
-
-// newJWT — обёртка: fx.Annotate не аннотирует вариадические конструкторы.
-func newJWT(cfg authnkit.JWTConfig) (*authnkit.HS256JWT, error) {
-	return authnkit.NewHS256JWT(cfg)
-}

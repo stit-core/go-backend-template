@@ -52,74 +52,57 @@ type UsecaseDeps struct {
 }
 
 type Usecase struct {
-	repo    Repository
-	hasher  authnkit.Hasher
-	policy  Authorizer
-	tx      pgkit.Transactor
-	events  outboxkit.Publisher
-	audit   auditkit.Logger
-	metrics *Metrics
-	log     logkit.Logger
-	clock   clockkit.Clock
+	d UsecaseDeps
 }
 
 func NewUsecase(d UsecaseDeps) *Usecase {
-	return &Usecase{
-		repo:    d.Repo,
-		hasher:  d.Hasher,
-		policy:  d.Policy,
-		tx:      d.Tx,
-		events:  d.Events,
-		audit:   d.Audit,
-		metrics: d.Metrics,
-		log:     d.Log.With("domain", "user"),
-		clock:   d.Clock,
-	}
+	d.Log = d.Log.With("domain", "user")
+	return &Usecase{d: d}
 }
 
 func (uc *Usecase) Register(ctx context.Context, in *CreateInput) (u *User, err error) {
 	if len(in.Password) < minPasswordLen {
-		uc.metrics.RecordRegistered(ctx, "weak_password")
+		uc.d.Metrics.RecordRegistered(ctx, "weak_password")
 		return nil, ErrWeakPassword
 	}
 
-	hash, err := uc.hasher.Hash(ctx, in.Password)
+	hash, err := uc.d.Hasher.Hash(ctx, in.Password)
 	if err != nil {
-		uc.metrics.RecordRegistered(ctx, "error")
+		uc.d.Metrics.RecordRegistered(ctx, "error")
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
 	newU, err := NewUser(in.Email, hash, in.Name, identity.RoleClient)
 	if err != nil {
-		uc.metrics.RecordRegistered(ctx, "invalid")
+		uc.d.Metrics.RecordRegistered(ctx, "invalid")
 		return nil, err
 	}
 
-	if err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
-		if err := uc.repo.Insert(txCtx, newU); err != nil {
+	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		if err := uc.d.Repo.Insert(txCtx, newU); err != nil {
 			return err
 		}
 
-		return uc.events.Publish(txCtx, subjectUserRegistered,
+		return uc.d.Events.Publish(txCtx, subjectUserRegistered,
 			UserRegistered{ID: newU.ID, Email: newU.Email, At: newU.CreatedAt})
 	}); err != nil {
-		uc.metrics.RecordRegistered(ctx, "error")
+		uc.d.Metrics.RecordRegistered(ctx, "error")
 		return nil, err
 	}
 
-	uc.metrics.RecordRegistered(ctx, "ok")
-	uc.log.Info(ctx, "user registered", "user_id", newU.ID, "email", newU.Email)
+	uc.d.Metrics.RecordRegistered(ctx, "ok")
+	uc.d.Log.Info(ctx, "user registered", "user_id", newU.ID, "email", newU.Email)
 
-	if auditErr := uc.audit.Log(ctx, auditkit.Entry{
+	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
 		ActorID:    newU.ID,
 		Action:     "register",
 		Resource:   "user",
 		ResourceID: newU.ID,
-		At:         uc.clock.Now(),
+		At:         uc.d.Clock.Now(),
 		IP:         identity.IPFrom(ctx),
 		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
-		uc.log.Error(ctx, "audit register", "err", auditErr)
+		uc.d.Log.Error(ctx, "audit register", "err", auditErr)
 	}
 
 	return newU, nil
@@ -130,11 +113,11 @@ func (uc *Usecase) GetByID(ctx context.Context, id string) (u *User, err error) 
 	if !ok {
 		return nil, &ForbiddenError{Reason: "no identity"}
 	}
-	if d := uc.policy.CanGetByID(ctx, caller, id); !d.IsAllowed {
+	if d := uc.d.Policy.CanGetByID(ctx, caller, id); !d.IsAllowed {
 		return nil, &ForbiddenError{Reason: d.Reason}
 	}
 
-	return uc.repo.GetByID(ctx, id)
+	return uc.d.Repo.GetByID(ctx, id)
 }
 
 func (uc *Usecase) Me(ctx context.Context) (u *User, err error) {
@@ -143,7 +126,7 @@ func (uc *Usecase) Me(ctx context.Context) (u *User, err error) {
 		return nil, &ForbiddenError{Reason: "no identity"}
 	}
 
-	return uc.repo.GetByID(ctx, caller.UserID)
+	return uc.d.Repo.GetByID(ctx, caller.UserID)
 }
 
 func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPagination) (users []*User, total int, err error) {
@@ -151,7 +134,7 @@ func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPaginatio
 	if !ok {
 		return nil, 0, &ForbiddenError{Reason: "no identity"}
 	}
-	if d := uc.policy.CanList(ctx, caller); !d.IsAllowed {
+	if d := uc.d.Policy.CanList(ctx, caller); !d.IsAllowed {
 		return nil, 0, &ForbiddenError{Reason: d.Reason}
 	}
 
@@ -165,12 +148,12 @@ func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPaginatio
 		pg.Page = 1
 	}
 
-	total, err = uc.repo.Count(ctx, filter)
+	total, err = uc.d.Repo.Count(ctx, filter)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count users: %w", err)
 	}
 
-	list, err := uc.repo.List(ctx, filter, pg)
+	list, err := uc.d.Repo.List(ctx, filter, pg)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list users: %w", err)
 	}
@@ -181,53 +164,53 @@ func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPaginatio
 func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *User, err error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
-		uc.metrics.RecordUpdated(ctx, "forbidden")
+		uc.d.Metrics.RecordUpdated(ctx, "forbidden")
 		return nil, &ForbiddenError{Reason: "no identity"}
 	}
-	if d := uc.policy.CanUpdate(ctx, caller, id); !d.IsAllowed {
-		uc.metrics.RecordUpdated(ctx, "forbidden")
+	if d := uc.d.Policy.CanUpdate(ctx, caller, id); !d.IsAllowed {
+		uc.d.Metrics.RecordUpdated(ctx, "forbidden")
 		return nil, &ForbiddenError{Reason: d.Reason}
 	}
 
 	if in.Name == nil && in.Status == nil {
-		uc.metrics.RecordUpdated(ctx, "invalid")
+		uc.d.Metrics.RecordUpdated(ctx, "invalid")
 		return nil, ErrNoUpdateFields
 	}
 
-	if err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
+	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
 		var updated *User
 		var updErr error
 		switch {
 		case in.Name != nil:
-			updated, updErr = uc.repo.UpdateProfile(txCtx, id, *in.Name, in.Version)
+			updated, updErr = uc.d.Repo.UpdateProfile(txCtx, id, *in.Name, in.Version)
 		case in.Status != nil:
-			updated, updErr = uc.repo.UpdateStatus(txCtx, id, *in.Status, in.Version)
+			updated, updErr = uc.d.Repo.UpdateStatus(txCtx, id, *in.Status, in.Version)
 		}
 		if updErr != nil {
 			return updErr
 		}
 		u = updated
 
-		return uc.events.Publish(txCtx, subjectUserUpdated,
+		return uc.d.Events.Publish(txCtx, subjectUserUpdated,
 			UserUpdated{ID: updated.ID, At: updated.UpdatedAt})
 	}); err != nil {
-		uc.metrics.RecordUpdated(ctx, "error")
+		uc.d.Metrics.RecordUpdated(ctx, "error")
 		return nil, err
 	}
 
-	uc.metrics.RecordUpdated(ctx, "ok")
-	uc.log.Info(ctx, "user updated", "user_id", u.ID)
+	uc.d.Metrics.RecordUpdated(ctx, "ok")
+	uc.d.Log.Info(ctx, "user updated", "user_id", u.ID)
 
-	if auditErr := uc.audit.Log(ctx, auditkit.Entry{
+	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
 		ActorID:    caller.UserID,
 		Action:     "update",
 		Resource:   "user",
 		ResourceID: u.ID,
-		At:         uc.clock.Now(),
+		At:         uc.d.Clock.Now(),
 		IP:         identity.IPFrom(ctx),
 		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
-		uc.log.Error(ctx, "audit update", "err", auditErr)
+		uc.d.Log.Error(ctx, "audit update", "err", auditErr)
 	}
 
 	return u, nil
@@ -236,71 +219,71 @@ func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *Us
 func (uc *Usecase) Delete(ctx context.Context, id string) error {
 	caller, ok := identity.From(ctx)
 	if !ok {
-		uc.metrics.RecordDeleted(ctx, "forbidden")
+		uc.d.Metrics.RecordDeleted(ctx, "forbidden")
 		return &ForbiddenError{Reason: "no identity"}
 	}
-	if d := uc.policy.CanDelete(ctx, caller, id); !d.IsAllowed {
-		uc.metrics.RecordDeleted(ctx, "forbidden")
+	if d := uc.d.Policy.CanDelete(ctx, caller, id); !d.IsAllowed {
+		uc.d.Metrics.RecordDeleted(ctx, "forbidden")
 		return &ForbiddenError{Reason: d.Reason}
 	}
 
-	if err := uc.tx.WithTx(ctx, func(txCtx context.Context) error {
-		current, err := uc.repo.GetByID(txCtx, id)
+	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		current, err := uc.d.Repo.GetByID(txCtx, id)
 		if err != nil {
 			return err
 		}
 		if current.Status == StatusDeleted {
 			return ErrNotFound
 		}
-		if _, err := uc.repo.UpdateStatus(txCtx, id, StatusDeleted, current.Version); err != nil {
+		if _, err := uc.d.Repo.UpdateStatus(txCtx, id, StatusDeleted, current.Version); err != nil {
 			return err
 		}
-		return uc.events.Publish(txCtx, subjectUserDeleted,
-			UserDeleted{ID: id, At: uc.clock.Now()})
+		return uc.d.Events.Publish(txCtx, subjectUserDeleted,
+			UserDeleted{ID: id, At: uc.d.Clock.Now()})
 	}); err != nil {
-		uc.metrics.RecordDeleted(ctx, "error")
+		uc.d.Metrics.RecordDeleted(ctx, "error")
 		return err
 	}
 
-	uc.metrics.RecordDeleted(ctx, "ok")
-	uc.log.Info(ctx, "user deleted", "user_id", id)
+	uc.d.Metrics.RecordDeleted(ctx, "ok")
+	uc.d.Log.Info(ctx, "user deleted", "user_id", id)
 
-	if auditErr := uc.audit.Log(ctx, auditkit.Entry{
+	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
 		ActorID:    caller.UserID,
 		Action:     "delete",
 		Resource:   "user",
 		ResourceID: id,
-		At:         uc.clock.Now(),
+		At:         uc.d.Clock.Now(),
 		IP:         identity.IPFrom(ctx),
 		RequestID:  identity.RequestIDFrom(ctx),
 	}); auditErr != nil {
-		uc.log.Error(ctx, "audit delete", "err", auditErr)
+		uc.d.Log.Error(ctx, "audit delete", "err", auditErr)
 	}
 
 	return nil
 }
 
 func (uc *Usecase) LookupByID(ctx context.Context, id string) (*User, error) {
-	return uc.repo.GetByID(ctx, id)
+	return uc.d.Repo.GetByID(ctx, id)
 }
 
 func (uc *Usecase) LookupByEmail(ctx context.Context, email string) (*User, error) {
-	return uc.repo.GetByEmail(ctx, email)
+	return uc.d.Repo.GetByEmail(ctx, email)
 }
 
 func (uc *Usecase) UpdatePassword(ctx context.Context, userID, hash string, version int) error {
-	_, err := uc.repo.UpdatePassword(ctx, userID, hash, version)
+	_, err := uc.d.Repo.UpdatePassword(ctx, userID, hash, version)
 	return err
 }
 
 func (uc *Usecase) VerifyPassword(ctx context.Context, userID, plain string) (bool, error) {
-	u, err := uc.repo.GetByID(ctx, userID)
+	u, err := uc.d.Repo.GetByID(ctx, userID)
 	if err != nil {
 		return false, err
 	}
-	return uc.hasher.Verify(ctx, plain, u.PasswordHash)
+	return uc.d.Hasher.Verify(ctx, plain, u.PasswordHash)
 }
 
 func (uc *Usecase) MarkEmailVerified(ctx context.Context, userID string) error {
-	return uc.repo.SetEmailVerified(ctx, userID)
+	return uc.d.Repo.SetEmailVerified(ctx, userID)
 }

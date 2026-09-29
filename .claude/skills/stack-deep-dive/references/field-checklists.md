@@ -87,9 +87,9 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 **Обязательные H2**: `Required env`, `Optional env`, `Secrets`,
 `Validation`, `Generates`.
 
-**Generates содержит**: `internal/platform/config` (структуры +
-загрузка через `golibinfra/config`), `.env.example` (required+optional
-с дефолтами), seed для INFRA-HANDOFF (required + секреты).
+**Generates содержит**: `internal/platform/config` (структура `App`
+конфигов приложения, загрузка из env через envconfig), `.env.example`
+(required+optional с дефолтами), seed для INFRA-HANDOFF (required + секреты).
 
 **Cross-kind (это роллап)**: читает решения kit-артефактов —
 их envconfig-теги попадают сюда. Каждый env, упомянутый где-либо
@@ -288,8 +288,8 @@ golibinfra-first принцип (generic util → golibinfra, не локаль�
 
 1. `golibinfra kits` (таблица): множественный выбор kit'ов golibinfra —
    в `cmd/api` шаблона wired httpkit, pgkit, authnkit, outboxkit, natskit,
-   bruteforcekit, auditkit, cachekit, clockkit, logkit, healthkit, timerkit,
-   flagkit, config, bizmetric; полный набор — пакеты в корне golibinfra
+   bruteforcekit, auditkit, clockkit, logkit, healthkit, timerkit,
+   bizmetric; полный набор — пакеты в корне golibinfra
    нужной версии (storagekit, httpclient, … — Other для редких). Версия
    golibinfra (Other).
 2. `Что НЕ подключено`: автоматически = (полный набор) − (выбранные

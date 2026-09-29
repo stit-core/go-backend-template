@@ -97,6 +97,8 @@
 
 - Порты-интерфейсы объявлены в `usecase.go` сверху; зависимости — `UsecaseDeps{fx.In}`;
   конструктор `NewUsecase(d UsecaseDeps)`; хвост deps в порядке `Audit?, Log, Clock, Metrics`.
+  `Usecase` хранит deps целиком (`type Usecase struct{ d UsecaseDeps }`, обращение `uc.d.Repo`):
+  зависимость названа один раз, забыть её присвоить нельзя.
 - Named returns не используются (кроме naked-return/defer-модификации — здесь таких нет).
 - Каждый **мутирующий** метод пишет `metrics.Record*` на всех исходах; read-методы — опционально.
 - Security-значимые операции (login/logout/смена+сброс пароля/verification) пишут `audit`
@@ -130,6 +132,35 @@ DTO в порте — локальные (не re-export из B).
 - **Порт переносит решения, не сырьё:** вычисленное свойство (`Active bool`,
   `CanLogin() bool`) вместо сырого статуса-строки чужого enum'а.
 - Времени в адаптерах нет: `clockkit.Clock` инжектится так же, как в usecase.
+
+## fx
+
+Граф сервиса — `service` в `cmd/api/main.go`: его запускает `main`, его же собирают
+`TestFxGraphValidates` (статический граф, `fx.ValidateApp`) и `TestBoot` (конструкторы, Invoke и
+хуки на контейнерах).
+
+- **Модуль** — `fx.Module` на пакет (доменный `module/`, пакет платформы, `cmd/api`); имя — путь
+  пакета от корня репо (`internal/domain/user/module`).
+- **Привязка к порту** — тип результата провайдера. Свой конструктор возвращает порт
+  (repository, policy, адаптер); тип, который реализует несколько портов или приходит из кита,
+  привязывает identity-closure (`func(u *user.Usecase) userhttp.Usecase { return u }`,
+  `func(j *authnkit.HS256JWT) authnkit.JWTSigner { return j }`). `fx.As` не используется,
+  `fx.Annotate` — только для тегов `name:` и `group:`.
+- **Конфиги** — конфиг кита читает его `<kit>.NewConfig` (`kitConfigs` в `cmd/api`), конфиги
+  самого приложения — структура `App` (`internal/platform/config`). `context.Context` в графе нет.
+- **Порядок хуков** держит httpkit: сервер слушает после OnStart всех модулей и гасится первым.
+  Условие — `httpkit.Module` на верхнем уровне `fx.New`, `registerHTTP` — внутри `fx.Module`
+  (`httpModule`): Invoke модулей fx выполняет раньше корневых. Порядок проверяет `TestBoot`.
+- **Таймауты** — явные `fx.StartTimeout`/`fx.StopTimeout`; бюджет остановки покрывает
+  `HTTP_SHUTDOWN_TIMEOUT` и `NATS_DRAIN_TIMEOUT`.
+- **События fx** — в лог через `logkit.FxLogger`; паника конструктора или Invoke — ошибка старта
+  (`fx.RecoverFromPanics`).
+- **Группы** — `httpkit.security_scheme`, `healthkit.probes`, `timerkit.jobs` (через
+  `timerkit.Provide`), `pgkit.migrations`; middleware и правки huma — одним значением
+  `httpkit.Middlewares` и `httpkit.HumaConfigs` из `cmd/api`. Per-domain outbox
+  (`events.OutboxFor`) включается внутрь доменного `fx.Module`: `fx.Private` скоупит publisher.
+- Кит без потребителя в граф не подключается: его конструкторы не выполняются, конфиг не
+  проверяется, а env молча ничего не меняет.
 
 ## HTTP DTO naming (huma)
 

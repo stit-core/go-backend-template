@@ -123,7 +123,7 @@ func <provider>To<Consumer>(s *<provider>.<Entity>) *<consumer>.<DTO> {
 
 ```go
 var Module = fx.Module(
-    "<consumer>",
+    "internal/domain/<consumer>/module",
     fx.Provide(
         // ...уже было
         new<Provider>ReaderAdapter,

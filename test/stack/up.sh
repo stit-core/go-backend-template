@@ -71,8 +71,7 @@ resolve_port() {
 API_PORT=$(resolve_port api 8080)
 PG_PORT=$(resolve_port postgres 5432)
 NATS_PORT=$(resolve_port nats 4222)
-REDIS_PORT=$(resolve_port redis 6379)
-for _p in API_PORT PG_PORT NATS_PORT REDIS_PORT; do
+for _p in API_PORT PG_PORT NATS_PORT; do
     if [ -z "${!_p:-}" ]; then
         echo "FAIL: could not resolve host port ($_p)" >&2
         docker compose -p "$E2E_PROJECT" -f "$COMPOSE" ps >&2
@@ -84,7 +83,6 @@ cat > "$ENDPOINTS_FILE" <<EOF
 E2E_API_BASE_URL=${API_BASE}
 E2E_PG_DSN=postgresql://postgres:postgres@127.0.0.1:${PG_PORT}/app
 E2E_NATS_URL=nats://127.0.0.1:${NATS_PORT}
-E2E_REDIS_URL=redis://127.0.0.1:${REDIS_PORT}/0
 EOF
 
 # === Wait for api healthy via openapi ===

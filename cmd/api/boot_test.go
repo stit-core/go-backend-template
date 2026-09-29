@@ -46,15 +46,14 @@ func (h *hookOrder) LogEvent(e fxevent.Event) {
 	}
 }
 
-// TestBoot поднимает сервис набором опций main поверх Postgres, NATS и Redis в контейнерах:
+// TestBoot поднимает сервис набором опций main поверх Postgres и NATS в контейнерах:
 // конструкторы, Invoke и хуки выполняются по-настоящему, чего fx.ValidateApp не делает.
 func TestBoot(t *testing.T) {
 	pg := testkit.StartPostgres(t, testkit.WithMigrations(sources.Kits...), testkit.WithMigrationsDir(repopath.Migrations()))
 	nats := testkit.StartNATS(t, testkit.WithJetStream())
-	redis := testkit.StartRedis(t)
 	unsetHTTPEnv(t)
 	for k, v := range map[string]string{
-		"PG_DSN": pg.DSN, "NATS_URL": nats.URL, "REDIS_URL": redis.URL,
+		"PG_DSN": pg.DSN, "NATS_URL": nats.URL,
 		"NATS_JETSTREAM_ENABLED": "true", "NATS_JS_STREAM_NAMES": "user,verification",
 		"JWT_SECRET": strings.Repeat("s", 32), "HTTP_ADDR": "127.0.0.1:0", "LOG_SILENT": "true",
 	} {
