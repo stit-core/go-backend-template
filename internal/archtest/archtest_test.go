@@ -293,7 +293,7 @@ func TestTestsAssert(t *testing.T) {
 				fn, ok := decl.(*ast.FuncDecl)
 				if ok && fn.Recv == nil && strings.HasPrefix(fn.Name.Name, "Test") && fn.Name.Name != "TestMain" &&
 					!asserts(fn.Body, f.byName, helpers) {
-					t.Errorf("%s: %s asserts nothing — no require, assert, Assert*/Require* of a test kit or helper of the package that asserts (rule tests-pipeline): such a test raises coverage without checking anything", f.path, fn.Name.Name)
+					t.Errorf("%s: %s asserts nothing — no require, assert, Assert*/Require* of a test kit or testify/mock, or helper of the package that asserts (rule tests-pipeline): such a test raises coverage without checking anything", f.path, fn.Name.Name)
 				}
 			}
 		}
@@ -322,7 +322,7 @@ func helperNames(decl ast.Decl) []string {
 }
 
 // asserts — в узле есть testify require/assert, Assert*/Require* тестового кита (пакета из testkit)
-// или утверждающий хелпер.
+// или testify/mock (AssertExpectationsForObjects), утверждающий хелпер.
 func asserts(node ast.Node, byName map[string]string, helpers map[string]bool) bool {
 	found := false
 	ast.Inspect(node, func(n ast.Node) bool {
@@ -332,7 +332,7 @@ func asserts(node ast.Node, byName map[string]string, helpers map[string]bool) b
 				pkg := byName[id.Name]
 				kitAssert := strings.HasPrefix(x.Sel.Name, "Assert") || strings.HasPrefix(x.Sel.Name, "Require")
 				found = found || pkg == "github.com/stretchr/testify/require" || pkg == "github.com/stretchr/testify/assert" ||
-					strings.Contains(pkg, "/testkit/") && kitAssert
+					(strings.Contains(pkg, "/testkit/") || pkg == "github.com/stretchr/testify/mock") && kitAssert
 			}
 		case *ast.Ident:
 			found = found || helpers[x.Name]
