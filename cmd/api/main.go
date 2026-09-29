@@ -89,6 +89,7 @@ var (
 		usermod.Module,
 		authmod.Module,
 		verifmod.Module,
+		fx.Invoke(registerHTTP),
 	)
 )
 

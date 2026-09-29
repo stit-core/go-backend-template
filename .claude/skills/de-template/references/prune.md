@@ -7,7 +7,8 @@ domain) — иначе теряешь живой образец. Удаляй в
 
 ## Чеклист (7 точек)
 
-1. **Доменные пакеты** — `internal/domain/{auth,user,verification}/` целиком (`git rm -r`).
+1. **Доменные пакеты** — `internal/domain/{auth,user,verification}/` целиком (`git rm -r`) и
+   их записи в allowlist'ах `internal/archtest`.
 2. **`.mockery.yml`** — блоки `packages` удаляемых доменов (`internal/domain/{user,auth,verification}`
    и их `delivery/http`, `delivery/nats`); иначе `make gen` падает на несуществующих пакетах.
 3. **sqlc.yaml** — три блока `engine` с `queries/out` на `internal/domain/{user,verification,auth}/...`.
@@ -19,7 +20,8 @@ domain) — иначе теряешь живой образец. Удаляй в
    опираются на общие объекты из `0001_users` (`CREATE EXTENSION pgcrypto`, функция
    `set_updated_at()`), перенеси их в первую свою миграцию.
 5. **fx-wiring** — `cmd/api/main.go`: убери `usermod`/`authmod`/`verifmod` из `domainModules`
-   (импорты + строки в `fx.Options`).
+   (импорты + строки в `fx.Options`); `cmd/api/http.go` — их хендлеры из `httpHandlers` и
+   `registerHTTP`; `cmd/api/api_test.go` — их операции из `publicOperations`.
 6. **e2e** — их сценарии/фикстуры в `test/` (auth-flow, user CRUD, verification, admin-fixtures).
 7. **`cmd/seed-admin/`** — bootstrap админа завязан на `user`/`auth`; удали каталог + его
    сборку в `test/stack/` (`up.sh`, `Dockerfile.local`, сервис в `compose.yml`) + e2e-использование.

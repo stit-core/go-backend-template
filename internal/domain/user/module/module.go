@@ -20,5 +20,4 @@ var Module = fx.Module(
 		userhttp.NewHandler,
 		func(u *user.Usecase) userhttp.Usecase { return u },
 	),
-	fx.Invoke(userhttp.Register),
 )

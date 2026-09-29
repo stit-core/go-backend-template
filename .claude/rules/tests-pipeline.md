@@ -38,6 +38,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `delivery/nats` | unit handler-функции (мок Usecase-порта) — включая дубль-доставку |
 | `infra/postgres/repository.go` | integration per-домен (build-tag) |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp` |
+| HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь |
 
 ## TDD для багфиксов — обязательно
 

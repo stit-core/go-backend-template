@@ -1,7 +1,7 @@
 // Package archtest машинно держит границы и слоевые инварианты доменов (rule
 // domain-architecture) для любого каталога internal/domain/*: импорты между доменами и
-// слоями, чистоту корня домена, huma-уникальность HTTP-DTO, владение subject-литералами и
-// запрет time.Now(). На archtest //nolint не действует.
+// слоями, чистоту корня домена, адаптеры и таблицы между доменами, huma-уникальность
+// HTTP-типов, владение subject-литералами и запрет time.Now(). На archtest //nolint не действует.
 package archtest
 
 import (
@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -96,6 +97,30 @@ func goFiles(t *testing.T) []goFile {
 	return files
 }
 
+func parseGo(t *testing.T, rel string) *ast.File {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repoRoot(t), rel), nil, 0)
+	require.NoError(t, err)
+	return f
+}
+
+// importsByName — пакеты файла по имени, под которым файл их видит: алиас, "." или элемент пути.
+func importsByName(f *ast.File) map[string]string {
+	byName := map[string]string{}
+	for _, imp := range f.Imports {
+		p, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			continue
+		}
+		name := path.Base(p)
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		byName[name] = p
+	}
+	return byName
+}
+
 // splitDomain разбирает путь пакета от корня репо на домен и подпакет:
 // internal/domain/user/infra/postgres → "user", "infra/postgres", true.
 func splitDomain(pkg string) (string, string, bool) {
@@ -109,43 +134,49 @@ func under(p, dir string) bool {
 	return p == dir || strings.HasPrefix(p, dir+"/")
 }
 
-// TestHTTPDTONamesGloballyUnique ловит huma-коллизию на этапе теста, а не
-// паникой при старте: имена экспортируемых типов delivery/http уникальны глобально.
+// allowlist — нарушения новой проверки в текущем коде: нарушение → ID находки аудита. Список
+// опустошает fix-reference-code; запись, которой не соответствует нарушение, тоже провал —
+// исправленное вычёркивается.
+type allowlist map[string]string
+
+func (a allowlist) check(t *testing.T, violations []string, rule string) {
+	t.Helper()
+	for _, v := range violations {
+		if _, known := a[v]; !known {
+			t.Errorf("%s: %s", v, rule)
+		}
+	}
+	for v, id := range a {
+		if !slices.Contains(violations, v) {
+			t.Errorf("allowlist entry %q (%s) matches no violation: remove it", v, id)
+		}
+	}
+}
+
+// TestHTTPDTONamesGloballyUnique: huma регистрирует схемы по имени Go-типа на весь API, и
+// одноимённые типы двух доменов роняют старт паникой. Handler и Usecase — канон пакета, в
+// схемы не попадают.
 func TestHTTPDTONamesGloballyUnique(t *testing.T) {
 	t.Parallel()
-	root := repoRoot(t)
-	seen := map[string]string{} // type name -> first location
-	for _, d := range domains(t) {
-		dir := filepath.Join(root, "internal", "domain", d, "delivery", "http")
-		entries, err := os.ReadDir(dir)
-		if err != nil {
+	seen := map[string]string{} // имя типа → файл
+	for _, f := range goFiles(t) {
+		if _, sub, ok := splitDomain(f.pkg); !ok || sub != "delivery/http" || f.test {
 			continue
 		}
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+		for _, decl := range parseGo(t, f.path).Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
 				continue
 			}
-			path := filepath.Join(dir, e.Name())
-			f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-			require.NoError(t, err)
-			for _, decl := range f.Decls {
-				gd, ok := decl.(*ast.GenDecl)
-				if !ok || gd.Tok != token.TYPE {
+			for _, spec := range gd.Specs {
+				name := spec.(*ast.TypeSpec).Name.Name
+				if !ast.IsExported(name) || name == "Handler" || name == "Usecase" {
 					continue
 				}
-				for _, spec := range gd.Specs {
-					ts := spec.(*ast.TypeSpec)
-					name := ts.Name.Name
-					// huma registers request/response types by name; Handler/Usecase/View stay local.
-					if !ast.IsExported(name) ||
-						(!strings.HasSuffix(name, "Input") && !strings.HasSuffix(name, "Output")) {
-						continue
-					}
-					prev, dup := seen[name]
-					require.False(t, dup,
-						"HTTP DTO type %q declared in both %s and %s — huma registry panics on name collision", name, prev, path)
-					seen[name] = path
+				if prev, dup := seen[name]; dup {
+					t.Errorf("type %s is declared in both %s and %s: huma names schemas by Go type, prefix it with the domain", name, prev, f.path)
 				}
+				seen[name] = f.path
 			}
 		}
 	}
@@ -156,14 +187,12 @@ func TestHTTPDTONamesGloballyUnique(t *testing.T) {
 // источника запрещён (consumers обязаны держать свою константу).
 func TestSubjectLiteralOwnership(t *testing.T) {
 	t.Parallel()
-	root := repoRoot(t)
 	names := domains(t)
-	walkGoFiles(t, filepath.Join(root, "internal"), func(path string) {
-		rel, err := filepath.Rel(root, path)
-		require.NoError(t, err)
-		f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		require.NoError(t, err)
-		ast.Inspect(f, func(n ast.Node) bool {
+	for _, f := range goFiles(t) {
+		if !under(f.pkg, "internal") || f.test {
+			continue
+		}
+		ast.Inspect(parseGo(t, f.path), func(n ast.Node) bool {
 			lit, ok := n.(*ast.BasicLit)
 			if !ok || lit.Kind != token.STRING {
 				return true
@@ -176,14 +205,14 @@ func TestSubjectLiteralOwnership(t *testing.T) {
 				if !strings.HasPrefix(val, d+".events.") {
 					continue
 				}
-				inOwner := strings.HasPrefix(rel, filepath.Join("internal", "domain", d)+string(os.PathSeparator))
-				inConsumerNATS := strings.Contains(rel, filepath.Join("delivery", "nats"))
+				inOwner := under(f.pkg, "internal/domain/"+d)
+				inConsumerNATS := strings.Contains(f.pkg, "delivery/nats")
 				require.True(t, inOwner || inConsumerNATS,
-					"%s contains subject literal %q — only the owning domain or a delivery/nats consumer may declare it", rel, val)
+					"%s contains subject literal %q — only the owning domain or a delivery/nats consumer may declare it", f.path, val)
 			}
 			return true
 		})
-	})
+	}
 }
 
 func TestNoExportedSubjectInDomainRoot(t *testing.T) {
@@ -215,44 +244,28 @@ func TestNoExportedSubjectInDomainRoot(t *testing.T) {
 	}
 }
 
-// TestNoTimeNowInDomains: детерминизм — clockkit.Clock вместо time.Now()
-// во всём internal/domain (кроме тестов).
+// TestNoTimeNowInDomains: детерминизм — clockkit.Clock вместо time.Now() во всём
+// internal/domain (кроме тестов). Имя пакета берётся из импортов файла: алиас не прячет вызов.
 func TestNoTimeNowInDomains(t *testing.T) {
 	t.Parallel()
-	root := repoRoot(t)
-	walkGoFiles(t, filepath.Join(root, "internal", "domain"), func(path string) {
-		f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		require.NoError(t, err)
-		ast.Inspect(f, func(n ast.Node) bool {
+	for _, f := range goFiles(t) {
+		if _, _, ok := splitDomain(f.pkg); !ok || f.test {
+			continue
+		}
+		file := parseGo(t, f.path)
+		byName := importsByName(file)
+		if byName["."] == "time" {
+			t.Errorf("%s dot-imports time: time.Now() would hide behind it", f.path)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
-			if !ok {
+			if !ok || sel.Sel.Name != "Now" {
 				return true
 			}
-			ident, ok := sel.X.(*ast.Ident)
-			if ok && ident.Name == "time" && sel.Sel.Name == "Now" {
-				t.Errorf("%s calls time.Now() — inject clockkit.Clock (rule domain-architecture)", path)
+			if id, ok := sel.X.(*ast.Ident); ok && byName[id.Name] == "time" {
+				t.Errorf("%s calls time.Now(): inject clockkit.Clock (rule domain-architecture)", f.path)
 			}
 			return true
 		})
-	})
-}
-
-func walkGoFiles(t *testing.T, root string, fn func(path string)) {
-	t.Helper()
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if d.Name() == "mocks" || d.Name() == "db" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
-			fn(path)
-		}
-		return nil
-	})
-	require.NoError(t, err)
+	}
 }

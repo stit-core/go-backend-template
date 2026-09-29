@@ -41,14 +41,19 @@ func newCookieSecurityScheme() httpkit.SecuritySchemeEntry {
 	}
 }
 
+// SecurityScheme — схема Cookie в OpenAPI; входит в Module, а без него собирает API без JWT и БД.
+var SecurityScheme = fx.Provide(
+	fx.Annotate(newCookieSecurityScheme, fx.ResultTags(`group:"`+httpkit.SecuritySchemeGroup+`"`)),
+)
+
 var Module = fx.Module(
 	"authgate",
 	authnProviders,
+	SecurityScheme,
 	fx.Provide(
 		NewExtractor,
 
 		func(e *Extractor) httpkit.AuthExtractor { return e.Extract },
-		fx.Annotate(newCookieSecurityScheme, fx.ResultTags(`group:"`+httpkit.SecuritySchemeGroup+`"`)),
 		fx.Annotate(newClientIPMiddleware, fx.ResultTags(`group:"`+httpkit.MiddlewareGroup+`"`)),
 	),
 	fx.Invoke(registerIdentityLogAttr),

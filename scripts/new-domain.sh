@@ -349,11 +349,10 @@ var Module = fx.Module(
 		${NAME}http.NewHandler,
 		func(u *${NAME}.Usecase) ${NAME}http.Usecase { return u },
 	),
-	fx.Invoke(${NAME}http.Register),
 )
 
 // Cross-domain порт нужен → тип-адаптер и его конструктор в module/adapters.go
-// (identity-closure только без логики). См. rule domain-architecture.
+// (identity-closure — только внутри домена). См. rule domain-architecture.
 EOF
 
 # ── авто-вписывание конфигов ──────────────────────────────────────────────
@@ -379,5 +378,5 @@ echo "  3. make gen — регенерация sqlc+mocks"
 echo "  4. Usecase/handler/тесты; HTTP-DTO в delivery/http/dto.go (${TITLE}<Op>Input/Output),"
 echo "     view.go — когда появится тело ответа; events.go (payload + unexported subject-const)"
 echo "     + infra/outbox/outbox.go — при первой публикации (rule events-and-messaging)"
-echo "  5. Подключи модуль в cmd/api/main.go (domainModules)"
+echo "  5. Подключи модуль в cmd/api/main.go (domainModules), HTTP-вход — в cmd/api/http.go (registerHTTP)"
 echo "  6. make check (нужен Docker)"

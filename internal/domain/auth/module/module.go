@@ -25,5 +25,4 @@ var Module = fx.Module(
 		authhttp.NewHandler,
 		func(u *auth.Usecase) authhttp.Usecase { return u },
 	),
-	fx.Invoke(authhttp.Register),
 )

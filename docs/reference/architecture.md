@@ -118,8 +118,9 @@ DTO в порте — локальные (не re-export из B).
 
 Канон адаптера:
 
-- **Identity-closure** — только когда провайдер уже удовлетворяет порт как есть:
-  `func(uc *user.Usecase) auth.PasswordVerifier { return uc }` inline в `module.go`.
+- **Identity-closure** (`func(u *user.Usecase) userhttp.Usecase { return u }`) — только внутри
+  домена: delivery-порт своего usecase. Порт между доменами closure не реализует — чужие
+  sentinel'ы уйдут потребителю без маппинга (archtest `TestNoCrossDomainIdentityClosure`).
 - **Типовой адаптер** — при любой логике (маппинг DTO, clock, преобразование ошибок):
   тип **и его конструктор** — в `adapters.go` (не расщеплять между module.go/adapters.go).
 - **Sentinel-маппинг обязателен:** порт возвращает sentinel'ы домена-потребителя
@@ -135,7 +136,13 @@ huma собирает все DTO-структуры всех доменов в �
 Go-типа. Два домена с одинаковым `ListOutput` → коллизия `ListOutputBody` → panic. Поэтому
 имена publicly-named DTO в `delivery/http/dto.go` — domain-specific: `EventListOutput`,
 не `ListOutput`. Inline `Body struct{...}` именуется по Outer-типу — уникальность Outer
-гарантирует уникальность Body.
+гарантирует уникальность Body. Уникальность экспортируемых типов `delivery/http` (кроме
+`Handler` и `Usecase`) держит archtest.
+
+Операции всех доменов регистрирует одна функция — `registerHTTP` в `cmd/api/http.go`; по ней
+же `cmd/api/api_test.go` собирает API без БД и брокера и проверяет: у каждой операции
+`Security` или место в `publicOperations` (операция без `Security` публична в рантайме), пара
+метод+путь уникальна (huma и chi молча перезаписывают маршрут), дубль `OperationID` — паника.
 
 ## События и messaging
 

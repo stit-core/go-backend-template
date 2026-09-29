@@ -136,5 +136,5 @@ make build
 - ❌ Бизнес-логика в handler-методе. Handler только: парсит вход, вызывает usecase, мапит ошибки.
 - ❌ Прямое использование `pgx`/`sqlc` из handler. Только через usecase.
 - ❌ Свой формат ошибок мимо `httpkit.MapErr` — нарушит единый shape ответа.
-- ❌ Забыть `Security:` для авторизованного endpoint — он окажется анонимным в swagger.
+- ❌ Забыть `Security:` для авторизованного endpoint — он публичен в рантайме; `TestHTTPOperations` (`cmd/api`) не пропустит операцию без `Security` вне `publicOperations`.
 - ❌ `_, _ = ctx, in` в handler без вызова usecase — компилятор пропустит, но это dead-handler.

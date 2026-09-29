@@ -27,7 +27,6 @@ var Module = fx.Module(
 		verifnats.NewHandler,
 		func(u *verification.Usecase) verifnats.Usecase { return u },
 	),
-	fx.Invoke(verifhttp.Register),
 	fx.Invoke(verifnats.Register),
 )
 

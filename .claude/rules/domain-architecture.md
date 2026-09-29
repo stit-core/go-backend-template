@@ -25,11 +25,14 @@ paths:
   `infra/outbox` — только свой `module/` и `cmd/migrate`. Порт объявляешь в домене-потребителе
   (`usecase.go`), адаптер — в `<consumer>/module/adapters.go`. DTO в порте — локальные; порт
   возвращает **sentinel'ы потребителя** (адаптер мапит чужие) и **вычисленные свойства**
-  (`Active bool`), не сырые чужие enum'ы. Identity-closure (`return uc`) — только без логики;
-  любой маппинг → типовой адаптер, тип и конструктор в `adapters.go`. Clock в адаптерах
-  инжектится (`clockkit.Clock`), `time.Now()` запрещён.
+  (`Active bool`), не сырые чужие enum'ы. Identity-closure (`return uc`) — только внутри домена
+  (delivery-порты своего usecase); порт между доменами — типовой адаптер с маппингом, тип и
+  конструктор в `adapters.go` (archtest). Clock в адаптерах инжектится (`clockkit.Clock`),
+  `time.Now()` запрещён.
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
+  Операция без `Security` публична в рантайме: она либо под `Security`, либо в
+  `publicOperations` (`cmd/api/api_test.go`); регистрация — в `registerHTTP` (`cmd/api/http.go`).
   Envelope — `data`. OperationID — lowerCamel `<verb><Noun>`, глобально уникален.
 - **I/O — это use-case, не метод агрегата.** Нужен repo/сеть/время → метод `*Usecase`.
   Чистое правило/константа правила (password strength и т.п.) → `policy.go`, не inline в usecase.

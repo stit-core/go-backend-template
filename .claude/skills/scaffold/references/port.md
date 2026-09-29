@@ -132,7 +132,7 @@ var Module = fx.Module(
 )
 ```
 
-Inline identity-closure (`func(uc *<provider>.Usecase) <consumer>.<Port> { return uc }`) — только когда провайдер удовлетворяет порт как есть, без маппинга.
+Identity-closure (`func(uc *<provider>.Usecase) <consumer>.<Port> { return uc }`) для порта между доменами запрещён (archtest): чужие sentinel'ы ушли бы потребителю без маппинга. Всегда типовой адаптер.
 
 ### 7. Проверить границы
 

@@ -195,15 +195,16 @@ var Module = fx.Module(
         <name>http.NewHandler,
         func(u *<name>.Usecase) <name>http.Usecase { return u },
     ),
-    fx.Invoke(<name>http.Register),
 )
 ```
 
 Дальше дополняй его провайдерами по мере роста: адаптеры портов (`new<Port>Adapter` из
 `adapters.go`), `outbox.Providers` домена-публикатора, NATS-handler (`references/event.md`).
+HTTP-операции домен сам не регистрирует — это делает `registerHTTP` в `cmd/api` (шаг 12).
 
-### 12. Подключить в cmd/api/main.go
+### 12. Подключить в cmd/api
 
+`cmd/api/main.go` — модуль:
 ```go
 import <name>mod "<module-path>/internal/domain/<name>/module"
 
@@ -212,8 +213,13 @@ domainModules = fx.Options(
     authmod.Module,
     verifmod.Module,
     <name>mod.Module,  // добавить
+    fx.Invoke(registerHTTP),
 )
 ```
+
+`cmd/api/http.go` — HTTP-вход: поле `<Name> *<name>http.Handler` в `httpHandlers` и
+`<name>http.Register(api, h.<Name>)` в `registerHTTP`. Публичная операция (без `Security`) —
+ещё и в `publicOperations` (`cmd/api/api_test.go`).
 
 ### 13. Моки
 
