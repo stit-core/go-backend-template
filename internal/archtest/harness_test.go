@@ -1,9 +1,10 @@
 package archtest
 
 import (
+	"errors"
 	"go/ast"
-	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -80,7 +81,8 @@ var (
 )
 
 // TestProseReferencesExist: make-цели и пути репо в коде прозы (CLAUDE.md, README, docs/,
-// .claude/rules и skills) существуют — иначе агент идёт по мёртвой ссылке (HAR-11).
+// .claude/rules и skills) есть в репо — иначе агент идёт по мёртвой ссылке (HAR-11). Репо — то,
+// что отслеживает git: локальное (test/.venv, неотслеживаемый файл) есть не в каждом клоне.
 // Плейсхолдеры (<d>, NNNN, *) — не ссылки; артефакт docs/stack/<kind>.md — по его шаблону.
 func TestProseReferencesExist(t *testing.T) {
 	t.Parallel()
@@ -91,10 +93,17 @@ func TestProseReferencesExist(t *testing.T) {
 	for _, m := range makeTarget.FindAllStringSubmatch(string(makefile), -1) {
 		targets = append(targets, m[1])
 	}
-	topDirs := repoTopDirs(t, root)
+	files := trackedFiles(t, root)
+	repo := map[string]bool{} // файлы и каталоги (с "/" на конце) репо
+	for _, f := range files {
+		repo[f] = true
+		for d := path.Dir(f); d != "."; d = path.Dir(d) {
+			repo[d+"/"] = true
+		}
+	}
 
 	var dead []string
-	for _, doc := range proseFiles(t, root) {
+	for _, doc := range proseFiles(files) {
 		data, err := os.ReadFile(filepath.Join(root, doc))
 		require.NoError(t, err)
 		for _, span := range codeSpan.FindAllString(string(data), -1) {
@@ -104,74 +113,77 @@ func TestProseReferencesExist(t *testing.T) {
 				}
 			}
 			for _, word := range strings.Fields(strings.Trim(span, "`")) {
-				ref := strings.Trim(word, `"'.,;:()`)
+				ref := strings.TrimRight(strings.TrimLeft(word, `"'(`), `"'.,;:()`) // точка в начале — .claude
 				ref, _, _ = strings.Cut(ref, ":")
-				if placeholder.MatchString(ref) || !slices.Contains(topDirs, strings.Split(ref, "/")[0]) || !strings.Contains(ref, "/") {
+				top, _, isPath := strings.Cut(ref, "/")
+				if placeholder.MatchString(ref) || !isPath || !repo[top+"/"] {
 					continue
 				}
-				if !repoPathExists(root, goSymbol.ReplaceAllString(ref, "")) {
+				if !inRepo(repo, goSymbol.ReplaceAllString(ref, "")) && !gitIgnored(t, root, ref) {
 					dead = append(dead, doc+": "+ref)
 				}
 			}
 		}
 	}
-	proseAllowlist.check(t, dead, "the prose points to a make target or a repo path that does not exist")
+	proseAllowlist.check(t, dead, "the prose points to a missing make target or to a path git does not track")
 }
 
-func repoPathExists(root, ref string) bool {
-	if _, err := os.Stat(filepath.Join(root, ref)); err == nil {
+func inRepo(repo map[string]bool, ref string) bool {
+	ref = strings.TrimSuffix(ref, "/")
+	if repo[ref] || repo[ref+"/"] {
 		return true
 	}
 	// Артефакт стека docs/stack/<kind>.md появляется у форка — по шаблону _templates/<kind>.md.
 	kind, ok := strings.CutPrefix(ref, "docs/stack/")
-	_, err := os.Stat(filepath.Join(root, "docs/stack/_templates", kind))
-	return ok && !strings.Contains(kind, "/") && err == nil
+	return ok && !strings.Contains(kind, "/") && repo["docs/stack/_templates/"+kind]
 }
 
-// repoTopDirs — каталоги корня репо, на которые ссылается проза: без скрытых (кроме .claude) и bin.
-func repoTopDirs(t *testing.T, root string) []string {
+// trackedFiles — файлы индекса git, которые есть в рабочем дереве: удалённый файл — уже не ссылка.
+func trackedFiles(t *testing.T, root string) []string {
 	t.Helper()
-	entries, err := os.ReadDir(root)
-	require.NoError(t, err)
-	var dirs []string
-	for _, e := range entries {
-		if e.IsDir() && e.Name() != "bin" && (!strings.HasPrefix(e.Name(), ".") || e.Name() == ".claude") {
-			dirs = append(dirs, e.Name())
+	cmd := exec.CommandContext(t.Context(), "git", "ls-files", "-z")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	require.NoError(t, err, "git ls-files")
+	var files []string
+	for _, f := range strings.FieldsFunc(string(out), func(r rune) bool { return r == 0 }) {
+		if _, err := os.Stat(filepath.Join(root, f)); err == nil {
+			files = append(files, f)
 		}
 	}
-	return dirs
+	require.NotEmpty(t, files)
+	return files
 }
 
-// workDocs — рабочие документы проекта: планы, память stack-deep-dive, чужие worktree. Они
-// описывают и файлы, которых ещё нет, поэтому проверка прозы их не касается.
-var workDocs = []string{".claude/plans", ".claude/skills/stack-deep-dive/state", ".claude/worktrees"}
-
-// proseFiles — .md обвязки: без рабочих документов, артефактов стека docs/stack/<kind>.md и
-// скрытых каталогов.
-func proseFiles(t *testing.T, root string) []string {
+// gitIgnored — путь исключён .gitignore: локальный, а не ссылка на репо. "/" на конце — чтобы git
+// узнал игнорируемый каталог, которого нет на диске (test/.venv в свежем клоне).
+func gitIgnored(t *testing.T, root, ref string) bool {
 	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "git", "check-ignore", "-q", strings.TrimSuffix(ref, "/")+"/")
+	cmd.Dir = root
+	err := cmd.Run()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return false
+	}
+	require.NoError(t, err, "git check-ignore %s", ref)
+	return true
+}
+
+// workDocs — рабочие документы проекта: планы и память stack-deep-dive. Они описывают и файлы,
+// которых ещё нет, поэтому проверка прозы их не касается.
+var workDocs = []string{".claude/plans", ".claude/skills/stack-deep-dive/state"}
+
+// proseFiles — .md репо без рабочих документов и артефактов стека docs/stack/<kind>.md.
+func proseFiles(files []string) []string {
 	var docs []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
+	for _, f := range files {
 		switch {
-		case d.IsDir() && (slices.Contains(workDocs, rel) ||
-			rel != "." && rel != ".claude" && strings.HasPrefix(d.Name(), ".")):
-			return filepath.SkipDir
-		case d.IsDir() || path.Ext(rel) != ".md":
-		case path.Dir(rel) == "docs/stack" && rel != "docs/stack/README.md":
+		case path.Ext(f) != ".md", slices.ContainsFunc(workDocs, func(d string) bool { return under(f, d) }):
+		case path.Dir(f) == "docs/stack" && f != "docs/stack/README.md":
 		default:
-			docs = append(docs, rel)
+			docs = append(docs, f)
 		}
-		return nil
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, docs)
+	}
 	return docs
 }

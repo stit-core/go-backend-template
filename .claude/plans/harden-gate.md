@@ -187,7 +187,8 @@ blocked-by: —
   - Сделано: `harness_test.go` — `TestProseReferencesExist`, `TestDomainsAreWired`;
     `cmd/api/main_test.go` — `TestEnvExampleHasRequired`. Проверка (`make check`): удалены цель
     `plan-check` и `docs/reference/release.md`, X13, X10, X10b, `fx.Invoke(verifnats.Register)`,
-    `PG_DSN` из `.env.example` → FAIL с точной причиной
+    `PG_DSN` из `.env.example`, ссылка на неотслеживаемый файл → FAIL с точной причиной; свежий
+    worktree → clean
 
 ### Запуск приложения
 - [x] **S10** — Boot-тест `cmd/api` (integration, контейнеры testkit): тот же набор fx-опций, что
@@ -264,9 +265,12 @@ blocked-by: —
   `CREATE TABLE` в `migrations/`). Allowlist — `map[нарушение]ID`; запись без нарушения валит тест.
 - Самопроверка обвязки — Go-тесты, не скрипт: кто на что ссылается в Go-коде (AST) и какие env
   required (reflect конфигов) надёжнее grep. Проза — только в коде (inline и fenced): цели `make`
-  и пути от каталогов корня; плейсхолдеры (`<d>`, `NNNN`, `*`) — не ссылки; цели хаба (`bump`,
-  `ps`, `ship`) — своим списком; ссылка на `docs/stack/<kind>.md` — по шаблону, а артефакты стека,
-  планы и память stack-deep-dive (там и будущие файлы) не проверяются. Env — в `cmd/api` рядом с
+  и пути репо (и `.claude/…`); репо — что отслеживает git (`git ls-files`, файл есть на диске),
+  игнорируемое (`git check-ignore`: `test/.venv`) — локальное, не ссылка: исход не зависит от
+  клона, а неотслеживаемый файл мёртвую ссылку не оживляет; плейсхолдеры (`<d>`, `NNNN`, `*`) —
+  не ссылки; цели хаба (`bump`, `ps`, `ship`) — своим списком; ссылка на `docs/stack/<kind>.md` —
+  по шаблону, а артефакты стека, планы и память stack-deep-dive (там и будущие файлы) не
+  проверяются. Env — в `cmd/api` рядом с
   `kitConfigs` (стал списком конструкторов): allowlist'ы — в `internal/archtest` и `cmd/api`.
 - Скелет `make new-domain` без подключения в `cmd/api` валит `TestDomainsAreWired` (как и покрытие,
   TST-04): подключение скелета — `fix-reference-code` S12 (AC10).
@@ -299,15 +303,14 @@ blocked-by: —
 S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Этап S2–S6 провалидирован: PASS после фиксов
 `fix(gate)`. Этап S7–S11: валидатор — FAIL, проверен частично (отчёт —
 `/home/mm/.cache/stit-audit-program/validation-harden-gate-B.md`, кейсы — `valb/inj.py` рядом).
-Блокирующий: `TestProseReferencesExist` сверяет ссылки прозы с рабочим деревом (`os.Stat`), а
-`test/README.md:92` ссылается на игнорируемый `test/.venv` — в свежем клоне или worktree `make
-check` красный; чинить сверкой с отслеживаемыми путями (`git ls-files`) плюс проверка «чистый
-worktree → гейт зелёный». Неблокирующие N1–N4 — в отчёте. Не проверено: инъекции ENF, ADP, fx,
+Блокирующий B1 исправлен: ссылки прозы сверяются с отслеживаемыми git путями — свежий worktree →
+`✓ check clean`, ссылка на неотслеживаемый файл → FAIL. Неблокирующие N1–N5, N7 и строки 9, 11,
+15 матрицы ENF — следующими фиксами. Не проверено: инъекции ENF, ADP, fx,
 M22, COD-05, OpenAPI и S9; ложные срабатывания (`make new-domain NAME=probe`, проза после prune
 учебных доменов); `TestBoot -count=3`; `make gen`/`status`/pre-commit; сверка «Сделано».
 Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
 `auth/module/module.go` и `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
 `docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. Обходы
-до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Следующее: фикс
-блокирующего (и N1–N4 по решению) → довалидация этапа S7–S11 → S12 отдельным агентом → закрыть
-план, push шаблона.
+до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Следующее: фиксы
+N1–N7 и строк 9, 11, 15 → довалидация этапа S7–S11 → S12 отдельным агентом → закрыть план, push
+шаблона.
