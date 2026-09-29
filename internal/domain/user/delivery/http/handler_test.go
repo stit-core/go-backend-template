@@ -17,6 +17,8 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user/delivery/http/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
+	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
+	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
 )
 
@@ -63,7 +65,7 @@ func TestRegister_WeakPassword(t *testing.T) {
 func TestGetByID_Forbidden(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().GetByID(mock.Anything, mock.Anything).Return(nil, &user.ForbiddenError{Reason: "not self"})
+	uc.EXPECT().GetByID(mock.Anything, mock.Anything).Return(nil, &policy.ForbiddenError{Reason: "not self"})
 	api := setup(t, uc)
 
 	resp := api.Get("/api/users/u1")
@@ -83,7 +85,7 @@ func TestGetByID_NotFound(t *testing.T) {
 func TestDelete_Forbidden(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Delete(mock.Anything, mock.Anything).Return(&user.ForbiddenError{Reason: "not admin"})
+	uc.EXPECT().Delete(mock.Anything, mock.Anything).Return(&policy.ForbiddenError{Reason: "not admin"})
 	api := setup(t, uc)
 
 	resp := api.Delete("/api/users/u1")
@@ -139,7 +141,7 @@ func TestMe_OK(t *testing.T) {
 func TestMe_ForbiddenWithoutIdentity(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Me(mock.Anything).Return(nil, &user.ForbiddenError{Reason: "no identity"})
+	uc.EXPECT().Me(mock.Anything).Return(nil, &policy.ForbiddenError{Reason: "no identity"})
 	api := setup(t, uc)
 
 	resp := api.Get("/api/users/me")
@@ -150,11 +152,10 @@ func TestList_OK(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, filter user.ListFilter, pg user.ListPagination) ([]*user.User, int, error) {
+		RunAndReturn(func(_ context.Context, filter user.ListFilter, page paging.Page) ([]*user.User, int, error) {
 			require.NotNil(t, filter.Status)
 			require.Equal(t, user.StatusActive, *filter.Status)
-			require.Equal(t, 2, pg.Page)
-			require.Equal(t, 5, pg.Size)
+			require.Equal(t, paging.Page{Number: 2, Size: 5}, page)
 			return []*user.User{
 				{ID: "u1", Email: "a@b.com", Name: "Alice", Status: user.StatusActive},
 				{ID: "u2", Email: "c@d.com", Name: "Bob", Status: user.StatusActive},

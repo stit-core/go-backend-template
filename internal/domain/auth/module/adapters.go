@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/idkit"
 )
 
 type userReaderAdapter struct {
@@ -83,7 +82,7 @@ func (a *tokensAdapter) IssueAccess(ctx context.Context, u *auth.User) (string, 
 }
 
 func (a *tokensAdapter) IssueRefresh(ctx context.Context, userID string) (string, string, time.Time, error) {
-	jti := uuid.NewString()
+	jti := idkit.NewV7()
 	expiresAt := a.clock.Now().Add(a.refreshTTL)
 	token, err := a.signer.SignRefresh(ctx, map[string]any{
 		"sub": userID,

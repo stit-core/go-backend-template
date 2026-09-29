@@ -15,8 +15,3 @@ type UpdateInput struct {
 type ListFilter struct {
 	Status *Status
 }
-
-type ListPagination struct {
-	Page int
-	Size int
-}

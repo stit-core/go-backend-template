@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
+	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/go-backend-template/pkg/tokens"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/idkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
@@ -80,7 +82,7 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email str
 		return fmt.Errorf("generate verify token: %w", err)
 	}
 
-	tokenID := uuid.NewString()
+	tokenID := idkit.NewV7()
 
 	var inserted bool
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
@@ -100,20 +102,20 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email str
 				At:      uc.d.Clock.Now(),
 			})
 	}); err != nil {
-		uc.d.Metrics.RecordEmailIssued(ctx, "error")
+		uc.d.Metrics.RecordEmailIssued(ctx, outcome.Error)
 		return err
 	}
 	if !inserted {
 		uc.d.Log.Info(ctx, "email verification already pending, skip", "user_id", userID)
-		uc.d.Metrics.RecordEmailIssued(ctx, "duplicate")
+		uc.d.Metrics.RecordEmailIssued(ctx, resultDuplicate)
 		return nil
 	}
 
 	if err := uc.d.Mailer.SendEmailVerification(ctx, email, t); err != nil {
-		uc.d.Metrics.RecordEmailIssued(ctx, "error")
+		uc.d.Metrics.RecordEmailIssued(ctx, outcome.Error)
 		return fmt.Errorf("send verification email: %w", err)
 	}
-	uc.d.Metrics.RecordEmailIssued(ctx, "ok")
+	uc.d.Metrics.RecordEmailIssued(ctx, outcome.OK)
 	return nil
 }
 
@@ -121,13 +123,13 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error
 	u, err := uc.d.Users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			uc.d.Metrics.RecordPasswordResetRequested(ctx, "user_not_found")
+			uc.d.Metrics.RecordPasswordResetRequested(ctx, resultUserNotFound)
 			return nil // anti-enumeration: absence of an account must be indistinguishable
 		}
 		return fmt.Errorf("lookup user: %w", err)
 	}
 	if !u.Active {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, "inactive")
+		uc.d.Metrics.RecordPasswordResetRequested(ctx, resultInactive)
 		return nil
 	}
 
@@ -136,7 +138,7 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error
 		return fmt.Errorf("generate reset token: %w", err)
 	}
 
-	tokenID := uuid.NewString()
+	tokenID := idkit.NewV7()
 
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
 		if err := uc.d.Repo.InsertPasswordReset(txCtx, u.ID, tokens.Hash(token), uc.d.Clock.Now().Add(time.Hour)); err != nil {
@@ -150,35 +152,35 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error
 				At:      uc.d.Clock.Now(),
 			})
 	}); err != nil {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, "error")
+		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
 		return err
 	}
 
 	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, "error")
+		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
 		return fmt.Errorf("send password reset email: %w", err)
 	}
-	uc.d.Metrics.RecordPasswordResetRequested(ctx, "ok")
+	uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.OK)
 	return nil
 }
 
 func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword string) error {
-	if !PasswordStrengthOK(newPassword) {
-		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, "weak")
+	if !policy.PasswordStrong(newPassword) {
+		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.WeakPassword)
 		return ErrWeakPassword
 	}
 
 	pr, err := uc.d.Repo.GetPasswordReset(ctx, tokens.Hash(token))
 	if err != nil {
-		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, "invalid")
+		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.Invalid)
 		return err
 	}
 	if pr.UsedAt != nil {
-		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, "already_used")
+		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, resultAlreadyUsed)
 		return ErrInvalidResetToken
 	}
 	if uc.d.Clock.Now().After(pr.ExpiresAt) {
-		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, "expired")
+		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.Expired)
 		return ErrInvalidResetToken
 	}
 
@@ -203,22 +205,22 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 
 	uc.d.Log.Info(ctx, "password reset", "user_id", pr.UserID)
 	uc.writeAudit(ctx, pr.UserID, "password_reset_confirmed", "user", pr.UserID)
-	uc.d.Metrics.RecordPasswordResetConfirmed(ctx, "ok")
+	uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.OK)
 	return nil
 }
 
 func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 	ev, err := uc.d.Repo.GetEmailVerification(ctx, tokens.Hash(token))
 	if err != nil {
-		uc.d.Metrics.RecordEmailConfirmed(ctx, "invalid")
+		uc.d.Metrics.RecordEmailConfirmed(ctx, outcome.Invalid)
 		return err
 	}
 	if ev.UsedAt != nil {
-		uc.d.Metrics.RecordEmailConfirmed(ctx, "already_used")
+		uc.d.Metrics.RecordEmailConfirmed(ctx, resultAlreadyUsed)
 		return ErrInvalidVerificationToken
 	}
 	if uc.d.Clock.Now().After(ev.ExpiresAt) {
-		uc.d.Metrics.RecordEmailConfirmed(ctx, "expired")
+		uc.d.Metrics.RecordEmailConfirmed(ctx, outcome.Expired)
 		return ErrInvalidVerificationToken
 	}
 
@@ -231,7 +233,7 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 		return err
 	}
 	uc.writeAudit(ctx, ev.UserID, "email_confirmed", "user", ev.UserID)
-	uc.d.Metrics.RecordEmailConfirmed(ctx, "ok")
+	uc.d.Metrics.RecordEmailConfirmed(ctx, outcome.OK)
 	return nil
 }
 

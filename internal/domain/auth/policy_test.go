@@ -31,22 +31,3 @@ func TestPolicy_CanChangePassword(t *testing.T) {
 		})
 	}
 }
-
-func TestPasswordStrengthOK(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name  string
-		plain string
-		want  bool
-	}{
-		{"long enough", "pass1234", true},
-		{"too short", "pass123", false},
-		{"empty", "", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.want, auth.PasswordStrengthOK(tc.plain))
-		})
-	}
-}

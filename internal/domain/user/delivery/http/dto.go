@@ -1,12 +1,15 @@
 package http
 
-import "git.stit.tech/stit-core/go-backend-template/internal/domain/user"
+import (
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
+)
 
 type UserRegisterInput struct {
 	Body struct {
-		Email    string `json:"email"    format:"email" required:"true"`
-		Password string `json:"password" minLength:"8"  required:"true"`
-		Name     string `json:"name"     minLength:"1"  required:"true"`
+		Email    string `json:"email"    format:"email"  required:"true"`
+		Password string `json:"password" required:"true"`
+		Name     string `json:"name"     minLength:"1"   required:"true"`
 	}
 }
 
@@ -33,8 +36,7 @@ type UserMeOutput struct {
 }
 
 type UserListInput struct {
-	Page   int    `default:"1"           minimum:"1"    query:"page"`
-	Size   int    `default:"20"          maximum:"100"  minimum:"1"  query:"size"`
+	paging.Page
 	Status string `enum:"active,blocked" query:"status"`
 }
 

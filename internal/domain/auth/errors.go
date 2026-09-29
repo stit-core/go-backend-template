@@ -12,12 +12,3 @@ var (
 	ErrSessionNotFound    = errors.New("auth: refresh session not found")
 	ErrUserNotFound       = errors.New("auth: user not found")
 )
-
-type ForbiddenError struct{ Reason string }
-
-func (e *ForbiddenError) Error() string {
-	if e.Reason == "" {
-		return "forbidden"
-	}
-	return "forbidden: " + e.Reason
-}

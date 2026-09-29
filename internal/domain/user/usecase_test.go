@@ -13,6 +13,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
+	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
@@ -144,7 +145,7 @@ func TestGetByID(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withPolicy(defaultPolicy(t, false)))
 		_, err := f.uc.GetByID(identitytest.Client("u1"), "u2")
-		var fe *user.ForbiddenError
+		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
 
@@ -152,7 +153,7 @@ func TestGetByID(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withPolicy(defaultPolicy(t, true)))
 		_, err := f.uc.GetByID(identitytest.Anon(), "u1")
-		var fe *user.ForbiddenError
+		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
 
@@ -176,7 +177,7 @@ func TestMe(t *testing.T) {
 		t.Parallel()
 		f := newUC(t)
 		_, err := f.uc.Me(identitytest.Anon())
-		var fe *user.ForbiddenError
+		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
 
@@ -199,8 +200,8 @@ func TestList(t *testing.T) {
 	t.Run("forbidden", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withPolicy(defaultPolicy(t, false)))
-		_, _, err := f.uc.List(identitytest.Client("u1"), user.ListFilter{}, user.ListPagination{Page: 1, Size: 20})
-		var fe *user.ForbiddenError
+		_, _, err := f.uc.List(identitytest.Client("u1"), user.ListFilter{}, paging.Page{Number: 1, Size: 20})
+		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
 
@@ -212,7 +213,7 @@ func TestList(t *testing.T) {
 		repo.EXPECT().Count(mock.Anything, mock.Anything).Return(2, nil)
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
 
-		got, total, err := f.uc.List(identitytest.Admin("admin"), user.ListFilter{}, user.ListPagination{Page: 1, Size: 20})
+		got, total, err := f.uc.List(identitytest.Admin("admin"), user.ListFilter{}, paging.Page{Number: 1, Size: 20})
 		require.NoError(t, err)
 		require.Len(t, got, 2)
 		require.Equal(t, 2, total)
@@ -220,20 +221,19 @@ func TestList(t *testing.T) {
 
 	t.Run("pagination defaults", func(t *testing.T) {
 		t.Parallel()
-		var seen user.ListPagination
+		var seen paging.Page
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).
-			RunAndReturn(func(_ context.Context, _ user.ListFilter, pg user.ListPagination) ([]*user.User, error) {
-				seen = pg
+			RunAndReturn(func(_ context.Context, _ user.ListFilter, page paging.Page) ([]*user.User, error) {
+				seen = page
 				return nil, nil
 			})
 		repo.EXPECT().Count(mock.Anything, mock.Anything).Return(0, nil)
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
 
-		_, _, err := f.uc.List(identitytest.Admin("admin"), user.ListFilter{}, user.ListPagination{})
+		_, _, err := f.uc.List(identitytest.Admin("admin"), user.ListFilter{}, paging.Page{})
 		require.NoError(t, err)
-		require.Equal(t, 1, seen.Page)
-		require.Equal(t, 20, seen.Size)
+		require.Equal(t, paging.Page{Number: 1, Size: paging.DefaultSize}, seen)
 	})
 }
 
@@ -282,7 +282,7 @@ func TestUpdate(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withPolicy(defaultPolicy(t, false)))
 		_, err := f.uc.Update(identitytest.Client("u1"), "u2", user.UpdateInput{})
-		var fe *user.ForbiddenError
+		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
 }
@@ -323,7 +323,7 @@ func TestDelete(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withPolicy(defaultPolicy(t, false)))
 		err := f.uc.Delete(identitytest.Client("u1"), "u2")
-		var fe *user.ForbiddenError
+		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
 }

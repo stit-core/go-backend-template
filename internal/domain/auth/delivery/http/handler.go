@@ -120,15 +120,10 @@ var authErrors = httpkit.NewErrorMap(
 	httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "refresh token reused"},
 	httpkit.ErrorRule{Err: auth.ErrAccountLocked, Status: http.StatusTooManyRequests, Code: "AUTH_ACCOUNT_LOCKED", Detail: "account temporarily locked"},
 	httpkit.ErrorRule{Err: auth.ErrWeakPassword, Status: http.StatusBadRequest, Code: "AUTH_WEAK_PASSWORD", Detail: "password too weak"},
-	httpkit.ErrorRule{Match: isForbidden, Status: http.StatusForbidden, Code: "FORBIDDEN", Detail: "forbidden"},
+	authgate.ForbiddenRule,
 )
 
 var refreshErrors = httpkit.NewErrorMap(
 	httpkit.ErrorRule{Err: auth.ErrRefreshExpired, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_EXPIRED", Detail: "refresh token expired or missing"},
 	httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "refresh token reused"},
 )
-
-func isForbidden(err error) bool {
-	var fe *auth.ForbiddenError
-	return errors.As(err, &fe)
-}

@@ -183,6 +183,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	"$MODULE_PATH/pkg/outcome"
 	"git.stit.tech/stit-core/golibinfra/bizmetric"
 )
 
@@ -200,11 +201,11 @@ func NewMetrics(m metric.Meter) (*Metrics, error) {
 	}, nil
 }
 
-func (m *Metrics) RecordCreated(ctx context.Context, result string) {
+func (m *Metrics) RecordCreated(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.created.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.created.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }
 EOF
 

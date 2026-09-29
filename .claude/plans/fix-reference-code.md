@@ -167,11 +167,13 @@ prod-дефолты, понятный контракт ошибок API, тес�
   - Проверка: AC12 → выполнен · Закрывает: AC12 · Зависит от: S1
   - Сделано: AC12 подтверждён, `make check` → `✓ check clean`; X6, X15 повторены (`fdn-s2-*.log`);
     скелет `make new-domain` по новому канону собирается, lint и его тесты зелёные
-- [ ] **S3** — Общие примитивы без лишнего: `ForbiddenError` и его маппинг в одном месте,
+- [x] **S3** — Общие примитивы без лишнего: `ForbiddenError` и его маппинг в одном месте,
   единственный источник правила пароля, тип пагинации, константы исходов метрик, ID — через
   `idkit` (COD-06)
   - Проверка: `make check` → зелёный; `grep -rn "type ForbiddenError" internal pkg` → одно место ·
     Закрывает: — · Зависит от: S2
+  - Сделано: `make check` → `✓ check clean`; grep → `pkg/policy/policy.go`; скелет `make new-domain`
+    на `outcome.Result` собирается, lint и его тесты зелёные
 
 ### Эталон доменов
 - [ ] **S4** — user: переходы статуса методами entity, смена статуса только админом, PATCH целиком
@@ -257,18 +259,19 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - flagkit и cachekit — вне графа до первого потребителя (FX-10): сервис и `/ready` без Redis.
 - bump golibinfra в `go.mod` разрешён владельцем; изменения env из аннотаций тегов — в INFRA-HANDOFF.
 - Мутации, D02 и пустые allowlist'ы — одним итоговым шагом S15.
-- S1: `registerHTTP` и `httpkit.Middlewares` — в `fx.Module("cmd/api")`: Invoke модулей fx
-  выполняет раньше корневого хука сервера — зависимость с хуком, нужная только хендлерам,
-  стартует до HTTP; `Middlewares` провайдит приложение (значение одно на граф), не `authgate`.
-- S1: `ErrorMap` — таблица на прежнюю функцию маппинга, хендлер зовёт `Map`; `Declare` — в S8 с
-  точными таблицами операций: доменная таблица объявила бы операции в `openapi.json` чужие ошибки.
-- S1: порт `auth.LoginGuard` повторяет кит (`Attempt` + `RecordSuccess`); ошибка guard по-прежнему
-  только в лог — fail-closed для логина делает S10 (SEC-05).
-- S2: порт — тип результата провайдера (`NewPolicy` → `Authorizer`, как `NewRepository`),
-  identity-closure — delivery-порты и типы китов; без `fx.As`: closure видит archtest.
-- S2: `App` (Cookie) читает envconfig без `golibinfra/config` — `config.Load` требует ctx; строка
-  старта — `context.Background()` корня процесса в `cmd/api` (правило tests-pipeline уточнено).
-  `fx.StopTimeout` 30s = HTTP 15s + NATS 10s + запас. Неиспользуемая фикстура `redis` e2e удалена.
+- S1: `registerHTTP` и `httpkit.Middlewares` — в `fx.Module("cmd/api")`: Invoke модулей fx идёт
+  раньше корневого хука сервера, зависимость хендлеров стартует до HTTP; `Middlewares` — от
+  приложения, не `authgate`. `ErrorMap` — таблица на прежнюю функцию маппинга; `Declare` — в S8 с
+  точными таблицами операций. `LoginGuard` повторяет кит; ошибка guard — в лог до S10 (SEC-05).
+- S2: порт — тип результата провайдера (`NewPolicy` → `Authorizer`), identity-closure —
+  delivery-порты и типы китов, без `fx.As` (closure видит archtest). `App` (Cookie) читает
+  envconfig без `golibinfra/config` (`config.Load` требует ctx); строка старта —
+  `context.Background()` корня процесса. `fx.StopTimeout` 30s = HTTP 15s + NATS 10s + запас.
+- S3: `ForbiddenError` и правило пароля — в `pkg/policy`, 403 — одно `authgate.ForbiddenRule`;
+  `minLength` из HTTP-схем снят — правило только в домене, короткий пароль → 400
+  `*_WEAK_PASSWORD` (форму ошибки поля даст S8). `paging.Page` — один тип на вход huma, usecase и
+  SQL (дефолт и предел в тегах сверяет тест); исходы метрик — `outcome.Result`, `weak` →
+  `weak_password`; ID — `idkit.NewV7()`, `google/uuid` вне `rootLibs` archtest.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, envelope `data`, problem+json с машинным `code`,
@@ -281,16 +284,15 @@ prod-дефолты, понятный контракт ошибок API, тес�
   прокси) — по аннотациям v1.2.0 и v1.3.0; `REDIS_URL` сервису не нужен; `OTEL_*` — если метрики
   экспортируются через telemetry.
 - Образы от nonroot с закреплённой базой.
-- Лёг S1 (golibinfra v1.2.0): `NATS_JETSTREAM_ENABLED=true` и стрим `user` в
-  `NATS_JS_STREAM_NAMES` нужны для старта; `LOG_REDACT_ENABLED` не читается — маскирование логов
-  включено всегда, выключатель `LOG_REDACT_DISABLED=true` (в проде не ставить);
-  `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64 — блокировки со старым ключом теряются не дольше
-  `BRUTEFORCE_LOCK_DURATION`; ошибки API — problem+json с `code` и `request_id`, без `type`/`instance`.
-- Лёг S2: Redis сервису не нужен (`REDIS_URL` не читается, `go-redis` ушёл из `go.mod`),
-  `FEATURE_FLAGS` не читается; `PG_*`/`HTTP_*` — без вариантов с приставкой `POSTGRES_`/`HTTP_HTTP_`;
-  остановка — до 30s (`fx.StopTimeout`): контейнеру `stop_grace_period` ≥ 35s (docker ждёт 10s).
+- Лёг S1–S3 (golibinfra v1.2.0): для старта нужны `NATS_JETSTREAM_ENABLED=true` и стрим `user` в
+  `NATS_JS_STREAM_NAMES`; `LOG_REDACT_ENABLED` не читается — маскирование включено всегда
+  (`LOG_REDACT_DISABLED=true` — не в проде); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64 (старые
+  блокировки теряются ≤ `BRUTEFORCE_LOCK_DURATION`); Redis, `REDIS_URL`, `FEATURE_FLAGS` не нужны;
+  `PG_*`/`HTTP_*` без приставок `POSTGRES_`/`HTTP_HTTP_`; остановка до 30s — `stop_grace_period`
+  ≥ 35s. API: problem+json с `code` и `request_id`; короткий пароль — 400 `*_WEAK_PASSWORD`.
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-S1–S2 закрыты: шаблон на golibinfra v1.2.0, обход `beforeHTTP` снят, DI по канону (AC12). v1.3.0 —
-после базового аудита китов (идёт), bump — S9. Следующий шаг — S3 (общие примитивы).
+Этап «Фундамент» (S1–S3) закрыт: шаблон на golibinfra v1.2.0, обход `beforeHTTP` снят, DI по
+канону (AC12), общие примитивы в `pkg/`. Ждёт валидатора этапа; затем S4 (user). v1.3.0 — после
+базового аудита китов (идёт), bump — S9.

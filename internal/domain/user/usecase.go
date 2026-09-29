@@ -7,6 +7,8 @@ import (
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
+	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
@@ -16,8 +18,6 @@ import (
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 
-const minPasswordLen = 8
-
 type Repository interface {
 	Insert(ctx context.Context, u *User) error
 	GetByID(ctx context.Context, id string) (*User, error)
@@ -26,7 +26,7 @@ type Repository interface {
 	UpdateStatus(ctx context.Context, id string, status Status, version int) (*User, error)
 	UpdatePassword(ctx context.Context, id, passwordHash string, version int) (*User, error)
 	SetEmailVerified(ctx context.Context, id string) error
-	List(ctx context.Context, filter ListFilter, pagination ListPagination) ([]*User, error)
+	List(ctx context.Context, filter ListFilter, page paging.Page) ([]*User, error)
 	Count(ctx context.Context, filter ListFilter) (int, error)
 }
 
@@ -61,20 +61,20 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 }
 
 func (uc *Usecase) Register(ctx context.Context, in *CreateInput) (u *User, err error) {
-	if len(in.Password) < minPasswordLen {
-		uc.d.Metrics.RecordRegistered(ctx, "weak_password")
+	if !policy.PasswordStrong(in.Password) {
+		uc.d.Metrics.RecordRegistered(ctx, outcome.WeakPassword)
 		return nil, ErrWeakPassword
 	}
 
 	hash, err := uc.d.Hasher.Hash(ctx, in.Password)
 	if err != nil {
-		uc.d.Metrics.RecordRegistered(ctx, "error")
+		uc.d.Metrics.RecordRegistered(ctx, outcome.Error)
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
 	newU, err := NewUser(in.Email, hash, in.Name, identity.RoleClient)
 	if err != nil {
-		uc.d.Metrics.RecordRegistered(ctx, "invalid")
+		uc.d.Metrics.RecordRegistered(ctx, outcome.Invalid)
 		return nil, err
 	}
 
@@ -86,11 +86,11 @@ func (uc *Usecase) Register(ctx context.Context, in *CreateInput) (u *User, err 
 		return uc.d.Events.Publish(txCtx, subjectUserRegistered,
 			UserRegistered{ID: newU.ID, Email: newU.Email, At: newU.CreatedAt})
 	}); err != nil {
-		uc.d.Metrics.RecordRegistered(ctx, "error")
+		uc.d.Metrics.RecordRegistered(ctx, outcome.Error)
 		return nil, err
 	}
 
-	uc.d.Metrics.RecordRegistered(ctx, "ok")
+	uc.d.Metrics.RecordRegistered(ctx, outcome.OK)
 	uc.d.Log.Info(ctx, "user registered", "user_id", newU.ID, "email", newU.Email)
 
 	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
@@ -111,10 +111,10 @@ func (uc *Usecase) Register(ctx context.Context, in *CreateInput) (u *User, err 
 func (uc *Usecase) GetByID(ctx context.Context, id string) (u *User, err error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
-		return nil, &ForbiddenError{Reason: "no identity"}
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
 	}
 	if d := uc.d.Policy.CanGetByID(ctx, caller, id); !d.IsAllowed {
-		return nil, &ForbiddenError{Reason: d.Reason}
+		return nil, &policy.ForbiddenError{Reason: d.Reason}
 	}
 
 	return uc.d.Repo.GetByID(ctx, id)
@@ -123,29 +123,19 @@ func (uc *Usecase) GetByID(ctx context.Context, id string) (u *User, err error) 
 func (uc *Usecase) Me(ctx context.Context) (u *User, err error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
-		return nil, &ForbiddenError{Reason: "no identity"}
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
 	}
 
 	return uc.d.Repo.GetByID(ctx, caller.UserID)
 }
 
-func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPagination) (users []*User, total int, err error) {
+func (uc *Usecase) List(ctx context.Context, filter ListFilter, page paging.Page) (users []*User, total int, err error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
-		return nil, 0, &ForbiddenError{Reason: "no identity"}
+		return nil, 0, &policy.ForbiddenError{Reason: "no identity"}
 	}
 	if d := uc.d.Policy.CanList(ctx, caller); !d.IsAllowed {
-		return nil, 0, &ForbiddenError{Reason: d.Reason}
-	}
-
-	if pg.Size <= 0 {
-		pg.Size = 20
-	}
-	if pg.Size > 100 {
-		pg.Size = 100
-	}
-	if pg.Page < 1 {
-		pg.Page = 1
+		return nil, 0, &policy.ForbiddenError{Reason: d.Reason}
 	}
 
 	total, err = uc.d.Repo.Count(ctx, filter)
@@ -153,7 +143,7 @@ func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPaginatio
 		return nil, 0, fmt.Errorf("count users: %w", err)
 	}
 
-	list, err := uc.d.Repo.List(ctx, filter, pg)
+	list, err := uc.d.Repo.List(ctx, filter, page.Normalize())
 	if err != nil {
 		return nil, 0, fmt.Errorf("list users: %w", err)
 	}
@@ -164,16 +154,16 @@ func (uc *Usecase) List(ctx context.Context, filter ListFilter, pg ListPaginatio
 func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *User, err error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
-		uc.d.Metrics.RecordUpdated(ctx, "forbidden")
-		return nil, &ForbiddenError{Reason: "no identity"}
+		uc.d.Metrics.RecordUpdated(ctx, outcome.Forbidden)
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
 	}
 	if d := uc.d.Policy.CanUpdate(ctx, caller, id); !d.IsAllowed {
-		uc.d.Metrics.RecordUpdated(ctx, "forbidden")
-		return nil, &ForbiddenError{Reason: d.Reason}
+		uc.d.Metrics.RecordUpdated(ctx, outcome.Forbidden)
+		return nil, &policy.ForbiddenError{Reason: d.Reason}
 	}
 
 	if in.Name == nil && in.Status == nil {
-		uc.d.Metrics.RecordUpdated(ctx, "invalid")
+		uc.d.Metrics.RecordUpdated(ctx, outcome.Invalid)
 		return nil, ErrNoUpdateFields
 	}
 
@@ -194,11 +184,11 @@ func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *Us
 		return uc.d.Events.Publish(txCtx, subjectUserUpdated,
 			UserUpdated{ID: updated.ID, At: updated.UpdatedAt})
 	}); err != nil {
-		uc.d.Metrics.RecordUpdated(ctx, "error")
+		uc.d.Metrics.RecordUpdated(ctx, outcome.Error)
 		return nil, err
 	}
 
-	uc.d.Metrics.RecordUpdated(ctx, "ok")
+	uc.d.Metrics.RecordUpdated(ctx, outcome.OK)
 	uc.d.Log.Info(ctx, "user updated", "user_id", u.ID)
 
 	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
@@ -219,12 +209,12 @@ func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *Us
 func (uc *Usecase) Delete(ctx context.Context, id string) error {
 	caller, ok := identity.From(ctx)
 	if !ok {
-		uc.d.Metrics.RecordDeleted(ctx, "forbidden")
-		return &ForbiddenError{Reason: "no identity"}
+		uc.d.Metrics.RecordDeleted(ctx, outcome.Forbidden)
+		return &policy.ForbiddenError{Reason: "no identity"}
 	}
 	if d := uc.d.Policy.CanDelete(ctx, caller, id); !d.IsAllowed {
-		uc.d.Metrics.RecordDeleted(ctx, "forbidden")
-		return &ForbiddenError{Reason: d.Reason}
+		uc.d.Metrics.RecordDeleted(ctx, outcome.Forbidden)
+		return &policy.ForbiddenError{Reason: d.Reason}
 	}
 
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
@@ -241,11 +231,11 @@ func (uc *Usecase) Delete(ctx context.Context, id string) error {
 		return uc.d.Events.Publish(txCtx, subjectUserDeleted,
 			UserDeleted{ID: id, At: uc.d.Clock.Now()})
 	}); err != nil {
-		uc.d.Metrics.RecordDeleted(ctx, "error")
+		uc.d.Metrics.RecordDeleted(ctx, outcome.Error)
 		return err
 	}
 
-	uc.d.Metrics.RecordDeleted(ctx, "ok")
+	uc.d.Metrics.RecordDeleted(ctx, outcome.OK)
 	uc.d.Log.Info(ctx, "user deleted", "user_id", id)
 
 	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{

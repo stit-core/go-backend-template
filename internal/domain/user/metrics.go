@@ -6,6 +6,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
 	"git.stit.tech/stit-core/golibinfra/bizmetric"
 )
 
@@ -36,23 +37,23 @@ func NewMetrics(m metric.Meter) (*Metrics, error) {
 
 // Все Record* nil-safe — observability не валит домен.
 
-func (m *Metrics) RecordRegistered(ctx context.Context, result string) {
+func (m *Metrics) RecordRegistered(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.registered.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.registered.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }
 
-func (m *Metrics) RecordUpdated(ctx context.Context, result string) {
+func (m *Metrics) RecordUpdated(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.updated.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.updated.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }
 
-func (m *Metrics) RecordDeleted(ctx context.Context, result string) {
+func (m *Metrics) RecordDeleted(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.deleted.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.deleted.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }

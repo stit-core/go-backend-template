@@ -6,6 +6,7 @@ import (
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/postgres/db"
+	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 
@@ -133,10 +134,10 @@ func (r *Repository) SetEmailVerified(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *Repository) List(ctx context.Context, filter user.ListFilter, pg user.ListPagination) ([]*user.User, error) {
+func (r *Repository) List(ctx context.Context, filter user.ListFilter, page paging.Page) ([]*user.User, error) {
 	rows, err := r.q.ListUsers(ctx, db.ListUsersParams{
-		Limit:  int32(pg.Size),
-		Offset: int32((pg.Page - 1) * pg.Size),
+		Limit:  int32(page.Size),
+		Offset: int32(page.Offset()),
 		Status: statusFilter(filter.Status),
 	})
 	if err != nil {

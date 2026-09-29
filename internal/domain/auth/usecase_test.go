@@ -461,7 +461,7 @@ func TestChangePassword(t *testing.T) {
 		f := newUC(t)
 		ctx := identitytest.Client("u1")
 		err := f.uc.ChangePassword(ctx, "u2", "old", "newpassword123")
-		var fe *auth.ForbiddenError
+		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
 }

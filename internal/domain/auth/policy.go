@@ -7,10 +7,6 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 )
 
-const minPasswordLen = 8
-
-func PasswordStrengthOK(plain string) bool { return len(plain) >= minPasswordLen }
-
 type Policy struct{}
 
 func NewPolicy() Authorizer { return &Policy{} }

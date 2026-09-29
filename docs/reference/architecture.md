@@ -44,7 +44,7 @@
 | `entity.go`, `errors.go`, `usecase.go`, `module/module.go` | всегда |
 | `metrics.go` | всегда (мутирующие use-case'ы инструментированы) |
 | `dto.go` | есть хоть один Input/Output-тип (метод с 1–2 скалярами обходится без DTO) |
-| `policy.go` | есть authenticated actor (authorization) **или** чистые правила валидации (password strength и т.п.) |
+| `policy.go` | есть authenticated actor (authorization) **или** чистые правила валидации домена (общее для доменов правило пароля — `pkg/policy`) |
 | `events.go` | домен публикует хотя бы одно outbox-событие; вместе с ним — `infra/outbox/outbox.go` |
 | `delivery/http/view.go` | есть хоть один response с телом (mapping entity → view) |
 | `delivery/nats/` | домен подписан хотя бы на один subject |
@@ -59,7 +59,7 @@
 | `entity.go` | любой I/O, импорт `infra/`/`delivery/`/kit'ов кроме stdlib и `internal/platform/{identity,shared}` |
 | `policy.go` | I/O, импорт `infra/`/`delivery/`; только чистые решения (`pkg/policy.Decision` / bool) |
 | `dto.go` | huma-теги, json-теги транспорта (это `delivery/http/dto.go`), методы с I/O |
-| `errors.go` | всё, кроме sentinel-`var` и error-типов домена (`ForbiddenError` живёт здесь, не в usecase) |
+| `errors.go` | всё, кроме sentinel-`var` и error-типов домена (отказ policy — общий `policy.ForbiddenError` из `pkg/policy`) |
 | `events.go` | всё, кроме payload-типов и unexported subject-констант |
 | `usecase.go` | прямой транспорт: `httpkit`/`natskit`/huma/`net/http`; ctx-геттеры транспорта — только через `internal/platform/identity`; inline-константы правил (место — `policy.go`) |
 | `delivery/*` | бизнес-решения (все ветвления — в usecase), импорт чужих доменов и своего `infra/` (archtest) |
@@ -69,7 +69,8 @@
 ### Канон именования
 
 - **Domain-DTO** (`dto.go`): `<Op>Input` / `<Op>Output` (`LoginInput`, `CreateInput`).
-  Вспомогательные value-типы — описательно (`ListFilter`, `ListPagination`).
+  Вспомогательные value-типы — описательно (`ListFilter`); страница списка — общий `paging.Page`
+  (`pkg/paging`), он же встраивается во вход list-операции huma.
   Output-DTO заводится, когда результат ≠ entity и ≠ скаляр.
 - **События** (`events.go`): `<Aggregate><PastEvent>` (`UserRegistered`,
   `EmailVerificationRequested`); payload — без json-тегов (wire = Go-имена; смена формата =
@@ -84,7 +85,8 @@
   `user`, но путь `/api/auth/register`): владелец = тот, чей usecase вызывается.
 - **Метрики** (`metrics.go`): первый аргумент bizmetric — имя домена = имени пакета
   (`biz_<domain>_<event>_total`); struct `Metrics`, конструктор `NewMetrics(m metric.Meter)`,
-  все `Record*` — nil-safe.
+  все `Record*` — nil-safe. Исход (метка `result`) — `outcome.Result`: общие исходы — `pkg/outcome`,
+  особые для домена — константы в `metrics.go`.
 - **Repository**: создание — `Insert*` (не `Create*`), sqlc-аннотации — `Insert<Entity>`.
 
 ### Разбиение переростков
@@ -104,6 +106,7 @@
 - Security-значимые операции (login/logout/смена+сброс пароля/verification) пишут `audit`
   из usecase; технические записи адаптеров (`mail_sent`) допустимы в адаптере.
 - Транспортные значения из ctx (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`.
+- ID, которые создаёт код (не БД), — `idkit.NewV7()`.
 
 ## Ports & adapters (cross-domain)
 

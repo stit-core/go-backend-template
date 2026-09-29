@@ -2,12 +2,13 @@ package http
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
@@ -15,7 +16,7 @@ type Usecase interface {
 	Register(ctx context.Context, in *user.CreateInput) (*user.User, error)
 	GetByID(ctx context.Context, id string) (*user.User, error)
 	Me(ctx context.Context) (*user.User, error)
-	List(ctx context.Context, filter user.ListFilter, pg user.ListPagination) ([]*user.User, int, error)
+	List(ctx context.Context, filter user.ListFilter, page paging.Page) ([]*user.User, int, error)
 	Update(ctx context.Context, id string, in user.UpdateInput) (*user.User, error)
 	Delete(ctx context.Context, id string) error
 }
@@ -124,20 +125,15 @@ func (h *Handler) list(ctx context.Context, in *UserListInput) (*UserListOutput,
 		filter.Status = &s
 	}
 
-	pg := user.ListPagination{
-		Page: in.Page,
-		Size: in.Size,
-	}
-
-	list, total, err := h.uc.List(ctx, filter, pg)
+	list, total, err := h.uc.List(ctx, filter, in.Page)
 	if err != nil {
 		return nil, userErrors.Map(err)
 	}
 
 	out := &UserListOutput{}
 	out.Body.Total = total
-	out.Body.Page = pg.Page
-	out.Body.Size = pg.Size
+	out.Body.Page = in.Number
+	out.Body.Size = in.Size
 	out.Body.Data = make([]UserView, len(list))
 	for i, u := range list {
 		out.Body.Data[i].FromEntity(u)
@@ -174,10 +170,5 @@ var userErrors = httpkit.NewErrorMap(
 	httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"},
 	httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"},
 	httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"},
-	httpkit.ErrorRule{Match: isForbidden, Status: http.StatusForbidden, Code: "FORBIDDEN", Detail: "forbidden"},
+	authgate.ForbiddenRule,
 )
-
-func isForbidden(err error) bool {
-	var fe *user.ForbiddenError
-	return errors.As(err, &fe)
-}

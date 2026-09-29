@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -164,8 +165,8 @@ func (_c *MockUsecase_GetByID_Call) RunAndReturn(run func(ctx context.Context, i
 }
 
 // List provides a mock function for the type MockUsecase
-func (_mock *MockUsecase) List(ctx context.Context, filter user.ListFilter, pg user.ListPagination) ([]*user.User, int, error) {
-	ret := _mock.Called(ctx, filter, pg)
+func (_mock *MockUsecase) List(ctx context.Context, filter user.ListFilter, page paging.Page) ([]*user.User, int, error) {
+	ret := _mock.Called(ctx, filter, page)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
@@ -174,23 +175,23 @@ func (_mock *MockUsecase) List(ctx context.Context, filter user.ListFilter, pg u
 	var r0 []*user.User
 	var r1 int
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, user.ListFilter, user.ListPagination) ([]*user.User, int, error)); ok {
-		return returnFunc(ctx, filter, pg)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, user.ListFilter, paging.Page) ([]*user.User, int, error)); ok {
+		return returnFunc(ctx, filter, page)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, user.ListFilter, user.ListPagination) []*user.User); ok {
-		r0 = returnFunc(ctx, filter, pg)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, user.ListFilter, paging.Page) []*user.User); ok {
+		r0 = returnFunc(ctx, filter, page)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*user.User)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, user.ListFilter, user.ListPagination) int); ok {
-		r1 = returnFunc(ctx, filter, pg)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, user.ListFilter, paging.Page) int); ok {
+		r1 = returnFunc(ctx, filter, page)
 	} else {
 		r1 = ret.Get(1).(int)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, user.ListFilter, user.ListPagination) error); ok {
-		r2 = returnFunc(ctx, filter, pg)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, user.ListFilter, paging.Page) error); ok {
+		r2 = returnFunc(ctx, filter, page)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -205,12 +206,12 @@ type MockUsecase_List_Call struct {
 // List is a helper method to define mock.On call
 //   - ctx context.Context
 //   - filter user.ListFilter
-//   - pg user.ListPagination
-func (_e *MockUsecase_Expecter) List(ctx interface{}, filter interface{}, pg interface{}) *MockUsecase_List_Call {
-	return &MockUsecase_List_Call{Call: _e.mock.On("List", ctx, filter, pg)}
+//   - page paging.Page
+func (_e *MockUsecase_Expecter) List(ctx interface{}, filter interface{}, page interface{}) *MockUsecase_List_Call {
+	return &MockUsecase_List_Call{Call: _e.mock.On("List", ctx, filter, page)}
 }
 
-func (_c *MockUsecase_List_Call) Run(run func(ctx context.Context, filter user.ListFilter, pg user.ListPagination)) *MockUsecase_List_Call {
+func (_c *MockUsecase_List_Call) Run(run func(ctx context.Context, filter user.ListFilter, page paging.Page)) *MockUsecase_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -220,9 +221,9 @@ func (_c *MockUsecase_List_Call) Run(run func(ctx context.Context, filter user.L
 		if args[1] != nil {
 			arg1 = args[1].(user.ListFilter)
 		}
-		var arg2 user.ListPagination
+		var arg2 paging.Page
 		if args[2] != nil {
-			arg2 = args[2].(user.ListPagination)
+			arg2 = args[2].(paging.Page)
 		}
 		run(
 			arg0,
@@ -238,7 +239,7 @@ func (_c *MockUsecase_List_Call) Return(users []*user.User, n int, err error) *M
 	return _c
 }
 
-func (_c *MockUsecase_List_Call) RunAndReturn(run func(ctx context.Context, filter user.ListFilter, pg user.ListPagination) ([]*user.User, int, error)) *MockUsecase_List_Call {
+func (_c *MockUsecase_List_Call) RunAndReturn(run func(ctx context.Context, filter user.ListFilter, page paging.Page) ([]*user.User, int, error)) *MockUsecase_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

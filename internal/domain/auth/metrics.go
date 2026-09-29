@@ -6,7 +6,17 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
 	"git.stit.tech/stit-core/golibinfra/bizmetric"
+)
+
+// Исходы, особые для домена; общие — outcome.
+const (
+	resultInvalidLogin       outcome.Result = "invalid_credentials"
+	resultLocked             outcome.Result = "locked"
+	resultBlocked            outcome.Result = "blocked"
+	resultReused             outcome.Result = "reused"
+	resultInvalidOldPassword outcome.Result = "invalid_old"
 )
 
 // Metrics — security-relevant counters auth-домена. Имена строятся
@@ -47,18 +57,18 @@ func NewMetrics(m metric.Meter) (*Metrics, error) {
 // CLI-утилиты без Metrics-провайдера) — no-op. Observability не должна
 // валить домен.
 
-func (m *Metrics) RecordLogin(ctx context.Context, result string) {
+func (m *Metrics) RecordLogin(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.loginAttempts.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.loginAttempts.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }
 
-func (m *Metrics) RecordRefresh(ctx context.Context, result string) {
+func (m *Metrics) RecordRefresh(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.refreshAttempts.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.refreshAttempts.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }
 
 func (m *Metrics) RecordLogout(ctx context.Context) {
@@ -68,9 +78,9 @@ func (m *Metrics) RecordLogout(ctx context.Context) {
 	m.logouts.Add(ctx, 1)
 }
 
-func (m *Metrics) RecordPasswordChange(ctx context.Context, result string) {
+func (m *Metrics) RecordPasswordChange(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.passwordChange.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.passwordChange.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
@@ -15,6 +14,7 @@ import (
 	userpg "git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/postgres"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/pgseed"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
+	"git.stit.tech/stit-core/golibinfra/idkit"
 	"git.stit.tech/stit-core/golibinfra/testkit"
 )
 
@@ -34,7 +34,7 @@ func TestInsertAndGetByJTI(t *testing.T) {
 	repo, userID := setup(t)
 	ctx := context.Background()
 
-	jti := uuid.NewString()
+	jti := idkit.NewV7()
 	require.NoError(t, repo.Insert(ctx, jti, userID, sessionExpiry))
 
 	got, err := repo.GetByJTI(ctx, jti)
@@ -56,7 +56,7 @@ func TestGetByJTI_NotFound(t *testing.T) {
 		name string
 		jti  string
 	}{
-		{name: "unknown jti", jti: uuid.NewString()},
+		{name: "unknown jti", jti: idkit.NewV7()},
 		{name: "malformed jti", jti: "not-a-uuid"},
 	}
 	for _, tc := range tests {
@@ -72,8 +72,8 @@ func TestMarkUsed(t *testing.T) {
 	repo, userID := setup(t)
 	ctx := context.Background()
 
-	jti := uuid.NewString()
-	replacedBy := uuid.NewString()
+	jti := idkit.NewV7()
+	replacedBy := idkit.NewV7()
 	require.NoError(t, repo.Insert(ctx, jti, userID, sessionExpiry))
 
 	require.NoError(t, repo.MarkUsed(ctx, jti, replacedBy))
@@ -90,5 +90,5 @@ func TestMarkUsed_MissingJTI(t *testing.T) {
 
 	// The UPDATE is :exec without rows-affected check: a jti matching no row
 	// is a silent no-op, not an error.
-	require.NoError(t, repo.MarkUsed(context.Background(), uuid.NewString(), ""))
+	require.NoError(t, repo.MarkUsed(context.Background(), idkit.NewV7(), ""))
 }

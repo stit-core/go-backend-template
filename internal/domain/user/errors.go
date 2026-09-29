@@ -11,12 +11,3 @@ var (
 	ErrConcurrentUpdate = errors.New("user: concurrent update")
 	ErrNoUpdateFields   = errors.New("user: no update fields")
 )
-
-type ForbiddenError struct{ Reason string }
-
-func (e *ForbiddenError) Error() string {
-	if e.Reason == "" {
-		return "forbidden"
-	}
-	return "forbidden: " + e.Reason
-}

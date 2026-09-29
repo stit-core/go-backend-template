@@ -65,6 +65,7 @@ type UserNewMethodOutput struct {
 ```
 
 Используй huma-теги: `path`, `query`, `header`, валидаторы (`minLength`, `format:"email"` и т.д.).
+Список — встрой `paging.Page` (`pkg/paging`): query `page` и `size` с общими дефолтом и пределом.
 
 ### 5. Handler-метод в `handler.go`
 
@@ -104,13 +105,14 @@ httpkit.ErrorRule{Err: user.ErrXyz, Status: http.StatusBadRequest, Code: "USER_X
 ```
 
 Первое совпавшее правило выигрывает; правило, которое затеняет правило выше, — panic при сборке.
-`ForbiddenError` уже покрыт — не дублируй.
+Отказ policy (`policy.ForbiddenError`) мапит общее правило `authgate.ForbiddenRule` — оно уже в
+таблице домена, не дублируй.
 
 ### 8. Тест в `handler_test.go`
 
 Минимум:
 - Happy path (201/200)
-- Forbidden (мок usecase возвращает `&<domain>.ForbiddenError{…}` → 403)
+- Forbidden (мок usecase возвращает `&policy.ForbiddenError{…}` → 403)
 - Validation error (huma сам отдаёт 422 / 400)
 - Один specific error mapping (например, `ErrAlreadyExists` → 409)
 

@@ -6,7 +6,16 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
 	"git.stit.tech/stit-core/golibinfra/bizmetric"
+)
+
+// Исходы, особые для домена; общие — outcome.
+const (
+	resultDuplicate    outcome.Result = "duplicate"
+	resultAlreadyUsed  outcome.Result = "already_used"
+	resultUserNotFound outcome.Result = "user_not_found"
+	resultInactive     outcome.Result = "inactive"
 )
 
 // Metrics — domain-уровень counters для verification (email confirm +
@@ -48,30 +57,30 @@ func NewMetrics(m metric.Meter) (*Metrics, error) {
 
 // Все Record* nil-safe — observability не валит домен.
 
-func (m *Metrics) RecordEmailIssued(ctx context.Context, result string) {
+func (m *Metrics) RecordEmailIssued(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.emailIssued.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.emailIssued.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }
 
-func (m *Metrics) RecordEmailConfirmed(ctx context.Context, result string) {
+func (m *Metrics) RecordEmailConfirmed(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.emailConfirmed.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.emailConfirmed.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }
 
-func (m *Metrics) RecordPasswordResetRequested(ctx context.Context, result string) {
+func (m *Metrics) RecordPasswordResetRequested(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.passwordResetRequested.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.passwordResetRequested.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }
 
-func (m *Metrics) RecordPasswordResetConfirmed(ctx context.Context, result string) {
+func (m *Metrics) RecordPasswordResetConfirmed(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.passwordResetConfirmed.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+	m.passwordResetConfirmed.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
 }

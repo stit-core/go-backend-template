@@ -13,6 +13,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/pgseed"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
+	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/golibinfra/testkit"
 )
 
@@ -60,7 +61,7 @@ func TestList_WithRole(t *testing.T) {
 	u1 := pgseed.InsertUser(t, repo, pgseed.WithRole(identity.RoleClient))
 	u2 := pgseed.InsertUser(t, repo, pgseed.WithRole(identity.RoleAdmin))
 
-	list, err := repo.List(ctx, user.ListFilter{}, user.ListPagination{Page: 1, Size: 100})
+	list, err := repo.List(ctx, user.ListFilter{}, paging.Page{Number: 1, Size: 100})
 	require.NoError(t, err)
 
 	roleByEmail := make(map[string]identity.Role)

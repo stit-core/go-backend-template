@@ -37,7 +37,9 @@ paths:
   `Hidden: true` обходят проверку `Security`, `TestBoot` их не пускает. Envelope — `data`.
   OperationID — lowerCamel `<verb><Noun>`, глобально уникален.
 - **I/O — это use-case, не метод агрегата.** Нужен repo/сеть/время → метод `*Usecase`.
-  Чистое правило/константа правила (password strength и т.п.) → `policy.go`, не inline в usecase.
+  Чистое правило/константа правила → `policy.go` домена, общее для доменов (правило пароля,
+  `ForbiddenError`) — `pkg/policy`; не inline в usecase. Исход метрики — `outcome.Result`, ID,
+  которые создаёт код, — `idkit.NewV7()`, страница списка — `paging.Page`.
 - **Usecase не знает транспорта.** `httpkit`/`natskit`/huma в usecase запрещены; ctx-геттеры
   (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`. Named returns не используем.
   Мутирующий метод инструментирован `metrics.Record*` на всех исходах; security-операции
