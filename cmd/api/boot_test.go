@@ -108,7 +108,11 @@ func TestBoot(t *testing.T) {
 		`SELECT count(*) FROM outbox_verification WHERE subject LIKE 'verification.%'`).Scan(&own))
 	require.Positive(t, own, "verification publishes into its own outbox")
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/openapi.json", nil)
+	humaAPI, ok := srv.API().(interface{ Config() huma.Config })
+	require.True(t, ok, "the huma API exposes its Config")
+	humaCfg := humaAPI.Config()
+	require.NotEmpty(t, humaCfg.OpenAPIPath, "the service serves its OpenAPI spec")
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+humaCfg.OpenAPIPath+".json", nil)
 	require.NoError(t, err)
 	resp, err := anon.Do(req)
 	require.NoError(t, err)
@@ -127,12 +131,10 @@ func TestBoot(t *testing.T) {
 		Paths map[string]map[string]any `json:"paths"`
 	}
 	require.NoError(t, json.Unmarshal(spec, &contract))
-	humaAPI, ok := srv.API().(interface{ Config() huma.Config })
-	require.True(t, ok, "the huma API exposes its Config")
 	for _, route := range srv.Router().Routes() {
 		for method := range route.Handlers {
 			_, op := contract.Paths[route.Pattern][strings.ToLower(method)]
-			require.True(t, op || method == http.MethodGet && humaSpecRoute(humaAPI.Config(), route.Pattern),
+			require.True(t, op || method == http.MethodGet && humaSpecRoute(humaCfg, route.Pattern),
 				"route %s %s is not in openapi.json: a raw chi route or a Hidden huma operation escapes the Security check and the API contract", method, route.Pattern)
 		}
 	}

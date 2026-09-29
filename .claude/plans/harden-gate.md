@@ -286,7 +286,8 @@ blocked-by: —
   nil }`: иначе такая closure прячется, а allowlist велит удалить её запись как устаревшую (NB5).
 - Сырой маршрут chi (`Router().Get`, `Mount`) обходит `Security` и `openapi.json`: `TestBoot`
   требует, чтобы каждый маршрут роутера был операцией контракта или маршрутом спецификации huma
-  — их пути берутся из её конфига, свой `DocsPath` форка законен; вебхук, SSE и выгрузка — тоже
+  — их пути, как и адрес живой спецификации, берутся из её конфига: свои `DocsPath` и
+  `OpenAPIPath` форка законны; вебхук, SSE и выгрузка — тоже
   операции huma (`RawBody`, `StreamResponse`) (NB4). `Hidden: true` вне канона: скрытую операцию
   не видят ни контракт, ни `TestHTTPOperations` (huma не зовёт для неё `OnAddOperation` —
   `Security` не проверен), `TestBoot` называет это прямо (`hidden-op`); скрытая ручка — отдельное
@@ -363,8 +364,8 @@ NB5 (closure с `(T, error)`), NB6 (AC8 с чистым кешем), NB8 (ID т�
 `ptrkit-root` → clean); часы — все функции
 настенного времени (`time-since` → FAIL); SQL — по словам с уровнями скобок (`k-mixed` → FAIL,
 `k-func-from`, `k-distinct-from` → clean); хелпер второго уровня и `Require*` кита — утверждения
-(`t15-2level`, `t15-kit-require`, `t15-mock-assert` → clean, `t15-var-block` → FAIL); маршруты спецификации huma — из её конфига (`docs-path`
-→ clean, `hidden-op` → FAIL с точной причиной). Строки матрицы ENF: 15 закрыта (`TestTestsAssert`),
+(`t15-2level`, `t15-kit-require`, `t15-mock-assert` → clean, `t15-var-block` → FAIL); маршруты спецификации huma — из её конфига (`docs-path`,
+`openapi-path` → clean, `hidden-op` → FAIL с точной причиной). Строки матрицы ENF: 15 закрыта (`TestTestsAssert`),
 9 и 11 исключены («Решения»). Allowlist (опустошает
 `fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
 `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
