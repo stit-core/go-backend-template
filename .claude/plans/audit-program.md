@@ -114,6 +114,10 @@ blocked-by: —
   - вопросов владельцу по ходу программы не задавать.
 - Обходы шаблона в ожидании китов (`beforeHTTP`, `publicOperations`, client-IP, `pkg/tokens`)
   снимаются bump'ами в `fix-reference-code` S1 и S9 — `replan-golibinfra.md` §3–4.
+- Базовый аудит golibinfra (S4) идёт двумя частями: киты вне httpkit и `testkit/handlertest` —
+  сразу после PASS этапа S1–S9 `harden-kits` (их код до v1.2.0 уже не меняется), httpkit и
+  handlertest — после тега v1.2.0 — партия 2 на критическом пути, так она стартует раньше.
+  Отчёты углов — `kits-audit/` в материалах, ID находок `K<угол>-NN`.
 
 ## Где мы сейчас
 S1 закрыт: `harden-gate` выполнен и удалён, шаблон запушен. S2 идёт: golibinfra `harden-kits`,
