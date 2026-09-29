@@ -326,7 +326,9 @@ blocked-by: —
 - depguard удалён целиком: изоляцию доменов и моков держит archtest без списков доменов в
   конфигах, `//nolint` на него не действует. Правила импортов — для не-тестового кода: тесты
   берут фикстуры откуда угодно, моки — только тесты. `io`/`bufio` в usecase разрешены (поток —
-  данные, не I/O), в чистых слоях — нет.
+  данные, не I/O), в чистых слоях — нет. Корень домена — по перечню разрешённого, а не запретов:
+  stdlib без I/O, пакеты модуля и `rootLibs` (порты и значения китов, DI, ID); новый драйвер,
+  транспорт или кит с I/O падает без правки списка, новый порт кита — запись в `rootLibs` (NB7).
 - Пустой down — без непробельных символов (`-- noop` с причиной законен для миграции данных, DDL
   с таким down ловит лесенка). Разрушительный оператор — по up без комментариев и строк;
   `ALTER … TYPE` — смена типа колонки; down не проверяется. `migrations-check` — до тестов.
@@ -339,19 +341,18 @@ blocked-by: —
 
 ## Где мы сейчас
 S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Этап S2–S6 провалидирован: PASS после фиксов
-`fix(gate)`. Этап S7–S11: валидатор B2 — FAIL (отчёт —
-`/home/mm/.cache/stit-audit-program/validation-harden-gate-B2.md`, кейсы — `valb2/` рядом); шаги
-S7–S11, AC9, AC10 и фиксы прошлого круга (проза по путям git, N1–N5, строка 15) он воспроизвёл.
-Его замечания исправлены («Решения»): B1 — таблица запроса только в позиции таблицы (`k*` → FAIL,
-`k-column` → clean); NB1 — утверждение в хелпере засчитывается (`t15-helper` → clean, `t15` →
-FAIL); NB5 — closure с `(T, error)` видна (`closure-err-clean`, `closure-new-err` → FAIL); NB4 —
-маршрут мимо huma валит `TestBoot` (`raw-route`, `raw-route-live`, `Mount` → FAIL); NB8 — ID
-находок только в записях allowlist; NB6 — сырой линтер в AC8 с чистым кешем. NB2 и NB3 переносит
-в планы дирижёр. Строки матрицы ENF: 15 закрыта (`TestTestsAssert`), 9 и 11 исключены
-(«Решения»). Allowlist (опустошает `fix-reference-code`): ADP-02 — 4 identity-closure в
-`auth/module/module.go` и `verification/module/module.go`; ADP-03 — `internal/platform/shared` в
+`fix(gate)`. Этап S7–S11: валидатор B2 — PASS после фиксов (отчёт и раздел «Перепроверка c7afe08»
+— `/home/mm/.cache/stit-audit-program/validation-harden-gate-B2.md`, кейсы — `valb2/` рядом):
+B1 (таблица запроса — в позиции таблицы), NB1 (утверждение в хелпере), NB4 (маршрут мимо huma),
+NB5 (closure с `(T, error)`), NB6 (AC8 с чистым кешем), NB8 (ID только в allowlist); NB2 и NB3
+переносит в планы дирижёр. Дыры шагов S7–S8 из его NB7 и перепроверки закрываются фиксами:
+корень домена — по перечню разрешённого (`nats-root`, `cache-root` → FAIL); дальше — часы мимо
+`time.Now`, SQL-разбор, хелперы второго уровня, маршруты спецификации huma. Строки матрицы ENF:
+15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Allowlist (опустошает
+`fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
+`verification/module/module.go`; ADP-03 — `internal/platform/shared` в
 `docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. Обходы
 до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Хвост: запас покрытия
 ≈1 statement (75,1% при пороге 75%) — первый шаг `fix-reference-code` с непокрытым кодом упрётся в
 `cover-check`; снимают S13–S14 там, и там же — покрытие по функциям или диффу (строка 11).
-Следующее: перепроверка валидатором B2 → S12 отдельным агентом → закрыть план, push шаблона.
+Следующее: фиксы дыр S7–S8 → S12 отдельным агентом → закрыть план, push шаблона.

@@ -69,23 +69,41 @@ var (
 	netParsers = []string{"net/mail", "net/netip", "net/url"}
 )
 
-// rootForbidden — чего корень домена не видит: транспорт, драйверы и I/O живут за портами.
-var rootForbidden = append([]string{
-	"git.stit.tech/stit-core/golibinfra/httpkit",
-	"git.stit.tech/stit-core/golibinfra/natskit",
-	"github.com/danielgtaylor/huma",
-	"github.com/jackc/pgx",
-}, ioStdlib...)
+// rootLibs — внешние пакеты, которые видит корень домена: порты и значения китов (аудит,
+// хеширование, метрики, часы, лог, outbox, pgkit.Transactor), DI и ID. Это перечень разрешённого:
+// драйвер, транспорт или кит с I/O в корне падает без правки списка.
+var rootLibs = []string{
+	"git.stit.tech/stit-core/golibinfra/auditkit",
+	"git.stit.tech/stit-core/golibinfra/authnkit",
+	"git.stit.tech/stit-core/golibinfra/bizmetric",
+	"git.stit.tech/stit-core/golibinfra/clockkit",
+	"git.stit.tech/stit-core/golibinfra/logkit",
+	"git.stit.tech/stit-core/golibinfra/outboxkit",
+	"git.stit.tech/stit-core/golibinfra/pgkit",
+	"github.com/google/uuid",
+	"go.opentelemetry.io/otel/attribute",
+	"go.opentelemetry.io/otel/metric",
+	"go.uber.org/fx",
+}
 
 func TestDomainRootIsTransportAgnostic(t *testing.T) {
 	t.Parallel()
 	for _, f := range domainRootFiles(t) {
 		for _, imp := range f.imports {
-			if underAny(imp, rootForbidden) {
-				t.Errorf("%s imports %s: the domain root reaches transport, drivers and OS/network I/O only through ports", f.path, imp)
+			if !rootAllowed(imp) {
+				t.Errorf("%s imports %s: the domain root sees stdlib without I/O, the module's packages and rootLibs only — transport, drivers and I/O go through ports", f.path, imp)
 			}
 		}
 	}
+}
+
+// rootAllowed — импорт корня домена: пакеты модуля (их границы держит TestImportBoundaries),
+// rootLibs или stdlib без I/O.
+func rootAllowed(imp string) bool {
+	if strings.HasPrefix(imp, module+"/") || slices.Contains(rootLibs, imp) {
+		return true
+	}
+	return !strings.Contains(imp, ".") && !underAny(imp, ioStdlib)
 }
 
 // pureLayers — файлы корня домена без I/O: им доступны stdlib без побочных эффектов и потоков
