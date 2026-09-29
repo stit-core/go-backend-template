@@ -32,9 +32,12 @@ done
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-# race detector требует cgo.
-RACE=""
-[ "$(go env CGO_ENABLED)" = "1" ] && RACE="-race"
+# race detector требует cgo: без него прогон идёт без -race, и это видно в выводе.
+RACE="-race"
+if [ "$(go env CGO_ENABLED)" != "1" ]; then
+    RACE=""
+    echo "WARN: без -race — CGO_ENABLED=$(go env CGO_ENABLED) (нужны cgo и C-компилятор)"
+fi
 out=$(go test $INTEGRATION $RACE "${PKGS[@]}" 2>&1)
 code=$?
 

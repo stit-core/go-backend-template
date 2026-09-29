@@ -22,6 +22,7 @@ import (
 // Integration-тесты — шаг make check, а testkit без Docker их пропускает: здесь
 // пропуск становится провалом, иначе гейт позеленеет, не открыв БД.
 func TestDockerRequired(t *testing.T) {
+	t.Parallel()
 	available := false
 	t.Run("docker", func(t *testing.T) {
 		testkit.RequireDocker(t)
@@ -33,6 +34,7 @@ func TestDockerRequired(t *testing.T) {
 // Лесенка по миграциям приложения: down каждой версии возвращает схему ровно к
 // состоянию до её up, повторный up воспроизводит схему версии.
 func TestAppMigrationsRoundtrip(t *testing.T) {
+	t.Parallel()
 	dir := repopath.Migrations()
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)

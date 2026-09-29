@@ -17,7 +17,7 @@ help: ## сгруппированный список команд
 ##@ LOOP
 # test/lint/build: concise-by-default (scripts/tools/* за make). FORMAT=detailed или
 # VERBOSE=1 — полный вывод (у build VERBOSE=1 — сырой go build). PKG= — подмножество
-# (default ./...). test.sh сам гейтит -race по CGO_ENABLED. make check эти переменные
+# (default ./...). Без cgo test.sh идёт без -race и пишет WARN. make check эти переменные
 # не читает — гейт всегда проверяет всё дерево.
 DETAIL = $(if $(or $(VERBOSE),$(filter detailed,$(FORMAT))),--format=detailed)
 
@@ -54,9 +54,9 @@ GATE = $(MAKE) --no-print-directory PKG= VERBOSE= FORMAT=
 
 # make check не запускается там, где сказал бы «clean», не проверив всё: -i глушит ошибки шагов,
 # -n/-q/-t их не выполняют, подмена переменных гейта меняет шаги, GOFLAGS (из env или
-# go env -w) — go test и vet.
+# go env -w) — go test и vet. override — чтобы guard не выключался своей же переменной.
 ifneq (,$(filter check,$(MAKECMDGOALS)))
-gate_bad := $(foreach f,i n q t,$(if $(findstring $f,$(firstword -$(MAKEFLAGS))),-$f)) \
+override gate_bad := $(foreach f,i n q t,$(if $(findstring $f,$(firstword -$(MAKEFLAGS))),-$f)) \
 	$(foreach v,MAKE SHELL .SHELLFLAGS GATE DETAIL,$(if $(filter command% environment%,$(origin $v)),$v=…)) \
 	$(if $(shell go env GOFLAGS),GOFLAGS=$(shell go env GOFLAGS))
 ifneq (,$(strip $(gate_bad)))

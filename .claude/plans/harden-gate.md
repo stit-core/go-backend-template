@@ -98,7 +98,8 @@ blocked-by: —
   `git commit --no-veri`, `SKIP_PREPUSH=1 git push`, `git -c core.hooksPath=/dev/null push`
   блокируются хуком; pre-push с грязным деревом → отказ; `make setup` выставляет `core.hooksPath`
   - Подтверждено: `guard-bash.sh` с JSON PreToolUse на stdin — наборы валидатора (79) и свой (49):
-    все обходы → exit 2, в том числе многострочные (`git add -A⏎git commit -n`, `git status⏎git
+    все обходы git-хуков → exit 2 (make- и `GOFLAGS`-кейсы хук пропускает намеренно — их
+    останавливают `make check` и pre-push), в том числе многострочные (`git add -A⏎git commit -n`, `git status⏎git
     push --no-veri`), `git --git-dir .git commit -n`, `git merge --no-veri`, `GIT_CONFIG_KEY_0`;
     обычные команды (heredoc-коммиты с этими словами, `git push -n`, `git log -n`) → exit 0,
     ложные — только `git config --get core.hooksPath` и `git grep "SKIP_PREPUSH="`; ≈8 мс. Живьём
@@ -251,8 +252,11 @@ blocked-by: —
 - `make check` не запускается (`$(error)` до шагов) с `-i`/`-n`/`-q`/`-t`, с подменой `MAKE`,
   `SHELL`, `.SHELLFLAGS`, `GATE`, `DETAIL` (аргумент, env, `MAKEFLAGS`) и с `GOFLAGS` (env или
   `go env -w`): один guard закрывает класс «clean без проверки», включая `MAKE=true` из окружения,
-  — вместо `override` по переменной и правила `GOFLAGS=` в хуке (валидатор, B2). pre-push зовёт
-  `make check` без `MAKEFLAGS`/`MFLAGS`/`GNUMAKEFLAGS`/`MAKEFILES` вызывающего.
+  — вместо `override` по переменной и правила `GOFLAGS=` в хуке (валидатор, B2); сам guard —
+  `override`. pre-push зовёт `make check` без `MAKEFLAGS`/`MFLAGS`/`GNUMAKEFLAGS`/`MAKEFILES`
+  вызывающего: `--eval=.IGNORE:`, `MAKEFILES`, лишний `-f` в ручном прогоне — обфускация, до
+  remote её не пускает pre-push.
+- Без cgo `test.sh` идёт без `-race` и печатает WARN, а не падает: гейт не требует C-компилятор.
 - Хук Claude Code — страховка от «удобного» обхода, не от обфускации (`git commit '-n'`, `sh -c`,
   скрипт-файл, alias): флаги ищутся построчно, вне кавычек и тел heredoc, `SKIP_PREPUSH=` и
   `core.hooksPath` — только в команде с `git`. Проверен JSON PreToolUse на stdin и живьём.
