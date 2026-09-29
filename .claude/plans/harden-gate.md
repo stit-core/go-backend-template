@@ -265,9 +265,12 @@ blocked-by: —
   API без JWT.
 - `time.Now` — по таблице импортов файла (алиас, dot-import), без go/types: тот же охват без
   загрузки пакетов. Владелец таблицы — единственный домен, чьи запросы её трогают (таблицы — из
-  `CREATE TABLE` в `migrations/`); запрос трогает таблицу, если в нём (вне комментариев и строк)
-  есть слово с её именем — так видны JOIN через запятую, подзапрос и имя в кавычках без разбора
-  SQL; kit-таблиц в запросах нет — схема sqlc только `migrations/` (N2). Allowlist — один тип
+  `CREATE TABLE` в `migrations/`); запрос трогает таблицу, если её имя стоит в позиции таблицы:
+  после FROM, JOIN, INTO, UPDATE, USING и в списке FROM через запятую (схема, кавычки, алиас) —
+  так видны неявный JOIN, подзапрос и `"users"`, а колонка `orders.notes` при таблице `notes`
+  соседа — не обращение (N2, B2-B1). Ключевое слово и список разбираются отдельно: однострочная
+  регулярка съедала `JOIN` без алиаса как алиас и теряла таблицу. kit-таблиц в запросах нет —
+  схема sqlc только `migrations/`. Allowlist — один тип
   `allowlist.List` (`internal/testkit/allowlist`) в archtest и `cmd/api`: нарушение → ID
   находки; запись без нарушения или без ID валит тест, проверка AC7 — grep по ID (N4).
 - Мост к чужому домену закрыт слоями, а не списком импортёров: домен вне доменов импортирует только
@@ -325,19 +328,18 @@ blocked-by: —
 
 ## Где мы сейчас
 S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Этап S2–S6 провалидирован: PASS после фиксов
-`fix(gate)`. Этап S7–S11: валидатор — FAIL, проверен частично (отчёт —
-`/home/mm/.cache/stit-audit-program/validation-harden-gate-B.md`, кейсы — `valb/inj.py` рядом).
-Блокирующий B1 исправлен: ссылки прозы сверяются с отслеживаемыми git путями — свежий worktree →
-`✓ check clean`, ссылка на неотслеживаемый файл → FAIL. Неблокирующие решены («Решения»): N1, N2,
-N4, N5 — правками, N3 — без правок (ловит `buildAPI`), N7 — хвостом ниже, N6 — констатация.
-Строки матрицы ENF: 15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Не проверено:
-инъекции ENF, ADP, fx, M22, COD-05, OpenAPI и S9; ложные срабатывания (`make new-domain
-NAME=probe`, проза после prune учебных доменов); `TestBoot -count=3`; `make gen`/`status`/
-pre-commit; сверка «Сделано». Allowlist (опустошает `fix-reference-code`): ADP-02 — 4
-identity-closure в `auth/module/module.go` и `verification/module/module.go`; ADP-03 —
-`internal/platform/shared` в `docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET`
-нет в `.env.example`. Обходы до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP`
-(FX-01). Хвост: запас покрытия ≈1 statement (75,1% при пороге 75%) — первый шаг
-`fix-reference-code` с непокрытым кодом упрётся в `cover-check`; снимают S13–S14 там, и там же —
-покрытие по функциям или диффу (строка 11). Следующее: довалидация этапа S7–S11 → S12 отдельным
-агентом → закрыть план, push шаблона.
+`fix(gate)`. Этап S7–S11: валидатор B2 — FAIL (отчёт —
+`/home/mm/.cache/stit-audit-program/validation-harden-gate-B2.md`, кейсы — `valb2/` рядом); шаги
+S7–S11, AC9, AC10 и фиксы прошлого круга (проза по путям git, N1–N5, строка 15) он воспроизвёл.
+Его блокирующий B1 исправлен: таблица запроса — только в позиции таблицы, колонка с именем
+чужой таблицы гейт не роняет (кейсы `k*` → FAIL, `k-column` → clean). Неблокирующие NB1, NB4,
+NB5, NB6 (AC8), NB8 — следующими фиксами; NB2 и NB3 переносит в планы дирижёр. Строки матрицы ENF:
+15 закрыта (`TestTestsAssert`), 9 и 11 исключены («Решения»). Allowlist (опустошает
+`fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
+`verification/module/module.go`; ADP-03 — `internal/platform/shared` в
+`docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. Обходы
+до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Хвост: запас покрытия
+≈1 statement (75,1% при пороге 75%) — первый шаг `fix-reference-code` с непокрытым кодом упрётся в
+`cover-check`; снимают S13–S14 там, и там же — покрытие по функциям или диффу (строка 11).
+Следующее: фиксы NB1, NB4–NB6, NB8 → перепроверка валидатором B2 → S12 отдельным агентом →
+закрыть план, push шаблона.

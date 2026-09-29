@@ -94,21 +94,26 @@ func typePackage(expr ast.Expr) string {
 
 var (
 	createTable = regexp.MustCompile(`(?i)\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:"?public"?\.)?"?(\w+)`)
-	sqlWord     = regexp.MustCompile(`(\w+)`)
-	sqlNoise    = regexp.MustCompile(`--[^\n]*|/\*[\s\S]*?\*/|'(?:[^']|'')*'`)
+	// tableKeyword — за ним идёт таблица; tableItem — таблица (схема, кавычки, алиас) и запятая,
+	// если список FROM продолжается.
+	tableKeyword = regexp.MustCompile(`(?i)\b(?:from|join|into|update|using)\s+(?:only\s+)?`)
+	tableItem    = regexp.MustCompile(`^(?:"?\w+"?\.)?"?(\w+)"?(?:\s+(?:as\s+)?\w+)?(\s*,\s*)?`)
+	sqlNoise     = regexp.MustCompile(`--[^\n]*|/\*[\s\S]*?\*/|'(?:[^']|'')*'`)
 )
 
 // TestQueriesUseOwnTables: таблица приложения (CREATE TABLE в migrations/) принадлежит одному
-// домену; запрос соседа к ней — связь в обход порта (ADP-03). Запрос трогает таблицу, если в нём
-// есть слово с её именем: так видны и JOIN через запятую, и подзапрос, и имя в кавычках.
+// домену; запрос соседа к ней — связь в обход порта.
 func TestQueriesUseOwnTables(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	tables := sqlNames(t, filepath.Join(root, "migrations", "*.up.sql"), createTable)
+	var tables []string
+	for _, m := range createTable.FindAllStringSubmatch(sqlText(t, filepath.Join(root, "migrations", "*.up.sql")), -1) {
+		tables = append(tables, strings.ToLower(m[1]))
+	}
 	require.NotEmpty(t, tables)
 	queriedBy := map[string][]string{} // таблица → домены
 	for _, d := range domains(t) {
-		used := sqlNames(t, filepath.Join(root, "internal", "domain", d, "infra", "postgres", "queries", "*.sql"), sqlWord)
+		used := queriedTables(sqlText(t, filepath.Join(root, "internal", "domain", d, "infra", "postgres", "queries", "*.sql")))
 		for _, table := range tables {
 			if slices.Contains(used, table) {
 				queriedBy[table] = append(queriedBy[table], d)
@@ -122,18 +127,33 @@ func TestQueriesUseOwnTables(t *testing.T) {
 	}
 }
 
-// sqlNames — имена, которые re находит в SQL-файлах glob вне комментариев и строк.
-func sqlNames(t *testing.T, glob string, re *regexp.Regexp) []string {
-	t.Helper()
-	files, err := filepath.Glob(glob)
-	require.NoError(t, err)
+// queriedTables — имена в позиции таблицы: после FROM, JOIN, INTO, UPDATE, USING и через запятую
+// в списке FROM. Колонка с именем чужой таблицы (orders.notes) — не обращение к ней.
+func queriedTables(sql string) []string {
 	var names []string
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		require.NoError(t, err)
-		for _, m := range re.FindAllStringSubmatch(sqlNoise.ReplaceAllString(string(data), " "), -1) {
+	for _, kw := range tableKeyword.FindAllStringIndex(sql, -1) {
+		rest := sql[kw[1]:]
+		for m := tableItem.FindStringSubmatch(rest); m != nil; m = tableItem.FindStringSubmatch(rest) {
 			names = append(names, strings.ToLower(m[1]))
+			if m[2] == "" {
+				break
+			}
+			rest = rest[len(m[0]):]
 		}
 	}
 	return names
+}
+
+// sqlText — SQL файлов glob без комментариев и строк.
+func sqlText(t *testing.T, glob string) string {
+	t.Helper()
+	files, err := filepath.Glob(glob)
+	require.NoError(t, err)
+	var sql strings.Builder
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		require.NoError(t, err)
+		sql.WriteString(sqlNoise.ReplaceAllString(string(data), " ") + "\n")
+	}
+	return sql.String()
 }
