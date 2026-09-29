@@ -74,10 +74,12 @@ test-int (юнит + integration, нужен Docker) + build + gen-check + migra
 ## Git workflow
 
 - **Conventional Commits** (`scripts/git-hooks/commit-msg`): типы `feat|fix|refactor|docs|test|chore|meta`,
-  формат `<type>(<scope>)?: <subject>`, subject ≤72.
+  формат `<type>(<scope>)?: <subject>`, subject ≤72; сообщения самого git (`Revert "…"`,
+  `fixup!`/`squash!`) тоже проходят.
 - **Push в `main` разрешён** (прямой или через PR); линейная история. Gate — git
-  `pre-push → make check` (skip только `SKIP_PREPUSH=1`, не `--no-verify`).
-- git-хуки ставятся `make setup` (commit-msg, pre-commit, pre-push). Релиз — `/release`.
+  `pre-push → make check` на чистом дереве, пушится только HEAD. Обойти хуки может только
+  человек (`SKIP_PREPUSH=1`); из сессии Claude обходы блокирует хук `.claude/hooks/guard-bash.sh`.
+- git-хуки подключает `make setup` (`core.hooksPath=scripts/git-hooks`). Релиз — `/release`.
 
 ## Границы
 
@@ -99,8 +101,9 @@ test-int (юнит + integration, нужен Docker) + build + gen-check + migra
   `go.mod`/`go.sum`, `git tag -a` / `make release` (артефакт вне репо).
 
 ### Не делать никогда
-- `--no-verify` (блокирует `permissions.deny`). Коммитить/цитировать `.env`, `.env.local`,
-  `*.pem`, `*.key` (в репо живут только `*.example`-шаблоны).
+- Обходить хуки и гейт: `--no-verify`, `git commit -n`, `SKIP_PREPUSH`, `core.hooksPath`,
+  `GOFLAGS=` (блокируют `permissions.deny` и хук `guard-bash`). Коммитить/цитировать `.env`,
+  `.env.local`, `*.pem`, `*.key` (в репо живут только `*.example`-шаблоны).
 - Править сгенерированное руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
 - `fmt.Print*`/`slog.*` напрямую. Image-теги `:latest`/`:edge`/lightweight.
 - Deploy-команды (`make bump`, `make ship`, `ssh`, env-прокатка) — выкатка идёт только из

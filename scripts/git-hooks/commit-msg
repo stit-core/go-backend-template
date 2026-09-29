@@ -4,11 +4,14 @@
 set -euo pipefail
 COMMIT_MSG_FILE="$1"
 PATTERN='^(feat|fix|refactor|docs|test|chore|meta)(\([a-z0-9_/-]+\))?(!)?: .{1,72}$'
+# Сообщения, которые пишет сам git: git revert и git commit --fixup/--squash.
+GIT_PATTERN='^((Revert|Reapply) ".+"|(fixup|squash|amend)! .+)$'
 HEAD_LINE="$(head -n 1 "$COMMIT_MSG_FILE" | sed 's/[[:space:]]*$//')"
-if ! [[ "$HEAD_LINE" =~ $PATTERN ]]; then
+if ! [[ "$HEAD_LINE" =~ $PATTERN || "$HEAD_LINE" =~ $GIT_PATTERN ]]; then
   echo "ERROR: первая строка коммита должна быть Conventional Commit"
   echo "Формат: <type>(<scope>)?: <subject>  (≤72 символа)"
   echo "Допустимые types: feat, fix, refactor, docs, test, chore, meta"
+  echo "Сообщения самого git (Revert \"…\", fixup!/squash!/amend! …) тоже проходят"
   echo "Пример: feat(user): add password reset"
   echo "       meta(rules): align commit-prefix SSOT"
   echo "Текущая первая строка: $HEAD_LINE"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# scripts/release.sh — релиз одной командой: confirm → annotated tag →
-# release-preflight (ветка/clean/semver/buildx + doctor) → buildx api+migrate
-# push lockstep → агрегированный INFRA-HANDOFF → STOP.
+# scripts/release.sh — релиз одной командой: confirm → чистое дерево + make check →
+# annotated tag → release-preflight (ветка/clean/semver/buildx + doctor) → buildx
+# api+migrate push lockstep → агрегированный INFRA-HANDOFF → STOP.
 #
 #   make release VERSION=vX.Y.Z
 #
@@ -34,6 +34,10 @@ else
         *) echo "release: отменено (нет подтверждения)"; exit 1 ;;
     esac
 fi
+
+# --- гейт до тега: тег и образы — только у чистого HEAD, прошедшего make check ---
+[ -z "$(git status --porcelain)" ] || { echo "release: working tree dirty — закоммить или stash" >&2; exit 2; }
+make --no-print-directory check
 
 # --- annotated tag, если на HEAD ещё нет ---
 existing=$(git describe --tags --exact-match HEAD 2>/dev/null || true)

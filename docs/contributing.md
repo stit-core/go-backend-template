@@ -37,14 +37,15 @@ prompt → /smartdev (cockpit: make status, читает активные пла
 
 | Механизм | Где | Сила |
 |---|---|---|
-| git-хуки | `scripts/git-hooks/` (ставятся `make setup`): commit-msg (Conventional Commits), pre-commit (gofumpt+vet+lint+validate-stack/plan), pre-push (`make check`) | **детерминированно** |
+| git-хуки | `scripts/git-hooks/` (подключает `make setup` через `core.hooksPath`): commit-msg (Conventional Commits), pre-commit (fmt-check+vet+lint+validate-stack/plan), pre-push (`make check` на чистом дереве, только HEAD) | **детерминированно** |
 | permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-verify`, force-push, reset --hard, правка `*.pem`/`*.key`/generated) |
+| Хук Claude Code | `.claude/hooks/guard-bash.sh` (PreToolUse, Bash) | **детерминированно** (блок `git commit -n`, `--no-veri…`, `SKIP_PREPUSH`, `core.hooksPath`, `GOFLAGS=` у гейта) |
 | Path-scoped rules | `.claude/rules/*.md` | контекстная подсказка |
 | CLAUDE.md | repo root | always-on advisory |
 
-Claude Code хуков (PreToolUse/PostToolUse/Stop) в шаблоне **нет** — критичные инварианты
-держат git-хуки + `permissions.deny`; soft-guidance — CLAUDE.md и rules. Push в `main`
-разрешён (прямой или через PR); gate — `pre-push → make check`.
+Хук Claude Code в шаблоне один — `guard-bash` против обходов git-хуков и гейта; остальные
+критичные инварианты держат git-хуки + `permissions.deny`; soft-guidance — CLAUDE.md и rules.
+Push в `main` разрешён (прямой или через PR); gate — `pre-push → make check`.
 
 ## Course correction
 

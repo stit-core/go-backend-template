@@ -91,9 +91,16 @@ blocked-by: —
     скрыт (`unshare -rm` + bind `/dev/null` на сокет) → `TestDockerRequired`: «Docker is
     unavailable: make check requires integration tests». Лесенка ловит пустой, мусорный,
     деструктивный (`DROP TABLE users CASCADE`) и `-- noop` down и down 0001 без `DROP FUNCTION`
-- [ ] **AC4** — Обходы хуков закрыты. Проверка: в сессии Claude Code `git commit -n`,
+- [x] **AC4** — Обходы хуков закрыты. Проверка: в сессии Claude Code `git commit -n`,
   `git commit --no-veri`, `SKIP_PREPUSH=1 git push`, `git -c core.hooksPath=/dev/null push`
   блокируются хуком; pre-push с грязным деревом → отказ; `make setup` выставляет `core.hooksPath`
+  - Подтверждено: `guard-bash.sh` с JSON PreToolUse на stdin — 25 обходов → exit 2 (все четыре
+    из проверки, а ещё `-anm`, `-qn`, `git -C … commit -n`, `--no-verif`, `-c "core.hooksPath=…"`,
+    `GIT_CONFIG_KEY_0=core.hooksPath`, `GOFLAGS=… make check`, `go env -w GOFLAGS`), 24 обычные
+    команды → exit 0 (heredoc-коммиты с этими словами в теле, `-m "… -n …"`, `git push -n`,
+    `git log -n`, grep по `SKIP_PREPUSH`/`core.hooksPath`); ≈10 мс на вызов. В клоне: `make
+    setup` → `core.hookspath=scripts/git-hooks` в `.git/config`; pre-push → отказ на грязном
+    дереве (`?? stray.txt`) и на пуше не-HEAD, чистый HEAD → `make check` → `✓ check clean`
 - [ ] **AC5** — Матрица инъекций аудита: пойманы все 24 строки, кроме явно исключённых в
   «Решениях» с причиной. Проверка: повторить инъекции из раздела ENF отчёта → таблица в «Где мы
   сейчас»
@@ -139,11 +146,16 @@ blocked-by: —
     `TestDockerRequired`; integration-тест optimistic lock user; `-short` удалён (ничего не
     делал); vet и lint — с тегом `integration`; `make doctor` проверяет Docker-демон. Проверка —
     AC2, AC3; `make check` → `✓ check clean`
-- [ ] **S4** — Хуки: `make setup` ставит `core.hooksPath`; pre-push отказывает на грязном дереве;
+- [x] **S4** — Хуки: `make setup` ставит `core.hooksPath`; pre-push отказывает на грязном дереве;
   commit-msg принимает сообщения, которые генерирует сам git (Revert, fixup); хук Claude Code
   PreToolUse (короткий скрипт) блокирует обходы; `make release*` и `docker buildx*` убраны из
   allow; release гоняет `make check` до тега (ENF-03, ENF-09, ENF-11)
   - Проверка: AC4 → как описано · Закрывает: AC4 · Зависит от: S1
+  - Сделано: `.claude/hooks/guard-bash.sh` (PreToolUse Bash) в `settings.json`; pre-push
+    отказывает на грязном дереве и на пуше не-HEAD; commit-msg пропускает `Revert "…"`,
+    `Reapply "…"`, `fixup!`/`squash!`/`amend!`; `make setup` — `git config core.hooksPath
+    scripts/git-hooks`; `make release*` и `docker buildx*` убраны из allow; `release.sh` — чистое
+    дерево и `make check` до тега. Проверка — AC4; `make check` → `✓ check clean`
 - [ ] **S5** — Линтеры: nolintlint с обязательным объяснением, errcheck `check-blank`, forbidigo
   на `log.Print*`, `println`, `print`, запись в `os.Stdout`/`os.Stderr`; testifylint (ENF-07)
   - Проверка: инъекции 2b, 10a, 16 → пойманы · Закрывает: AC5 · Зависит от: S2
@@ -215,13 +227,24 @@ blocked-by: —
 - `PKG`/`VERBOSE`/`FORMAT` гасятся на под-make, а не `override` в Makefile: в цикле разработки
   они нужны. `GOFLAGS` из окружения тоже меняет `go test` (вне находок аудита) — префикс
   `GOFLAGS=` у команд гейта блокирует хук S4.
+- Хук Claude Code проверен прямым запуском с JSON PreToolUse на stdin: живые `git push` и
+  `SKIP_PREPUSH` в сессии запрещены. Хук подхватился в идущей сессии сразу после правки
+  `settings.json` — заблокировал мой grep по `SKIP_PREPUSH`, поэтому `SKIP_PREPUSH=` и
+  `core.hooksPath` блокируются только в команде с `git`, а флаги ищутся вне кавычек и тел heredoc.
+- Хук — страховка от «удобного» обхода, не от обфускации (`git commit '-n'`, `sh -c`, base64
+  его проходят): полный разбор shell в хуке не окупается.
+- pre-push, кроме грязного дерева, отказывает на пуше ref не на HEAD (ENF-03 «не читает пушимые
+  refs»): `make check` проверяет рабочее дерево, и только так оно равно пушимому коммиту. Дешевле
+  временного worktree на пушимом SHA из предложения аудита.
+- В основном репо `core.hooksPath` не менял: он выставлен вручную абсолютным путём и общий с
+  чужим worktree `.claude/worktrees/agent-…`; `make setup` проверен в клоне.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S2 и S3 закрыты. S3: гейт не читает `PKG`/`VERBOSE`/`FORMAT`, порог покрытия — константа,
-integration и лесенка миграций — шаг `make test-int` в `make check`, без Docker гейт падает на
-`TestDockerRequired`. `make check` → `✓ check clean` за ≈14 с (integration ≈11 с всегда без
-кеша; остальное — ≈3 с на тёплых кешах); сводка — «17 пакет(ов) с тестами». Обнаружено: в S2
-`config verify` закрыл и строку матрицы 13d — учесть в S10. Следующий шаг — S4.
+S2–S4 закрыты. S4: обходы хуков из сессии Claude блокирует `.claude/hooks/guard-bash.sh`
+(действует уже в этой сессии), pre-push пушит только чистый HEAD, `make setup` подключает хуки
+через `core.hooksPath`, release гоняет `make check` до тега. `make check` → `✓ check clean` за
+≈14 с (integration ≈11 с без кеша). Обнаружено: в S2 `config verify` закрыл строку матрицы 13d —
+учесть в S10. Следующий шаг — S5.

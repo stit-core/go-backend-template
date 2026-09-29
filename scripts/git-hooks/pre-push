@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# pre-push: канонический локальный gate перед отправкой в remote.
-# Без CI это последняя проверка — гонит весь `make check`.
+# pre-push: канонический локальный gate перед отправкой в remote. Без CI это последняя
+# проверка — гонит весь `make check`. make check проверяет рабочее дерево, поэтому пушится
+# только чистый HEAD: иначе незакоммиченная правка озеленит сломанный коммит.
 #
-# Если хочешь skip ради скорости (например, push WIP-ветки) — push с
-# --no-verify запрещён политикой проекта (pre-bash-no-verify hook у Claude
-# тоже это блокирует). Если действительно нужно — пользователь руками
-# выставляет SKIP_PREPUSH=1 git push.
+# Обход — только руками человека: SKIP_PREPUSH=1 git push. Из сессии Claude его,
+# --no-verify и core.hooksPath блокирует хук .claude/hooks/guard-bash.sh.
 set -euo pipefail
 
 if [ "${SKIP_PREPUSH:-}" = "1" ]; then
@@ -14,6 +13,24 @@ if [ "${SKIP_PREPUSH:-}" = "1" ]; then
 fi
 
 cd "$(git rev-parse --show-toplevel)"
+
+if [ -n "$(git status --porcelain)" ]; then
+    echo "pre-push: дерево не чистое — make check проверил бы не то, что уходит в remote."
+    echo "Закоммить или спрячь изменения (git stash -u):"
+    git status --short | sed 's/^/  /'
+    exit 1
+fi
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha> на каждый пушимый ref.
+head=$(git rev-parse HEAD)
+while read -r local_ref local_sha _ _; do
+    [[ $local_sha =~ ^0+$ ]] && continue # удаление ref: проверять нечего
+    if [ "$(git rev-parse "$local_sha^{commit}")" != "$head" ]; then
+        echo "pre-push: $local_ref указывает не на HEAD — make check проверяет только HEAD."
+        echo "Переключись на пушимый коммит и повтори push."
+        exit 1
+    fi
+done
 
 echo "pre-push: make check"
 exec make check

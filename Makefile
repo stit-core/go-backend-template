@@ -121,17 +121,14 @@ search: ## Поиск по коду (Q=pattern [P=path]) — rg, fallback grep -
 	fi
 
 ##@ RELEASE
-release: ## release VERSION=vX.Y.Z — confirm→tag→preflight(+doctor)→push lockstep→handoff→STOP
+release: ## release VERSION=vX.Y.Z — confirm→check→tag→preflight(+doctor)→push lockstep→handoff→STOP
 	@bash scripts/release.sh "$(VERSION)"
 
 ##@ SETUP
-setup: ## Поставить pinned dev-tools + git-хуки (commit-msg, pre-commit, pre-push)
+setup: ## Поставить pinned dev-tools и подключить git-хуки scripts/git-hooks (core.hooksPath)
 	@bash scripts/install-tools.sh
-	@cp scripts/git-hooks/commit-msg .git/hooks/commit-msg
-	@cp scripts/git-hooks/pre-push .git/hooks/pre-push
-	@cp scripts/git-hooks/pre-commit .git/hooks/pre-commit 2>/dev/null || true
-	@chmod +x .git/hooks/commit-msg .git/hooks/pre-push .git/hooks/pre-commit 2>/dev/null || true
-	@echo "✓ setup: dev-tools + git hooks"
+	@git config core.hooksPath scripts/git-hooks
+	@echo "✓ setup: dev-tools + git hooks (core.hooksPath=scripts/git-hooks)"
 
 doctor: ## Fail-fast preflight: auth/env/drift
 	@bash scripts/tools/doctor.sh $(A)

@@ -23,8 +23,6 @@
       "Bash(make setup)",
       "Bash(make tidy)",
       "Bash(make help)",
-      "Bash(make release*)",
-      "Bash(docker buildx*)",
       "Bash(bash scripts/release-preflight.sh*)",
       "Bash(scripts/release-preflight.sh*)",
       "Bash(go test*)",
@@ -73,6 +71,19 @@
       "Edit(**/mocks/*.go)",
       "Edit(go.sum)",
       "Edit(**/.claude/projects/**/memory/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh\""
+          }
+        ]
+      }
     ]
   }
 }
