@@ -33,7 +33,9 @@ paths:
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
   Операция без `Security` публична в рантайме: она либо под `Security`, либо в
   `publicOperations` (`cmd/api/api_test.go`); регистрация — в `registerHTTP` (`cmd/api/http.go`).
-  Envelope — `data`. OperationID — lowerCamel `<verb><Noun>`, глобально уникален.
+  Каждая ручка — операция huma в контракте `openapi.json`: сырой маршрут chi (`Router()`) и
+  `Hidden: true` обходят проверку `Security`, `TestBoot` их не пускает. Envelope — `data`.
+  OperationID — lowerCamel `<verb><Noun>`, глобально уникален.
 - **I/O — это use-case, не метод агрегата.** Нужен repo/сеть/время → метод `*Usecase`.
   Чистое правило/константа правила (password strength и т.п.) → `policy.go`, не inline в usecase.
 - **Usecase не знает транспорта.** `httpkit`/`natskit`/huma в usecase запрещены; ctx-геттеры
