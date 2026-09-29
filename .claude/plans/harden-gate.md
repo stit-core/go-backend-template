@@ -84,19 +84,36 @@ blocked-by: —
     `GATE=…`, `MAKE=true`, `SHELL`, `.SHELLFLAGS`, `GOFLAGS` из env и go env). В клоне pre-push на
     падающем коммите при `MAKEFLAGS=i`, `…SHELL=/bin/true`, `MAKEFILES` → FAIL; чистый HEAD → `✓`;
     `make setup` → `core.hookspath=scripts/git-hooks`; грязное дерево и не-HEAD → отказ
-- [ ] **AC5** — Матрица инъекций аудита: пойманы все 24 строки, кроме явно исключённых в
+- [x] **AC5** — Матрица инъекций аудита: пойманы все 24 строки, кроме явно исключённых в
   «Решениях» с причиной. Проверка: повторить инъекции из раздела ENF отчёта → таблица в «Где мы
   сейчас»
-- [ ] **AC6** — Нарушения границ из эксперимента ADP (b, c, d, e, f2, g, h, i, j, k) ловит гейт;
+  - Подтверждено: свежий worktree на `62642d6`, на каждую строку — поломка, `make check` и целевой
+    тест. Все строки таблицы аудита, кроме 9 и 11 (исключены), → FAIL: линтеры, `config verify`,
+    gen-check, vet, migrations-check, лесенка, archtest. Строку 14 ловит хук commit-msg, в том
+    числе при живом `git commit`. Таблица — «Где мы сейчас»
+- [x] **AC6** — Нарушения границ из эксперимента ADP (b, c, d, e, f2, g, h, i, j, k) ловит гейт;
   a и l закрывает `fix-reference-code` (правила и тесты адаптеров, контракт событий). Проверка:
   повторить эксперимент → таблица
-- [ ] **AC7** — Каждая новая проверка, которая срабатывает на текущем коде, имеет явный
+  - Подтверждено: `make check` → FAIL на всех обязательных:
+    - b, c, e1, g, h, i — `TestImportBoundaries`; k — `TestQueriesUseOwnTables`;
+    - d — `TestGetByID`; e2 — import cycle (vet); j — `TestFxGraphValidates`, `TestBoot`;
+    - f2 — migrations-check, с маркером — `TestInsertEmailVerification_PendingIdempotency`;
+    - вне обязательных: a → clean; l: `ID → UserID` ловит `TestBoot`, но `Email → …` → clean —
+      контракт событий остаётся за `fix-reference-code`
+- [x] **AC7** — Каждая новая проверка, которая срабатывает на текущем коде, имеет явный
   allowlist с ID находки на каждую запись; итоговый список в «Где мы сейчас» (его опустошает
   `fix-reference-code`). Проверка: `grep -rnE '"[A-Z]{2,3}-[0-9]{2}"' internal/archtest cmd` →
   записи с ID; запись без ID находки или без нарушения → FAIL теста
-- [ ] **AC8** — Гейт зелёный. Проверка: `make check` → `✓ check clean`, сырой
+  - Подтверждено: grep находит 7 записей, у каждой ID и настоящее нарушение: ADP-02 ×4 — closure в
+    `module.go` auth и verification; ADP-03 ×2 — `domain-mapping.md`; SEC-10 — `JWT_SECRET`.
+    FAIL дают лишняя запись, запись без ID и запись исправленного нарушения (`JWT_SECRET` в
+    `.env.example`)
+- [x] **AC8** — Гейт зелёный. Проверка: `make check` → `✓ check clean`, сырой
   `GOLANGCI_LINT_CACHE=$(mktemp -d) golangci-lint run ./...` → exit 0 (общий кеш линтера держит
   фантомы чужих деревьев)
+  - Подтверждено: `make check` → `✓ check clean` в свежем worktree на `62642d6` (16 с, без
+    `test/.venv` и кеша линтера) и в основном дереве; сырой линтер с пустым кешем → `0 issues.`,
+    exit 0 в обоих
 - [x] **AC9** — Поломки DI, которые видны только при запуске, ловит гейт: boot-тест поднимает
   `cmd/api` целиком — без cookie 401, перебор паролей 429, событие доходит до подписчика, HTTP
   останавливается раньше пула БД (до httpkit v1.2.0 — обходом `beforeHTTP`). Проверка: повторить эксперименты
@@ -216,9 +233,13 @@ blocked-by: —
     тестов и `gen-check`); `TestBoot` сверяет живой `/openapi.json` с файлом. Проверка — AC10
 
 ### Итог
-- [ ] **S12** — Повторить матрицу инъекций, эксперимент ADP и эксперименты fx-аудита, записать
+- [x] **S12** — Повторить матрицу инъекций, эксперимент ADP и эксперименты fx-аудита, записать
   таблицы и allowlist в «Где мы сейчас»; гейт зелёный
   - Проверка: `make check` → `✓ check clean` · Закрывает: AC5, AC6, AC7, AC8, AC9, AC10 · Зависит от: S2–S11
+  - Сделано: отдельным агентом, в worktree на `62642d6` — 73 кейса и строка 14. На каждый кейс:
+    поломка → `make check` и целевой тест → откат. Таблицы и allowlist — «Где мы сейчас». AC9 и
+    AC10 перепроверены выборочно: таблица fx, `summary`, `summary+gen`, `side-door`. Протокол —
+    `/home/mm/.cache/stit-audit-program/s12-harden-gate.md`
 
 ## Решения
 - Integration-тесты — часть `make check`, docker обязателен: CI нет, гейт должен проверять БД.
@@ -354,25 +375,74 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S2–S11 закрыты, AC1–AC4, AC9 и AC10 подтверждены. Этап S2–S6 провалидирован: PASS после фиксов
-`fix(gate)`. Этап S7–S11: валидатор B2 — PASS после фиксов (отчёт и раздел «Перепроверка c7afe08»
-— `/home/mm/.cache/stit-audit-program/validation-harden-gate-B2.md`, кейсы — `valb2/` рядом):
-B1 (таблица запроса — в позиции таблицы), NB1 (утверждение в хелпере), NB4 (маршрут мимо huma),
-NB5 (closure с `(T, error)`), NB6 (AC8 с чистым кешем), NB8 (ID только в allowlist); NB2 и NB3
-переносит в планы дирижёр. Дыры шагов S7–S8 из его NB7 и перепроверки закрыты:
-корень домена — по перечню разрешённого (`nats-root`, `cache-root` → FAIL; `idkit-root`,
-`ptrkit-root` → clean); часы — все функции
-настенного времени (`time-since` → FAIL); SQL — по словам с уровнями скобок (`k-mixed` → FAIL,
-`k-func-from`, `k-distinct-from` → clean); хелпер второго уровня и `Require*` кита — утверждения
-(`t15-2level`, `t15-kit-require`, `t15-mock-assert` → clean, `t15-var-block` → FAIL); маршруты спецификации huma — из её конфига (`docs-path`,
-`openapi-path` → clean, `hidden-op` → FAIL с точной причиной; сырой маршрут и `Hidden` вне канона —
-строкой в rule `domain-architecture`). Строки матрицы ENF: 15 закрыта (`TestTestsAssert`),
-9 и 11 исключены («Решения»). Allowlist (опустошает
-`fix-reference-code`): ADP-02 — 4 identity-closure в `auth/module/module.go` и
-`verification/module/module.go`; ADP-03 — `internal/platform/shared` в
-`docs/reference/domain-mapping.md` (2 ссылки); SEC-10 — `JWT_SECRET` нет в `.env.example`. Обходы
-до bump golibinfra (снимает `fix-reference-code` S1): `beforeHTTP` (FX-01). Хвост: запас покрытия
-≈1 statement (75,1% при пороге 75%) — первый шаг `fix-reference-code` с непокрытым кодом упрётся в
-`cover-check`; снимают S13–S14 там, и там же — покрытие по функциям или диффу (строка 11).
-Мёртвую `//nolint:<выключенный линтер>` гейт не ловит — чистка директив (`repair-harness`).
-Следующее: S12 отдельным агентом → закрыть план, push шаблона.
+План выполнен: S1–S12 закрыты, AC1–AC10 подтверждены. Следующее — закрытие: хвосты в бэклог и
+планы, файл удалить, push шаблона.
+
+Этапы S2–S6 и S7–S11 провалидированы: PASS после фиксов. Отчёты валидаторов —
+`/home/mm/.cache/stit-audit-program/validation-harden-gate-*.md`; NB2 и NB3 валидатора B2
+переносит в планы дирижёр. Повтор экспериментов (S12) шёл в worktree на `62642d6`: на каждый
+кейс — `make check` и целевой тест. Кейсы и логи — `/home/mm/.cache/stit-audit-program/s12/`,
+протокол — `…/s12-harden-gate.md`.
+
+Матрица ENF (AC5):
+
+| Строка | Чем поймано |
+|---|---|
+| 1, 1b, 13, M | archtest `TestImportBoundaries` |
+| 2a, 2b | forbidigo |
+| 3, 3b | `TestNoWallClockInDomains` |
+| 4a, 5 | gen-check: `sqlc diff` |
+| 4b | gen-check: моки (незакоммиченную правку перезаписывает mockery гейта) |
+| 6 | go vet: мок не реализует интерфейс |
+| 7a, 7b, 7c, 8 | migrations-check |
+| 7d | лесенка `TestAppMigrationsRoundtrip` |
+| 10a, 10b | errcheck, nilerr |
+| 12 | `TestDomainRootIsTransportAgnostic` |
+| 13c, 13d | lint: `config verify` |
+| 14 | хук commit-msg |
+| 15 | `TestTestsAssert` |
+| 16 | nolintlint |
+| 9 | исключено («Решения»): статус в хендлере — смысл, а не синтаксис |
+| 11 | исключено («Решения»): `cover-check` сейчас 71,4%, но только из-за запаса ≈1 statement |
+
+Эксперимент ADP (AC6):
+
+| Кейс | Чем поймано |
+|---|---|
+| b, c, e1, g, h, i | archtest `TestImportBoundaries` |
+| d | `TestGetByID` (integration) |
+| e2 | go vet: import cycle |
+| f2 | migrations-check; с маркером — `TestInsertEmailVerification_PendingIdempotency` |
+| j | `TestFxGraphValidates`, `TestBoot` |
+| k | `TestQueriesUseOwnTables` |
+| a | не ловится — `fix-reference-code`: правила и тесты адаптеров |
+| l | `ID → UserID` — `TestBoot`; `Email → EmailAddress` проходит — контракт событий, `fix-reference-code` |
+
+fx-аудит (AC9):
+
+| Эксперимент | Чем поймано |
+|---|---|
+| X4, X14 | `TestBoot`: старт падает |
+| X5a | handler-тесты, `TestHTTPOperations`, `TestOpenAPISpec`, `TestBoot` |
+| X5b, X5c | `TestHTTPOperations`: дубль OperationID, тот же METHOD+path; `TestBoot` |
+| X6 | невозможен по построению (`beforeHTTP`); без него или после `httpkit` — `TestBoot`, порядок остановки |
+| X7, X8 | `TestFxGraphValidates`, `TestBoot` |
+| X9 | `TestImportBoundaries`, `TestBoot` |
+| X10, X10b, X13 | `TestDomainsAreWired`, `TestBoot`; X10 — и `TestFxGraphValidates`, X10b — `TestHTTPOperations` |
+| X11, X12, X15 | `TestBoot`: 403 вместо 200, нет 429, событие не доходит |
+| X16 | не ловится — `fix-reference-code` (FX-06) |
+
+Allowlist (AC7; его опустошает `fix-reference-code`):
+- ADP-02 — 4 identity-closure: `auth/module/module.go` (`PasswordVerifier`, `PasswordSetter`),
+  `verification/module/module.go` (`PasswordSetter`, `EmailVerificationSetter`);
+- ADP-03 — мёртвые ссылки в `docs/reference/domain-mapping.md`: `internal/platform/shared/` и
+  `internal/platform/shared/errors.go`;
+- SEC-10 — `JWT_SECRET` нет в `.env.example`.
+
+Хвосты к закрытию:
+- обход `beforeHTTP` (FX-01) снимает bump httpkit v1.2.0 — `fix-reference-code` S1;
+- запас покрытия ≈1 statement (75,1%) и строка 11 — `fix-reference-code` S13–S14;
+- мёртвые `//nolint:<выключенный линтер>` гейт не ловит — `repair-harness`;
+- сжатый вывод `make check` (25000 байт) срезает имена части упавших тестов, когда место съедает
+  большой дифф `openapi.json` или лог fx. Гейт при этом падает — это UX, кандидат для
+  `repair-harness`.
