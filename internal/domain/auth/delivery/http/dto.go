@@ -36,6 +36,6 @@ type ChangePasswordInput struct {
 	Body struct {
 		UserID      string `json:"user_id"      required:"true"`
 		OldPassword string `json:"old_password" required:"true"`
-		NewPassword string `json:"new_password" required:"true"`
+		NewPassword string `json:"new_password" minLength:"8"   required:"true"`
 	}
 }

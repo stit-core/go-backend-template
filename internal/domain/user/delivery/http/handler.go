@@ -166,7 +166,7 @@ var userErrors = httpkit.NewErrorMap(
 	httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"},
 	httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusBadRequest, Code: "USER_INVALID_EMAIL", Detail: "invalid email"},
 	httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusBadRequest, Code: "USER_INVALID_ROLE", Detail: "invalid role"},
-	httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusBadRequest, Code: "USER_WEAK_PASSWORD", Detail: "password too weak"},
+	httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"},
 	httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"},
 	httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"},
 	httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"},

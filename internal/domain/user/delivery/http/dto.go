@@ -7,9 +7,9 @@ import (
 
 type UserRegisterInput struct {
 	Body struct {
-		Email    string `json:"email"    format:"email"  required:"true"`
-		Password string `json:"password" required:"true"`
-		Name     string `json:"name"     minLength:"1"   required:"true"`
+		Email    string `json:"email"    format:"email" required:"true"`
+		Password string `json:"password" minLength:"8"  required:"true"`
+		Name     string `json:"name"     minLength:"1"  required:"true"`
 	}
 }
 

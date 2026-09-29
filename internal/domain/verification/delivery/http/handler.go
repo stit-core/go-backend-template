@@ -75,5 +75,5 @@ func (h *Handler) confirmEmail(ctx context.Context, in *EmailVerifyInput) (*stru
 var verificationErrors = httpkit.NewErrorMap(
 	httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "invalid or expired reset token"},
 	httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "invalid or expired verification token"},
-	httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusBadRequest, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "password too weak"},
+	httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"},
 )

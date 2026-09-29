@@ -18,7 +18,8 @@ func (e *ForbiddenError) Error() string {
 	return "forbidden: " + e.Reason
 }
 
-// minPasswordLen — правило пароля продукта: одно для всех доменов, где пароль задаётся.
-const minPasswordLen = 8
+// MinPasswordLen — правило пароля продукта для всех доменов; тег minLength HTTP-схем паролей
+// повторяет его, handler-тесты держат их равными.
+const MinPasswordLen = 8
 
-func PasswordStrong(plain string) bool { return len(plain) >= minPasswordLen }
+func PasswordStrong(plain string) bool { return len(plain) >= MinPasswordLen }

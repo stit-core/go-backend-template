@@ -3,6 +3,7 @@ package http_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -58,8 +59,27 @@ func TestRegister_WeakPassword(t *testing.T) {
 	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrWeakPassword)
 	api := setup(t, uc)
 
-	resp := api.Post("/api/auth/register", strings.NewReader(`{"email":"a@b.com","password":"abcdefgh","name":"A"}`))
-	handlertest.AssertAPIError(t, resp, http.StatusBadRequest, "USER_WEAK_PASSWORD")
+	resp := api.Post("/api/auth/register", strings.NewReader(registerBody(strings.Repeat("p", policy.MinPasswordLen))))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "USER_WEAK_PASSWORD")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.password", errs[0].Location)
+}
+
+// Правило длины пароля — policy.MinPasswordLen; схема register отклоняет короче его до usecase.
+func TestRegister_ShortPassword(t *testing.T) {
+	t.Parallel()
+	api := setup(t, mocks.NewMockUsecase(t))
+
+	resp := api.Post("/api/auth/register", strings.NewReader(registerBody(strings.Repeat("p", policy.MinPasswordLen-1))))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.password", errs[0].Location)
+}
+
+func registerBody(password string) string {
+	return fmt.Sprintf(`{"email":"a@b.com","password":%q,"name":"A"}`, password)
 }
 
 func TestGetByID_Forbidden(t *testing.T) {

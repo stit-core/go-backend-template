@@ -268,10 +268,9 @@ prod-дефолты, понятный контракт ошибок API, тес�
   delivery-порты и типы китов, без `fx.As` (closure видит archtest). `App` (Cookie) читает
   envconfig без `golibinfra/config` (`config.Load` требует ctx); строка старта —
   `context.Background()` корня процесса. `fx.StopTimeout` 30s = HTTP 15s + NATS 10s + запас.
-- S3: `ForbiddenError` и правило пароля — в `pkg/policy`, 403 — одно `authgate.ForbiddenRule`;
-  `minLength` из HTTP-схем снят — правило только в домене, короткий пароль → 400
-  `*_WEAK_PASSWORD` (форму ошибки поля даст S8). `paging.Page` — один тип на вход huma, usecase и
-  SQL (дефолт и предел в тегах сверяет тест); исходы метрик — `outcome.Result`, `weak` →
+- S3: `ForbiddenError` и `policy.MinPasswordLen` — в `pkg/policy`, 403 — `authgate.ForbiddenRule`;
+  тег `minLength` схем паролей повторяет правило (держат handler-тесты), `ErrWeakPassword` — 422 с
+  `Field` (AC13). `paging.Page` — вход huma, usecase и SQL; исходы — `outcome.Result`, `weak` →
   `weak_password`; ID — `idkit.NewV7()`, `google/uuid` вне `rootLibs` archtest.
 
 ## Handoff
@@ -290,10 +289,12 @@ prod-дефолты, понятный контракт ошибок API, тес�
   (`LOG_REDACT_DISABLED=true` — не в проде); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64 (старые
   блокировки теряются ≤ `BRUTEFORCE_LOCK_DURATION`); Redis, `REDIS_URL`, `FEATURE_FLAGS` не нужны;
   `PG_*`/`HTTP_*` без приставок `POSTGRES_`/`HTTP_HTTP_`; остановка до 30s — `stop_grace_period`
-  ≥ 35s. API: problem+json с `code` и `request_id`; короткий пароль — 400 `*_WEAK_PASSWORD`.
+  ≥ 35s. API: problem+json с `code` и `request_id`.
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-Этап «Фундамент» (S1–S3) закрыт: шаблон на golibinfra v1.2.0, обход `beforeHTTP` снят, DI по
-канону (AC12), общие примитивы в `pkg/`. Ждёт валидатора этапа; затем S4 (user). v1.3.0 — после
-базового аудита китов (идёт), bump — S9.
+«Фундамент» (S1–S3) сделан, валидатор — FAIL (`validation-fix-reference-code-A.md`); B1 (пароль —
+422 с полем) закрыт. Остаток круга фиксов: N1 (cachekit в `README.md:9`, `ecosystem.md:69`), N2
+(стрим домена-публикатора — проверка на старте), N3 (`Declare` в `new-domain.sh`), N4 (тест на
+`FxLogger`, `context.Context`, `fx.As`), N5 (Argon2id в Handoff), N6 (`StopTimeout` ↔ env), N7, N8.
+Дальше — перепроверка валидатором (всё после `77528f3`), затем S4; v1.3.0 — bump в S9.

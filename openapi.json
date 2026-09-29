@@ -89,6 +89,7 @@
             "type": "string"
           },
           "new_password": {
+            "minLength": 8,
             "type": "string"
           },
           "old_password": {
@@ -302,6 +303,7 @@
             "type": "string"
           },
           "password": {
+            "minLength": 8,
             "type": "string"
           },
           "token": {
@@ -486,6 +488,7 @@
             "type": "string"
           },
           "password": {
+            "minLength": 8,
             "type": "string"
           }
         },

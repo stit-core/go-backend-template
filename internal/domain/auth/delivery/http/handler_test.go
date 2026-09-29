@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -13,6 +14,8 @@ import (
 	authhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/delivery/http"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth/delivery/http/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
+	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
 )
 
@@ -138,4 +141,35 @@ func TestLogout_ExpiredTokenStillClears(t *testing.T) {
 
 	resp := api.Do(http.MethodPost, "/api/auth/logout", "Cookie: refresh_token=expired.jwt")
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
+}
+
+func TestChangePassword_WeakPassword(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", mock.Anything).Return(auth.ErrWeakPassword)
+	api := setup(t, uc)
+
+	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",
+		strings.NewReader(changePasswordBody(strings.Repeat("p", policy.MinPasswordLen))))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "AUTH_WEAK_PASSWORD")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.new_password", errs[0].Location)
+}
+
+// Правило длины пароля — policy.MinPasswordLen; схема смены пароля отклоняет короче его до usecase.
+func TestChangePassword_ShortPassword(t *testing.T) {
+	t.Parallel()
+	api := setup(t, mocks.NewMockUsecase(t))
+
+	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",
+		strings.NewReader(changePasswordBody(strings.Repeat("p", policy.MinPasswordLen-1))))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.new_password", errs[0].Location)
+}
+
+func changePasswordBody(newPassword string) string {
+	return fmt.Sprintf(`{"user_id":"u1","old_password":"old-password","new_password":%q}`, newPassword)
 }

@@ -9,7 +9,7 @@ type PasswordResetRequestInput struct {
 type PasswordResetConfirmInput struct {
 	Body struct {
 		Token    string `json:"token"    required:"true"`
-		Password string `json:"password" required:"true"`
+		Password string `json:"password" minLength:"8"   required:"true"`
 	}
 }
 
