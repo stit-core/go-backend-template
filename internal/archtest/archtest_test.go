@@ -273,21 +273,16 @@ func TestTestsAssert(t *testing.T) {
 	}
 	for _, files := range byPkg {
 		// Утверждающий хелпер пакета — функция без результатов или общая таблица (var) с
-		// утверждением: фикстура с require (newUC) возвращает значение, тест на ней одной — пустышка.
+		// утверждением, в том числе через другой хелпер: фикстура с require (newUC) возвращает
+		// значение, тест на ней одной — пустышка.
 		helpers := map[string]bool{}
-		for _, f := range files {
-			for _, decl := range f.file.Decls {
-				switch d := decl.(type) {
-				case *ast.FuncDecl:
-					if d.Recv == nil && d.Type.Results == nil && asserts(d.Body, f.byName, nil) {
-						helpers[d.Name.Name] = true
-					}
-				case *ast.GenDecl:
-					for _, spec := range d.Specs {
-						if vs, ok := spec.(*ast.ValueSpec); ok && asserts(vs, f.byName, nil) {
-							for _, name := range vs.Names {
-								helpers[name.Name] = true
-							}
+		for grew := true; grew; {
+			grew = false
+			for _, f := range files {
+				for _, decl := range f.file.Decls {
+					for _, name := range helperNames(decl) {
+						if !helpers[name] && asserts(decl, f.byName, helpers) {
+							helpers[name], grew = true, true
 						}
 					}
 				}
@@ -298,14 +293,36 @@ func TestTestsAssert(t *testing.T) {
 				fn, ok := decl.(*ast.FuncDecl)
 				if ok && fn.Recv == nil && strings.HasPrefix(fn.Name.Name, "Test") && fn.Name.Name != "TestMain" &&
 					!asserts(fn.Body, f.byName, helpers) {
-					t.Errorf("%s: %s asserts nothing — no require, assert, Assert* of a test kit or helper of the package that asserts (rule tests-pipeline): such a test raises coverage without checking anything", f.path, fn.Name.Name)
+					t.Errorf("%s: %s asserts nothing — no require, assert, Assert*/Require* of a test kit or helper of the package that asserts (rule tests-pipeline): such a test raises coverage without checking anything", f.path, fn.Name.Name)
 				}
 			}
 		}
 	}
 }
 
-// asserts — в узле есть testify require/assert, Assert* тестового кита или утверждающий хелпер.
+// helperNames — имена декларации, которая может быть утверждающим хелпером: функция без получателя
+// и результатов или переменная пакета.
+func helperNames(decl ast.Decl) []string {
+	var names []string
+	switch d := decl.(type) {
+	case *ast.FuncDecl:
+		if d.Recv == nil && d.Type.Results == nil {
+			names = append(names, d.Name.Name)
+		}
+	case *ast.GenDecl:
+		for _, spec := range d.Specs {
+			if vs, ok := spec.(*ast.ValueSpec); ok {
+				for _, name := range vs.Names {
+					names = append(names, name.Name)
+				}
+			}
+		}
+	}
+	return names
+}
+
+// asserts — в узле есть testify require/assert, Assert*/Require* тестового кита (пакета из testkit)
+// или утверждающий хелпер.
 func asserts(node ast.Node, byName map[string]string, helpers map[string]bool) bool {
 	found := false
 	ast.Inspect(node, func(n ast.Node) bool {
@@ -313,8 +330,9 @@ func asserts(node ast.Node, byName map[string]string, helpers map[string]bool) b
 		case *ast.SelectorExpr:
 			if id, ok := x.X.(*ast.Ident); ok {
 				pkg := byName[id.Name]
+				kitAssert := strings.HasPrefix(x.Sel.Name, "Assert") || strings.HasPrefix(x.Sel.Name, "Require")
 				found = found || pkg == "github.com/stretchr/testify/require" || pkg == "github.com/stretchr/testify/assert" ||
-					pkg != "" && strings.HasPrefix(x.Sel.Name, "Assert")
+					strings.Contains(pkg, "/testkit/") && kitAssert
 			}
 		case *ast.Ident:
 			found = found || helpers[x.Name]
