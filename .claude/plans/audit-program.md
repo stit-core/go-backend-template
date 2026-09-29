@@ -12,7 +12,7 @@ blocked-by: —
 порядок, метод и решения владельца; содержание работы — в планах фаз.
 
 ## Контекст
-- **Планы фаз.** Шаблон: `harden-gate.md` → `fix-reference-code.md` → `repair-harness.md` (в
+- **Планы фаз.** Шаблон: `fix-reference-code.md` → `repair-harness.md` (в
   `.claude/plans/`). golibinfra: `../golibinfra/.claude/plans/harden-kits.md` (партия 1 → v1.2.0),
   планы следующих партий — там же.
 - **Материалы** — `/home/mm/.cache/stit-audit-program/`: `audit-report.html` (копия отчёта аудита;
@@ -63,10 +63,14 @@ blocked-by: —
 
 ## Шаги
 ### Шаблон: harden-gate
-- [ ] **S1** — Закрыть `harden-gate`: фикс блокирующего дефекта валидатора этапа S7–S11 (ссылки
+- [x] **S1** — Закрыть `harden-gate`: фикс блокирующего дефекта валидатора этапа S7–S11 (ссылки
   прозы — по отслеживаемым путям) и неблокирующих по решению, довалидация непроверенного, S12
   отдельным агентом, план удалён, push шаблона
   - Проверка: валидатор → PASS; `make check` в свежем worktree → `✓ check clean` · Закрывает: AC3 · Зависит от: —
+  - Сделано: фиксы замечаний валидатора `12db57e`…`62642d6` → PASS после трёх перепроверок
+    (`validation-harden-gate-B2.md`); S12 — `3015a4f`, все строки матрицы ENF, ADP и fx пойманы
+    или исключены с причиной (`s12-harden-gate.md`); хвосты — в `fix-reference-code` (контекст,
+    S14) и `repair-harness` (S1–S3, S8, S9); план удалён, шаблон запушен
 
 ### golibinfra: партия 1
 - [ ] **S2** — `harden-kits` S2–S15 (исполнитель) → валидатор → `make gate-clean` → тег v1.2.0 →
@@ -112,7 +116,8 @@ blocked-by: —
   снимаются bump'ами в `fix-reference-code` S1 и S9 — `replan-golibinfra.md` §3–4.
 
 ## Где мы сейчас
-Первая сессия закончила: `harden-gate` S1–S11 (этап S2–S6 провалидирован, S7–S11 — FAIL при
-частичной проверке, детали — в плане), golibinfra `harden-kits` S1 (три коммита впереди origin, не
-запушены), пересмотр планов под правку golibinfra применён. Следующее — параллельно S1 (шаблон:
-фикс дефекта → довалидация → S12) и S2 (golibinfra: исполнитель `harden-kits` с S2).
+S1 закрыт: `harden-gate` выполнен и удалён, шаблон запушен. S2 идёт: golibinfra `harden-kits`,
+этап S1–S9 — фиксы замечаний валидатора на перепроверке (`validation-harden-kits-A.md`), дальше
+этап httpkit S10–S14, затем S15, валидатор партии, тег v1.2.0 и push. S3 (`fix-reference-code`)
+ждёт тег v1.2.0 в origin. Промпты — `prompts.md`, оперативные заметки дирижёра —
+`orchestrator-todo.md` (оба — в каталоге материалов).

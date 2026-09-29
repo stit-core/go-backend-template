@@ -1,7 +1,7 @@
 ---
 status: blocked
 parent: —
-blocked-by: после закрытия harden-gate и тега golibinfra v1.2.0 в origin
+blocked-by: тег golibinfra v1.2.0 в origin
 ---
 
 # fix-reference-code — эталонный код, безопасность, контракт ошибок, тесты, покрытие 90–95%
@@ -14,9 +14,14 @@ prod-дефолты, понятный контракт ошибок API, тес�
 95%). Общая механика живёт в китах golibinfra, в шаблоне — доменная логика и тонкий клей.
 
 ## Контекст
-- После `harden-gate`: гейт честный, integration-тесты в `make check`, archtest «границы 2.0»,
-  boot-тест `cmd/api`, `openapi.json` из `make gen`. Здесь опустошаются allowlist'ы (ADP-02,
-  ADP-03, SEC-10) и снимается обход `beforeHTTP` (FX-01).
+- Гейт честный: integration-тесты в `make check`, archtest «границы 2.0», boot-тест `cmd/api`,
+  `openapi.json` из `make gen`. Здесь опустошаются allowlist'ы (`internal/testkit/allowlist`) и
+  снимается обход `beforeHTTP` (FX-01):
+  - ADP-02 — 4 identity-closure: `auth/module/module.go` (`PasswordVerifier`, `PasswordSetter`),
+    `verification/module/module.go` (`PasswordSetter`, `EmailVerificationSetter`);
+  - ADP-03 — мёртвые ссылки `docs/reference/domain-mapping.md` на `internal/platform/shared/` и
+    `internal/platform/shared/errors.go`;
+  - SEC-10 — `JWT_SECRET` нет в `.env.example`.
 - **golibinfra меняется своими планами** в `../golibinfra` (партии «исполнитель → валидатор», тег
   пушится с OK владельца), шаблон поднимает версию. Точный состав и шаги миграции — аннотации тегов:
   - **v1.2.0** (план `../golibinfra/.claude/plans/harden-kits.md`, его Handoff — обязательные
@@ -118,7 +123,7 @@ prod-дефолты, понятный контракт ошибок API, тес�
   «Решениях» (эквивалентный мутант); D02 убит. Проверка: повторить мутации → таблица
 - [ ] **AC10** — `make new-domain NAME=probe` без правок проходит `make check`, включая покрытие.
   Проверка: в worktree → `make check` зелёный
-- [ ] **AC11** — Allowlist'ы archtest и `cmd/api` из `harden-gate` пусты, обходов в ожидании китов
+- [ ] **AC11** — Allowlist'ы archtest и `cmd/api` пусты, обходов в ожидании китов
   нет (`beforeHTTP`, client-IP middleware, `pkg/tokens`, `publicOperations`); гейт зелёный.
   Проверка: `grep -rn "beforeHTTP\|WithIP\|pkg/tokens\|publicOperations" --include=*.go .` → пусто;
   `make check` → `✓ check clean`
@@ -217,7 +222,10 @@ prod-дефолты, понятный контракт ошибок API, тес�
   все методы репозиториев, контракт-тесты событий (TST-01, TST-03, TST-06, ADP-06, TST-08)
   - Проверка: `make check` → зелёный · Закрывает: AC9 · Зависит от: S12
 - [ ] **S14** — Покрытие: широкий scope, общий профиль unit + integration, `COVER_FLOOR` 90;
-  довести до ≥ 95% осмысленными тестами и поднять порог до 95, если держится стабильно (TST-04)
+  довести до ≥ 95% осмысленными тестами и поднять порог до 95, если держится стабильно (TST-04);
+  строка 11 матрицы ENF (непокрытый новый код) ловится с запасом, а не только потому, что до
+  порога ≈1 statement (сейчас 75,1% при 75%): иначе — проверка покрытия новых функций или
+  исключение с причиной в «Решениях»
   - Проверка: AC8 → OK · Закрывает: AC8 · Зависит от: S13
 - [ ] **S15** — Итог: повторить 34 мутации аудита и D02, таблица — в «Где мы сейчас»; allowlist'ы
   пусты, обходов нет, гейт зелёный
@@ -259,4 +267,4 @@ prod-дефолты, понятный контракт ошибок API, тес�
 ## Где мы сейчас
 План составлен по итогам аудита и fx-аудита. golibinfra меняется своими партиями: v1.2.0 — в
 работе, v1.3.0 — после базового аудита китов; шаблон поднимает версию на S1 и S9. Стартует после
-закрытия `harden-gate` и тега v1.2.0 в origin. Следующий шаг — S1.
+тега v1.2.0 в origin. Следующий шаг — S1.
