@@ -37,8 +37,8 @@ paths:
   Операция без `Security` публична в рантайме: она либо под `Security` (`authgate.Secured(op)`),
   либо в `publicOperations` (`cmd/api/api_test.go`); регистрация — в `registerHTTP`
   (`cmd/api/http.go`). Ошибки — таблица домена `<домен>Errors`: правило на каждую ошибку `errors.go`,
-  хендлер отдаёт `<домен>Errors.Map(err)` (archtest `TestDomainErrorTables`); таблица операции из тех
-  же правил — `Declare` при регистрации; ошибка поля — 422 с `Field`.
+  хендлер отдаёт `<домен>Errors.Map(err)`, таблица операции из тех же правил — `Declare` при
+  регистрации (оба — archtest `TestDomainErrorTables`); ошибка поля — 422 с `Field`.
   Каждая ручка — операция huma в контракте `openapi.json`: сырой маршрут chi (`Router()`) и
   `Hidden: true` обходят проверку `Security`, `TestBoot` их не пускает. Envelope — `data`;
   префикс, уникальность имён и envelope держит archtest `TestHTTPTypes`.

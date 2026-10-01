@@ -208,9 +208,9 @@ func structField(expr ast.Expr, name string) *ast.Field {
 }
 
 // TestDomainErrorTables: в домене, который регистрирует HTTP-операции, таблица домена <домен>Errors
-// (delivery/http) переводит каждую ошибку его errors.go, а хендлеры отдают ошибки только через неё:
-// ни одна ошибка домена не уходит клиенту 500 ни на одной операции. Таблицы операций лишь объявляют
-// свои коды в OpenAPI.
+// (delivery/http) переводит каждую ошибку его errors.go, а хендлеры huma.Register отдают ошибки только
+// через неё: ни одна ошибка домена не уходит клиенту 500 ни на одной операции. Таблица операции лишь
+// объявляет свои коды в OpenAPI — Declare при регистрации.
 func TestDomainErrorTables(t *testing.T) {
 	t.Parallel()
 	files := map[string][]goFile{} // домен → не-тестовые файлы его delivery/http
@@ -224,6 +224,8 @@ func TestDomainErrorTables(t *testing.T) {
 		root := module + "/internal/domain/" + domain
 		rules := map[string]string{}   // переменная-правило → ошибка домена
 		errorMaps := map[string]bool{} // переменные — таблицы ошибок
+		handlers := map[string]bool{}  // методы — хендлеры huma.Register
+		declared := map[string]bool{}  // таблицы с Declare в операции huma.Register
 		var (
 			tableArgs   []ast.Expr
 			tableByName map[string]string // импорты файла таблицы
@@ -258,9 +260,20 @@ func TestDomainErrorTables(t *testing.T) {
 				}
 			}
 			ast.Inspect(file, func(n ast.Node) bool {
-				if sel, ok := n.(*ast.SelectorExpr); ok && isSelector(sel, byName, "github.com/danielgtaylor/huma/v2", "Register") {
-					registers = true
+				call, ok := n.(*ast.CallExpr)
+				if !ok || !isSelector(call.Fun, byName, "github.com/danielgtaylor/huma/v2", "Register") || len(call.Args) < 3 {
+					return true
 				}
+				registers = true
+				if h, ok := call.Args[2].(*ast.SelectorExpr); ok {
+					handlers[h.Sel.Name] = true
+				}
+				ast.Inspect(call.Args[1], func(n ast.Node) bool {
+					if name := calledOn(n, "Declare"); name != "" {
+						declared[name] = true
+					}
+					return true
+				})
 				return true
 			})
 		}
@@ -284,18 +297,26 @@ func TestDomainErrorTables(t *testing.T) {
 				t.Errorf("%s.%s has no rule in %s.%s: the domain error would answer 500", domain, sentinel, path, table)
 			}
 		}
+		for name := range errorMaps {
+			if name != table && !declared[name] {
+				t.Errorf("%s: operation table %s is not declared in huma.Register(api, %s.Declare(op), …): its codes are missing from OpenAPI", path, name, name)
+			}
+		}
 		for i, file := range parsed {
 			ast.Inspect(file, func(n ast.Node) bool {
 				switch x := n.(type) {
 				case *ast.CallExpr:
-					if sel, ok := x.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Map" {
-						if id, ok := sel.X.(*ast.Ident); ok && errorMaps[id.Name] && id.Name != table {
-							t.Errorf("%s maps errors with %s: a handler maps through the domain table %s, an operation table only declares", pkgFiles[i].path, id.Name, table)
-						}
+					if m := calledOn(x, "Map"); errorMaps[m] && m != table {
+						t.Errorf("%s maps errors with %s: a handler maps through the domain table %s, an operation table only declares", pkgFiles[i].path, m, table)
 					}
-				case *ast.ReturnStmt:
-					if len(x.Results) > 0 && isIdent(x.Results[len(x.Results)-1], "err") {
-						t.Errorf("%s returns err unmapped: a handler returns %s.Map(err)", pkgFiles[i].path, table)
+				case *ast.FuncDecl:
+					if x.Recv != nil && handlers[x.Name.Name] {
+						ast.Inspect(x.Body, func(n ast.Node) bool {
+							if ret, ok := n.(*ast.ReturnStmt); ok && len(ret.Results) > 0 && isIdent(ret.Results[len(ret.Results)-1], "err") {
+								t.Errorf("%s: handler %s returns err unmapped: a handler returns %s.Map(err)", pkgFiles[i].path, x.Name.Name, table)
+							}
+							return true
+						})
 					}
 				}
 				return true
@@ -305,6 +326,22 @@ func TestDomainErrorTables(t *testing.T) {
 }
 
 const httpkitPath = "git.stit.tech/stit-core/golibinfra/httpkit"
+
+// calledOn — имя переменной x в вызове x.method(…); "" — не такой вызов.
+func calledOn(n ast.Node, method string) string {
+	call, ok := n.(*ast.CallExpr)
+	if !ok {
+		return ""
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != method {
+		return ""
+	}
+	if id, ok := sel.X.(*ast.Ident); ok {
+		return id.Name
+	}
+	return ""
+}
 
 // ruleErr — ошибка домена root в литерале httpkit.ErrorRule{Err: <домен>.ErrX, …}; "" — не такой литерал.
 func ruleErr(expr ast.Expr, byName map[string]string, root string) string {
