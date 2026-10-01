@@ -696,6 +696,16 @@
             },
             "description": "Unprocessable Entity: AUTH_WEAK_PASSWORD, AUTH_INVALID_OLD_PASSWORD"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Too Many Requests: AUTH_ACCOUNT_LOCKED"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1130,6 +1140,7 @@
             "schema": {
               "default": 1,
               "format": "int64",
+              "maximum": 100000,
               "minimum": 1,
               "type": "integer"
             }

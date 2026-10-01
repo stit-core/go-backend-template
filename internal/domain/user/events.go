@@ -4,15 +4,14 @@ import "time"
 
 // Subjects stay unexported: consumers declare their own literal (rule events-and-messaging).
 const (
-	subjectUserRegistered = "user.events.registered"
+	subjectUserRegistered = "user.events.registered.v2"
 	subjectUserUpdated    = "user.events.updated"
 	subjectUserDeleted    = "user.events.deleted"
 )
 
 type UserRegistered struct {
-	ID    string
-	Email string
-	At    time.Time
+	ID string
+	At time.Time
 }
 
 type UserUpdated struct {

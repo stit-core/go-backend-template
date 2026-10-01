@@ -131,5 +131,6 @@ var (
 
 	loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule)
 	refreshErrors        = httpkit.NewErrorMap(refreshExpiredRule, refreshReusedRule, refreshInvalidRule)
-	changePasswordErrors = httpkit.NewErrorMap(weakPasswordRule, wrongOldPasswordRule, userNotFoundRule, concurrentUpdateRule, authgate.ForbiddenRule)
+	changePasswordErrors = httpkit.NewErrorMap(weakPasswordRule, wrongOldPasswordRule, accountLockedRule, userNotFoundRule,
+		concurrentUpdateRule, authgate.ForbiddenRule)
 )

@@ -159,11 +159,10 @@ type Authorizer interface {
 type UsecaseDeps struct {
 	fx.In
 
-	Repo    Repository
-	Policy  Authorizer
-	Log     logkit.Logger
-	Clock   clockkit.Clock
-	Metrics *Metrics
+	Repo   Repository
+	Policy Authorizer
+	Log    logkit.Logger
+	Clock  clockkit.Clock
 }
 
 type Usecase struct {
@@ -173,41 +172,6 @@ type Usecase struct {
 func NewUsecase(d UsecaseDeps) *Usecase {
 	d.Log = d.Log.With("domain", "$NAME")
 	return &Usecase{d: d}
-}
-EOF
-
-cat >"$DOMAIN_DIR/metrics.go" <<EOF
-package $NAME
-
-import (
-	"context"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
-
-	"$MODULE_PATH/pkg/outcome"
-	"git.stit.tech/stit-core/golibinfra/bizmetric"
-)
-
-// Metrics — bizmetric-счётчики домена (biz_${NAME}_*_total). Все Record* nil-safe.
-type Metrics struct {
-	created metric.Int64Counter
-}
-
-func NewMetrics(m metric.Meter) (*Metrics, error) {
-	return &Metrics{
-		created: bizmetric.Counter(
-			m, "$NAME", "created",
-			metric.WithDescription("${TITLE} creations by outcome"),
-		),
-	}, nil
-}
-
-func (m *Metrics) RecordCreated(ctx context.Context, result outcome.Result) {
-	if m == nil {
-		return
-	}
-	m.created.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }
 EOF
 
@@ -339,7 +303,6 @@ var Module = fx.Module(
 	fx.Provide(
 		${NAME}pg.NewRepository,
 		${NAME}.NewPolicy,
-		${NAME}.NewMetrics,
 		${NAME}.NewUsecase,
 		${NAME}http.NewHandler,
 		func(u *${NAME}.Usecase) ${NAME}http.Usecase { return u },

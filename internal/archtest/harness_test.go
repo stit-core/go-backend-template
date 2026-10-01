@@ -69,10 +69,7 @@ func refers(t *testing.T, files []goFile, dir, pkgPath, name string) bool {
 }
 
 // proseAllowlist — мёртвые ссылки прозы в текущем тексте.
-var proseAllowlist = allowlist.List{
-	"docs/reference/domain-mapping.md: internal/platform/shared/":          "ADP-03",
-	"docs/reference/domain-mapping.md: internal/platform/shared/errors.go": "ADP-03",
-}
+var proseAllowlist = allowlist.List{}
 
 // hubTargets — цели make хаба <org>/infra: проза называет их, чтобы сказать, что здесь их нет.
 var hubTargets = []string{"bump", "ps", "ship"}

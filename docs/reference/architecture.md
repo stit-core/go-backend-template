@@ -1,7 +1,21 @@
 # Architecture
 
-Слои бизнес-домена, ports/adapters, события, граница с golibinfra. Path-scoped правила
+Каталоги, слои бизнес-домена, ports/adapters, события, граница с golibinfra. Path-scoped правила
 (`.claude/rules/*`) держат terse-инварианты и ссылаются сюда за «как и почему».
+
+## Каталоги
+
+| Каталог | Что в нём | Что импортирует |
+|---|---|---|
+| `internal/domain/<d>/` | бизнес-код домена: слои ниже | `internal/platform`, `pkg`, киты; чужой домен — только `module/` |
+| `internal/domain/<d>/infra/<kit>/` | адаптер порта домена к киту, внешнему каналу (почта, платёжный провайдер) или клиенту из `pkg/` | корень своего домена, кит, клиент |
+| `internal/platform/` | клей сервиса, общий доменам: конфиг и prod-гард (`config`), сессия (`authgate`), личность (`identity`), outbox доменов (`events`) | `pkg`, киты; доменов не знает |
+| `pkg/` | правила и типы сервиса без I/O, общие доменам (`policy`, `paging`, `outcome`); сгенерированные клиенты (gRPC, OpenAPI) — их зовёт `infra/` домена | `pkg`, киты |
+| `cmd/` | входы: `api`, `migrate`, `seed-admin` | всё |
+| `internal/testkit/`, `internal/archtest/` | тестовая обвязка и машинные правила раскладки | — |
+
+Generic-примитив, нужный не только этому сервису (HTTP-клиент, middleware, «kit»), — в golibinfra
+(§ Граница с golibinfra). Других каталогов в `internal/` нет (archtest `TestInternalLayout`).
 
 ## Слои домена
 
@@ -16,7 +30,7 @@
 ├── policy.go        authorization + чистые правила; решения без I/O
 ├── usecase.go       бизнес-логика; зависимости через интерфейсы (порты)
 ├── trusted.go       операции для других доменов без policy (Trusted)
-├── metrics.go       bizmetric-счётчики домена (biz_<domain>_*_total); nil-safe Record*
+├── metrics.go       метрики для алертов (biz_<domain>_*_total); nil-safe Record*
 ├── delivery/http/   huma/v2 + chi: handler.go, dto.go, view.go
 ├── delivery/nats/   NATS-subscriber (опц.): handler.go, dto.go
 ├── infra/postgres/  repository.go + queries/*.sql + db/ (sqlc, read-only)
@@ -32,7 +46,7 @@
 | Операции для других доменов (без policy) | `trusted.go` |
 | Authorization + чистые валидационные правила | `policy.go` |
 | Outbox-события | `events.go` |
-| Domain-метрики (bizmetric-счётчики) | `metrics.go` |
+| Domain-метрики для алертов (bizmetric) | `metrics.go` |
 | HTTP handler / DTO / mapping | `delivery/http/{handler,dto,view}.go` |
 | sqlc-запросы / repository | `infra/postgres/queries/*.sql`, `repository.go` |
 | Адаптер порта к киту | `infra/<kit>/` |
@@ -46,7 +60,7 @@
 | Файл | Когда обязателен |
 |---|---|
 | `entity.go`, `errors.go`, `usecase.go`, `module/module.go` | всегда |
-| `metrics.go` | всегда (мутирующие use-case'ы инструментированы) |
+| `metrics.go` | у домена есть сигнал, на который ставят алерт (исходы входа, повтор refresh, письма сброса, которые не ушли); счётчиков операций «на всякий случай» нет |
 | `dto.go` | есть хоть один Input/Output-тип (метод с 1–2 скалярами обходится без DTO) |
 | `policy.go` | есть authenticated actor (authorization) **или** чистые правила валидации домена (общее для доменов правило пароля — `pkg/policy`) |
 | `events.go` | домен публикует хотя бы одно outbox-событие; вместе с ним — `infra/outbox/outbox.go` |
@@ -61,7 +75,7 @@
 
 | Файл | Запрещено |
 |---|---|
-| `entity.go` | любой I/O, импорт `infra/`/`delivery/`/kit'ов кроме stdlib и `internal/platform/{identity,shared}` |
+| `entity.go` | любой I/O, импорт `infra/`/`delivery/`/kit'ов: только stdlib, `internal/platform/identity` и `pkg/policy` |
 | `policy.go` | I/O, импорт `infra/`/`delivery/`; только чистые решения (`pkg/policy.Decision` / bool) |
 | `dto.go` | huma-теги, json-теги транспорта (это `delivery/http/dto.go`), методы с I/O |
 | `errors.go` | всё, кроме sentinel-`var` и error-типов домена (отказ policy — общий `policy.ForbiddenError` из `pkg/policy`) |
@@ -89,10 +103,11 @@
   Path-префикс и `Tags` роута могут не совпадать с доменом-владельцем (регистрация живёт в
   `user`, но путь `/api/auth/register`): владелец = тот, чей usecase вызывается.
 - **Метрики** (`metrics.go`): первый аргумент bizmetric — имя домена = имени пакета
-  (`biz_<domain>_<event>_total`); struct `Metrics`, конструктор `NewMetrics(m metric.Meter)`,
+  (`biz_<domain>_<event>_total`); struct `Metrics`, конструктор `NewMetrics(m metric.Meter) *Metrics`,
   все `Record*` — nil-safe. Исход (метка `result`) — `outcome.Result`: общие исходы — `pkg/outcome`,
   особые для домена — переменные `outcome.New(…)` в `metrics.go`; строка вместо исхода не
-  компилируется.
+  компилируется. Экспорт — `telemetry.Module` в `cmd/api`: при `OTEL_SDK_DISABLED=true` сигналы не
+  уходят; запись метрики тест сверяет SDK-ридером (`sdkmetric.NewManualReader`).
 - **Repository**: создание — `Insert*` (не `Create*`), sqlc-аннотации — `Insert<Entity>`.
 
 ### Разбиение переростков
@@ -107,10 +122,13 @@
   конструктор `NewUsecase(d UsecaseDeps)`; хвост deps в порядке `Audit?, Log, Clock, Metrics`.
   `Usecase` хранит deps целиком (`type Usecase struct{ d UsecaseDeps }`, обращение `uc.d.Repo`):
   зависимость названа один раз, забыть её присвоить нельзя.
-- Named returns не используются (кроме naked-return/defer-модификации — здесь таких нет).
-- Каждый **мутирующий** метод пишет `metrics.Record*` на всех исходах; read-методы — опционально.
+- Named returns не используются (линтер `nonamedreturns`).
+- Метод с метрикой пишет исход ровно раз на любом пути: исход возвращает внутренняя функция
+  (`Login` → `login`), запись — одна, в публичном методе.
 - Security-значимые операции (login/logout/смена+сброс пароля/verification) пишут `audit`
-  из usecase; техническая запись канала (факт доставки письма) — в его адаптере.
+  из usecase одним хелпером домена (`uc.audit`: время, IP, запрос) — в записи ID учётной записи, не
+  адрес; попытка входа на неизвестный адрес и блокировка guard'а — только исход в метрике.
+  Техническая запись канала (факт доставки письма) — в его адаптере.
 - Транспортные значения из ctx (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`.
 - ID, которые создаёт код (не БД), — `idkit.NewV7()`.
 

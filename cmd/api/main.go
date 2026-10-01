@@ -20,6 +20,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	outboxpg "git.stit.tech/stit-core/golibinfra/outboxkit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
+	"git.stit.tech/stit-core/golibinfra/telemetry"
 	"git.stit.tech/stit-core/golibinfra/timerkit"
 
 	authmod "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/module"
@@ -33,6 +34,7 @@ import (
 // kitConfigs — конструкторы конфигов китов из ENV: Module'ы golibinfra свои конфиги
 // не читают, их провайдит приложение.
 var kitConfigs = []any{
+	telemetry.NewConfig,
 	logkit.NewConfig,
 	logkit.NewRedactConfig,
 	pgkit.NewPoolConfig,
@@ -49,12 +51,10 @@ var kitConfigs = []any{
 var (
 	infraModules = fx.Options(
 		fx.Provide(kitConfigs...),
-		// metric.Meter — глобальный no-op: MeterProvider не сконфигурирован,
-		// поэтому business-counter'ы доменов (biz_*) инертны и никуда не
-		// экспортируются. Держится, чтобы DI доменных Metrics резолвился.
+		// Первым: глобальные провайдеры OTel, в которые пишут киты и метрики доменов; при
+		// OTEL_SDK_DISABLED=true сигналы не экспортируются, логи — только в stdout.
+		telemetry.Module,
 		fx.Provide(func() metric.Meter { return otel.Meter("app") }),
-		// Логи — локальный sink (JSON в stdout → docker/kubectl logs); OTLP-sink
-		// не поднимается: log.LoggerProvider в графе отсутствует.
 		logkit.Module,
 		pgkit.Module,
 		natskit.Module(""),

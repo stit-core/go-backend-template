@@ -37,6 +37,7 @@ linters:
     - tagalign
     - nolintlint
     - testifylint
+    - nonamedreturns # канон usecase: результаты без имён
 
   settings:
     errcheck:
@@ -85,7 +86,7 @@ linters:
           - gosec
           - errcheck
           - forbidigo
-      # Optimistic-lock version — pgkit конвертит int↔int32; диапазон bounded by PG int4.
+      # int → int4 запроса: версия optimistic-lock — из int4 колонки, страница — в пределах paging.Page.
       - path: internal/domain/.+/infra/postgres/repository\.go
         linters:
           - gosec

@@ -15,7 +15,6 @@ var Module = fx.Module(
 	fx.Provide(
 		userpg.NewRepository,
 		user.NewPolicy,
-		user.NewMetrics,
 		user.NewUsecase,
 		user.NewTrusted,
 		userhttp.NewHandler,

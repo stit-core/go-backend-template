@@ -18,9 +18,8 @@ import (
 
 func testEvent() UserRegisteredEvent {
 	return UserRegisteredEvent{
-		ID:    "3f1d2c4b-5a6e-4f70-8b91-0c2d3e4f5a6b",
-		Email: "user@example.com",
-		At:    time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		ID: "3f1d2c4b-5a6e-4f70-8b91-0c2d3e4f5a6b",
+		At: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 	}
 }
 
@@ -40,13 +39,14 @@ func TestOnUserRegistered(t *testing.T) {
 
 			e := testEvent()
 			uc := mocks.NewMockUsecase(t)
-			uc.EXPECT().IssueEmailVerification(mock.Anything, e.ID, e.Email).Return(tc.ucErr).Once()
+			uc.EXPECT().IssueEmailVerification(mock.Anything, e.ID).Return(tc.ucErr).Once()
 
 			h := NewHandler(uc, logkit.Nop())
 			err := h.onUserRegistered(context.Background(), e)
 
 			if tc.ucErr != nil {
 				require.ErrorIs(t, err, tc.ucErr)
+				require.ErrorContains(t, err, e.ID, "the broker's log names the user by ID")
 				return
 			}
 			require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestOnUserRegistered_DuplicateDelivery(t *testing.T) {
 	uc := mocks.NewMockUsecase(t)
 	// Dedup lives in the usecase (the schema records the sent email): on
 	// redelivery the handler must call it again, not short-circuit.
-	uc.EXPECT().IssueEmailVerification(mock.Anything, e.ID, e.Email).Return(nil).Times(2)
+	uc.EXPECT().IssueEmailVerification(mock.Anything, e.ID).Return(nil).Times(2)
 
 	h := NewHandler(uc, logkit.Nop())
 	require.NoError(t, h.onUserRegistered(context.Background(), e))

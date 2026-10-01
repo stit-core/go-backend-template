@@ -20,6 +20,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -149,7 +151,7 @@ func TestBoot(t *testing.T) {
 		"NATS_JETSTREAM_ENABLED": "true", "NATS_JS_STREAM_NAMES": "user,verification",
 		"JWT_SECRET": strings.Repeat("s", 32), "HTTP_ADDR": "127.0.0.1:0", "LOG_SILENT": "true",
 		// dev: лог-mailer и cookie без Secure — клиент теста ходит по http.
-		"APP_ENV": "dev", "COOKIE_SECURE": "false",
+		"APP_ENV": "dev", "COOKIE_SECURE": "false", "OTEL_SDK_DISABLED": "true",
 	} {
 		t.Setenv(k, v)
 	}
@@ -166,6 +168,8 @@ func TestBoot(t *testing.T) {
 		fx.Populate(&srv),
 		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
 	app.RequireStart()
+	require.IsType(t, &sdkmetric.MeterProvider{}, otel.GetMeterProvider(),
+		"telemetry.Module sets the global meter provider: without it every metric of the service is a no-op")
 
 	// cmd/migrate — отдельный бинарь без графа сервиса: его список обязан совпасть с kit-таблицами графа.
 	require.ElementsMatch(t, sourceNames(sources.Kits), sourceNames(kitSources),
@@ -278,16 +282,16 @@ func TestBoot(t *testing.T) {
 	require.NotEmpty(t, internal.RequestID)
 	require.True(t, logs.logged5xx(internal.RequestID), "the cause is in the service log under the request_id of the response")
 
-	// Пароли, cookie сессии и токены писем не попадают в лог даже до маскирования.
+	// Адрес, пароли, cookie сессии и токены писем не попадают в лог даже до маскирования.
 	require.Eventually(t, func() bool { return len(mail.sent()) == 2 }, 15*time.Second, 100*time.Millisecond,
 		"the service mails the email verification and the password reset")
 	baseURL, err := url.Parse(base)
 	require.NoError(t, err)
-	secrets := append(mail.sent(), password, wrongPassword)
+	secrets := append(mail.sent(), email, password, wrongPassword)
 	for _, c := range jar.Cookies(baseURL) {
 		secrets = append(secrets, c.Value)
 	}
-	require.Len(t, secrets, 6, "two mail tokens, two passwords, two session cookies")
+	require.Len(t, secrets, 7, "two mail tokens, the address, two passwords, two session cookies")
 	require.Empty(t, logs.leaked(secrets), "a secret reached the service log")
 
 	app.RequireStop()

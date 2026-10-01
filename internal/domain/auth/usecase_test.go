@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth/mocks"
@@ -163,6 +165,7 @@ type ucOpts struct {
 	sessions *memSessions
 	policy   *mocks.MockAuthorizer
 	guard    *mocks.MockLoginGuard
+	metrics  *auth.Metrics
 }
 
 type ucOption func(*ucOpts)
@@ -176,6 +179,7 @@ func withSessions(s *memSessions) ucOption { return func(o *ucOpts) { o.sessions
 
 func withPolicy(p *mocks.MockAuthorizer) ucOption { return func(o *ucOpts) { o.policy = p } }
 func withGuard(g *mocks.MockLoginGuard) ucOption  { return func(o *ucOpts) { o.guard = g } }
+func withMetrics(m *auth.Metrics) ucOption        { return func(o *ucOpts) { o.metrics = m } }
 
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
@@ -223,6 +227,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Audit:          aud,
 		Log:            logkit.Nop(),
 		Clock:          clockkit.NewFixed(fixedNow),
+		Metrics:        o.metrics,
 	})
 	return ucFixture{
 		uc: uc, users: o.users, verify: o.verify, setpw: o.setpw,
@@ -258,7 +263,7 @@ func TestLogin(t *testing.T) {
 
 		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "wrong"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
-		require.True(t, f.audit.Has("login_failed"))
+		require.Equal(t, "u1", f.audit.Last("login_failed").ResourceID, "the audit names the account by ID, not by address")
 	})
 
 	t.Run("blocked status", func(t *testing.T) {
@@ -284,6 +289,7 @@ func TestLogin(t *testing.T) {
 
 		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+		require.Empty(t, f.audit.Entries(), "an unknown address does not reach the audit")
 	})
 
 	t.Run("lookup infra error is not invalid credentials", func(t *testing.T) {
@@ -310,7 +316,7 @@ func TestLogin(t *testing.T) {
 		var locked *auth.LockedError
 		require.ErrorAs(t, err, &locked)
 		require.Equal(t, 15*time.Minute, locked.RetryAfter(), "retry when the lock ends")
-		require.True(t, f.audit.Has("login_locked"))
+		require.Empty(t, f.audit.Entries(), "a lock before the lookup knows no account: the outcome goes to the metric")
 	})
 
 	// Fail-closed: строгий мок пользователей — до поиска учётной записи и пароля вход не доходит.
@@ -453,30 +459,27 @@ func TestLogout(t *testing.T) {
 	})
 }
 
+// pwUser отдаёт учётную запись u1 для смены пароля ровно один раз.
+func pwUser(t *testing.T) *mocks.MockUserReader {
+	t.Helper()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", Email: "a@b.com", Version: 7}, nil).Once()
+	return users
+}
+
 func TestChangePassword(t *testing.T) {
 	t.Parallel()
 
 	t.Run("happy path propagates version", func(t *testing.T) {
 		t.Parallel()
 		verify := mocks.NewMockPasswordVerifier(t)
-		verify.EXPECT().VerifyPassword(mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
+		verify.EXPECT().VerifyPassword(mock.Anything, "u1", "old").Return(true, nil).Once()
 		setter := mocks.NewMockPasswordSetter(t)
-		var lastHash string
-		var lastVersion int
-		setter.EXPECT().UpdatePassword(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-			RunAndReturn(func(_ context.Context, _, hash string, version int) error {
-				lastHash = hash
-				lastVersion = version
-				return nil
-			})
-		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByID(mock.Anything, mock.Anything).Return(&auth.User{ID: "u1", Version: 7}, nil)
-		f := newUC(t, withUsers(users), withVerifier(verify), withSetter(setter), withPolicy(defaultPolicy(t, true)))
+		setter.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 7).Return(nil).Once()
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(verify),
+			withSetter(setter), withPolicy(defaultPolicy(t, true)))
 
-		ctx := identitytest.Client("u1")
-		require.NoError(t, f.uc.ChangePassword(ctx, "u1", "old", "newpassword123"))
-		require.Equal(t, "hash:newpassword123", lastHash)
-		require.Equal(t, 7, lastVersion)
+		require.NoError(t, f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123"))
 		require.True(t, f.audit.Has("change_password"))
 	})
 
@@ -484,11 +487,10 @@ func TestChangePassword(t *testing.T) {
 		t.Parallel()
 		verify := mocks.NewMockPasswordVerifier(t)
 		verify.EXPECT().VerifyPassword(mock.Anything, "u1", "old").Return(true, nil).Once()
-		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", Version: 7}, nil).Once()
 		setter := mocks.NewMockPasswordSetter(t)
 		setter.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 7).Return(auth.ErrConcurrentUpdate).Once()
-		f := newUC(t, withUsers(users), withVerifier(verify), withSetter(setter), withPolicy(defaultPolicy(t, true)))
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(verify),
+			withSetter(setter), withPolicy(defaultPolicy(t, true)))
 
 		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
 		require.ErrorIs(t, err, auth.ErrConcurrentUpdate)
@@ -497,39 +499,155 @@ func TestChangePassword(t *testing.T) {
 
 	t.Run("unknown user", func(t *testing.T) {
 		t.Parallel()
-		verify := mocks.NewMockPasswordVerifier(t)
-		verify.EXPECT().VerifyPassword(mock.Anything, "u2", "old").Return(false, auth.ErrUserNotFound).Once()
-		f := newUC(t, withVerifier(verify), withPolicy(defaultPolicy(t, true)))
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByID(mock.Anything, "u2").Return(nil, auth.ErrUserNotFound).Once()
+		f := newUC(t, withUsers(users), withPolicy(defaultPolicy(t, true)))
 
 		err := f.uc.ChangePassword(identitytest.Admin("a1"), "u2", "old", "newpassword123")
 		require.ErrorIs(t, err, auth.ErrUserNotFound)
 	})
 
+	// Неверный старый пароль — попытка в счётчике входа учётной записи, успеха guard не видит.
 	t.Run("wrong old", func(t *testing.T) {
 		t.Parallel()
 		verify := mocks.NewMockPasswordVerifier(t)
-		verify.EXPECT().VerifyPassword(mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
-		f := newUC(t, withVerifier(verify), withPolicy(defaultPolicy(t, true)))
+		verify.EXPECT().VerifyPassword(mock.Anything, "u1", "old").Return(false, nil).Once()
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", false)), withVerifier(verify),
+			withPolicy(defaultPolicy(t, true)))
 
-		ctx := identitytest.Client("u1")
-		err := f.uc.ChangePassword(ctx, "u1", "old", "newpassword123")
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
 		require.ErrorIs(t, err, auth.ErrWrongOldPassword)
 	})
 
 	t.Run("weak new", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withPolicy(defaultPolicy(t, true)))
-		ctx := identitytest.Client("u1")
-		err := f.uc.ChangePassword(ctx, "u1", "old", "short")
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "short")
 		require.ErrorIs(t, err, auth.ErrWeakPassword)
 	})
 
 	t.Run("forbidden", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t)
-		ctx := identitytest.Client("u1")
-		err := f.uc.ChangePassword(ctx, "u2", "old", "newpassword123")
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "u2", "old", "newpassword123")
 		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
+}
+
+// Старый пароль угадывают так же, как при входе: под блокировкой и при сбое guard'а он не проверяется —
+// строгий мок проверки пароля.
+func TestChangePassword_Guarded(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		lock    *auth.LockState
+		err     error
+		wantErr error
+	}{
+		{name: "locked", lock: &auth.LockState{Until: fixedNow.Add(time.Minute)}, wantErr: auth.ErrAccountLocked},
+		{name: "guard failure", err: errors.New("guard store down")},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := mocks.NewMockLoginGuard(t)
+			g.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(tc.lock, tc.err).Once()
+			f := newUC(t, withUsers(pwUser(t)), withGuard(g), withPolicy(defaultPolicy(t, true)))
+
+			err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
+			require.Error(t, err)
+			require.NotErrorIs(t, err, auth.ErrWrongOldPassword)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// Исходы входа и обновления сессии — в метрике: на перебор паролей и повтор refresh стоят алерты.
+func TestLogin_RecordsOutcome(t *testing.T) {
+	t.Parallel()
+	found := func(canLogin bool) ucOption {
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(
+			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: canLogin}, nil,
+		).Once()
+		return withUsers(users)
+	}
+	locked := mocks.NewMockLoginGuard(t)
+	locked.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(&auth.LockState{Until: fixedNow.Add(time.Minute)}, nil).Once()
+	failing := mocks.NewMockLoginGuard(t)
+	failing.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(nil, errors.New("guard store down")).Once()
+	tests := []struct {
+		result, password string
+		opts             []ucOption
+	}{
+		{"ok", "pass1234", []ucOption{found(true), withGuard(loginGuard(t, "a@b.com", true))}},
+		{"invalid_credentials", "wrong", []ucOption{found(true), withGuard(loginGuard(t, "a@b.com", false))}},
+		{"blocked", "pass1234", []ucOption{found(false), withGuard(loginGuard(t, "a@b.com", false))}},
+		{"locked", "pass1234", []ucOption{withGuard(locked)}},
+		{"error", "pass1234", []ucOption{withGuard(failing)}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.result, func(t *testing.T) {
+			t.Parallel()
+			reader := sdkmetric.NewManualReader()
+			m := auth.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
+			f := newUC(t, append(tc.opts, withMetrics(m))...)
+
+			_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: tc.password})
+			require.Equal(t, tc.result == "ok", err == nil, "login error: %v", err)
+			require.Equal(t, map[string]int64{tc.result: 1}, counted(t, reader, "biz_auth_login_attempts_total"))
+		})
+	}
+}
+
+func TestRefresh_RecordsOutcome(t *testing.T) {
+	t.Parallel()
+	reused := newMemSessions()
+	require.NoError(t, reused.Insert(context.Background(), "jti-u1", "u1", fixedNow.Add(time.Hour)))
+	require.NoError(t, reused.MarkUsed(context.Background(), "jti-u1", "jti-next"))
+	tests := []struct {
+		result string
+		opts   []ucOption
+	}{
+		{"reused", []ucOption{withSessions(reused)}},
+		{"invalid", []ucOption{withParser(parserReturning(t, "", "", errors.New("not a refresh token")))}},
+		{"expired", []ucOption{withParser(parserReturning(t, "", "", auth.ErrTokenExpired))}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.result, func(t *testing.T) {
+			t.Parallel()
+			reader := sdkmetric.NewManualReader()
+			m := auth.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
+			f := newUC(t, append(tc.opts, withMetrics(m))...)
+
+			_, err := f.uc.Refresh(context.Background(), "tok")
+			require.Error(t, err)
+			require.Equal(t, map[string]int64{tc.result: 1}, counted(t, reader, "biz_auth_refresh_total"))
+		})
+	}
+}
+
+// counted — значения счётчика name по метке result.
+func counted(t *testing.T, reader *sdkmetric.ManualReader, name string) map[string]int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(context.Background(), &rm))
+	got := map[string]int64{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != name {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "%s is an int64 counter", name)
+			for _, dp := range sum.DataPoints {
+				result, _ := dp.Attributes.Value("result")
+				got[result.AsString()] += dp.Value
+			}
+		}
+	}
+	return got
 }

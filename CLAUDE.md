@@ -80,7 +80,8 @@ integration, нужен Docker) + build + gen-check + cover-check ≥75%. `make 
   клей платформы — `internal/platform/`; `pkg/` — правила и типы этого сервиса (`policy`, `paging`,
   `outcome`) и сгенерированные клиенты (gRPC, OpenAPI: зовёт `infra/` домена, не корень); входы —
   `cmd/`; тестовая обвязка — `internal/testkit/` и `internal/archtest/`. Других каталогов в
-  `internal/` нет; generic-примитив — golibinfra (ниже).
+  `internal/` нет; generic-примитив — golibinfra (ниже). Хартия — `docs/reference/architecture.md`
+  § Каталоги.
 - **archtest** (`internal/archtest`, шаг тестов; `//nolint` на него не действует) — раскладка и
   границы любого домена: чужой домен — только через порт и адаптер в `<domain>/module/adapters.go`,
   моки — только из тестов, `platform` и `pkg` доменов не знают. Перечень — комментарий пакета в

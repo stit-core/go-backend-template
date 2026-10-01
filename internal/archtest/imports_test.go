@@ -132,8 +132,8 @@ func rootAllowed(imp string, pkgImports map[string][]string) bool {
 	return !strings.Contains(imp, ".") && !underAny(imp, ioStdlib)
 }
 
-// pureLayers — файлы корня домена без I/O: им доступны stdlib без побочных эффектов и потоков
-// и платформенные value-примитивы.
+// pureLayers — файлы корня домена без I/O: им доступны stdlib без побочных эффектов и потоков,
+// личность вызывающего и общие правила сервиса.
 var pureLayers = []string{"entity.go", "policy.go", "dto.go", "errors.go", "events.go"}
 
 func TestPureLayersHaveNoIO(t *testing.T) {
@@ -144,7 +144,7 @@ func TestPureLayersHaveNoIO(t *testing.T) {
 		}
 		for _, imp := range f.imports {
 			if !pureLayerAllowed(imp) {
-				t.Errorf("%s imports %s: pure layers allow side-effect-free stdlib, platform/{identity,shared} and pkg/policy only", f.path, imp)
+				t.Errorf("%s imports %s: pure layers allow side-effect-free stdlib, platform/identity and pkg/policy only", f.path, imp)
 			}
 		}
 	}
@@ -152,7 +152,7 @@ func TestPureLayersHaveNoIO(t *testing.T) {
 
 func pureLayerAllowed(imp string) bool {
 	switch imp {
-	case module + "/internal/platform/identity", module + "/internal/platform/shared", module + "/pkg/policy":
+	case module + "/internal/platform/identity", module + "/pkg/policy":
 		return true
 	}
 	stdlib := !strings.Contains(imp, ".")

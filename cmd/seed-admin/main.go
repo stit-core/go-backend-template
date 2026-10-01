@@ -73,21 +73,22 @@ func run(ctx context.Context, log logkit.Logger) int {
 	}
 	defer func() { _ = conn.Close(ctx) }() //nolint:errcheck // процесс завершается, ошибку закрытия некуда вернуть
 
-	if err := upsertAdmin(ctx, conn, email, hash, name); err != nil {
+	id, err := upsertAdmin(ctx, conn, email, hash, name)
+	if err != nil {
 		log.Error(ctx, "seed admin failed", "err", err)
 		return 1
 	}
-	log.Info(ctx, "seed admin: ok", "email", email)
+	log.Info(ctx, "seed admin: ok", "user_id", id)
 	return 0
 }
 
 // upsertAdmin идемпотентен: повторный запуск обновляет role/hash, не плодит
 // строк. Уникальность users — частичный индекс LOWER(email) WHERE
 // status != 'deleted'; матчим по нему вручную в транзакции.
-func upsertAdmin(ctx context.Context, conn *pgx.Conn, email, passwordHash, name string) error {
+func upsertAdmin(ctx context.Context, conn *pgx.Conn, email, passwordHash, name string) (string, error) {
 	tx, err := conn.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin: %w", err)
+		return "", fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // после Commit — no-op с ErrTxClosed
 
@@ -104,19 +105,19 @@ func upsertAdmin(ctx context.Context, conn *pgx.Conn, email, passwordHash, name 
 			"UPDATE users SET role = 'admin', password_hash = $1 WHERE id = $2",
 			passwordHash, id,
 		); err != nil {
-			return fmt.Errorf("update: %w", err)
+			return "", fmt.Errorf("update: %w", err)
 		}
 	case errors.Is(err, pgx.ErrNoRows):
-		if _, err := tx.Exec(
+		if err := tx.QueryRow(
 			ctx,
 			"INSERT INTO users (email, password_hash, name, status, role, email_verified) "+
-				"VALUES ($1, $2, $3, 'active', 'admin', true)",
+				"VALUES ($1, $2, $3, 'active', 'admin', true) RETURNING id",
 			email, passwordHash, name,
-		); err != nil {
-			return fmt.Errorf("insert: %w", err)
+		).Scan(&id); err != nil {
+			return "", fmt.Errorf("insert: %w", err)
 		}
 	default:
-		return fmt.Errorf("lookup: %w", err)
+		return "", fmt.Errorf("lookup: %w", err)
 	}
-	return tx.Commit(ctx)
+	return id, tx.Commit(ctx)
 }

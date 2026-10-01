@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 )
@@ -41,8 +43,6 @@ type UserRepo interface {
 func InsertUser(t *testing.T, repo UserRepo, opts ...UserOption) *user.User {
 	t.Helper()
 	u := NewUser(opts...)
-	if err := repo.Insert(context.Background(), u); err != nil {
-		t.Fatalf("pgseed: insert user: %v", err)
-	}
+	require.NoError(t, repo.Insert(context.Background(), u), "pgseed: insert user")
 	return u
 }

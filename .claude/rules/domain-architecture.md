@@ -19,8 +19,8 @@ paths:
   `errors.go` (все sentinel и error-типы домена — только здесь) · `policy.go` (authorization
   + чистые правила, без I/O) · `usecase.go` (логика, зависимости через порты) · `trusted.go`
   (операции для других доменов без policy) · `events.go` (payload + unexported subject-const) ·
-  `metrics.go` (`biz_<domain>_*`, nil-safe) · `delivery/{http,nats}/` · `infra/postgres/` ·
-  `infra/<kit>/` (адаптер порта к киту или к клиенту из `pkg/`) · `module/`. Файл существует
+  `metrics.go` (`biz_<domain>_*` под алерт, nil-safe) · `delivery/{http,nats}/` · `infra/postgres/` ·
+  `infra/<kit>/` (адаптер порта к киту, внешнему каналу или клиенту из `pkg/`) · `module/`. Файл существует
   только вместе со своим содержимым (таблица обязательности — architecture.md); мёртвые
   типы/файлы удаляются.
 - **Логика — в usecase и policy, края тонкие.** Хендлер: разбор входа → вызов usecase →
@@ -66,10 +66,11 @@ paths:
   `ForbiddenError`) — `pkg/policy`; не inline в usecase. Исход метрики — `outcome.Result`, ID,
   которые создаёт код, — `idkit.NewV7()`, страница списка — `paging.Page`.
 - **Usecase не знает транспорта.** `httpkit`/`natskit`/huma в usecase запрещены; ctx-геттеры
-  (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`. Named returns не используем.
-  Мутирующий метод инструментирован `metrics.Record*` на всех исходах; security-операции
-  пишут audit из usecase. Состояния между запросами в `*Usecase` и переменных пакета нет — оно
-  в БД или ките.
+  (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`. Named returns не используем
+  (линтер `nonamedreturns`).
+  Метрика — только под алерт; у метода с метрикой исход пишется ровно раз на любом пути, запись
+  проверяет тест. Security-операции пишут audit из usecase (`uc.audit`, в записи — ID, не адрес).
+  Состояния между запросами в `*Usecase` и переменных пакета нет — оно в БД или ките.
 - **Логи — `logkit.Logger`.** Не `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` и не запись в
   `os.Stdout`/`os.Stderr` напрямую (forbidigo). В лог и payload события — ID и факты: токенов,
   паролей, секретов и PII (email, телефон, имя) там нет — лог и стрим читают многие и хранят

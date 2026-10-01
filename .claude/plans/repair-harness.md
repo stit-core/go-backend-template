@@ -224,11 +224,9 @@ blocked-by: —
   остальное продолжается; отступление от канона — с OK и строкой в «Решениях» или теле коммита.
 - S2: правило без пометки держит `/code-review`, пометка archtest, теста или линтера — машина;
   тонкий хендлер, логика вне SQL и адаптеров, policy на методе синтаксисом не проверить.
-- S2: «в лог и payload — ID и факты, без токенов, секретов и PII» строже эталона: verification
-  логирует email (`delivery/nats/handler.go`, лог-mailer), `Email` — в payload
-  `user.events.registered` и событий verification (email берётся портом `UserReader`); эталон
-  приводит `fix-reference-code` (S10, S11) — передано дирижёру; `event.md` берёт у образца
-  `user.events.registered` только поток, поля payload — по правилу.
+- S2: «в лог и payload — ID и факты, без токенов, секретов и PII» — эталон ему следует
+  (`fix-reference-code` S10, S11: события `.v2` без email, адрес — портом `UserReader`, лог сверяет
+  `TestBoot`); `event.md` ведёт по образцу `user.events.registered.v2`.
 - S2: раскладку `internal/` держит archtest `TestInternalLayout` — пакет вне domain, platform,
   testkit и archtest не видит ни одно правило слоёв (HAR-09). `pkg/` — правила и типы сервиса и
   сгенерированные клиенты; корень домена берёт из `pkg/` только пакеты без транспорта и I/O
@@ -256,6 +254,5 @@ blocked-by: —
 Общие машинные правила едут в форки версией golibinfra (v1.4.0), остальное — git-способом. S1, S2
 и S5 идут досрочно, пока `fix-reference-code` ждёт golibinfra v1.3.0; S3, S4 и «Жизненный цикл» —
 после закрытия `fix-reference-code`. S1, S2 и S5 закрыты: маршрут и «готово» — по разделу в
-CLAUDE.md, инварианты аудита — в правилах, handoff копится в `.claude/plans/handoff.md` до релиза;
-эталон с PII в логах и payload — хвост `fix-reference-code` («Решения» S2). Следующий шаг — S3,
-после закрытия `fix-reference-code`.
+CLAUDE.md, инварианты аудита — в правилах, handoff копится в `.claude/plans/handoff.md` до релиза.
+Следующий шаг — S3, после закрытия `fix-reference-code`.

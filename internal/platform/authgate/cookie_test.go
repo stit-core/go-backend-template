@@ -2,7 +2,6 @@ package authgate_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -75,48 +74,5 @@ func TestBuildExpiredAuthCookies(t *testing.T) {
 				require.Equal(t, -1, c.MaxAge, "expired cookies must instruct the browser to drop them")
 			}
 		})
-	}
-}
-
-func TestSetAuthCookies_WritesSetCookieHeaders(t *testing.T) {
-	t.Parallel()
-
-	w := httptest.NewRecorder()
-	authgate.SetAuthCookies(w, "access-value", "refresh-value", authgate.CookieConfig{Secure: true})
-
-	resp := w.Result()
-	defer func() { require.NoError(t, resp.Body.Close()) }()
-
-	cookies := resp.Cookies()
-	require.Len(t, cookies, 2)
-	require.Equal(t, authgate.CookieAccess, cookies[0].Name)
-	require.Equal(t, "access-value", cookies[0].Value)
-	require.Equal(t, authgate.CookieRefresh, cookies[1].Name)
-	require.Equal(t, "refresh-value", cookies[1].Value)
-
-	for _, c := range cookies {
-		require.Equal(t, "/", c.Path)
-		require.True(t, c.HttpOnly)
-		require.True(t, c.Secure)
-	}
-}
-
-func TestClearAuthCookies_ExpiresBothCookies(t *testing.T) {
-	t.Parallel()
-
-	w := httptest.NewRecorder()
-	authgate.ClearAuthCookies(w, authgate.CookieConfig{})
-
-	resp := w.Result()
-	defer func() { require.NoError(t, resp.Body.Close()) }()
-
-	cookies := resp.Cookies()
-	require.Len(t, cookies, 2)
-	require.Equal(t, authgate.CookieAccess, cookies[0].Name)
-	require.Equal(t, authgate.CookieRefresh, cookies[1].Name)
-
-	for _, c := range cookies {
-		require.Empty(t, c.Value)
-		require.Equal(t, -1, c.MaxAge)
 	}
 }

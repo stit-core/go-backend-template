@@ -20,6 +20,7 @@ x-app-env: &app-env
   # dev: лог-mailer (канала доставки писем у стека нет) и cookie без Secure — клиент ходит по http.
   APP_ENV: dev
   COOKIE_SECURE: "false"
+  OTEL_SDK_DISABLED: "true"
 
   LOG_LEVEL: debug
 

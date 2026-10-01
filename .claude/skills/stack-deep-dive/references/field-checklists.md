@@ -287,8 +287,8 @@ golibinfra-first принцип (generic util → golibinfra, не локаль�
 **Порядок копания**:
 
 1. `golibinfra kits` (таблица): множественный выбор kit'ов golibinfra —
-   в `cmd/api` шаблона wired httpkit, pgkit, authnkit, outboxkit, natskit,
-   bruteforcekit, auditkit, clockkit, logkit, healthkit, timerkit,
+   в `cmd/api` шаблона wired telemetry, httpkit, pgkit, authnkit, outboxkit,
+   natskit, bruteforcekit, auditkit, clockkit, logkit, healthkit, timerkit,
    bizmetric; полный набор — пакеты в корне golibinfra
    нужной версии (storagekit, httpclient, … — Other для редких). Версия
    golibinfra (Other).

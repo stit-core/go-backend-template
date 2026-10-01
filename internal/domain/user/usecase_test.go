@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	noopmetric "go.opentelemetry.io/otel/metric/noop"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user/mocks"
@@ -81,19 +80,15 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	bus := &outboxtest.Recorder{}
 	aud := &audittest.Recorder{}
 
-	m, err := user.NewMetrics(noopmetric.NewMeterProvider().Meter("test"))
-	require.NoError(t, err)
-
 	uc := user.NewUsecase(user.UsecaseDeps{
-		Repo:    o.repo,
-		Hasher:  authntest.DeterministicHasher{},
-		Policy:  o.pol,
-		Tx:      pgtest.Identity{},
-		Events:  bus,
-		Audit:   aud,
-		Metrics: m,
-		Log:     logkit.Nop(),
-		Clock:   clockkit.NewFixed(fixedNow),
+		Repo:   o.repo,
+		Hasher: authntest.DeterministicHasher{},
+		Policy: o.pol,
+		Tx:     pgtest.Identity{},
+		Events: bus,
+		Audit:  aud,
+		Log:    logkit.Nop(),
+		Clock:  clockkit.NewFixed(fixedNow),
 	})
 	return ucFixture{uc: uc, repo: o.repo, bus: bus, audit: aud}
 }
@@ -120,6 +115,8 @@ func TestRegister(t *testing.T) {
 		require.Equal(t, "hash:longenough", got.PasswordHash)
 		require.NotNil(t, captured)
 		require.True(t, f.audit.Has("register"))
+		require.Equal(t, user.UserRegistered{ID: "id-1", At: fixedNow}, f.bus.Last("user.events.registered.v2"),
+			"the event carries the ID only: consumers read the address by ID")
 	})
 
 	t.Run("weak password", func(t *testing.T) {

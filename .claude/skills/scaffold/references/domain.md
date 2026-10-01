@@ -54,7 +54,6 @@ internal/domain/<name>/
 ├── entity.go
 ├── dto.go
 ├── errors.go
-├── metrics.go
 ├── policy.go
 ├── policy_test.go
 ├── usecase.go
@@ -177,7 +176,8 @@ var (
 `usecase.go`:
 - Объяви интерфейсы зависимостей (порты) и `UsecaseDeps{fx.In}`; `Usecase` хранит deps целиком
   (`uc.d.Repo`), `NewUsecase` меняет только `d.Log`.
-- Методы — бизнес-логика; мутирующие инструментированы `metrics.Record*` (`metrics.go`).
+- Методы — бизнес-логика. Метрика (`metrics.go`) — только под алерт (`docs/reference/architecture.md`
+  § Обязательность файлов): исход пишется ровно раз, тест сверяет запись.
 
 ### 10. Adapters (если нужны cross-domain)
 
@@ -194,7 +194,6 @@ var Module = fx.Module(
     fx.Provide(
         <name>pg.NewRepository,
         <name>.NewPolicy,
-        <name>.NewMetrics,
         <name>.NewUsecase,
         <name>http.NewHandler,
         func(u *<name>.Usecase) <name>http.Usecase { return u },

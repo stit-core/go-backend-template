@@ -5,7 +5,7 @@
 
 Эвент-флоу: usecase домена-источника пишет событие в **per-domain outbox** (`outbox_<source>`) в той же транзакции, что и основное изменение → drain этого инстанса (поднимается fx.Lifecycle того же `cmd/api`) публикует в **JetStream** через `natskit.StreamBus` → durable-subscriber потребляющего домена (`internal/domain/<consumer>/delivery/nats/`) обрабатывает. Отдельного worker-процесса нет — всё в одном бинаре.
 
-Как и почему — `docs/reference/architecture.md § События и messaging`. Живой образец потока — `user.events.registered`: публикация в `internal/domain/user/usecase.go`, потребление в `internal/domain/verification/delivery/nats/`. Поля payload бери по правилу «ID и факты» (rule `domain-architecture`), не из образца.
+Как и почему — `docs/reference/architecture.md § События и messaging`. Живой образец потока — `user.events.registered.v2`: публикация в `internal/domain/user/usecase.go`, потребление в `internal/domain/verification/delivery/nats/` (адрес потребитель берёт портом `UserReader` по ID из события). Поля payload — по правилу «ID и факты» (rule `domain-architecture`).
 
 > `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
 > `git.stit.tech/<org>/backend`). Подставляй фактический, не копируй буквально.
@@ -36,7 +36,7 @@ Outbox оправдан когда:
 
 - Какой домен **публикует**?
 - Какие поля в payload (ID и факты, минимум — ID агрегата + `At`; токенов и PII нет)?
-- Какой Subject? Формат: `<source>.events.<event>` (реф. — `user.events.registered`, `verification.events.password_reset_requested` в `internal/domain/*/events.go`).
+- Какой Subject? Формат: `<source>.events.<event>`, у новой версии payload — суффикс `.v2` (реф. — `user.events.registered.v2`, `verification.events.password_reset_requested.v2` в `internal/domain/*/events.go`).
 - Какой домен **обрабатывает** (или несколько)?
 - Idempotency: на каком natural key consumer отсечёт повторную доставку?
 
@@ -57,7 +57,7 @@ type <Aggregate><PastEvent> struct {
 }
 ```
 
-Поля **без json-тегов**: wire = Go-имена, смена формата = новый subject `….v2`. `At` — `uc.d.Clock.Now()` (или время из сохранённой сущности). Subject — unexported const рядом с payload: не inline-литерал в usecase и не экспорт; consumer заводит свою константу (шаг 4).
+Поля **без json-тегов**: wire = Go-имена, смена формата = новый subject `….v2`. `At` — `uc.d.Clock.Now()`. Subject — unexported const рядом с payload: не inline-литерал в usecase и не экспорт; consumer заводит свою константу (шаг 4).
 
 ### 3. Публикация в usecase
 
@@ -132,10 +132,10 @@ func NewHandler(uc Usecase, log logkit.Logger) *Handler {
     return &Handler{uc: uc, log: log.With("delivery", "<consumer>.nats")}
 }
 
+// Ошибку логирует natskit вместе с повтором доставки — обработчик её только возвращает.
 func (h *Handler) on<Event>(ctx context.Context, e <Event>Event) error {
     if err := h.uc.DoSomething(ctx, /* mapping из e */); err != nil {
-        h.log.Error(ctx, "handle <event>", "<aggregate>_id", e.<Aggregate>ID, "err", err)
-        return fmt.Errorf("handle <event>: %w", err)
+        return fmt.Errorf("handle <event> for <aggregate> %s: %w", e.<Aggregate>ID, err)
     }
     h.log.Info(ctx, "<event> handled", "<aggregate>_id", e.<Aggregate>ID)
     return nil
@@ -213,11 +213,13 @@ make gen-check  # если добавил интерфейс из .mockery.yml
 ## Versioning событий
 
 Если меняешь payload-структуру с breaking change:
-1. Новый тип `<Event>V2`, новая const-subject `"<source>.events.<event>.v2"`.
+1. Новая const-subject `"<source>.events.<event>.v2"`; пока публикуются обе версии — второй тип `<Event>V2`.
 2. Старый subscriber продолжает работать со старым subject.
 3. Когда все consumer'ы перешли — удаляешь публикацию старого.
 
-Не правь существующий тип события без breaking-version-bump.
+Поле, которому в payload не место (токен, PII), со старым subject не остаётся: публикация уходит на
+`.v2` сразу, свои потребители — тем же изменением, внешним — INFRA-HANDOFF (старый subject дренируется
+до выкатки). Не правь существующий тип события без breaking-version-bump.
 
 ## Anti-patterns
 

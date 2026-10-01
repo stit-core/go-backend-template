@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification/mocks"
@@ -25,8 +27,8 @@ import (
 var fixedNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 const (
-	subjectEmailVerificationRequested = "verification.events.email_verification_requested"
-	subjectPasswordResetRequested     = "verification.events.password_reset_requested"
+	subjectEmailVerificationRequested = "verification.events.email_verification_requested.v2"
+	subjectPasswordResetRequested     = "verification.events.password_reset_requested.v2"
 )
 
 type ucFixture struct {
@@ -50,6 +52,7 @@ type ucOpts struct {
 	emailSet *mocks.MockEmailVerificationSetter
 	mailer   *mocks.MockMailer
 	limiter  *mocks.MockResetLimiter
+	metrics  *verification.Metrics
 }
 
 type ucOption func(*ucOpts)
@@ -66,6 +69,8 @@ func withEmailSet(e *mocks.MockEmailVerificationSetter) ucOption {
 func withMailer(m *mocks.MockMailer) ucOption { return func(o *ucOpts) { o.mailer = m } }
 
 func withLimiter(l *mocks.MockResetLimiter) ucOption { return func(o *ucOpts) { o.limiter = l } }
+
+func withMetrics(m *verification.Metrics) ucOption { return func(o *ucOpts) { o.metrics = m } }
 
 // limiter ждёт ровно одну проверку лимита сброса пользователя userID и отвечает allowed.
 func limiter(t *testing.T, userID string, allowed bool, err error) *mocks.MockResetLimiter {
@@ -135,11 +140,20 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Audit:         aud,
 		Log:           log,
 		Clock:         clockkit.NewFixed(fixedNow),
+		Metrics:       o.metrics,
 	})
 	return ucFixture{
 		uc: uc, repo: o.repo, users: o.users, pwSet: o.pwSet, emailSet: o.emailSet, mailer: o.mailer, limiter: o.limiter,
 		bus: bus, audit: aud, tx: tx, log: log,
 	}
+}
+
+// knownUser отдаёт пользователя u1 по ID столько раз, сколько его спросят.
+func knownUser(t *testing.T) *mocks.MockUserReader {
+	t.Helper()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil)
+	return users
 }
 
 func TestIssueEmailVerification_HappyPath(t *testing.T) {
@@ -158,11 +172,11 @@ func TestIssueEmailVerification_HappyPath(t *testing.T) {
 			return nil
 		}).Once().NotBefore(upsert)
 	repo.EXPECT().MarkEmailVerificationSent(mock.Anything, "vid").Return(nil).Once().NotBefore(send)
-	f := newUC(t, withRepo(repo), withMailer(mailer))
+	f := newUC(t, withRepo(repo), withUsers(knownUser(t)), withMailer(mailer))
 
-	require.NoError(t, f.uc.IssueEmailVerification(context.Background(), "u1", "a@b.com"))
+	require.NoError(t, f.uc.IssueEmailVerification(context.Background(), "u1"))
 	require.Equal(t, tokens.Hash(sentToken), storedHash, "the mailed token is the one stored by hash")
-	require.Equal(t, verification.EmailVerificationRequested{TokenID: "vid", UserID: "u1", Email: "a@b.com", At: fixedNow},
+	require.Equal(t, verification.EmailVerificationRequested{TokenID: "vid", UserID: "u1", At: fixedNow},
 		f.bus.Last(subjectEmailVerificationRequested), "TokenID is the id of the stored token, not the token")
 }
 
@@ -187,17 +201,28 @@ func TestIssueEmailVerification_Redelivery(t *testing.T) {
 			}
 			return nil
 		}).Twice()
-	f := newUC(t, withRepo(repo), withMailer(mailer))
+	f := newUC(t, withRepo(repo), withUsers(knownUser(t)), withMailer(mailer))
 	ctx := context.Background()
 
-	require.Error(t, f.uc.IssueEmailVerification(ctx, "u1", "a@b.com"), "a mailer failure goes back to the broker for redelivery")
-	require.NoError(t, f.uc.IssueEmailVerification(ctx, "u1", "a@b.com"), "redelivery sends the email")
-	require.NoError(t, f.uc.IssueEmailVerification(ctx, "u1", "a@b.com"), "redelivery after success is a no-op")
+	require.Error(t, f.uc.IssueEmailVerification(ctx, "u1"), "a mailer failure goes back to the broker for redelivery")
+	require.NoError(t, f.uc.IssueEmailVerification(ctx, "u1"), "redelivery sends the email")
+	require.NoError(t, f.uc.IssueEmailVerification(ctx, "u1"), "redelivery after success is a no-op")
 
 	require.Len(t, mailed, 2)
 	require.NotEqual(t, mailed[0], mailed[1], "the resent email carries a new token")
 	require.Equal(t, []string{tokens.Hash(mailed[0]), tokens.Hash(mailed[1])}, hashes)
 	require.Len(t, f.bus.Published(subjectEmailVerificationRequested), 2, "one event per issued token")
+}
+
+// Пользователь удалён до доставки события: письма нет, повтора доставки тоже — строгие моки.
+func TestIssueEmailVerification_UserGone(t *testing.T) {
+	t.Parallel()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, verification.ErrUserNotFound).Once()
+	f := newUC(t, withUsers(users), withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t)))
+
+	require.NoError(t, f.uc.IssueEmailVerification(context.Background(), "u1"))
+	require.Empty(t, f.bus.Published(subjectEmailVerificationRequested))
 }
 
 func activeUser(t *testing.T) *mocks.MockUserReader {
@@ -229,7 +254,7 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 
 	require.NoError(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"))
 	require.Equal(t, tokens.Hash(sentToken), capturedHash)
-	require.Equal(t, verification.PasswordResetRequested{TokenID: "rid", UserID: "u1", Email: "a@b.com", At: fixedNow},
+	require.Equal(t, verification.PasswordResetRequested{TokenID: "rid", UserID: "u1", At: fixedNow},
 		f.bus.Last(subjectPasswordResetRequested))
 }
 
@@ -284,6 +309,63 @@ func TestRequestPasswordReset_LimiterFailure(t *testing.T) {
 
 	require.ErrorContains(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"), "guard store down")
 	require.Empty(t, f.bus.Published(subjectPasswordResetRequested))
+}
+
+// Исход каждого запроса сброса попадает в метрику: на «не ушло письмо» и «упёрлись в лимит» стоят алерты.
+func TestRequestPasswordReset_RecordsOutcome(t *testing.T) {
+	t.Parallel()
+	failingMailer := mocks.NewMockMailer(t)
+	failingMailer.EXPECT().SendPasswordReset(mock.Anything, "a@b.com", mock.Anything).Return(errors.New("smtp unavailable")).Once()
+	blocked := mocks.NewMockUserReader(t)
+	blocked.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(&verification.User{ID: "u1", CanLogin: false}, nil).Once()
+	issuing := func() ucOption {
+		r := mocks.NewMockRepository(t)
+		r.EXPECT().InsertPasswordReset(mock.Anything, "u1", mock.Anything, mock.Anything).Return("rid", nil).Once()
+		return withRepo(r)
+	}
+	cases := []struct {
+		result string
+		opts   []ucOption
+	}{
+		{"ok", []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", true, nil)), issuing()}},
+		{"error", []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", true, nil)), issuing(), withMailer(failingMailer)}},
+		{"user_not_found", nil},
+		{"inactive", []ucOption{withUsers(blocked)}},
+		{"throttled", []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, nil))}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.result, func(t *testing.T) {
+			t.Parallel()
+			reader := sdkmetric.NewManualReader()
+			m := verification.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
+			f := newUC(t, append(tc.opts, withMetrics(m))...)
+
+			require.NoError(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"))
+			require.Equal(t, map[string]int64{tc.result: 1}, counted(t, reader, "biz_verification_password_reset_requested_total"))
+		})
+	}
+}
+
+// counted — значения счётчика name по метке result.
+func counted(t *testing.T, reader *sdkmetric.ManualReader, name string) map[string]int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(context.Background(), &rm))
+	got := map[string]int64{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != name {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "%s is an int64 counter", name)
+			for _, dp := range sum.DataPoints {
+				result, _ := dp.Attributes.Value("result")
+				got[result.AsString()] += dp.Value
+			}
+		}
+	}
+	return got
 }
 
 func TestConfirmPasswordReset_HappyPath(t *testing.T) {

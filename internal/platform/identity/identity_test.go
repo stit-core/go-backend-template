@@ -42,23 +42,6 @@ func TestFrom_EmptyContext(t *testing.T) {
 	require.False(t, ok, "bare context must not carry identity")
 }
 
-func TestMustFrom_ReturnsStoredIdentity(t *testing.T) {
-	t.Parallel()
-
-	want := identity.Identity{UserID: "u1", Role: identity.RoleClient}
-	ctx := identity.With(context.Background(), want)
-
-	require.Equal(t, want, identity.MustFrom(ctx))
-}
-
-func TestMustFrom_PanicsOnEmptyContext(t *testing.T) {
-	t.Parallel()
-
-	require.PanicsWithValue(t, "identity: not in context", func() {
-		identity.MustFrom(context.Background())
-	})
-}
-
 func TestIPFrom(t *testing.T) {
 	t.Parallel()
 

@@ -14,7 +14,7 @@
 
 `../strategy/docs/projects/<slug>/services/<svc>/domains/<context>/` ↔ `internal/domain/<context>/` — один Go-пакет, один FX-модуль (`module/module.go`).
 
-`../strategy/docs/projects/<slug>/services/_shared/<Name>.md` (kind=vo) ↔ `internal/platform/shared/` — платформенные cross-context VO в одном пакете. Не зависят от бизнес-доменов; бизнес-домены импортят их напрямую.
+`../strategy/docs/projects/<slug>/services/_shared/<Name>.md` (kind=vo) — VO нескольких контекстов: в коде у каждого контекста-потребителя свой тип (§ Shared Value Objects).
 
 ## Aggregate / Entity
 
@@ -57,19 +57,22 @@
 
 ## Shared Value Objects (`_shared/`, kind: vo)
 
-Для платформенных VO, которые структурно идентичны в ≥2 контекстах и не несут доменной семантики (`PhotoRef`, etc).
+Общего пакета VO у доменов нет: пакет, который импортируют несколько доменов, стал бы мостом в обход
+портов, а чистые слои домена (`entity.go`, `policy.go`, `dto.go`, `errors.go`, `events.go`) видят
+только stdlib, `internal/platform/identity` и `pkg/policy` (archtest `TestPureLayersHaveNoIO`).
+Каждый контекст-потребитель держит свою копию:
 
 | Артефакт | Go-код |
 |---|---|
-| `kind: vo` файл (`_shared/<Name>.md`) | `internal/platform/shared/<name>.go` (`type <Name> struct{...}`) |
+| `kind: vo` файл (`_shared/<Name>.md`) | `type <Name> struct{...}` в `entity.go` каждого контекста-потребителя |
 | Properties → таблица | поля struct'а |
 | Constructor секция | `New<Name>(...) (<Name>, error)` рядом со struct'ом |
-| Invariants | проверки в конструкторе → возврат sentinel-ошибки |
+| Invariants | проверки в конструкторе → sentinel из `errors.go` контекста |
 | Equality | `==` (если все поля comparable) или метод `Equal` |
-| Consumed by | импорты из бизнес-доменов; **не** наоборот — `_shared/` ничего не импортит из `internal/domain/` |
-| Errors секция | sentinel в `internal/platform/shared/errors.go`; домены оборачивают через `%w` |
+| Consumed by | между контекстами — через порт: каждый переводит свою копию в DTO порта |
 
-`_shared/` — узкий список (большинство VO остаются inline в aggregate-файле своего контекста). Доменные VO (`Phone`, `Email`, `OrderTotal`) — не сюда: их семантика принадлежит контексту, а не платформе.
+Правило, общее для копий (формат, длина), — одна функция или константа в `pkg/policy`. Доменные VO
+(`Phone`, `Email`, `OrderTotal`) живут в своём контексте.
 
 ## Events
 

@@ -30,14 +30,6 @@ func From(ctx context.Context) (Identity, bool) {
 	return id, ok
 }
 
-func MustFrom(ctx context.Context) Identity {
-	id, ok := From(ctx)
-	if !ok {
-		panic("identity: not in context")
-	}
-	return id
-}
-
 type ipCtxKey struct{}
 
 func WithIP(ctx context.Context, ip string) context.Context {

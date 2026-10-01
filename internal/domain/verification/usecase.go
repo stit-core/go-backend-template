@@ -86,9 +86,18 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 	return &Usecase{d: d}
 }
 
-// IssueEmailVerification — идемпотентный обработчик доставки user.events.registered: отправленное
-// письмо повтор пропускает, неотправленное (сбой mailer) отправляет заново с новым токеном.
-func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email string) error {
+// IssueEmailVerification — идемпотентный обработчик доставки user.events.registered.v2: отправленное
+// письмо повтор пропускает, неотправленное (сбой mailer) отправляет заново с новым токеном. Адрес
+// берётся у пользователя по ID: в событии его нет.
+func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) error {
+	u, err := uc.d.Users.GetByID(ctx, userID)
+	if errors.Is(err, ErrUserNotFound) {
+		uc.d.Log.Info(ctx, "user gone before email verification, skip", "user_id", userID)
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load user: %w", err)
+	}
 	t, err := tokens.Generate()
 	if err != nil {
 		return fmt.Errorf("generate verify token: %w", err)
@@ -100,115 +109,90 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email str
 	)
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
 		var err error
-		tokenID, issued, err = uc.d.Repo.UpsertEmailVerification(txCtx, userID, tokens.Hash(t), uc.d.Clock.Now().Add(24*time.Hour))
+		tokenID, issued, err = uc.d.Repo.UpsertEmailVerification(txCtx, userID, tokens.Hash(t), uc.d.Clock.Now().Add(emailVerificationTTL))
 		if err != nil || !issued {
 			return err
 		}
 		return uc.d.Events.Publish(txCtx, subjectEmailVerificationRequested,
-			EmailVerificationRequested{
-				TokenID: tokenID,
-				UserID:  userID,
-				Email:   email,
-				At:      uc.d.Clock.Now(),
-			})
+			EmailVerificationRequested{TokenID: tokenID, UserID: userID, At: uc.d.Clock.Now()})
 	}); err != nil {
-		uc.d.Metrics.RecordEmailIssued(ctx, outcome.Error)
 		return err
 	}
 	if !issued {
 		uc.d.Log.Info(ctx, "email verification already sent, skip", "user_id", userID)
-		uc.d.Metrics.RecordEmailIssued(ctx, resultDuplicate)
 		return nil
 	}
 
-	if err := uc.d.Mailer.SendEmailVerification(ctx, email, t); err != nil {
-		uc.d.Metrics.RecordEmailIssued(ctx, outcome.Error)
+	if err := uc.d.Mailer.SendEmailVerification(ctx, u.Email, t); err != nil {
 		return fmt.Errorf("send verification email: %w", err)
 	}
 	if err := uc.d.Repo.MarkEmailVerificationSent(ctx, tokenID); err != nil {
-		uc.d.Metrics.RecordEmailIssued(ctx, outcome.Error)
 		return fmt.Errorf("mark verification email sent: %w", err)
 	}
-	uc.d.Metrics.RecordEmailIssued(ctx, outcome.OK)
 	return nil
 }
 
 // RequestPasswordReset отвечает одинаково, есть ли учётная запись, пускают ли её, исчерпан ли лимит
-// запросов и ушло ли письмо: по ответу не узнать, чей email зарегистрирован.
+// запросов и ушло ли письмо: по ответу не узнать, чей email зарегистрирован. Исход — в метрику.
 func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error {
+	result, err := uc.requestPasswordReset(ctx, email)
+	uc.d.Metrics.RecordPasswordResetRequested(ctx, result)
+	return err
+}
+
+func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outcome.Result, error) {
 	u, err := uc.d.Users.GetByEmail(ctx, email)
-	if errors.Is(err, ErrUserNotFound) {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, resultUserNotFound)
-		return nil
-	}
-	if err != nil {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
-		return fmt.Errorf("lookup user: %w", err)
-	}
-	if !u.CanLogin {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, resultInactive)
-		return nil
+	switch {
+	case errors.Is(err, ErrUserNotFound):
+		return resultUserNotFound, nil
+	case err != nil:
+		return outcome.Error, fmt.Errorf("lookup user: %w", err)
+	case !u.CanLogin:
+		return resultInactive, nil
 	}
 	allowed, err := uc.d.Limiter.Allow(ctx, u.ID, identity.IPFrom(ctx))
-	if err != nil {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
-		return fmt.Errorf("password reset limiter: %w", err)
-	}
-	if !allowed {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, resultThrottled)
-		return nil
+	switch {
+	case err != nil:
+		return outcome.Error, fmt.Errorf("password reset limiter: %w", err)
+	case !allowed:
+		return resultThrottled, nil
 	}
 
 	token, err := tokens.Generate()
 	if err != nil {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
-		return fmt.Errorf("generate reset token: %w", err)
+		return outcome.Error, fmt.Errorf("generate reset token: %w", err)
 	}
-
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
-		tokenID, err := uc.d.Repo.InsertPasswordReset(txCtx, u.ID, tokens.Hash(token), uc.d.Clock.Now().Add(time.Hour))
+		tokenID, err := uc.d.Repo.InsertPasswordReset(txCtx, u.ID, tokens.Hash(token), uc.d.Clock.Now().Add(passwordResetTTL))
 		if err != nil {
 			return err
 		}
 		return uc.d.Events.Publish(txCtx, subjectPasswordResetRequested,
-			PasswordResetRequested{
-				TokenID: tokenID,
-				UserID:  u.ID,
-				Email:   u.Email,
-				At:      uc.d.Clock.Now(),
-			})
+			PasswordResetRequested{TokenID: tokenID, UserID: u.ID, At: uc.d.Clock.Now()})
 	}); err != nil {
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
-		return err
+		return outcome.Error, err
 	}
 
 	// Сбой доставки клиент не видит — иначе ответ выдал бы учётную запись; повтор — новым запросом.
 	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
 		uc.d.Log.Error(ctx, "send password reset email", "user_id", u.ID, "err", err)
-		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
-		return nil
+		return outcome.Error, nil
 	}
-	uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.OK)
-	return nil
+	return outcome.OK, nil
 }
 
 func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword string) error {
 	if !policy.PasswordStrong(newPassword) {
-		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.WeakPassword)
 		return ErrWeakPassword
 	}
 
 	pr, err := uc.d.Repo.GetPasswordReset(ctx, tokens.Hash(token))
-	if err != nil {
-		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.Invalid)
+	switch {
+	case err != nil:
 		return err
-	}
-	if pr.UsedAt != nil {
-		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, resultAlreadyUsed)
+	case pr.UsedAt != nil:
 		return ErrTokenUsed
-	}
-	if uc.d.Clock.Now().After(pr.ExpiresAt) {
-		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.Expired)
+	case uc.d.Clock.Now().After(pr.ExpiresAt):
 		return ErrInvalidResetToken
 	}
 
@@ -219,7 +203,6 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 
 	current, err := uc.d.Users.GetByID(ctx, pr.UserID)
 	if errors.Is(err, ErrUserNotFound) {
-		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.Invalid)
 		return ErrInvalidResetToken // токен удалённого пользователя
 	}
 	if err != nil {
@@ -237,30 +220,22 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 		}
 		return uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version)
 	}); err != nil {
-		if errors.Is(err, ErrTokenUsed) {
-			uc.d.Metrics.RecordPasswordResetConfirmed(ctx, resultAlreadyUsed)
-		}
 		return err
 	}
 
 	uc.d.Log.Info(ctx, "password reset", "user_id", pr.UserID)
-	uc.writeAudit(ctx, pr.UserID, "password_reset_confirmed", "user", pr.UserID)
-	uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.OK)
+	uc.audit(ctx, auditkit.Entry{ActorID: pr.UserID, Action: "password_reset_confirmed", Resource: "user", ResourceID: pr.UserID})
 	return nil
 }
 
 func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 	ev, err := uc.d.Repo.GetEmailVerification(ctx, tokens.Hash(token))
-	if err != nil {
-		uc.d.Metrics.RecordEmailConfirmed(ctx, outcome.Invalid)
+	switch {
+	case err != nil:
 		return err
-	}
-	if ev.UsedAt != nil {
-		uc.d.Metrics.RecordEmailConfirmed(ctx, resultAlreadyUsed)
+	case ev.UsedAt != nil:
 		return ErrTokenUsed
-	}
-	if uc.d.Clock.Now().After(ev.ExpiresAt) {
-		uc.d.Metrics.RecordEmailConfirmed(ctx, outcome.Expired)
+	case uc.d.Clock.Now().After(ev.ExpiresAt):
 		return ErrInvalidVerificationToken
 	}
 
@@ -274,26 +249,16 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 		}
 		return err
 	}); err != nil {
-		if errors.Is(err, ErrTokenUsed) {
-			uc.d.Metrics.RecordEmailConfirmed(ctx, resultAlreadyUsed)
-		}
 		return err
 	}
-	uc.writeAudit(ctx, ev.UserID, "email_confirmed", "user", ev.UserID)
-	uc.d.Metrics.RecordEmailConfirmed(ctx, outcome.OK)
+	uc.audit(ctx, auditkit.Entry{ActorID: ev.UserID, Action: "email_confirmed", Resource: "user", ResourceID: ev.UserID})
 	return nil
 }
 
-func (uc *Usecase) writeAudit(ctx context.Context, actorID, action, resource, resourceID string) {
-	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
-		ActorID:    actorID,
-		Action:     action,
-		Resource:   resource,
-		ResourceID: resourceID,
-		At:         uc.d.Clock.Now(),
-		IP:         identity.IPFrom(ctx),
-		RequestID:  identity.RequestIDFrom(ctx),
-	}); auditErr != nil {
-		uc.d.Log.Error(ctx, "audit "+action, "err", auditErr)
+// audit дописывает время, IP и запрос; сбой записи аудита операцию не отменяет — он уходит в лог.
+func (uc *Usecase) audit(ctx context.Context, e auditkit.Entry) {
+	e.At, e.IP, e.RequestID = uc.d.Clock.Now(), identity.IPFrom(ctx), identity.RequestIDFrom(ctx)
+	if err := uc.d.Audit.Log(ctx, e); err != nil {
+		uc.d.Log.Error(ctx, "audit "+e.Action, "err", err)
 	}
 }

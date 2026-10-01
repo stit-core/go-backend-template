@@ -7,13 +7,9 @@ import (
 	outboxpg "git.stit.tech/stit-core/golibinfra/outboxkit/pgstore"
 )
 
-// OutboxFor разводит per-domain transactional-outbox: outboxkit.Instance поверх
-// таблицы table (store из фабрики pgstore, транспорт с namespace'ным Nats-Msg-Id,
-// drain- и maintenance-job'ы в timerkit.Group, backlog-gauge'и) плюс приватный
-// алиас его Publisher'а без fx-тега — UsecaseDeps домена имени инстанса не
-// знает. Возвращает fx.Options (НЕ fx.Module): fx.Private обязан заскоупиться
-// доменным модулем, в который это включают. Схему таблицы даёт
-// pgstore.TableMigrations(table), накатывает её cmd/migrate.
+// OutboxFor — per-domain outbox на таблице table (outboxkit.Instance) и его Publisher без fx-тега:
+// UsecaseDeps имени инстанса не знает. fx.Options, а не fx.Module — fx.Private скоупит publisher
+// модулем домена, в который его включают.
 func OutboxFor(name, table string) fx.Option {
 	return fx.Options(
 		outboxkit.Instance(name, table),

@@ -11,16 +11,6 @@ type CookieConfig struct {
 	Secure bool `default:"true" envconfig:"COOKIE_SECURE"`
 }
 
-func SetAuthCookies(w http.ResponseWriter, access, refresh string, cfg CookieConfig) {
-	http.SetCookie(w, authCookie(CookieAccess, access, cfg))
-	http.SetCookie(w, authCookie(CookieRefresh, refresh, cfg))
-}
-
-func ClearAuthCookies(w http.ResponseWriter, cfg CookieConfig) {
-	http.SetCookie(w, expiredCookie(CookieAccess, cfg))
-	http.SetCookie(w, expiredCookie(CookieRefresh, cfg))
-}
-
 func BuildAuthCookies(access, refresh string, cfg CookieConfig) []http.Cookie {
 	return []http.Cookie{*authCookie(CookieAccess, access, cfg), *authCookie(CookieRefresh, refresh, cfg)}
 }

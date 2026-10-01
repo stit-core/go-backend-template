@@ -65,6 +65,8 @@
       "Bash(rm -rf *)",
       "Read(**/*.pem)",
       "Read(**/*.key)",
+      "Read(**/.env)",
+      "Read(**/.env.local)",
       "Edit(**/*.pem)",
       "Edit(**/*.key)",
       "Edit(**/infra/postgres/db/**)",

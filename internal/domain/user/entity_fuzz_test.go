@@ -4,6 +4,8 @@ import (
 	"net/mail"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 )
@@ -22,24 +24,13 @@ func FuzzNewUser(f *testing.F) {
 		validEmail := mailErr == nil && len(email) <= 254
 		validRole := role == identity.RoleAdmin || role == identity.RoleClient || role == identity.RoleUnknown
 
-		if validEmail && validRole {
-			if err != nil {
-				t.Fatalf("expected nil err for email=%q role=%q, got %v", email, role, err)
-			}
-			if u == nil {
-				t.Fatal("expected non-nil user for valid input")
-			}
-			if u.Email != email {
-				t.Errorf("email mismatch: got %q want %q", u.Email, email)
-			}
-		}
-		if !validEmail {
-			if err == nil {
-				t.Fatalf("expected err for invalid email %q", email)
-			}
-			if u != nil {
-				t.Fatal("expected nil user for invalid email")
-			}
+		switch {
+		case !validEmail:
+			require.ErrorIs(t, err, user.ErrInvalidEmail, "email %q", email)
+			require.Nil(t, u)
+		case validRole:
+			require.NoError(t, err, "email %q role %q", email, role)
+			require.Equal(t, email, u.Email)
 		}
 	})
 }

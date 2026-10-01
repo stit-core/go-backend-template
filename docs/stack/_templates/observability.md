@@ -9,8 +9,9 @@ status: draft
 
 Шаблон эмитит **структурные логи в stdout** через `golibinfra/logkit`. Сбор/хранение
 логов (docker/host log-driver, внешний агрегатор) — зона деплой-инфры, не этого репо.
-Бизнес-счётчики доменов (`biz_*`, `metrics.go`) пишутся в глобальный no-op `metric.Meter`:
-MeterProvider в `cmd/api` не сконфигурирован, экспорта метрик нет.
+Метрики, трейсы и копию логов `golibinfra/telemetry` (`cmd/api`) отдаёт по OTLP в коллектор
+`OTEL_EXPORTER_OTLP_ENDPOINT`; без коллектора — `OTEL_SDK_DISABLED=true`, сигналы не уходят.
+Бизнес-метрики доменов (`biz_*`, `metrics.go`) — только под алерт.
 
 ## Log sink
 <Куда идут логи: structured slog → stdout (`docker`/`kubectl logs`). Формат `LOG_FORMAT`

@@ -11,10 +11,8 @@ func New(name string) Result { return Result{name: name} }
 func (r Result) String() string { return r.name }
 
 var (
-	OK           = New("ok")
-	Error        = New("error")
-	Invalid      = New("invalid")
-	Forbidden    = New("forbidden")
-	WeakPassword = New("weak_password")
-	Expired      = New("expired")
+	OK      = New("ok")
+	Error   = New("error")
+	Invalid = New("invalid")
+	Expired = New("expired")
 )

@@ -1,6 +1,7 @@
 package paging_test
 
 import (
+	"math"
 	"reflect"
 	"strconv"
 	"testing"
@@ -21,6 +22,7 @@ func TestPage_Normalize(t *testing.T) {
 		{"valid page is kept", paging.Page{Number: 3, Size: 50}, paging.Page{Number: 3, Size: 50}},
 		{"size above the limit is capped", paging.Page{Number: 2, Size: 500}, paging.Page{Number: 2, Size: paging.MaxSize}},
 		{"negative number starts from the first page", paging.Page{Number: -1, Size: 10}, paging.Page{Number: 1, Size: 10}},
+		{"number above the limit is capped", paging.Page{Number: 1 << 40, Size: 10}, paging.Page{Number: paging.MaxNumber, Size: 10}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -36,11 +38,16 @@ func TestPage_Offset(t *testing.T) {
 	require.Equal(t, 40, paging.Page{Number: 3, Size: 20}.Offset())
 }
 
-// Дефолт и предел размера живут дважды — в константах и в тегах huma; тест держит их равными.
+// Дефолт и пределы живут дважды — в константах и в тегах huma; тест держит их равными, а смещение
+// последней страницы — в int4.
 func TestPage_TagsMatchLimits(t *testing.T) {
 	t.Parallel()
 	size, ok := reflect.TypeFor[paging.Page]().FieldByName("Size")
 	require.True(t, ok)
 	require.Equal(t, strconv.Itoa(paging.DefaultSize), size.Tag.Get("default"))
 	require.Equal(t, strconv.Itoa(paging.MaxSize), size.Tag.Get("maximum"))
+	number, ok := reflect.TypeFor[paging.Page]().FieldByName("Number")
+	require.True(t, ok)
+	require.Equal(t, strconv.Itoa(paging.MaxNumber), number.Tag.Get("maximum"))
+	require.LessOrEqual(t, paging.Page{Number: paging.MaxNumber, Size: paging.MaxSize}.Offset(), math.MaxInt32)
 }

@@ -11,13 +11,13 @@ import (
 )
 
 const (
-	// streamUser — JetStream-стрим, покрывающий user.> (источник user.events.registered).
+	// streamUser — JetStream-стрим, покрывающий user.> (источник user.events.registered.v2).
 	streamUser  = "user"
-	durableName = "verification-user-registered"
+	durableName = "verification-user-registered-v2"
 )
 
 type Usecase interface {
-	IssueEmailVerification(ctx context.Context, userID, email string) error
+	IssueEmailVerification(ctx context.Context, userID string) error
 }
 
 type Handler struct {
@@ -29,14 +29,12 @@ func NewHandler(uc Usecase, log logkit.Logger) *Handler {
 	return &Handler{uc: uc, log: log.With("delivery", "verification.nats")}
 }
 
+// onUserRegistered: ошибку логирует natskit вместе с повтором доставки — здесь её только возвращают.
 func (h *Handler) onUserRegistered(ctx context.Context, e UserRegisteredEvent) error {
-	if err := h.uc.IssueEmailVerification(ctx, e.ID, e.Email); err != nil {
-		h.log.Error(ctx, "issue email verification",
-			"user_id", e.ID, "email", e.Email, "err", err)
-		return fmt.Errorf("issue email verification: %w", err)
+	if err := h.uc.IssueEmailVerification(ctx, e.ID); err != nil {
+		return fmt.Errorf("issue email verification for user %s: %w", e.ID, err)
 	}
-	h.log.Info(ctx, "email verification issued",
-		"user_id", e.ID, "email", e.Email)
+	h.log.Info(ctx, "email verification handled", "user_id", e.ID)
 	return nil
 }
 
