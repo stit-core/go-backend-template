@@ -52,7 +52,9 @@ paths:
 - PK — `uuid`.
 - **Delete-политика — решение домена, фиксируется явно.** user-домен — status-based
   soft-delete (`status='deleted'` + partial unique index `WHERE status != 'deleted'`):
-  сохраняет audit-историю и освобождает email. Домен без такой нужды — hard delete.
+  сохраняет audit-историю и освобождает email; удаление — `UPDATE … WHERE id = $1 AND status !=
+  'deleted'` без версии (`:execrows`, 0 строк → `ErrNotFound`): повтор и гонка — не конфликт, а
+  запросы на запись удалённого не трогают. Домен без такой нужды — hard delete.
   Теневые флаги `deleted_at` без политики — нет.
 - Optimistic lock через `version`: `WHERE id=$1 AND version=$2 … RETURNING` (`:one`;
   no-rows → `ErrConcurrentUpdate`) либо `:execrows`=0 → `ErrConcurrentUpdate`.

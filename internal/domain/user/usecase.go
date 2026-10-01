@@ -24,6 +24,9 @@ type Repository interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	// Update пишет имя и статус u при версии в БД u.Version; иначе, и для удалённого, — ErrConcurrentUpdate.
 	Update(ctx context.Context, u *User) (*User, error)
+	// Delete удаляет мягко и без версии: уже удалённого или несуществующего нет — ErrNotFound, так что
+	// повтор и гонка с другой записью — не конфликт.
+	Delete(ctx context.Context, id string) error
 	UpdatePassword(ctx context.Context, id, passwordHash string, version int) (*User, error)
 	// SetEmailVerified: нет пользователя или удалён — ErrNotFound.
 	SetEmailVerified(ctx context.Context, id string) error
@@ -234,14 +237,7 @@ func (uc *Usecase) Delete(ctx context.Context, id string) error {
 	}
 
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
-		u, err := uc.d.Repo.GetByID(txCtx, id)
-		if err != nil {
-			return err
-		}
-		if err := u.Delete(); err != nil {
-			return err
-		}
-		if _, err := uc.d.Repo.Update(txCtx, u); err != nil {
+		if err := uc.d.Repo.Delete(txCtx, id); err != nil {
 			return err
 		}
 		return uc.d.Events.Publish(txCtx, subjectUserDeleted,

@@ -25,6 +25,22 @@ func (q *Queries) CountUsers(ctx context.Context, status *string) (int64, error)
 	return count, err
 }
 
+const deleteUser = `-- name: DeleteUser :execrows
+UPDATE users
+SET status = 'deleted',
+    version = version + 1
+WHERE id = $1
+  AND status != 'deleted'
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
 FROM users

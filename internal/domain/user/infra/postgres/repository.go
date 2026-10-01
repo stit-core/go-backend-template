@@ -86,6 +86,21 @@ func (r *Repository) Update(ctx context.Context, u *user.User) (*user.User, erro
 	return rowToEntity(row), nil
 }
 
+func (r *Repository) Delete(ctx context.Context, id string) error {
+	uid, err := pgkit.ParseUUID(id)
+	if err != nil {
+		return user.ErrNotFound
+	}
+	rows, err := r.q.DeleteUser(ctx, uid)
+	if err != nil {
+		return fmt.Errorf("user repo: delete: %w", err)
+	}
+	if rows == 0 {
+		return user.ErrNotFound
+	}
+	return nil
+}
+
 func (r *Repository) UpdatePassword(ctx context.Context, id, passwordHash string, version int) (*user.User, error) {
 	uid, err := pgkit.ParseUUID(id)
 	if err != nil {

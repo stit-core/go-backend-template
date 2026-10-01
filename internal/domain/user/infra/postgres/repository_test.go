@@ -4,6 +4,7 @@ package postgres_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -120,6 +121,44 @@ func TestUpdate_StaleVersion(t *testing.T) {
 	}
 }
 
+// Удаление без версии: повтор — ErrNotFound, из одновременных удалений проходит ровно одно.
+func TestDelete(t *testing.T) {
+	t.Parallel()
+	repo := setup(t)
+	ctx := context.Background()
+
+	u := pgseed.InsertUser(t, repo)
+	require.NoError(t, repo.Delete(ctx, u.ID))
+	_, err := repo.GetByID(ctx, u.ID)
+	require.ErrorIs(t, err, user.ErrNotFound)
+	require.ErrorIs(t, repo.Delete(ctx, u.ID), user.ErrNotFound)
+	require.ErrorIs(t, repo.Delete(ctx, "00000000-0000-0000-0000-000000000000"), user.ErrNotFound)
+
+	raced := pgseed.InsertUser(t, repo)
+	const n = 8
+	errs := make(chan error, n)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			<-start
+			errs <- repo.Delete(ctx, raced.ID)
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	deleted := 0
+	for err := range errs {
+		if err == nil {
+			deleted++
+			continue
+		}
+		require.ErrorIs(t, err, user.ErrNotFound)
+	}
+	require.Equal(t, 1, deleted, "exactly one of the concurrent deletes deletes")
+}
+
 func TestSetEmailVerified(t *testing.T) {
 	t.Parallel()
 	repo := setup(t)
@@ -142,11 +181,10 @@ func TestDeletedUserIsUntouched(t *testing.T) {
 	ctx := context.Background()
 
 	u := pgseed.InsertUser(t, repo)
-	u.Status = user.StatusDeleted
-	deleted, err := repo.Update(ctx, u)
-	require.NoError(t, err)
+	require.NoError(t, repo.Delete(ctx, u.ID))
+	deletedVersion := u.Version + 1
 
-	_, err = repo.GetByID(ctx, u.ID)
+	_, err := repo.GetByID(ctx, u.ID)
 	require.ErrorIs(t, err, user.ErrNotFound)
 	_, err = repo.GetByEmail(ctx, u.Email)
 	require.ErrorIs(t, err, user.ErrNotFound)
@@ -154,9 +192,9 @@ func TestDeletedUserIsUntouched(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, list)
 
-	_, err = repo.Update(ctx, &user.User{ID: u.ID, Name: "revived", Status: user.StatusActive, Version: deleted.Version})
+	_, err = repo.Update(ctx, &user.User{ID: u.ID, Name: "revived", Status: user.StatusActive, Version: deletedVersion})
 	require.ErrorIs(t, err, user.ErrConcurrentUpdate)
-	_, err = repo.UpdatePassword(ctx, u.ID, "new-hash", deleted.Version)
+	_, err = repo.UpdatePassword(ctx, u.ID, "new-hash", deletedVersion)
 	require.ErrorIs(t, err, user.ErrConcurrentUpdate)
 	require.ErrorIs(t, repo.SetEmailVerified(ctx, u.ID), user.ErrNotFound)
 
@@ -168,6 +206,6 @@ func TestDeletedUserIsUntouched(t *testing.T) {
 	require.NoError(t, pg.Pool(t).QueryRow(ctx,
 		`SELECT name, status, password_hash, version, email_verified FROM users WHERE id = $1`, u.ID).
 		Scan(&name, &status, &hash, &version, &verified))
-	require.Equal(t, []any{u.Name, "deleted", u.PasswordHash, deleted.Version, false},
+	require.Equal(t, []any{u.Name, "deleted", u.PasswordHash, deletedVersion, false},
 		[]any{name, status, hash, version, verified})
 }

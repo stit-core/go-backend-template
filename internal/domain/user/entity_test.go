@@ -68,27 +68,6 @@ func TestUser_ChangeStatus(t *testing.T) {
 	}
 }
 
-func TestUser_Delete(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name    string
-		from    user.Status
-		wantErr error
-	}{
-		{"active", user.StatusActive, nil},
-		{"blocked", user.StatusBlocked, nil},
-		{"already deleted", user.StatusDeleted, user.ErrNotFound},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			u := &user.User{Status: tc.from}
-			require.ErrorIs(t, u.Delete(), tc.wantErr)
-			require.Equal(t, user.StatusDeleted, u.Status)
-		})
-	}
-}
-
 func TestUserCanLogin(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

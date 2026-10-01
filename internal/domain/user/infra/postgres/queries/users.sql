@@ -25,6 +25,13 @@ WHERE id = $3
   AND status != 'deleted'
 RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at;
 
+-- name: DeleteUser :execrows
+UPDATE users
+SET status = 'deleted',
+    version = version + 1
+WHERE id = $1
+  AND status != 'deleted';
+
 -- name: UpdateUserPassword :one
 UPDATE users
 SET password_hash = $1,

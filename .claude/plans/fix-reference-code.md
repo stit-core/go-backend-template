@@ -256,7 +256,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
   `fx.As`; `App` — envconfig; `pkg/policy`, `paging.Page`, `outcome.Result`, `idkit`; ошибка guard — в
   лог до S10; стрим публикатора — бэклог `publisher-stream-check`; хуки `TestBoot` — из лога сервиса.
 - S4: PATCH: нет — 404, чужая `version` — 409, поля — одной записью; переход — `User.ChangeStatus`
-  (deleted — только `Delete`); `status` — `CanChangeStatus`, 403 на весь PATCH; удалённых не пишут.
+  (в deleted — только удаление); `status` — `CanChangeStatus`, 403 на весь PATCH; удалённых не пишут.
+  B1 валидатора: удаление — условная запись без версии (`Repository.Delete`): повтор и гонка — 404.
 - S5: эффект консьюмера помнит `sent_at`: upsert перевыпускает токен неотправленного, отправленное —
   пропуск; `TokenID` — id строки; погашение — условный `UPDATE` первым в транзакции (`ErrTokenUsed`).
 - S6: `user.Trusted` — без policy, только адаптерам `module/` (archtest); адаптер — тип на поставщика,
@@ -268,11 +269,11 @@ prod-дефолты, понятный контракт ошибок API, тес�
   `importsByName` archtest знает имя пакета модуля v2+ (`huma/v2` → `huma`), иначе сверка молчала.
 
 ## Handoff
-- API reference-доменов меняется (префиксы DTO, envelope `data`, problem+json с машинным `code`,
-  новые коды ответов, ошибки в OpenAPI; user: PATCH целиком, `status` — только админ, неизвестный
-  id — 404, `version` в ответе; auth: login — `data`, change-password — 404, 409, неверный старый
-  пароль — 422, битый refresh — 401 вместо 500, истёкший access — 401 `AUTH_ACCESS_EXPIRED`, 429 — с
-  `Retry-After`; verification: токен погашенный или в гонке — 409) — breaking для форков.
+- API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в
+  OpenAPI) — breaking для форков. user: PATCH целиком, `status` — только админ, неизвестный id и
+  повторный DELETE — 404, `version` в ответе; auth: login — `data`, change-password — 404, 409,
+  старый пароль — 422, битый refresh — 401, истёкший access — `AUTH_ACCESS_EXPIRED`, 429 —
+  `Retry-After`; verification: токен погашенный или в гонке — 409.
 - События verification: `TokenID` — id строки токена; `email_verification_requested` повторяется при
   перевыпуске неотправленного письма — потребитель дедуплицирует по `TokenID`. Миграция 0004 — колонка.
 - Сессии на `authnkit/session`: при выкатке все пользователи входят заново один раз;
@@ -295,5 +296,5 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-«Фундамент» (S1–S3) — PASS, н1 и н2 перепроверки закрыты; «Эталон доменов» (S4–S8) сделан. Дальше —
-валидатор этапа, затем S9 (ждёт v1.3.0; при задержке — S11, S12 раньше).
+«Фундамент» — PASS; «Эталон доменов» (S4–S8) — FAIL валидатора B: фиксы B1, N1–N6 → перепроверка
+(`validation-fix-reference-code-B.md`); дальше S9 (ждёт v1.3.0; при задержке — S11, S12 раньше).

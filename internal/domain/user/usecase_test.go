@@ -17,6 +17,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
@@ -359,9 +360,7 @@ func TestDelete(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
-		repo.EXPECT().Update(mock.Anything, &user.User{ID: "u1", Email: "a@b.com", Name: "Old", Status: user.StatusDeleted, Version: 3}).
-			Return(&user.User{ID: "u1", Status: user.StatusDeleted, Version: 4}, nil).Once()
+		repo.EXPECT().Delete(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
 
 		require.NoError(t, f.uc.Delete(identitytest.Client("u1"), "u1"))
@@ -369,15 +368,17 @@ func TestDelete(t *testing.T) {
 		require.True(t, f.audit.Has("delete"))
 	})
 
-	t.Run("unknown or deleted user", func(t *testing.T) {
+	// Удалённого нет: повтор и гонка двух удалений — 404, а не конфликт; события и аудита нет.
+	t.Run("unknown or already deleted user", func(t *testing.T) {
 		t.Parallel()
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, "u1").Return(nil, user.ErrNotFound).Once()
+		repo.EXPECT().Delete(mock.Anything, "u1").Return(user.ErrNotFound).Once()
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
 
 		err := f.uc.Delete(identitytest.Client("u1"), "u1")
 		require.ErrorIs(t, err, user.ErrNotFound)
 		require.Zero(t, f.bus.Count())
+		require.False(t, f.audit.Has("delete"))
 	})
 
 	t.Run("forbidden", func(t *testing.T) {
