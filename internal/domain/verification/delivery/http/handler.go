@@ -51,40 +51,42 @@ func Register(api huma.API, h *Handler) {
 	}), h.confirmEmail)
 }
 
-// requestPasswordReset: доменных ошибок нет — отсутствие учётной записи неотличимо от успеха.
+// requestPasswordReset: доменных ошибок usecase не отдаёт — отсутствие учётной записи неотличимо от
+// успеха.
 func (h *Handler) requestPasswordReset(ctx context.Context, in *VerificationPasswordResetRequestInput) (*struct{}, error) {
 	if err := h.uc.RequestPasswordReset(ctx, in.Body.Email); err != nil {
-		return nil, err
+		return nil, verificationErrors.Map(err)
 	}
 	return nil, nil
 }
 
 func (h *Handler) confirmPasswordReset(ctx context.Context, in *VerificationPasswordResetConfirmInput) (*struct{}, error) {
 	if err := h.uc.ConfirmPasswordReset(ctx, in.Body.Token, in.Body.Password); err != nil {
-		return nil, confirmPasswordResetErrors.Map(err)
+		return nil, verificationErrors.Map(err)
 	}
 	return nil, nil
 }
 
 func (h *Handler) confirmEmail(ctx context.Context, in *VerificationEmailVerifyInput) (*struct{}, error) {
 	if err := h.uc.ConfirmEmail(ctx, in.Body.Token); err != nil {
-		return nil, confirmEmailErrors.Map(err)
+		return nil, verificationErrors.Map(err)
 	}
 	return nil, nil
 }
 
-// Таблица операции — правила того, что отдаёт её usecase (полноту держит тест).
+// Правило каждой ошибки домена — одно. verificationErrors переводит в хендлерах их все (ни одна не
+// уходит 500 — archtest), таблица операции объявляет в OpenAPI те, что отдаёт её usecase.
 var (
-	tokenUsedRule = httpkit.ErrorRule{Err: verification.ErrTokenUsed, Status: http.StatusConflict, Code: "VERIFICATION_TOKEN_USED", Detail: "token already used"}
+	weakPasswordRule     = httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"}
+	invalidResetRule     = httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "invalid or expired reset token"}
+	invalidVerifyRule    = httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "invalid or expired verification token"}
+	tokenUsedRule        = httpkit.ErrorRule{Err: verification.ErrTokenUsed, Status: http.StatusConflict, Code: "VERIFICATION_TOKEN_USED", Detail: "token already used"}
+	concurrentUpdateRule = httpkit.ErrorRule{Err: verification.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "VERIFICATION_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"}
+	userNotFoundRule     = httpkit.ErrorRule{Err: verification.ErrUserNotFound, Status: http.StatusNotFound, Code: "VERIFICATION_USER_NOT_FOUND", Detail: "user not found"}
 
-	confirmPasswordResetErrors = httpkit.NewErrorMap(
-		httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"},
-		httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "invalid or expired reset token"},
-		tokenUsedRule,
-		httpkit.ErrorRule{Err: verification.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "VERIFICATION_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"},
-	)
-	confirmEmailErrors = httpkit.NewErrorMap(
-		httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "invalid or expired verification token"},
-		tokenUsedRule,
-	)
+	verificationErrors = httpkit.NewErrorMap(weakPasswordRule, invalidResetRule, invalidVerifyRule, tokenUsedRule,
+		concurrentUpdateRule, userNotFoundRule)
+
+	confirmPasswordResetErrors = httpkit.NewErrorMap(weakPasswordRule, invalidResetRule, tokenUsedRule, concurrentUpdateRule)
+	confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule, tokenUsedRule)
 )

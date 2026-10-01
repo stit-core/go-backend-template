@@ -128,9 +128,10 @@ prod-дефолты, понятный контракт ошибок API, тес�
   внутренностей, с ID запроса, тот же ID — в логах; каждая операция объявляет свои ошибки в
   OpenAPI. Проверка: тест полноты — каждый sentinel каждого домена → (статус, `code`), ожидаемая
   ошибка не даёт 500; `openapi.json` содержит ошибки операций; handler-тесты по кодам → PASS
-  - Подтверждено: `TestErrorMaps` ×3 и archtest `TestDomainErrorsReachHTTP`, handler-тесты кодов, 422
-    полей, 401 `AUTH_ACCESS_EXPIRED`, 429 с `Retry-After`; `TestBoot` — 5xx без причины, она в логе
-    под тем же `request_id`; `openapi.json` — коды каждой операции
+  - Подтверждено: archtest `TestDomainErrorTables` — правило домена на каждую ошибку `errors.go` и
+    хендлеры только через таблицу домена (500 исключён); `TestErrorMaps` ×3 — объявления операций
+    (список по usecase — ручной); handler-тесты кодов, 422 полей, 401 `AUTH_ACCESS_EXPIRED`, 429 с
+    `Retry-After`; `TestBoot` — 5xx без причины, она в логе под тем же `request_id`
 
 ## Шаги
 ### Фундамент
@@ -255,18 +256,17 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - «Фундамент»: `registerHTTP`, `Middlewares` — в `fx.Module("cmd/api")`; порт — тип провайдера, без
   `fx.As`; `App` — envconfig; `pkg/policy`, `paging.Page`, `outcome.Result`, `idkit`; ошибка guard — в
   лог до S10; стрим публикатора — бэклог `publisher-stream-check`; хуки `TestBoot` — из лога сервиса.
-- S4: PATCH: нет — 404, чужая `version` — 409, поля — одной записью; переход — `User.ChangeStatus`
-  (в deleted — только удаление); `status` — `CanChangeStatus`, 403 на весь PATCH; удалённых не пишут.
-  B1 валидатора: удаление — условная запись без версии (`Repository.Delete`): повтор и гонка — 404.
+- S4: PATCH: нет — 404, чужая `version` — 409, поля одной записью, переход — `User.ChangeStatus`, `status`
+  — `CanChangeStatus` (403); удаление — условная запись без версии (B1: повтор и гонка — 404).
 - S5: эффект консьюмера помнит `sent_at`: upsert перевыпускает токен неотправленного, отправленное —
   пропуск; `TokenID` — id строки; погашение — условный `UPDATE` первым в транзакции (`ErrTokenUsed`).
 - S6: `user.Trusted` — без policy, только адаптерам `module/` (archtest); адаптер — тип на поставщика,
   ошибки `Trusted` → sentinel потребителя; киты — `auth/infra/`, log-mailer — S11; HAR-08 — 95, 119, 120.
 - S7: префикс и `data` — archtest `TestHTTPTypes`; 401 — `TestBoot` по спецификации; e2e-модели строгие.
-- S8: таблица ошибок — на операцию (`Map`, `Declare`); старый пароль — 422 поля, не 401; 401
-  `AUTH_ACCESS_EXPIRED` — обновить сессию (`authgate.Secured`); внутренние ошибки — списком теста
-  полноты, сверка с `errors.go` — archtest для доменов с операциями (скелет без них не трогает);
-  `importsByName` archtest знает имя пакета модуля v2+ (`huma/v2` → `huma`), иначе сверка молчала.
+- S8: 401 `AUTH_ACCESS_EXPIRED` — обновить сессию (`authgate.Secured`); `importsByName` archtest знает
+  `huma/v2` → `huma`. B1: правило на каждую ошибку `errors.go`, `Map` — таблицей домена (archtest для
+  доменов с операциями), таблица операции — только `Declare`; разный смысл — разная ошибка
+  (`ErrWrongOldPassword` 422, `ErrRefreshInvalid` 401); ошибки портов — тоже с правилом.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в

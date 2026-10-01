@@ -74,7 +74,7 @@ type UserNewMethodOutput struct {
 func (h *Handler) newMethod(ctx context.Context, in *UserNewMethodInput) (*UserNewMethodOutput, error) {
     res, err := h.uc.NewMethod(ctx, /* mapping */)
     if err != nil {
-        return nil, newMethodErrors.Map(err)
+        return nil, userErrors.Map(err) // таблица домена: любая ошибка домена — свой код, не 500
     }
     out := &UserNewMethodOutput{}
     out.Body.Data.FromEntity(res)
@@ -98,24 +98,28 @@ huma.Register(api, newMethodErrors.Declare(authgate.Secured(huma.Operation{
 `authgate.Secured` — операция под cookie: `Security` и коды 401 сессии в OpenAPI. Публичная
 операция — без него и в `publicOperations` (`cmd/api/api_test.go`).
 
-### 7. Таблица ошибок операции
+### 7. Ошибки: правило домена и таблица операции
 
-Ошибки, которые отдаёт usecase операции, переводит её таблица (`httpkit.NewErrorMap` в
-`handler.go`): `Map` — в хендлере, `Declare` — при регистрации (статусы и коды — в `openapi.json`).
-Правило, общее для операций (`notFoundRule`, `authgate.ForbiddenRule`), — переменная пакета:
+Правило каждой ошибки `errors.go` — одно, переменной пакета (`notFoundRule`). Таблица домена
+`userErrors` переводит их все — хендлер отдаёт ошибку только через неё. Таблица операции из тех же
+правил объявляет при регистрации (`Declare`) коды, которые отдаёт её usecase (`openapi.json`):
 
 ```go
-var newMethodErrors = httpkit.NewErrorMap(
-    notFoundRule,
-    httpkit.ErrorRule{Err: user.ErrXyz, Status: http.StatusConflict, Code: "USER_XYZ", Detail: "..."},
-    authgate.ForbiddenRule,
+var (
+    xyzRule = httpkit.ErrorRule{Err: user.ErrXyz, Status: http.StatusConflict, Code: "USER_XYZ", Detail: "..."}
+
+    userErrors      = httpkit.NewErrorMap(notFoundRule /* …правило каждой ошибки домена… */, xyzRule, authgate.ForbiddenRule)
+    newMethodErrors = httpkit.NewErrorMap(notFoundRule, xyzRule, authgate.ForbiddenRule)
 )
 ```
 
-- Код — `<DOMAIN>_<WHAT>`; ошибка поля запроса — 422 с `Field: "body.<field>"`.
+- Новая ошибка домена — правило в `userErrors`, иначе archtest `TestDomainErrorTables` красный: она
+  ответила бы 500.
+- Код — `<DOMAIN>_<WHAT>`; разный смысл — разная ошибка домена; ошибка поля запроса — 422 с
+  `Field: "body.<field>"`.
 - 429 — `Retry-After` из метода `RetryAfter() time.Duration` ошибки в цепочке (`auth.LockedError`).
 - Первое совпавшее правило выигрывает; правило, которое затеняет правило выше, — panic при сборке.
-- Операция без доменных ошибок таблицы не заводит: несопоставленная ошибка — 500 без причины.
+- Операция без доменных ошибок таблицы операции не заводит.
 
 Контракт ошибок целиком — `docs/reference/architecture.md` § Контракт ошибок API.
 
@@ -127,9 +131,8 @@ var newMethodErrors = httpkit.NewErrorMap(
 - Validation error (huma сам отдаёт 422)
 - Каждый код таблицы операции (`handlertest.AssertAPIError`)
 
-`errors_test.go` (white-box) — строка операции в `TestErrorMaps`: ошибки её usecase → таблица
-(`Unmapped` пуст). Новая ошибка домена, которая до HTTP не доходит, — в `internalErrors`; archtest
-`TestDomainErrorsReachHTTP` сверяет оба списка с `errors.go`.
+`errors_test.go` (white-box) — строка операции в `TestErrorMaps`: таблица операции объявляет ошибки
+её usecase (список — по коду usecase, `Unmapped` пуст).
 
 Используй `MockUsecase` (уже регенерирован после шага 3).
 

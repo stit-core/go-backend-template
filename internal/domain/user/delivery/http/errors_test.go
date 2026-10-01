@@ -1,4 +1,4 @@
-// White-box (package http): таблицы ошибок операций неэкспортируемые.
+// White-box (package http): таблицы ошибок неэкспортируемые.
 package http
 
 import (
@@ -11,11 +11,8 @@ import (
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
-// Ошибки домена, которые до HTTP не доходят (archtest сверяет со списком errors.go вместе с
-// операциями ниже).
-var internalErrors = []error{user.ErrInvalidRole}
-
-// Каждая ошибка, которую отдаёт usecase операции, — в таблице операции: свой code, а не 500.
+// OpenAPI операции объявляет ошибки, которые отдаёт её usecase (список — по коду usecase). Что ни
+// одна ошибка домена не уходит 500, держит таблица userErrors и archtest TestDomainErrorTables.
 func TestErrorMaps(t *testing.T) {
 	t.Parallel()
 	forbidden := &policy.ForbiddenError{Reason: "test"}
@@ -35,7 +32,6 @@ func TestErrorMaps(t *testing.T) {
 		t.Run(tc.op, func(t *testing.T) {
 			t.Parallel()
 			require.Empty(t, tc.m.Unmapped(tc.errs...))
-			require.Equal(t, internalErrors, tc.m.Unmapped(internalErrors...), "an internal error is not part of the HTTP contract")
 		})
 	}
 }

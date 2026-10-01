@@ -1,7 +1,7 @@
 // Package archtest машинно держит границы и слоевые инварианты доменов (rule
 // domain-architecture) для любого каталога internal/domain/*: импорты между доменами и
 // слоями, чистоту корня домена, адаптеры и таблицы между доменами, привязку портов без fx.As,
-// префикс, уникальность и envelope HTTP-типов, ошибки домена в HTTP-контракте, владение
+// префикс, уникальность и envelope HTTP-типов, таблицу ошибок домена в HTTP-контракте, владение
 // subject-литералами, запрет time.Now() и тестов без утверждений. На archtest //nolint не действует.
 package archtest
 
@@ -207,58 +207,151 @@ func structField(expr ast.Expr, name string) *ast.Field {
 	return nil
 }
 
-// TestDomainErrorsReachHTTP: каждая ошибка домена, который регистрирует HTTP-операции, названа в его
-// delivery/http — правилом таблицы ошибок операции или в списке внутренних ошибок теста полноты:
-// новая ошибка не уходит клиенту 500 незамеченной.
-func TestDomainErrorsReachHTTP(t *testing.T) {
+// TestDomainErrorTables: в домене, который регистрирует HTTP-операции, таблица домена <домен>Errors
+// (delivery/http) переводит каждую ошибку его errors.go, а хендлеры отдают ошибки только через неё:
+// ни одна ошибка домена не уходит клиенту 500 ни на одной операции. Таблицы операций лишь объявляют
+// свои коды в OpenAPI.
+func TestDomainErrorTables(t *testing.T) {
 	t.Parallel()
-	named := map[string]map[string]bool{} // домен → ошибки, названные в его delivery/http
-	registers := map[string]bool{}        // домен регистрирует операции huma
+	files := map[string][]goFile{} // домен → не-тестовые файлы его delivery/http
 	for _, f := range goFiles(t) {
-		domain, sub, ok := splitDomain(f.pkg)
-		if !ok || sub != "delivery/http" {
-			continue
+		if domain, sub, ok := splitDomain(f.pkg); ok && sub == "delivery/http" && !f.test {
+			files[domain] = append(files[domain], f)
 		}
-		file := parseGo(t, f.path)
-		byName := importsByName(file)
-		if named[domain] == nil {
-			named[domain] = map[string]bool{}
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			if id, ok := sel.X.(*ast.Ident); ok {
-				switch pkg := byName[id.Name]; {
-				case pkg == module+"/internal/domain/"+domain && strings.HasPrefix(sel.Sel.Name, "Err"):
-					named[domain][sel.Sel.Name] = true
-				case pkg == "github.com/danielgtaylor/huma/v2" && sel.Sel.Name == "Register" && !f.test:
-					registers[domain] = true
-				}
-			}
-			return true
-		})
 	}
-	for domain, names := range named {
-		if !registers[domain] {
-			continue
-		}
-		path := "internal/domain/" + domain + "/errors.go"
-		for _, decl := range parseGo(t, path).Decls {
-			gd, ok := decl.(*ast.GenDecl)
-			if !ok || gd.Tok != token.VAR {
-				continue
-			}
-			for _, spec := range gd.Specs {
-				for _, id := range spec.(*ast.ValueSpec).Names {
-					if strings.HasPrefix(id.Name, "Err") && !names[id.Name] {
-						t.Errorf("%s declares %s, but internal/domain/%s/delivery/http names it neither in an operation's error table nor among the internal errors of its completeness test", path, id.Name, domain)
+	for domain, pkgFiles := range files {
+		table := strings.ToLower(exportedName(domain)[:1]) + exportedName(domain)[1:] + "Errors"
+		root := module + "/internal/domain/" + domain
+		rules := map[string]string{}   // переменная-правило → ошибка домена
+		errorMaps := map[string]bool{} // переменные — таблицы ошибок
+		var (
+			tableArgs   []ast.Expr
+			tableByName map[string]string // импорты файла таблицы
+		)
+		registers := false
+		parsed := make([]*ast.File, len(pkgFiles))
+		for i, f := range pkgFiles {
+			file := parseGo(t, f.path)
+			parsed[i] = file
+			byName := importsByName(file)
+			for _, decl := range file.Decls {
+				gd, ok := decl.(*ast.GenDecl)
+				if !ok || gd.Tok != token.VAR {
+					continue
+				}
+				for _, spec := range gd.Specs {
+					vs := spec.(*ast.ValueSpec)
+					for j, name := range vs.Names {
+						if j >= len(vs.Values) {
+							continue
+						}
+						if rule := ruleErr(vs.Values[j], byName, root); rule != "" {
+							rules[name.Name] = rule
+						}
+						if call, ok := vs.Values[j].(*ast.CallExpr); ok && isSelector(call.Fun, byName, httpkitPath, "NewErrorMap") {
+							errorMaps[name.Name] = true
+							if name.Name == table {
+								tableArgs, tableByName = call.Args, byName
+							}
+						}
 					}
 				}
 			}
+			ast.Inspect(file, func(n ast.Node) bool {
+				if sel, ok := n.(*ast.SelectorExpr); ok && isSelector(sel, byName, "github.com/danielgtaylor/huma/v2", "Register") {
+					registers = true
+				}
+				return true
+			})
+		}
+		if !registers {
+			continue
+		}
+		path := "internal/domain/" + domain + "/delivery/http"
+		if tableArgs == nil {
+			t.Errorf("%s registers operations without the domain error table %s = httpkit.NewErrorMap(…)", path, table)
+			continue
+		}
+		covered := map[string]bool{}
+		for _, arg := range tableArgs {
+			if id, ok := arg.(*ast.Ident); ok {
+				covered[rules[id.Name]] = true
+			}
+			covered[ruleErr(arg, tableByName, root)] = true
+		}
+		for _, sentinel := range domainErrors(t, domain) {
+			if !covered[sentinel] {
+				t.Errorf("%s.%s has no rule in %s.%s: the domain error would answer 500", domain, sentinel, path, table)
+			}
+		}
+		for i, file := range parsed {
+			ast.Inspect(file, func(n ast.Node) bool {
+				switch x := n.(type) {
+				case *ast.CallExpr:
+					if sel, ok := x.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Map" {
+						if id, ok := sel.X.(*ast.Ident); ok && errorMaps[id.Name] && id.Name != table {
+							t.Errorf("%s maps errors with %s: a handler maps through the domain table %s, an operation table only declares", pkgFiles[i].path, id.Name, table)
+						}
+					}
+				case *ast.ReturnStmt:
+					if len(x.Results) > 0 && isIdent(x.Results[len(x.Results)-1], "err") {
+						t.Errorf("%s returns err unmapped: a handler returns %s.Map(err)", pkgFiles[i].path, table)
+					}
+				}
+				return true
+			})
 		}
 	}
+}
+
+const httpkitPath = "git.stit.tech/stit-core/golibinfra/httpkit"
+
+// ruleErr — ошибка домена root в литерале httpkit.ErrorRule{Err: <домен>.ErrX, …}; "" — не такой литерал.
+func ruleErr(expr ast.Expr, byName map[string]string, root string) string {
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok || !isSelector(lit.Type, byName, httpkitPath, "ErrorRule") {
+		return ""
+	}
+	for _, elt := range lit.Elts {
+		if kv, ok := elt.(*ast.KeyValueExpr); ok && isIdent(kv.Key, "Err") {
+			if sel, ok := kv.Value.(*ast.SelectorExpr); ok {
+				if id, ok := sel.X.(*ast.Ident); ok && byName[id.Name] == root {
+					return sel.Sel.Name
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// isSelector — expr — это <пакет pkg>.name.
+func isSelector(expr ast.Expr, byName map[string]string, pkg, name string) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != name {
+		return false
+	}
+	id, ok := sel.X.(*ast.Ident)
+	return ok && byName[id.Name] == pkg
+}
+
+// domainErrors — ошибки (переменные Err*) из errors.go домена.
+func domainErrors(t *testing.T, domain string) []string {
+	t.Helper()
+	var names []string
+	for _, decl := range parseGo(t, "internal/domain/"+domain+"/errors.go").Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			for _, id := range spec.(*ast.ValueSpec).Names {
+				if strings.HasPrefix(id.Name, "Err") {
+					names = append(names, id.Name)
+				}
+			}
+		}
+	}
+	return names
 }
 
 // TestSubjectLiteralOwnership: литерал "<domain>.events." встречается только в

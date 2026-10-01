@@ -257,8 +257,8 @@ func Register(api huma.API, h *Handler) {
 	_ = h
 	// huma.Register(api, huma.Operation{OperationID: "create${TITLE}", ...}, h.create)
 	// HTTP-DTO — в dto.go, имена ${TITLE}<Op>Input/Output (huma-registry глобальна);
-	// ошибки — таблица httpkit.NewErrorMap операции: Map в хендлере, Declare в регистрации, полнота —
-	// errors_test.go (см. user/delivery/http).
+	// ошибки — таблица домена ${NAME}Errors (правило на каждую ошибку errors.go, Map в хендлере) и
+	// таблица операции из тех же правил для Declare (см. user/delivery/http).
 }
 EOF
 

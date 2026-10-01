@@ -36,8 +36,9 @@ paths:
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
   Операция без `Security` публична в рантайме: она либо под `Security` (`authgate.Secured(op)`),
   либо в `publicOperations` (`cmd/api/api_test.go`); регистрация — в `registerHTTP`
-  (`cmd/api/http.go`). Ошибки — таблица `httpkit.ErrorMap` операции: `Map` в хендлере, `Declare`
-  при регистрации, полнота — `delivery/http/errors_test.go` (archtest); ошибка поля — 422 с `Field`.
+  (`cmd/api/http.go`). Ошибки — таблица домена `<домен>Errors`: правило на каждую ошибку `errors.go`,
+  хендлер отдаёт `<домен>Errors.Map(err)` (archtest `TestDomainErrorTables`); таблица операции из тех
+  же правил — `Declare` при регистрации; ошибка поля — 422 с `Field`.
   Каждая ручка — операция huma в контракте `openapi.json`: сырой маршрут chi (`Router()`) и
   `Hidden: true` обходят проверку `Security`, `TestBoot` их не пускает. Envelope — `data`;
   префикс, уникальность имён и envelope держит archtest `TestHTTPTypes`.

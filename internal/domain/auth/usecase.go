@@ -165,20 +165,20 @@ func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*LoginOutp
 			return nil, ErrRefreshExpired
 		}
 		uc.d.Metrics.RecordRefresh(ctx, outcome.Invalid)
-		return nil, ErrInvalidCredentials
+		return nil, ErrRefreshInvalid
 	}
 
 	session, err := uc.d.Sessions.GetByJTI(ctx, oldJTI)
 	if err != nil {
 		if errors.Is(err, ErrSessionNotFound) {
 			uc.d.Metrics.RecordRefresh(ctx, outcome.Invalid)
-			return nil, ErrInvalidCredentials
+			return nil, ErrRefreshInvalid
 		}
 		return nil, fmt.Errorf("get refresh session: %w", err)
 	}
 	if session.UserID != userID {
 		uc.d.Metrics.RecordRefresh(ctx, outcome.Invalid)
-		return nil, ErrInvalidCredentials
+		return nil, ErrRefreshInvalid
 	}
 	if session.UsedAt != nil {
 		uc.writeRefreshReusedAudit(ctx, userID, oldJTI)
@@ -196,7 +196,7 @@ func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*LoginOutp
 			return nil, fmt.Errorf("lookup user: %w", err)
 		}
 		uc.d.Metrics.RecordRefresh(ctx, outcome.Invalid)
-		return nil, ErrInvalidCredentials
+		return nil, ErrRefreshInvalid
 	}
 
 	access, err := uc.d.Tokens.IssueAccess(ctx, u)
@@ -279,7 +279,7 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 	}
 	if !verified {
 		uc.d.Metrics.RecordPasswordChange(ctx, resultInvalidOldPassword)
-		return ErrInvalidCredentials
+		return ErrWrongOldPassword
 	}
 
 	current, err := uc.d.Users.GetByID(ctx, userID)

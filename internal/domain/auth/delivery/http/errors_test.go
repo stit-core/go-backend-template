@@ -1,4 +1,4 @@
-// White-box (package http): таблицы ошибок операций неэкспортируемые.
+// White-box (package http): таблицы ошибок неэкспортируемые.
 package http
 
 import (
@@ -11,11 +11,8 @@ import (
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
-// Ошибки портов auth, которые usecase переводит сам: до HTTP не доходят (archtest сверяет со
-// списком errors.go вместе с операциями ниже).
-var internalErrors = []error{auth.ErrTokenExpired, auth.ErrSessionNotFound}
-
-// Каждая ошибка, которую отдаёт usecase операции, — в таблице операции: свой code, а не 500.
+// OpenAPI операции объявляет ошибки, которые отдаёт её usecase (список — по коду usecase). Что ни
+// одна ошибка домена не уходит 500, держит таблица authErrors и archtest TestDomainErrorTables.
 func TestErrorMaps(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -24,9 +21,9 @@ func TestErrorMaps(t *testing.T) {
 		errs []error
 	}{
 		{"loginUser", loginErrors, []error{auth.ErrInvalidCredentials, &auth.LockedError{}}},
-		{"refreshToken", refreshErrors, []error{auth.ErrRefreshExpired, auth.ErrRefreshReused, auth.ErrInvalidCredentials}},
+		{"refreshToken", refreshErrors, []error{auth.ErrRefreshExpired, auth.ErrRefreshReused, auth.ErrRefreshInvalid}},
 		{"changePassword", changePasswordErrors, []error{
-			auth.ErrWeakPassword, auth.ErrInvalidCredentials, auth.ErrUserNotFound, auth.ErrConcurrentUpdate,
+			auth.ErrWeakPassword, auth.ErrWrongOldPassword, auth.ErrUserNotFound, auth.ErrConcurrentUpdate,
 			&policy.ForbiddenError{Reason: "test"},
 		}},
 	}
@@ -34,7 +31,6 @@ func TestErrorMaps(t *testing.T) {
 		t.Run(tc.op, func(t *testing.T) {
 			t.Parallel()
 			require.Empty(t, tc.m.Unmapped(tc.errs...))
-			require.Equal(t, internalErrors, tc.m.Unmapped(internalErrors...), "an internal error is not part of the HTTP contract")
 		})
 	}
 }

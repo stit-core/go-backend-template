@@ -86,7 +86,7 @@ func (h *Handler) register(ctx context.Context, in *UserRegisterInput) (*UserReg
 		Name:     in.Body.Name,
 	})
 	if err != nil {
-		return nil, registerErrors.Map(err)
+		return nil, userErrors.Map(err)
 	}
 	out := &UserRegisterOutput{}
 	out.Body.Data.FromEntity(u)
@@ -96,7 +96,7 @@ func (h *Handler) register(ctx context.Context, in *UserRegisterInput) (*UserReg
 func (h *Handler) getByID(ctx context.Context, in *UserGetInput) (*UserGetOutput, error) {
 	u, err := h.uc.GetByID(ctx, in.ID)
 	if err != nil {
-		return nil, getErrors.Map(err)
+		return nil, userErrors.Map(err)
 	}
 	out := &UserGetOutput{}
 	out.Body.Data.FromEntity(u)
@@ -106,7 +106,7 @@ func (h *Handler) getByID(ctx context.Context, in *UserGetInput) (*UserGetOutput
 func (h *Handler) me(ctx context.Context, _ *struct{}) (*UserMeOutput, error) {
 	u, err := h.uc.Me(ctx)
 	if err != nil {
-		return nil, meErrors.Map(err)
+		return nil, userErrors.Map(err)
 	}
 	out := &UserMeOutput{}
 	out.Body.Data.FromEntity(u)
@@ -122,7 +122,7 @@ func (h *Handler) list(ctx context.Context, in *UserListInput) (*UserListOutput,
 
 	list, total, err := h.uc.List(ctx, filter, in.Page)
 	if err != nil {
-		return nil, listErrors.Map(err)
+		return nil, userErrors.Map(err)
 	}
 
 	out := &UserListOutput{}
@@ -143,7 +143,7 @@ func (h *Handler) update(ctx context.Context, in *UserUpdateInput) (*UserUpdateO
 		Version: in.Body.Version,
 	})
 	if err != nil {
-		return nil, updateErrors.Map(err)
+		return nil, userErrors.Map(err)
 	}
 	out := &UserUpdateOutput{}
 	out.Body.Data.FromEntity(u)
@@ -152,29 +152,30 @@ func (h *Handler) update(ctx context.Context, in *UserUpdateInput) (*UserUpdateO
 
 func (h *Handler) delete(ctx context.Context, in *UserDeleteInput) (*struct{}, error) {
 	if err := h.uc.Delete(ctx, in.ID); err != nil {
-		return nil, deleteErrors.Map(err)
+		return nil, userErrors.Map(err)
 	}
 	return nil, nil
 }
 
-// Правила ошибок домена; таблица операции — правила того, что отдаёт её usecase (полноту держит тест).
+// Правило каждой ошибки домена — одно. userErrors переводит в хендлерах их все (ни одна не уходит
+// 500 — archtest), таблица операции объявляет в OpenAPI те, что отдаёт её usecase.
 var (
-	notFoundRule = httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"}
+	notFoundRule         = httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"}
+	alreadyExistsRule    = httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"}
+	invalidEmailRule     = httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_EMAIL", Detail: "invalid email", Field: "body.email"}
+	invalidRoleRule      = httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_ROLE", Detail: "invalid role"}
+	weakPasswordRule     = httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"}
+	concurrentUpdateRule = httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"}
+	noUpdateFieldsRule   = httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"}
+	statusTransitionRule = httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "status transition is not allowed"}
 
-	registerErrors = httpkit.NewErrorMap(
-		httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"},
-		httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_EMAIL", Detail: "invalid email", Field: "body.email"},
-		httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"},
-	)
-	meErrors     = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
-	listErrors   = httpkit.NewErrorMap(authgate.ForbiddenRule)
-	getErrors    = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
-	updateErrors = httpkit.NewErrorMap(
-		notFoundRule,
-		httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"},
-		httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"},
-		httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "status transition is not allowed"},
-		authgate.ForbiddenRule,
-	)
-	deleteErrors = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
+	userErrors = httpkit.NewErrorMap(notFoundRule, alreadyExistsRule, invalidEmailRule, invalidRoleRule, weakPasswordRule,
+		concurrentUpdateRule, noUpdateFieldsRule, statusTransitionRule, authgate.ForbiddenRule)
+
+	registerErrors = httpkit.NewErrorMap(weakPasswordRule, invalidEmailRule, alreadyExistsRule)
+	meErrors       = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
+	listErrors     = httpkit.NewErrorMap(authgate.ForbiddenRule)
+	getErrors      = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
+	updateErrors   = httpkit.NewErrorMap(notFoundRule, noUpdateFieldsRule, concurrentUpdateRule, statusTransitionRule, authgate.ForbiddenRule)
+	deleteErrors   = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
 )

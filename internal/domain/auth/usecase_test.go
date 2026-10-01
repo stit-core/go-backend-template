@@ -348,7 +348,7 @@ func TestRefresh(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withParser(parserReturning(t, "", "", errors.New("not a refresh token"))))
 		_, err := f.uc.Refresh(context.Background(), "tok")
-		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+		require.ErrorIs(t, err, auth.ErrRefreshInvalid)
 	})
 
 	t.Run("expired at token level", func(t *testing.T) {
@@ -386,7 +386,7 @@ func TestRefresh(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withParser(parserReturning(t, "u1", "missing", nil)))
 		_, err := f.uc.Refresh(context.Background(), "tok")
-		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+		require.ErrorIs(t, err, auth.ErrRefreshInvalid)
 	})
 }
 
@@ -473,7 +473,7 @@ func TestChangePassword(t *testing.T) {
 
 		ctx := identitytest.Client("u1")
 		err := f.uc.ChangePassword(ctx, "u1", "old", "newpassword123")
-		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+		require.ErrorIs(t, err, auth.ErrWrongOldPassword)
 	})
 
 	t.Run("weak new", func(t *testing.T) {

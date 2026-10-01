@@ -44,7 +44,7 @@ func TestLogin_HappyPath(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Login(mock.Anything, mock.Anything).
-		Return(&auth.LoginOutput{AccessToken: "a", RefreshToken: "r", User: &auth.User{ID: "u1", Role: identity.RoleClient}}, nil)
+		Return(&auth.LoginOutput{AccessToken: "a", RefreshToken: "r", User: &auth.User{ID: "u1", Email: "a@b.com", Name: "Alice", Role: identity.RoleClient}}, nil)
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/login", strings.NewReader(`{"email":"a@b.com","password":"pass1234"}`))
@@ -52,12 +52,16 @@ func TestLogin_HappyPath(t *testing.T) {
 	require.ElementsMatch(t, []string{authgate.CookieAccess, authgate.CookieRefresh}, setCookieNames(resp.Header()))
 	var body struct {
 		Data struct {
-			ID   string `json:"id"`
-			Role string `json:"role"`
+			ID    string `json:"id"`
+			Email string `json:"email"`
+			Name  string `json:"name"`
+			Role  string `json:"role"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
 	require.Equal(t, "u1", body.Data.ID, "the user goes in the data envelope")
+	require.Equal(t, "a@b.com", body.Data.Email)
+	require.Equal(t, "Alice", body.Data.Name)
 	require.Equal(t, "client", body.Data.Role)
 }
 
@@ -118,7 +122,7 @@ func TestRefresh_Expired(t *testing.T) {
 func TestRefresh_Invalid(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Refresh(mock.Anything, "broken").Return(nil, auth.ErrInvalidCredentials)
+	uc.EXPECT().Refresh(mock.Anything, "broken").Return(nil, auth.ErrRefreshInvalid)
 	api := setup(t, uc)
 
 	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=broken")
@@ -201,7 +205,7 @@ func TestChangePassword_Errors(t *testing.T) {
 func TestChangePassword_WrongOldPassword(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", mock.Anything).Return(auth.ErrInvalidCredentials).Once()
+	uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", mock.Anything).Return(auth.ErrWrongOldPassword).Once()
 	api := setup(t, uc)
 
 	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",

@@ -15,6 +15,8 @@ var (
 	ErrSessionNotFound    = errors.New("auth: refresh session not found")
 	ErrUserNotFound       = errors.New("auth: user not found")
 	ErrConcurrentUpdate   = errors.New("auth: concurrent update")
+	ErrWrongOldPassword   = errors.New("auth: old password does not match")
+	ErrRefreshInvalid     = errors.New("auth: refresh token invalid")
 )
 
 // LockedError — вход заблокирован guard'ом (errors.Is — ErrAccountLocked); Wait — до снятия
