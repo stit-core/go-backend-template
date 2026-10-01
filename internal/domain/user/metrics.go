@@ -41,19 +41,19 @@ func (m *Metrics) RecordRegistered(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.registered.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.registered.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }
 
 func (m *Metrics) RecordUpdated(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.updated.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.updated.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }
 
 func (m *Metrics) RecordDeleted(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.deleted.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.deleted.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }

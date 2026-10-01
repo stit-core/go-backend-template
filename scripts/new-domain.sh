@@ -205,7 +205,7 @@ func (m *Metrics) RecordCreated(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.created.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.created.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }
 EOF
 

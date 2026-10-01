@@ -11,12 +11,12 @@ import (
 )
 
 // Исходы, особые для домена; общие — outcome.
-const (
-	resultInvalidLogin       outcome.Result = "invalid_credentials"
-	resultLocked             outcome.Result = "locked"
-	resultBlocked            outcome.Result = "blocked"
-	resultReused             outcome.Result = "reused"
-	resultInvalidOldPassword outcome.Result = "invalid_old"
+var (
+	resultInvalidLogin       = outcome.New("invalid_credentials")
+	resultLocked             = outcome.New("locked")
+	resultBlocked            = outcome.New("blocked")
+	resultReused             = outcome.New("reused")
+	resultInvalidOldPassword = outcome.New("invalid_old")
 )
 
 // Metrics — security-relevant counters auth-домена. Имена строятся
@@ -61,14 +61,14 @@ func (m *Metrics) RecordLogin(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.loginAttempts.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.loginAttempts.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }
 
 func (m *Metrics) RecordRefresh(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.refreshAttempts.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.refreshAttempts.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }
 
 func (m *Metrics) RecordLogout(ctx context.Context) {
@@ -82,5 +82,5 @@ func (m *Metrics) RecordPasswordChange(ctx context.Context, result outcome.Resul
 	if m == nil {
 		return
 	}
-	m.passwordChange.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.passwordChange.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }

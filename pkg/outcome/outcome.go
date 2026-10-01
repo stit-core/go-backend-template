@@ -2,14 +2,19 @@
 // называется одинаково.
 package outcome
 
-// Result — значение метки result. Исход, особый для домена, — константа Result в его metrics.go.
-type Result string
+// Result — значение метки result; структура, а не строка: литерал вместо исхода не компилируется.
+type Result struct{ name string }
 
-const (
-	OK           Result = "ok"
-	Error        Result = "error"
-	Invalid      Result = "invalid"
-	Forbidden    Result = "forbidden"
-	WeakPassword Result = "weak_password"
-	Expired      Result = "expired"
+// New — исход, особый для домена: переменная в его metrics.go.
+func New(name string) Result { return Result{name: name} }
+
+func (r Result) String() string { return r.name }
+
+var (
+	OK           = New("ok")
+	Error        = New("error")
+	Invalid      = New("invalid")
+	Forbidden    = New("forbidden")
+	WeakPassword = New("weak_password")
+	Expired      = New("expired")
 )

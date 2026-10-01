@@ -11,11 +11,11 @@ import (
 )
 
 // Исходы, особые для домена; общие — outcome.
-const (
-	resultDuplicate    outcome.Result = "duplicate"
-	resultAlreadyUsed  outcome.Result = "already_used"
-	resultUserNotFound outcome.Result = "user_not_found"
-	resultInactive     outcome.Result = "inactive"
+var (
+	resultDuplicate    = outcome.New("duplicate")
+	resultAlreadyUsed  = outcome.New("already_used")
+	resultUserNotFound = outcome.New("user_not_found")
+	resultInactive     = outcome.New("inactive")
 )
 
 // Metrics — domain-уровень counters для verification (email confirm +
@@ -61,26 +61,26 @@ func (m *Metrics) RecordEmailIssued(ctx context.Context, result outcome.Result) 
 	if m == nil {
 		return
 	}
-	m.emailIssued.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.emailIssued.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }
 
 func (m *Metrics) RecordEmailConfirmed(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.emailConfirmed.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.emailConfirmed.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }
 
 func (m *Metrics) RecordPasswordResetRequested(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.passwordResetRequested.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.passwordResetRequested.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }
 
 func (m *Metrics) RecordPasswordResetConfirmed(ctx context.Context, result outcome.Result) {
 	if m == nil {
 		return
 	}
-	m.passwordResetConfirmed.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(result))))
+	m.passwordResetConfirmed.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
 }

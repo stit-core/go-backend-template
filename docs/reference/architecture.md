@@ -86,7 +86,8 @@
 - **Метрики** (`metrics.go`): первый аргумент bizmetric — имя домена = имени пакета
   (`biz_<domain>_<event>_total`); struct `Metrics`, конструктор `NewMetrics(m metric.Meter)`,
   все `Record*` — nil-safe. Исход (метка `result`) — `outcome.Result`: общие исходы — `pkg/outcome`,
-  особые для домена — константы в `metrics.go`.
+  особые для домена — переменные `outcome.New(…)` в `metrics.go`; строка вместо исхода не
+  компилируется.
 - **Repository**: создание — `Insert*` (не `Create*`), sqlc-аннотации — `Insert<Entity>`.
 
 ### Разбиение переростков
