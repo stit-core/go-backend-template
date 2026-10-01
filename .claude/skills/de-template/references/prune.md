@@ -7,14 +7,14 @@ domain) — иначе теряешь живой образец. Удаляй в
 
 ## Чеклист (7 точек)
 
-1. **Доменные пакеты** — `internal/domain/{auth,user,verification}/` целиком (`git rm -r`) и
-   их записи в allowlist'ах `internal/archtest`.
+1. **Доменные пакеты** — `internal/domain/{auth,user,verification}/` целиком (`git rm -r`).
 2. **`.mockery.yml`** — блоки `packages` удаляемых доменов (`internal/domain/{user,auth,verification}`
    и их `delivery/http`, `delivery/nats`); иначе `make gen` падает на несуществующих пакетах.
 3. **sqlc.yaml** — три блока `engine` с `queries/out` на `internal/domain/{user,verification,auth}/...`.
 4. **Миграции** — `migrations/*` этих доменов: `0001_users.*` (таблицы `users`,
    `password_resets`, `email_verifications` — user+verification), `0002_auth.*`
-   (`refresh_sessions`) и `0003_email_verifications_idempotency.*`. Удаляй и `.up.sql`, и
+   (`refresh_sessions`), `0003_email_verifications_idempotency.*` и
+   `0004_email_verifications_sent_at.*`. Удаляй и `.up.sql`, и
    `.down.sql`. Свои миграции перенумеруй подряд с `0001` — `migrations-check` (шаг `make check`)
    требует непрерывной нумерации; прод-БД у форка на этом шаге ещё нет. Если свои миграции
    опираются на общие объекты из `0001_users` (`CREATE EXTENSION pgcrypto`, функция
