@@ -260,13 +260,13 @@ prod-дефолты, понятный контракт ошибок API, тес�
   — `CanChangeStatus` (403); удаление — условная запись без версии (B1: повтор и гонка — 404).
 - S5: эффект консьюмера помнит `sent_at`: upsert перевыпускает токен неотправленного, отправленное —
   пропуск; `TokenID` — id строки; погашение — условный `UPDATE` первым в транзакции (`ErrTokenUsed`).
-- S6: `user.Trusted` — без policy, только адаптерам `module/` (archtest); адаптер — тип на поставщика,
-  ошибки `Trusted` → sentinel потребителя; киты — `auth/infra/`, log-mailer — S11; HAR-08 — 95, 119, 120.
+- S6: `user.Trusted` — без policy, только адаптерам `module/` потребителей (archtest; свой — лишь
+  `NewTrusted`, N1); ошибки — `TrustedErrors`, тест Trusted и адаптеров идут по нему (N2); киты —
+  `auth/infra/`, log-mailer — S11; HAR-08 — 95, 119, 120.
 - S7: префикс и `data` — archtest `TestHTTPTypes`; 401 — `TestBoot` по спецификации; e2e-модели строгие.
-- S8: 401 `AUTH_ACCESS_EXPIRED` — обновить сессию (`authgate.Secured`); `importsByName` archtest знает
-  `huma/v2` → `huma`. B1: правило на каждую ошибку `errors.go`, `Map` — таблицей домена (archtest для
-  доменов с операциями), таблица операции — только `Declare`; разный смысл — разная ошибка
-  (`ErrWrongOldPassword` 422, `ErrRefreshInvalid` 401); ошибки портов — тоже с правилом.
+- S8: `AUTH_ACCESS_EXPIRED` — `authgate.Secured`; `importsByName` знает `huma/v2`. B1: правило на каждую
+  ошибку `errors.go`, `Map` — таблицей домена (archtest), таблица операции — только `Declare`; разный
+  смысл — разная ошибка (`ErrWrongOldPassword`, `ErrRefreshInvalid`); у ошибок портов — тоже правило.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в

@@ -132,16 +132,18 @@ DTO в порте — локальные (не re-export из B).
 
 - **Поставщик отдаёт `Trusted`** (`trusted.go`): операции для других доменов без policy —
   решение принял вызывающий. Методы с policy (`Usecase`) — только входам самого домена (HTTP,
-  NATS); `Trusted` берут только адаптеры `module/` потребителей (archtest
-  `TestTrustedOnlyInModules`). Ошибки `Trusted` перечислены в его doc-комментарии.
+  NATS); `Trusted` берут только адаптеры `module/` потребителей, свой `module/` лишь провайдит
+  `NewTrusted` (archtest `TestTrustedOnlyInModules`). Ошибки `Trusted` — список `TrustedErrors`: тест
+  `Trusted` держит, что других нет, тест адаптера — что каждая переводится.
 - **Identity-closure** (`func(u *user.Usecase) userhttp.Usecase { return u }`) — только внутри
   домена: delivery-порт своего usecase. Порт между доменами closure не реализует — чужие
   sentinel'ы уйдут потребителю без маппинга (archtest `TestNoCrossDomainIdentityClosure`).
 - **Типовой адаптер** — тип **и его конструктор** в `adapters.go` (не расщеплять между
   module.go/adapters.go); один тип на домен-поставщика реализует все порты потребителя к нему.
-- **Sentinel-маппинг исчерпывающий:** каждая ошибка `Trusted` поставщика → sentinel
+- **Sentinel-маппинг исчерпывающий:** каждая ошибка из `TrustedErrors` поставщика → sentinel
   потребителя (`user.ErrConcurrentUpdate` → `auth.ErrConcurrentUpdate`), usecase-потребитель не
-  может `errors.Is` по чужим sentinel'ам (archtest); держит тест адаптера на каждый метод.
+  может `errors.Is` по чужим sentinel'ам (archtest); тест адаптера идёт по `TrustedErrors` на каждом
+  методе.
 - **Порт переносит решения, не сырьё:** вычисленное свойство — метод сущности поставщика
   (`CanLogin()`), в адаптере нет условий по полям поставщика.
 - Времени в адаптерах нет: `clockkit.Clock` инжектится так же, как в usecase.

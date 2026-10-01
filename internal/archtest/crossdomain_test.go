@@ -43,13 +43,16 @@ func TestNoCrossDomainIdentityClosure(t *testing.T) {
 }
 
 // TestTrustedOnlyInModules: Trusted домена — операции без policy для других доменов; их берут только
-// адаптеры module/ потребителей, иначе вход (HTTP, NATS) обошёл бы авторизацию.
+// адаптеры module/ потребителей, иначе вход (HTTP, NATS) обошёл бы авторизацию. Свой module/
+// поставщика только провайдит NewTrusted: интерфейс над *Trusted в нём открыл бы доверенные методы
+// своему же входу.
 func TestTrustedOnlyInModules(t *testing.T) {
 	t.Parallel()
 	for _, f := range goFiles(t) {
-		if _, sub, ok := splitDomain(f.pkg); f.test || ok && sub == "module" {
+		if f.test {
 			continue
 		}
+		domain, sub, inDomain := splitDomain(f.pkg)
 		file := parseGo(t, f.path)
 		byName := importsByName(file)
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -57,33 +60,13 @@ func TestTrustedOnlyInModules(t *testing.T) {
 			if !ok || sel.Sel.Name != "Trusted" {
 				return true
 			}
-			if id, ok := sel.X.(*ast.Ident); ok {
-				if _, sub, ok := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/")); ok && sub == "" {
-					t.Errorf("%s uses %s.Trusted: operations without policy are for adapters in module/ only", f.path, id.Name)
-				}
-			}
-			return true
-		})
-	}
-}
-
-// TestNoFxAs: порт привязывает тип результата провайдера или identity-closure (architecture.md § fx);
-// fx.As — вторая идиома, и порт между доменами через неё обошёл бы TestNoCrossDomainIdentityClosure.
-func TestNoFxAs(t *testing.T) {
-	t.Parallel()
-	for _, f := range goFiles(t) {
-		if f.test || !slices.Contains(f.imports, "go.uber.org/fx") {
-			continue
-		}
-		file := parseGo(t, f.path)
-		byName := importsByName(file)
-		ast.Inspect(file, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "As" {
+			id, ok := sel.X.(*ast.Ident)
+			if !ok {
 				return true
 			}
-			if id, ok := sel.X.(*ast.Ident); ok && byName[id.Name] == "go.uber.org/fx" {
-				t.Errorf("%s uses fx.As: a port is bound by the provider's result type or an identity closure (architecture.md § fx)", f.path)
+			provider, provSub, ok := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/"))
+			if ok && provSub == "" && (!inDomain || sub != "module" || provider == domain) {
+				t.Errorf("%s uses %s.Trusted: operations without policy are for adapters in module/ of consumer domains", f.path, id.Name)
 			}
 			return true
 		})

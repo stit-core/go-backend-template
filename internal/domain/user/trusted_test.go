@@ -2,6 +2,8 @@ package user_test
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -78,4 +80,58 @@ func TestTrusted_MarkEmailVerified(t *testing.T) {
 
 	require.NoError(t, tr.MarkEmailVerified(context.Background(), "u1"))
 	require.ErrorIs(t, tr.MarkEmailVerified(context.Background(), "gone"), user.ErrNotFound)
+}
+
+// Методы Trusted отдают только ошибки TrustedErrors и сбои инфраструктуры: их переводят адаптеры
+// потребителей, а новая ошибка без перевода ушла бы им 500.
+func TestTrusted_ErrorsAreDeclared(t *testing.T) {
+	t.Parallel()
+	infra := errors.New("db down")
+	found := func(repoErr error) *user.User {
+		if repoErr != nil {
+			return nil
+		}
+		return &user.User{ID: "u1", PasswordHash: "hash:secret-1", Version: 3}
+	}
+	calls := []struct {
+		name string
+		call func(tr *user.Trusted, repo *mocks.MockRepository, repoErr error) error
+	}{
+		{"LookupByID", func(tr *user.Trusted, repo *mocks.MockRepository, repoErr error) error {
+			repo.EXPECT().GetByID(mock.Anything, "u1").Return(found(repoErr), repoErr).Once()
+			_, err := tr.LookupByID(context.Background(), "u1")
+			return err
+		}},
+		{"LookupByEmail", func(tr *user.Trusted, repo *mocks.MockRepository, repoErr error) error {
+			repo.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(found(repoErr), repoErr).Once()
+			_, err := tr.LookupByEmail(context.Background(), "a@b.com")
+			return err
+		}},
+		{"VerifyPassword", func(tr *user.Trusted, repo *mocks.MockRepository, repoErr error) error {
+			repo.EXPECT().GetByID(mock.Anything, "u1").Return(found(repoErr), repoErr).Once()
+			_, err := tr.VerifyPassword(context.Background(), "u1", "secret-1")
+			return err
+		}},
+		{"UpdatePassword", func(tr *user.Trusted, repo *mocks.MockRepository, repoErr error) error {
+			repo.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:new", 3).Return(found(repoErr), repoErr).Once()
+			return tr.UpdatePassword(context.Background(), "u1", "hash:new", 3)
+		}},
+		{"MarkEmailVerified", func(tr *user.Trusted, repo *mocks.MockRepository, repoErr error) error {
+			repo.EXPECT().SetEmailVerified(mock.Anything, "u1").Return(repoErr).Once()
+			return tr.MarkEmailVerified(context.Background(), "u1")
+		}},
+	}
+	outcomes := append([]error{nil, infra}, user.TrustedErrors...)
+	for _, c := range calls {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			for _, repoErr := range outcomes {
+				repo := mocks.NewMockRepository(t)
+				err := c.call(newTrusted(repo), repo, repoErr)
+				declared := err == nil || errors.Is(err, infra) ||
+					slices.ContainsFunc(user.TrustedErrors, func(e error) bool { return errors.Is(err, e) })
+				require.True(t, declared, "%v is not in user.TrustedErrors", err)
+			}
+		})
+	}
 }

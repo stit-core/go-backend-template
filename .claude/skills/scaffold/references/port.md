@@ -70,8 +70,9 @@ type UsecaseDeps struct {
 
 Другим доменам поставщик отдаёт **`Trusted`** (`<provider>/trusted.go`): операции без policy —
 решение принял вызывающий. Методы `Usecase` с policy — только входам самого поставщика (HTTP,
-NATS); `Trusted` берут только адаптеры `module/` (archtest `TestTrustedOnlyInModules`). Нужной
-операции нет — добавь её в `Trusted`, а её ошибки — в его doc-комментарий; канон —
+NATS); `Trusted` берут только адаптеры `module/` потребителей, свой `module/` лишь провайдит
+`NewTrusted` (archtest `TestTrustedOnlyInModules`). Нужной операции нет — добавь её в `Trusted`, а
+её ошибки — в `TrustedErrors` (тест `Trusted` держит, что других нет); канон —
 `internal/domain/user/trusted.go`.
 
 Адаптер — один тип на домен-поставщика, он реализует все порты потребителя к нему; тип **и его
@@ -158,7 +159,7 @@ make test PKG=./internal/archtest/...
 ### 8. Тесты
 
 - `usecase_test.go` потребителя: используй `Mock<Provider>Reader` (свежесгенерированный). Тестируй именно поведение consumer'а.
-- `module/adapters_test.go` (white-box, обязателен): адаптер поверх настоящего `<provider>.Trusted` с моком его репозитория — маппинг полей и каждая ошибка `Trusted` → sentinel потребителя на каждом методе (чужой sentinel не протекает); канон — `internal/domain/auth/module/adapters_test.go`.
+- `module/adapters_test.go` (white-box, обязателен): адаптер поверх настоящего `<provider>.Trusted` с моком его репозитория — маппинг полей и каждая ошибка `<provider>.TrustedErrors` → sentinel потребителя на каждом методе (чужой sentinel не протекает, новая ошибка без перевода роняет тест); канон — `internal/domain/auth/module/adapters_test.go`.
 
 ### 9. Верификация
 

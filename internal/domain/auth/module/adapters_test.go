@@ -52,12 +52,13 @@ func TestUserAdapter_User(t *testing.T) {
 	}
 }
 
-// Каждая ошибка, которую отдаёт user.Trusted, доходит до auth своим sentinel'ом, а не чужим.
+// Каждая ошибка из user.TrustedErrors доходит до auth своим sentinel'ом, а не чужим: новая
+// ошибка Trusted без перевода роняет этот тест.
 func TestUserAdapter_MapsUserErrors(t *testing.T) {
 	t.Parallel()
-	sentinels := []struct{ from, want error }{
-		{user.ErrNotFound, auth.ErrUserNotFound},
-		{user.ErrConcurrentUpdate, auth.ErrConcurrentUpdate},
+	translated := map[error]error{
+		user.ErrNotFound:         auth.ErrUserNotFound,
+		user.ErrConcurrentUpdate: auth.ErrConcurrentUpdate,
 	}
 	infra := errors.New("db down")
 	calls := []struct {
@@ -87,11 +88,13 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 	for _, c := range calls {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			for _, s := range sentinels {
+			for _, from := range user.TrustedErrors {
+				want, ok := translated[from]
+				require.True(t, ok, "%v from user.Trusted has no auth error", from)
 				a, repo := newAdapter(t)
-				got := c.call(a, repo, s.from)
-				require.ErrorIs(t, got, s.want)
-				require.NotErrorIs(t, got, s.from, "the user sentinel must not leak to auth")
+				got := c.call(a, repo, from)
+				require.ErrorIs(t, got, want)
+				require.NotErrorIs(t, got, from, "the user sentinel must not leak to auth")
 			}
 			a, repo := newAdapter(t)
 			require.ErrorIs(t, c.call(a, repo, infra), infra, "an infrastructure error passes through")
