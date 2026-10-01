@@ -36,7 +36,7 @@ prompt → /smartdev (cockpit: make status, читает активные пла
 | Механизм | Где | Сила |
 |---|---|---|
 | git-хуки | `scripts/git-hooks/` (подключает `make setup` через `core.hooksPath`): commit-msg (Conventional Commits), pre-commit (fmt-check+vet+lint+validate-stack/plan), pre-push (`make check` на чистом дереве, только HEAD) | **детерминированно** |
-| permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-verify`, force-push, reset --hard, правка `*.pem`/`*.key`/generated, чтение `.env`/`.env.local`) |
+| permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-verify`, force-push, reset --hard, правка `*.pem`/`*.key`/generated); чтение `.env`/`.env.local` — только для инструмента Read: `cat` и другие команды Bash deny не видит, их держит правило (CLAUDE.md, rule `env-local`) |
 | Хук Claude Code | `.claude/hooks/guard-bash.sh` (PreToolUse, Bash) | **детерминированно** (блок `git commit -n`, `--no-veri…`, `SKIP_PREPUSH`, `core.hooksPath`; команда проверяется построчно) |
 | Самопроверка обвязки | `internal/archtest/harness_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели и пути репо в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`) |
 | Самозащита гейта | `Makefile` (`make check`), pre-push | **детерминированно** (`make check` не запускается с `-i`/`-n`, подменой своих переменных и `GOFLAGS`; pre-push не передаёт гейту флаги make) |
