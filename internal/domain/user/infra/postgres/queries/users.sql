@@ -15,20 +15,14 @@ FROM users
 WHERE LOWER(email) = LOWER($1)
   AND status != 'deleted';
 
--- name: UpdateUserProfile :one
+-- name: UpdateUser :one
 UPDATE users
 SET name = $1,
+    status = $2,
     version = version + 1
-WHERE id = $2
-  AND version = $3
-RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at;
-
--- name: UpdateUserStatus :one
-UPDATE users
-SET status = $1,
-    version = version + 1
-WHERE id = $2
-  AND version = $3
+WHERE id = $3
+  AND version = $4
+  AND status != 'deleted'
 RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at;
 
 -- name: UpdateUserPassword :one
@@ -37,10 +31,14 @@ SET password_hash = $1,
     version = version + 1
 WHERE id = $2
   AND version = $3
+  AND status != 'deleted'
 RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at;
 
 -- name: SetUserEmailVerified :exec
-UPDATE users SET email_verified = true WHERE id = $1;
+UPDATE users
+SET email_verified = true
+WHERE id = $1
+  AND status != 'deleted';
 
 -- name: ListUsers :many
 SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at

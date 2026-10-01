@@ -533,9 +533,14 @@
             "type": "string"
           },
           "name": {
+            "minLength": 1,
             "type": "string"
           },
           "status": {
+            "enum": [
+              "active",
+              "blocked"
+            ],
             "type": "string"
           },
           "version": {
@@ -591,6 +596,10 @@
           "updated_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "version": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -598,6 +607,7 @@
           "email",
           "name",
           "status",
+          "version",
           "created_at",
           "updated_at"
         ],

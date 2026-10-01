@@ -59,22 +59,32 @@ func TestPolicy_CanDelete(t *testing.T) {
 	}
 }
 
+var adminOnlyCases = []policyCase{
+	{"admin self", identity.Identity{UserID: "a1", Role: identity.RoleAdmin}, "a1", true},
+	{"admin other", identity.Identity{UserID: "a1", Role: identity.RoleAdmin}, "u2", true},
+	{"client self", identity.Identity{UserID: "u1", Role: identity.RoleClient}, "u1", false},
+	{"client other", identity.Identity{UserID: "u1", Role: identity.RoleClient}, "u2", false},
+	{"unknown self", identity.Identity{UserID: "u1", Role: identity.RoleUnknown}, "u1", false},
+}
+
 func TestPolicy_CanList(t *testing.T) {
 	t.Parallel()
 	p := user.NewPolicy()
-	cases := []struct {
-		name   string
-		caller identity.Identity
-		want   bool
-	}{
-		{"admin", identity.Identity{Role: identity.RoleAdmin}, true},
-		{"client", identity.Identity{Role: identity.RoleClient}, false},
-		{"unknown", identity.Identity{Role: identity.RoleUnknown}, false},
-	}
-	for _, tc := range cases {
+	for _, tc := range adminOnlyCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, p.CanList(context.Background(), tc.caller).IsAllowed)
+		})
+	}
+}
+
+func TestPolicy_CanChangeStatus(t *testing.T) {
+	t.Parallel()
+	p := user.NewPolicy()
+	for _, tc := range adminOnlyCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, p.CanChangeStatus(context.Background(), tc.caller, tc.targetID).IsAllowed)
 		})
 	}
 }

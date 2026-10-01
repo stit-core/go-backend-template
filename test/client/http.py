@@ -17,6 +17,8 @@ from client.models import (
     MeResponse,
     RegisterRequest,
     RegisterResponse,
+    UserUpdateRequest,
+    UserUpdateResponse,
     UserView,
 )
 
@@ -96,6 +98,15 @@ class Api:
     def me(self) -> UserView:
         r = self.expect("GET", "/api/users/me", expected=200)
         return MeResponse.model_validate_json(r.content).data
+
+    def update_user(self, user_id: str, req: UserUpdateRequest) -> UserView:
+        r = self.expect(
+            "PATCH",
+            f"/api/users/{user_id}",
+            expected=200,
+            json=req.model_dump(exclude_none=True),
+        )
+        return UserUpdateResponse.model_validate_json(r.content).data
 
     def refresh(self) -> None:
         self.expect("POST", "/api/auth/refresh", expected=204)

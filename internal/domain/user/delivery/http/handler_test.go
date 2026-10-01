@@ -216,21 +216,80 @@ func TestList_InvalidStatus(t *testing.T) {
 	handlertest.AssertStatus(t, resp, http.StatusUnprocessableEntity)
 }
 
-func TestUpdate_ConcurrentUpdate(t *testing.T) {
+func TestUpdate_OK(t *testing.T) {
 	t.Parallel()
+	name, status := "New", user.StatusBlocked
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Update(mock.Anything, mock.Anything, mock.Anything).Return(nil, user.ErrConcurrentUpdate)
+	uc.EXPECT().Update(mock.Anything, "u1", user.UpdateInput{Name: &name, Status: &status, Version: 3}).
+		Return(&user.User{ID: "u1", Email: "a@b.com", Name: name, Status: status, Version: 4}, nil).Once()
 	api := setup(t, uc)
 
-	resp := api.Patch("/api/users/u1", strings.NewReader(`{"name":"new","version":1}`))
-	handlertest.AssertAPIError(t, resp, http.StatusConflict, "USER_CONCURRENT_UPDATE")
+	resp := api.PatchCtx(identitytest.Admin("a1"), "/api/users/u1", strings.NewReader(`{"name":"New","status":"blocked","version":3}`))
+	handlertest.AssertStatus(t, resp, http.StatusOK)
+
+	var body struct {
+		Data struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Status  string `json:"status"`
+			Version int    `json:"version"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.Equal(t, "u1", body.Data.ID)
+	require.Equal(t, "New", body.Data.Name)
+	require.Equal(t, "blocked", body.Data.Status)
+	require.Equal(t, 4, body.Data.Version, "the client sends the next PATCH with this version")
 }
 
-func TestUpdate_MissingVersion(t *testing.T) {
+func TestUpdate_Errors(t *testing.T) {
 	t.Parallel()
-	uc := mocks.NewMockUsecase(t)
-	api := setup(t, uc)
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{"client changes status", &policy.ForbiddenError{Reason: "admin only"}, http.StatusForbidden, "FORBIDDEN"},
+		{"no fields", user.ErrNoUpdateFields, http.StatusBadRequest, "USER_NO_UPDATE_FIELDS"},
+		{"unknown id", user.ErrNotFound, http.StatusNotFound, "USER_NOT_FOUND"},
+		{"stale version", user.ErrConcurrentUpdate, http.StatusConflict, "USER_CONCURRENT_UPDATE"},
+		{"transition not allowed", user.ErrInvalidStatusTransition, http.StatusConflict, "USER_INVALID_STATUS_TRANSITION"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			uc := mocks.NewMockUsecase(t)
+			uc.EXPECT().Update(mock.Anything, "u1", mock.Anything).Return(nil, tc.err).Once()
+			api := setup(t, uc)
 
-	resp := api.Patch("/api/users/u1", strings.NewReader(`{"name":"new"}`))
-	handlertest.AssertStatus(t, resp, http.StatusUnprocessableEntity)
+			resp := api.Patch("/api/users/u1", strings.NewReader(`{"status":"active","version":1}`))
+			handlertest.AssertAPIError(t, resp, tc.status, tc.code)
+		})
+	}
+}
+
+func TestUpdate_InvalidBody(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		body     string
+		location string
+	}{
+		{"unknown status", `{"status":"deleted","version":1}`, "body.status"},
+		{"empty name", `{"name":"","version":1}`, "body.name"},
+		{"no version", `{"name":"new"}`, "body"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			api := setup(t, mocks.NewMockUsecase(t))
+
+			resp := api.Patch("/api/users/u1", strings.NewReader(tc.body))
+			handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+			errs := handlertest.DecodeAPIError(t, resp).Errors
+			require.Len(t, errs, 1)
+			require.Equal(t, tc.location, errs[0].Location)
+		})
+	}
 }

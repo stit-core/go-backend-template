@@ -39,6 +39,69 @@ func (_m *MockAuthorizer) EXPECT() *MockAuthorizer_Expecter {
 	return &MockAuthorizer_Expecter{mock: &_m.Mock}
 }
 
+// CanChangeStatus provides a mock function for the type MockAuthorizer
+func (_mock *MockAuthorizer) CanChangeStatus(ctx context.Context, caller identity.Identity, targetID string) policy.Decision {
+	ret := _mock.Called(ctx, caller, targetID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CanChangeStatus")
+	}
+
+	var r0 policy.Decision
+	if returnFunc, ok := ret.Get(0).(func(context.Context, identity.Identity, string) policy.Decision); ok {
+		r0 = returnFunc(ctx, caller, targetID)
+	} else {
+		r0 = ret.Get(0).(policy.Decision)
+	}
+	return r0
+}
+
+// MockAuthorizer_CanChangeStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanChangeStatus'
+type MockAuthorizer_CanChangeStatus_Call struct {
+	*mock.Call
+}
+
+// CanChangeStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - caller identity.Identity
+//   - targetID string
+func (_e *MockAuthorizer_Expecter) CanChangeStatus(ctx interface{}, caller interface{}, targetID interface{}) *MockAuthorizer_CanChangeStatus_Call {
+	return &MockAuthorizer_CanChangeStatus_Call{Call: _e.mock.On("CanChangeStatus", ctx, caller, targetID)}
+}
+
+func (_c *MockAuthorizer_CanChangeStatus_Call) Run(run func(ctx context.Context, caller identity.Identity, targetID string)) *MockAuthorizer_CanChangeStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 identity.Identity
+		if args[1] != nil {
+			arg1 = args[1].(identity.Identity)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAuthorizer_CanChangeStatus_Call) Return(decision policy.Decision) *MockAuthorizer_CanChangeStatus_Call {
+	_c.Call.Return(decision)
+	return _c
+}
+
+func (_c *MockAuthorizer_CanChangeStatus_Call) RunAndReturn(run func(ctx context.Context, caller identity.Identity, targetID string) policy.Decision) *MockAuthorizer_CanChangeStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CanDelete provides a mock function for the type MockAuthorizer
 func (_mock *MockAuthorizer) CanDelete(ctx context.Context, caller identity.Identity, targetID string) policy.Decision {
 	ret := _mock.Called(ctx, caller, targetID)

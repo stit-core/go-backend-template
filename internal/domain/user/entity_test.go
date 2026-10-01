@@ -41,6 +41,54 @@ func TestNewUser(t *testing.T) {
 	}
 }
 
+func TestUser_ChangeStatus(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		from, to user.Status
+		wantErr  error
+		want     user.Status
+	}{
+		{"block active", user.StatusActive, user.StatusBlocked, nil, user.StatusBlocked},
+		{"unblock blocked", user.StatusBlocked, user.StatusActive, nil, user.StatusActive},
+		{"active stays active", user.StatusActive, user.StatusActive, nil, user.StatusActive},
+		{"blocked stays blocked", user.StatusBlocked, user.StatusBlocked, nil, user.StatusBlocked},
+		{"delete goes through Delete", user.StatusActive, user.StatusDeleted, user.ErrInvalidStatusTransition, user.StatusActive},
+		{"deleted is final", user.StatusDeleted, user.StatusActive, user.ErrInvalidStatusTransition, user.StatusDeleted},
+		{"deleted stays out of ChangeStatus", user.StatusDeleted, user.StatusDeleted, user.ErrInvalidStatusTransition, user.StatusDeleted},
+		{"unknown target", user.StatusActive, user.Status("archived"), user.ErrInvalidStatusTransition, user.StatusActive},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			u := &user.User{Status: tc.from}
+			require.ErrorIs(t, u.ChangeStatus(tc.to), tc.wantErr)
+			require.Equal(t, tc.want, u.Status)
+		})
+	}
+}
+
+func TestUser_Delete(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		from    user.Status
+		wantErr error
+	}{
+		{"active", user.StatusActive, nil},
+		{"blocked", user.StatusBlocked, nil},
+		{"already deleted", user.StatusDeleted, user.ErrNotFound},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			u := &user.User{Status: tc.from}
+			require.ErrorIs(t, u.Delete(), tc.wantErr)
+			require.Equal(t, user.StatusDeleted, u.Status)
+		})
+	}
+}
+
 func TestUserCanLogin(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

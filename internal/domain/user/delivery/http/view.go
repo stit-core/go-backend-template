@@ -11,6 +11,7 @@ type UserView struct {
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
 	Status    string    `json:"status"`
+	Version   int       `json:"version"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -20,6 +21,7 @@ func (v *UserView) FromEntity(u *user.User) {
 	v.Email = u.Email
 	v.Name = u.Name
 	v.Status = string(u.Status)
+	v.Version = u.Version
 	v.CreatedAt = u.CreatedAt
 	v.UpdatedAt = u.UpdatedAt
 }

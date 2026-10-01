@@ -164,12 +164,56 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 }
 
 const setUserEmailVerified = `-- name: SetUserEmailVerified :exec
-UPDATE users SET email_verified = true WHERE id = $1
+UPDATE users
+SET email_verified = true
+WHERE id = $1
+  AND status != 'deleted'
 `
 
 func (q *Queries) SetUserEmailVerified(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, setUserEmailVerified, id)
 	return err
+}
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE users
+SET name = $1,
+    status = $2,
+    version = version + 1
+WHERE id = $3
+  AND version = $4
+  AND status != 'deleted'
+RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
+`
+
+type UpdateUserParams struct {
+	Name    string
+	Status  string
+	ID      pgtype.UUID
+	Version int32
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.Name,
+		arg.Status,
+		arg.ID,
+		arg.Version,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Status,
+		&i.Role,
+		&i.Version,
+		&i.EmailVerified,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateUserPassword = `-- name: UpdateUserPassword :one
@@ -178,6 +222,7 @@ SET password_hash = $1,
     version = version + 1
 WHERE id = $2
   AND version = $3
+  AND status != 'deleted'
 RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
 `
 
@@ -189,72 +234,6 @@ type UpdateUserPasswordParams struct {
 
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUserPassword, arg.PasswordHash, arg.ID, arg.Version)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.Name,
-		&i.Status,
-		&i.Role,
-		&i.Version,
-		&i.EmailVerified,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const updateUserProfile = `-- name: UpdateUserProfile :one
-UPDATE users
-SET name = $1,
-    version = version + 1
-WHERE id = $2
-  AND version = $3
-RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
-`
-
-type UpdateUserProfileParams struct {
-	Name    string
-	ID      pgtype.UUID
-	Version int32
-}
-
-func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserProfile, arg.Name, arg.ID, arg.Version)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.Name,
-		&i.Status,
-		&i.Role,
-		&i.Version,
-		&i.EmailVerified,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const updateUserStatus = `-- name: UpdateUserStatus :one
-UPDATE users
-SET status = $1,
-    version = version + 1
-WHERE id = $2
-  AND version = $3
-RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
-`
-
-type UpdateUserStatusParams struct {
-	Status  string
-	ID      pgtype.UUID
-	Version int32
-}
-
-func (q *Queries) UpdateUserStatus(ctx context.Context, arg UpdateUserStatusParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserStatus, arg.Status, arg.ID, arg.Version)
 	var i User
 	err := row.Scan(
 		&i.ID,

@@ -1,5 +1,5 @@
 """Authz-матрица user-домена (internal/domain/user/policy.go):
-CanList = admin-only; CanGetByID/CanUpdate/CanDelete = selfOrAdmin.
+CanList/CanChangeStatus = admin-only; CanGetByID/CanUpdate/CanDelete = selfOrAdmin.
 """
 
 import pytest

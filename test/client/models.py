@@ -25,11 +25,18 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class UserUpdateRequest(BaseModel):
+    name: str | None = None
+    status: str | None = None
+    version: int
+
+
 class UserView(BaseModel):
     id: str
     email: str
     name: str
     status: str
+    version: int
     created_at: datetime
     updated_at: datetime
 
@@ -46,6 +53,10 @@ class RegisterResponse(BaseModel):
 
 
 class MeResponse(BaseModel):
+    data: UserView
+
+
+class UserUpdateResponse(BaseModel):
     data: UserView
 
 

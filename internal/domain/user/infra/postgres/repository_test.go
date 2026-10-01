@@ -72,6 +72,24 @@ func TestList_WithRole(t *testing.T) {
 	require.Equal(t, identity.RoleAdmin, roleByEmail[u2.Email])
 }
 
+func TestUpdate(t *testing.T) {
+	t.Parallel()
+	repo := setup(t)
+	ctx := context.Background()
+
+	u := pgseed.InsertUser(t, repo)
+	u.Name, u.Status = "Renamed", user.StatusBlocked
+	got, err := repo.Update(ctx, u)
+	require.NoError(t, err)
+	require.Equal(t, u.Version+1, got.Version)
+
+	stored, err := repo.GetByID(ctx, u.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Renamed", stored.Name, "name and status are written together")
+	require.Equal(t, user.StatusBlocked, stored.Status, "name and status are written together")
+	require.Equal(t, got.Version, stored.Version)
+}
+
 func TestUpdate_StaleVersion(t *testing.T) {
 	t.Parallel()
 	repo := setup(t)
@@ -79,28 +97,63 @@ func TestUpdate_StaleVersion(t *testing.T) {
 
 	updates := []struct {
 		name   string
-		update func(id string, version int) (*user.User, error)
+		update func(u *user.User) (*user.User, error)
 	}{
-		{"profile", func(id string, version int) (*user.User, error) {
-			return repo.UpdateProfile(ctx, id, "renamed", version)
+		{"name and status", func(u *user.User) (*user.User, error) {
+			return repo.Update(ctx, &user.User{ID: u.ID, Name: "renamed", Status: user.StatusBlocked, Version: u.Version})
 		}},
-		{"status", func(id string, version int) (*user.User, error) {
-			return repo.UpdateStatus(ctx, id, user.StatusBlocked, version)
-		}},
-		{"password", func(id string, version int) (*user.User, error) {
-			return repo.UpdatePassword(ctx, id, "new-hash", version)
+		{"password", func(u *user.User) (*user.User, error) {
+			return repo.UpdatePassword(ctx, u.ID, "new-hash", u.Version)
 		}},
 	}
 	for _, tc := range updates {
 		t.Run(tc.name, func(t *testing.T) {
 			u := pgseed.InsertUser(t, repo)
 
-			got, err := tc.update(u.ID, u.Version)
+			got, err := tc.update(u)
 			require.NoError(t, err)
 			require.Equal(t, u.Version+1, got.Version)
 
-			_, err = tc.update(u.ID, u.Version)
+			_, err = tc.update(u)
 			require.ErrorIs(t, err, user.ErrConcurrentUpdate)
 		})
 	}
+}
+
+// Удалённый пользователь снаружи не существует: чтение его не находит, запись не трогает.
+func TestDeletedUserIsUntouched(t *testing.T) {
+	t.Parallel()
+	pg := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
+	repo := userpg.NewRepository(pg.DB(t))
+	ctx := context.Background()
+
+	u := pgseed.InsertUser(t, repo)
+	u.Status = user.StatusDeleted
+	deleted, err := repo.Update(ctx, u)
+	require.NoError(t, err)
+
+	_, err = repo.GetByID(ctx, u.ID)
+	require.ErrorIs(t, err, user.ErrNotFound)
+	_, err = repo.GetByEmail(ctx, u.Email)
+	require.ErrorIs(t, err, user.ErrNotFound)
+	list, err := repo.List(ctx, user.ListFilter{}, paging.Page{Number: 1, Size: paging.MaxSize})
+	require.NoError(t, err)
+	require.Empty(t, list)
+
+	_, err = repo.Update(ctx, &user.User{ID: u.ID, Name: "revived", Status: user.StatusActive, Version: deleted.Version})
+	require.ErrorIs(t, err, user.ErrConcurrentUpdate)
+	_, err = repo.UpdatePassword(ctx, u.ID, "new-hash", deleted.Version)
+	require.ErrorIs(t, err, user.ErrConcurrentUpdate)
+	require.NoError(t, repo.SetEmailVerified(ctx, u.ID))
+
+	var (
+		name, status, hash string
+		version            int
+		verified           bool
+	)
+	require.NoError(t, pg.Pool(t).QueryRow(ctx,
+		`SELECT name, status, password_hash, version, email_verified FROM users WHERE id = $1`, u.ID).
+		Scan(&name, &status, &hash, &version, &verified))
+	require.Equal(t, []any{u.Name, "deleted", u.PasswordHash, deleted.Version, false},
+		[]any{name, status, hash, version, verified})
 }

@@ -22,8 +22,8 @@ type Repository interface {
 	Insert(ctx context.Context, u *User) error
 	GetByID(ctx context.Context, id string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
-	UpdateProfile(ctx context.Context, id, name string, version int) (*User, error)
-	UpdateStatus(ctx context.Context, id string, status Status, version int) (*User, error)
+	// Update пишет имя и статус u при версии в БД u.Version; иначе, и для удалённого, — ErrConcurrentUpdate.
+	Update(ctx context.Context, u *User) (*User, error)
 	UpdatePassword(ctx context.Context, id, passwordHash string, version int) (*User, error)
 	SetEmailVerified(ctx context.Context, id string) error
 	List(ctx context.Context, filter ListFilter, page paging.Page) ([]*User, error)
@@ -34,6 +34,7 @@ type Authorizer interface {
 	CanGetByID(ctx context.Context, caller identity.Identity, targetID string) policy.Decision
 	CanList(ctx context.Context, caller identity.Identity) policy.Decision
 	CanUpdate(ctx context.Context, caller identity.Identity, targetID string) policy.Decision
+	CanChangeStatus(ctx context.Context, caller identity.Identity, targetID string) policy.Decision
 	CanDelete(ctx context.Context, caller identity.Identity, targetID string) policy.Decision
 }
 
@@ -151,7 +152,8 @@ func (uc *Usecase) List(ctx context.Context, filter ListFilter, page paging.Page
 	return list, total, nil
 }
 
-func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *User, err error) {
+// Update — все поля входа одной записью или ни одного: статус меняет только админ, переход — сущность.
+func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (*User, error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
 		uc.d.Metrics.RecordUpdated(ctx, outcome.Forbidden)
@@ -161,25 +163,38 @@ func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *Us
 		uc.d.Metrics.RecordUpdated(ctx, outcome.Forbidden)
 		return nil, &policy.ForbiddenError{Reason: d.Reason}
 	}
+	if in.Status != nil {
+		if d := uc.d.Policy.CanChangeStatus(ctx, caller, id); !d.IsAllowed {
+			uc.d.Metrics.RecordUpdated(ctx, outcome.Forbidden)
+			return nil, &policy.ForbiddenError{Reason: d.Reason}
+		}
+	}
 
 	if in.Name == nil && in.Status == nil {
 		uc.d.Metrics.RecordUpdated(ctx, outcome.Invalid)
 		return nil, ErrNoUpdateFields
 	}
 
+	var updated *User
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
-		var updated *User
-		var updErr error
-		switch {
-		case in.Name != nil:
-			updated, updErr = uc.d.Repo.UpdateProfile(txCtx, id, *in.Name, in.Version)
-		case in.Status != nil:
-			updated, updErr = uc.d.Repo.UpdateStatus(txCtx, id, *in.Status, in.Version)
+		u, err := uc.d.Repo.GetByID(txCtx, id)
+		if err != nil {
+			return err
 		}
-		if updErr != nil {
-			return updErr
+		if u.Version != in.Version {
+			return ErrConcurrentUpdate
 		}
-		u = updated
+		if in.Name != nil {
+			u.Name = *in.Name
+		}
+		if in.Status != nil {
+			if err := u.ChangeStatus(*in.Status); err != nil {
+				return err
+			}
+		}
+		if updated, err = uc.d.Repo.Update(txCtx, u); err != nil {
+			return err
+		}
 
 		return uc.d.Events.Publish(txCtx, subjectUserUpdated,
 			UserUpdated{ID: updated.ID, At: updated.UpdatedAt})
@@ -189,13 +204,13 @@ func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *Us
 	}
 
 	uc.d.Metrics.RecordUpdated(ctx, outcome.OK)
-	uc.d.Log.Info(ctx, "user updated", "user_id", u.ID)
+	uc.d.Log.Info(ctx, "user updated", "user_id", updated.ID)
 
 	if auditErr := uc.d.Audit.Log(ctx, auditkit.Entry{
 		ActorID:    caller.UserID,
 		Action:     "update",
 		Resource:   "user",
-		ResourceID: u.ID,
+		ResourceID: updated.ID,
 		At:         uc.d.Clock.Now(),
 		IP:         identity.IPFrom(ctx),
 		RequestID:  identity.RequestIDFrom(ctx),
@@ -203,7 +218,7 @@ func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (u *Us
 		uc.d.Log.Error(ctx, "audit update", "err", auditErr)
 	}
 
-	return u, nil
+	return updated, nil
 }
 
 func (uc *Usecase) Delete(ctx context.Context, id string) error {
@@ -218,14 +233,14 @@ func (uc *Usecase) Delete(ctx context.Context, id string) error {
 	}
 
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
-		current, err := uc.d.Repo.GetByID(txCtx, id)
+		u, err := uc.d.Repo.GetByID(txCtx, id)
 		if err != nil {
 			return err
 		}
-		if current.Status == StatusDeleted {
-			return ErrNotFound
+		if err := u.Delete(); err != nil {
+			return err
 		}
-		if _, err := uc.d.Repo.UpdateStatus(txCtx, id, StatusDeleted, current.Version); err != nil {
+		if _, err := uc.d.Repo.Update(txCtx, u); err != nil {
 			return err
 		}
 		return uc.d.Events.Publish(txCtx, subjectUserDeleted,

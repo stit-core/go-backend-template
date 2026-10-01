@@ -45,9 +45,10 @@ cross-user 403.
 - **auth**: login/refresh-rotation/reuse-detect/logout, change-password,
   bruteforce-LOCK (429 + `locked_until`).
 - **user**: register, /me, get-by-id, list (пагинация/`status`/границы),
-  PATCH (optimistic version → 409), DELETE (soft → `status=deleted`).
-- **authz** (`user/policy.go`): list = admin-only; get/update/delete =
-  selfOrAdmin; cross-user → 403.
+  PATCH (поля одной записью, `version` из ответа; устаревшая → 409, неизвестный
+  статус → 422, нет такого id → 404), DELETE (soft → `status=deleted`).
+- **authz** (`user/policy.go`): list и смена статуса = admin-only (свой статус
+  клиент не меняет → 403); get/update/delete = selfOrAdmin; cross-user → 403.
 - **negatives**: huma schema-валидация (4xx, у v2 — 422), 404, 401-без-cookie.
 - **cross-domain**: register → outbox → JetStream → verification consume →
   `email_verifications` (`e2e/test_event_flow.py`).

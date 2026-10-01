@@ -50,3 +50,25 @@ func NewUser(email, passwordHash, name string, role identity.Role) (*User, error
 }
 
 func (u *User) CanLogin() bool { return u.Status == StatusActive }
+
+// ChangeStatus — переход active ⇄ blocked; тот же статус — без перехода. В deleted переводит
+// только Delete: у удаления своё событие и аудит.
+func (u *User) ChangeStatus(to Status) error {
+	switch {
+	case to == u.Status && to != StatusDeleted:
+		return nil
+	case u.Status == StatusActive && to == StatusBlocked, u.Status == StatusBlocked && to == StatusActive:
+		u.Status = to
+		return nil
+	}
+	return ErrInvalidStatusTransition
+}
+
+// Delete — мягкое удаление; удалённого пользователя снаружи нет, как и в GetByID.
+func (u *User) Delete() error {
+	if u.Status == StatusDeleted {
+		return ErrNotFound
+	}
+	u.Status = StatusDeleted
+	return nil
+}

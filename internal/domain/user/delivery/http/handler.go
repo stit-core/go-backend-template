@@ -170,5 +170,6 @@ var userErrors = httpkit.NewErrorMap(
 	httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"},
 	httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"},
 	httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"},
+	httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "status transition is not allowed"},
 	authgate.ForbiddenRule,
 )

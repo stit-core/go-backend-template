@@ -34,7 +34,7 @@
 | Method `postconditions` | гарантируется state'ом после return; покрыто entity-test'ом |
 | Method `events emitted` | возвращается из метода или копится в `aggregate.uncommittedEvents` (если используется); use-case кладёт в outbox |
 | Invariants (локальные) | проверяются в методах агрегата + покрыты `entity_test.go` (+ fuzz при наличии валидаций строк) |
-| Lifecycle table | поле-enum (`Status`) + методы перехода (`Block`, `Unblock`, `Delete`); switch по from-state в начале метода |
+| Lifecycle table | поле-enum (`Status`) + методы перехода (`user.ChangeStatus`, `user.Delete`); switch по from-state в начале метода, недопустимый переход — sentinel |
 | Lifecycle `guard` | условие перед сменой состояния → возврат ошибки если не выполнено |
 | Lifecycle `side effects` | event(ы), эмитируемые методом перехода |
 | Boundary | конкретный набор полей и контейнеров внутри `entity.go`; репозиторий загружает/сохраняет всё это атомарно |

@@ -52,8 +52,8 @@ type UserListOutput struct {
 type UserUpdateInput struct {
 	ID   string `path:"id"`
 	Body struct {
-		Name    *string      `json:"name,omitempty"`
-		Status  *user.Status `json:"status,omitempty"`
+		Name    *string      `json:"name,omitempty"   minLength:"1"`
+		Status  *user.Status `json:"status,omitempty" enum:"active,blocked"`
 		Version int          `json:"version"          required:"true"`
 	}
 }

@@ -66,40 +66,22 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*user.User, 
 	return rowToEntity(row), nil
 }
 
-func (r *Repository) UpdateProfile(ctx context.Context, id, name string, version int) (*user.User, error) {
-	uid, err := pgkit.ParseUUID(id)
+func (r *Repository) Update(ctx context.Context, u *user.User) (*user.User, error) {
+	uid, err := pgkit.ParseUUID(u.ID)
 	if err != nil {
 		return nil, user.ErrNotFound
 	}
-	row, err := r.q.UpdateUserProfile(ctx, db.UpdateUserProfileParams{
-		Name:    name,
+	row, err := r.q.UpdateUser(ctx, db.UpdateUserParams{
+		Name:    u.Name,
+		Status:  string(u.Status),
 		ID:      uid,
-		Version: int32(version),
+		Version: int32(u.Version),
 	})
 	if pgkit.IsNoRows(err) {
 		return nil, user.ErrConcurrentUpdate
 	}
 	if err != nil {
-		return nil, fmt.Errorf("user repo: update profile: %w", err)
-	}
-	return rowToEntity(row), nil
-}
-
-func (r *Repository) UpdateStatus(ctx context.Context, id string, status user.Status, version int) (*user.User, error) {
-	uid, err := pgkit.ParseUUID(id)
-	if err != nil {
-		return nil, user.ErrNotFound
-	}
-	row, err := r.q.UpdateUserStatus(ctx, db.UpdateUserStatusParams{
-		Status:  string(status),
-		ID:      uid,
-		Version: int32(version),
-	})
-	if pgkit.IsNoRows(err) {
-		return nil, user.ErrConcurrentUpdate
-	}
-	if err != nil {
-		return nil, fmt.Errorf("user repo: update status: %w", err)
+		return nil, fmt.Errorf("user repo: update: %w", err)
 	}
 	return rowToEntity(row), nil
 }

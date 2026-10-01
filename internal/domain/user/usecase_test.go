@@ -23,6 +23,8 @@ import (
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
 
+var fixedNow = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
 func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 	t.Helper()
 	p := mocks.NewMockAuthorizer(t)
@@ -37,6 +39,8 @@ func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 	p.EXPECT().CanList(mock.Anything, mock.Anything).
 		RunAndReturn(func(context.Context, identity.Identity) policy.Decision { return dec() }).Maybe()
 	p.EXPECT().CanUpdate(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(context.Context, identity.Identity, string) policy.Decision { return dec() }).Maybe()
+	p.EXPECT().CanChangeStatus(mock.Anything, mock.Anything, mock.Anything).
 		RunAndReturn(func(context.Context, identity.Identity, string) policy.Decision { return dec() }).Maybe()
 	p.EXPECT().CanDelete(mock.Anything, mock.Anything, mock.Anything).
 		RunAndReturn(func(context.Context, identity.Identity, string) policy.Decision { return dec() }).Maybe()
@@ -88,7 +92,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Audit:   aud,
 		Metrics: m,
 		Log:     logkit.Nop(),
-		Clock:   clockkit.NewFixed(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
+		Clock:   clockkit.NewFixed(fixedNow),
 	})
 	return ucFixture{uc: uc, repo: o.repo, bus: bus, audit: aud}
 }
@@ -237,53 +241,115 @@ func TestList(t *testing.T) {
 	})
 }
 
+// stored — пользователь u1 в БД до правки.
+func stored() *user.User {
+	return &user.User{ID: "u1", Email: "a@b.com", Name: "Old", Status: user.StatusActive, Version: 3}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+// Авторизация — настоящая policy: статус меняет только админ, и свой тоже.
 func TestUpdate(t *testing.T) {
 	t.Parallel()
 
-	t.Run("happy path propagates version", func(t *testing.T) {
+	t.Run("admin applies name and status in one write", func(t *testing.T) {
 		t.Parallel()
-		var seenVersion int
+		saved := &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusBlocked, Version: 4, UpdatedAt: fixedNow}
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().UpdateProfile(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-			RunAndReturn(func(_ context.Context, id, name string, version int) (*user.User, error) {
-				seenVersion = version
-				return &user.User{ID: id, Name: name, Status: user.StatusActive, Version: version + 1, UpdatedAt: time.Now()}, nil
-			})
-		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
+		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+		repo.EXPECT().Update(mock.Anything, &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusBlocked, Version: 3}).
+			Return(saved, nil).Once()
+		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
 
-		newName := "New"
-		got, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Name: &newName, Version: 1})
+		got, err := f.uc.Update(identitytest.Admin("a1"), "u1",
+			user.UpdateInput{Name: ptr("New"), Status: ptr(user.StatusBlocked), Version: 3})
 		require.NoError(t, err)
-		require.Equal(t, "New", got.Name)
-		require.Equal(t, 1, seenVersion)
-		require.True(t, f.audit.Has("update"))
+		require.Same(t, saved, got)
+		require.Equal(t, user.UserUpdated{ID: "u1", At: fixedNow}, f.bus.Last("user.events.updated"))
+		require.Equal(t, "a1", f.audit.Last("update").ActorID)
 	})
 
-	t.Run("stale version", func(t *testing.T) {
+	t.Run("client renames self", func(t *testing.T) {
 		t.Parallel()
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().UpdateProfile(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-			Return(nil, user.ErrConcurrentUpdate)
-		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
+		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+		repo.EXPECT().Update(mock.Anything, &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusActive, Version: 3}).
+			Return(&user.User{ID: "u1", Name: "New", Status: user.StatusActive, Version: 4}, nil).Once()
+		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
 
-		newName := "New"
-		_, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Name: &newName, Version: 1})
-		require.ErrorIs(t, err, user.ErrConcurrentUpdate)
+		got, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Name: ptr("New"), Version: 3})
+		require.NoError(t, err)
+		require.Equal(t, 4, got.Version)
+	})
+
+	t.Run("client does not change own status", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withPolicy(user.NewPolicy()))
+
+		_, err := f.uc.Update(identitytest.Client("u1"), "u1",
+			user.UpdateInput{Name: ptr("New"), Status: ptr(user.StatusActive), Version: 3})
+		var fe *policy.ForbiddenError
+		require.ErrorAs(t, err, &fe)
+		require.Zero(t, f.bus.Count())
+	})
+
+	t.Run("client does not update another user", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withPolicy(user.NewPolicy()))
+
+		_, err := f.uc.Update(identitytest.Client("u1"), "u2", user.UpdateInput{Name: ptr("New"), Version: 3})
+		var fe *policy.ForbiddenError
+		require.ErrorAs(t, err, &fe)
 	})
 
 	t.Run("no fields", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t, withPolicy(defaultPolicy(t, true)))
-		_, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Version: 1})
+		f := newUC(t, withPolicy(user.NewPolicy()))
+		_, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Version: 3})
 		require.ErrorIs(t, err, user.ErrNoUpdateFields)
 	})
 
-	t.Run("forbidden", func(t *testing.T) {
+	t.Run("unknown or deleted user", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t, withPolicy(defaultPolicy(t, false)))
-		_, err := f.uc.Update(identitytest.Client("u1"), "u2", user.UpdateInput{})
-		var fe *policy.ForbiddenError
-		require.ErrorAs(t, err, &fe)
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetByID(mock.Anything, "u1").Return(nil, user.ErrNotFound).Once()
+		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
+
+		_, err := f.uc.Update(identitytest.Admin("a1"), "u1", user.UpdateInput{Name: ptr("New"), Version: 3})
+		require.ErrorIs(t, err, user.ErrNotFound)
+		require.Zero(t, f.bus.Count())
+	})
+
+	t.Run("stale version is not written", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
+
+		_, err := f.uc.Update(identitytest.Admin("a1"), "u1", user.UpdateInput{Name: ptr("New"), Version: 2})
+		require.ErrorIs(t, err, user.ErrConcurrentUpdate)
+	})
+
+	t.Run("concurrent write between read and update", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+		repo.EXPECT().Update(mock.Anything, mock.Anything).Return(nil, user.ErrConcurrentUpdate).Once()
+		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
+
+		_, err := f.uc.Update(identitytest.Admin("a1"), "u1", user.UpdateInput{Name: ptr("New"), Version: 3})
+		require.ErrorIs(t, err, user.ErrConcurrentUpdate)
+		require.Zero(t, f.bus.Count())
+	})
+
+	t.Run("status through Delete only", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
+
+		_, err := f.uc.Update(identitytest.Admin("a1"), "u1", user.UpdateInput{Status: ptr(user.StatusDeleted), Version: 3})
+		require.ErrorIs(t, err, user.ErrInvalidStatusTransition)
 	})
 }
 
@@ -292,31 +358,26 @@ func TestDelete(t *testing.T) {
 
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
-		var seenStatus user.Status
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, mock.Anything).
-			Return(&user.User{ID: "u1", Status: user.StatusActive, Version: 1}, nil)
-		repo.EXPECT().UpdateStatus(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-			RunAndReturn(func(_ context.Context, id string, status user.Status, version int) (*user.User, error) {
-				seenStatus = status
-				return &user.User{ID: id, Status: status, Version: version + 1}, nil
-			})
+		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+		repo.EXPECT().Update(mock.Anything, &user.User{ID: "u1", Email: "a@b.com", Name: "Old", Status: user.StatusDeleted, Version: 3}).
+			Return(&user.User{ID: "u1", Status: user.StatusDeleted, Version: 4}, nil).Once()
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
 
 		require.NoError(t, f.uc.Delete(identitytest.Client("u1"), "u1"))
-		require.Equal(t, user.StatusDeleted, seenStatus)
+		require.Equal(t, user.UserDeleted{ID: "u1", At: fixedNow}, f.bus.Last("user.events.deleted"))
 		require.True(t, f.audit.Has("delete"))
 	})
 
-	t.Run("already deleted", func(t *testing.T) {
+	t.Run("unknown or deleted user", func(t *testing.T) {
 		t.Parallel()
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, mock.Anything).
-			Return(&user.User{ID: "u1", Status: user.StatusDeleted}, nil)
+		repo.EXPECT().GetByID(mock.Anything, "u1").Return(nil, user.ErrNotFound).Once()
 		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
 
 		err := f.uc.Delete(identitytest.Client("u1"), "u1")
 		require.ErrorIs(t, err, user.ErrNotFound)
+		require.Zero(t, f.bus.Count())
 	})
 
 	t.Run("forbidden", func(t *testing.T) {
