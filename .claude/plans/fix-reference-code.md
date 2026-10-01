@@ -152,12 +152,11 @@ prod-дефолты, понятный контракт ошибок API, тес�
     и первым при любом месте `pgkit.Module`), X11 — старт падает `ErrAuthNotConfigured`, X15 —
     `TestFxGraphValidates`; `TestBoot` ловит и X12, X13, и `registerHTTP` в корне при зависимости с
     хуком только у хендлеров (T-C); логи — `fdn-s1-*.log` в материалах программы
-- [x] **S2** — DI-канон: зависимости usecase — одной структурой; одна идиома привязки к
-  интерфейсу; имя модуля — путь пакета; конфиги китов — через их `NewConfig`, `App` — только
-  конфиги приложения; без `context.Context` в графе; flagkit и cachekit вне графа до первого
-  потребителя — `/ready`, boot-тест, e2e-стек и local-deps без Redis; явные
-  `fx.StartTimeout`/`fx.StopTimeout`; раздел «fx» в `architecture.md` тем же коммитом (FX-06,
-  FX-10, FX-11)
+- [x] **S2** — DI-канон: зависимости usecase — одной структурой; одна идиома привязки к интерфейсу;
+  имя модуля — путь пакета; конфиги китов — через их `NewConfig`, `App` — только конфиги приложения;
+  без `context.Context` в графе; flagkit и cachekit вне графа до первого потребителя — `/ready`,
+  boot-тест, e2e-стек и local-deps без Redis; явные `fx.StartTimeout`/`fx.StopTimeout`; раздел «fx»
+  в `architecture.md` тем же коммитом (FX-06, FX-10, FX-11)
   - Проверка: AC12 → выполнен · Закрывает: AC12 · Зависит от: S1
   - Сделано: AC12 подтверждён, `make check` → `✓ check clean`; X6, X15 повторены (`fdn-s2-*.log`);
     скелет `make new-domain` по новому канону собирается, lint и его тесты зелёные
@@ -258,8 +257,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
   — `CanChangeStatus` (403); удаление — условная запись без версии (B1: повтор и гонка — 404).
 - S5: эффект помнит `sent_at` (upsert перевыпускает неотправленное); `TokenID` — id строки; погашение
   — условный `UPDATE` в транзакции (тесты — `pgkit.InTx`), истёкший токен — строгие моки.
-- S6: `user.Trusted` — только адаптерам потребителей (archtest, свой `module/` — лишь `NewTrusted`);
-  ошибки — `TrustedErrors` (тесты Trusted и адаптеров); киты — `auth/infra/`, mailer — S11; HAR-08.
+- S6: `user.Trusted` — только адаптерам потребителей (archtest: свой `module/` — лишь `NewTrusted`, без
+  `fx.As`); ошибки — `TrustedErrors` (тесты Trusted и адаптеров); киты — `auth/infra/`, mailer — S11; HAR-08.
 - S7: префикс и `data` — archtest `TestHTTPTypes`; 401 — `TestBoot` по спецификации; e2e-модели строгие.
 - S8: `AUTH_ACCESS_EXPIRED` — `authgate.Secured`; `importsByName` знает `huma/v2`. B1: правило на каждую
   ошибку `errors.go`, `Map` — таблицей домена (archtest), таблица операции — `Declare`; разный смысл —
@@ -296,5 +295,6 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-«Фундамент» — PASS; «Эталон доменов» (S4–S8) — FAIL валидатора B: фиксы B1, N1–N6 → перепроверка
-(`validation-fix-reference-code-B.md`); дальше S9 (ждёт v1.3.0; при задержке — S11, S12 раньше).
+«Фундамент» — PASS; «Эталон доменов» (S4–S8): B2 перепроверки f2deb23 закрыт (`TestNoFxAs`: `fx.As` и N1
+через него убиты) → перепроверка. Хвосты: archtest ложно ловит `return err` не-хендлера; в скелете —
+`${NAME}Errors`; не ловятся погашение вне транзакции записи, нет `Declare`, ошибка `Trusted` от входа. Дальше S9.
