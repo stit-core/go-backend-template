@@ -131,11 +131,15 @@ blocked-by: —
   Отчёты углов — `kits-audit/` в материалах, ID находок `K<угол>-NN`.
 
 ## Где мы сейчас
-S1 и S2 закрыты: `harden-gate` удалён, golibinfra v1.2.0 в origin.
-- **S3** — `fix-reference-code`: S1–S8 приняты; дальше S10–S12 (до S9, «Решения»), затем S9 на
-  v1.3.0 и S13–S15. `repair-harness` S1, S2, S5 приняты досрочно (`validation-repair-harness-A.md`).
-- **S4** — партия 2 golibinfra: `harden-gate-defaults` S1–S10 приняты, итоговый S11 идёт; затем
-  `harden-authn-release` и релиз v1.3.0.
+Контрольная точка сессии 3: фоновых агентов нет, всё закоммичено. S1 и S2 закрыты (`harden-gate`,
+golibinfra v1.2.0 в origin).
+- **S3** — `fix-reference-code`: S1–S8 и S10–S12 приняты (отчёты A, B, C); дальше S9 — ждёт golibinfra
+  v1.3.0, затем S13–S15. `repair-harness` S1, S2, S5 приняты досрочно; остальное — после
+  `fix-reference-code`.
+- **S4** — партия 2 golibinfra: `harden-gate-defaults` закрыт (аннотация первой половины v1.3.0 —
+  `annotation-v1.3.0.md` в материалах); `harden-authn-release` — этап S1–S7 сделан, валидатор FAIL
+  (`validation-harden-authn-release-A.md`, `testkit/metrictest`): первым — круг фиксов, перепроверка,
+  затем S8–S12 и релиз S13.
 - Предел контекста агента — 950 тыс. (владелец): наблюдатель `ctxwatch.py`, сворачивание и
-  продолжатель — `prompts.md`; агенты не запускают `/code-review` и вложенных агентов.
-  Оперативные заметки — `orchestrator-todo.md` (каталог материалов).
+  продолжатель — `prompts.md`; агенты не запускают `/code-review` и вложенных агентов. Оперативные
+  заметки и «Как продолжить» — `orchestrator-todo.md` (каталог материалов).
