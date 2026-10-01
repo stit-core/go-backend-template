@@ -133,7 +133,7 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) er
 }
 
 // RequestPasswordReset отвечает одинаково, есть ли учётная запись, пускают ли её, исчерпан ли лимит
-// запросов и ушло ли письмо: по ответу не узнать, чей email зарегистрирован. Исход — в метрику.
+// запросов и что сломалось после поиска: по ответу не узнать, чей email зарегистрирован. Исход — в метрику.
 func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error {
 	result, err := uc.requestPasswordReset(ctx, email)
 	uc.d.Metrics.RecordPasswordResetRequested(ctx, result)
@@ -150,10 +150,20 @@ func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outc
 	case !u.CanLogin:
 		return resultInactive, nil
 	}
+	// Дальше путь есть только у учётной записи: 500 на её сбое (лимитер, запись, письмо) выдал бы её —
+	// сбой уходит в лог и метрику, ответ тот же; повтор — новым запросом.
+	result, err := uc.issuePasswordReset(ctx, u)
+	if err != nil {
+		uc.d.Log.Error(ctx, "password reset request", "user_id", u.ID, "err", err)
+	}
+	return result, nil
+}
+
+func (uc *Usecase) issuePasswordReset(ctx context.Context, u *User) (outcome.Result, error) {
 	allowed, err := uc.d.Limiter.Allow(ctx, u.ID, identity.IPFrom(ctx))
 	switch {
 	case err != nil:
-		return outcome.Error, fmt.Errorf("password reset limiter: %w", err)
+		return outcome.Error, fmt.Errorf("limiter: %w", err)
 	case !allowed:
 		return resultThrottled, nil
 	}
@@ -173,10 +183,8 @@ func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outc
 		return outcome.Error, err
 	}
 
-	// Сбой доставки клиент не видит — иначе ответ выдал бы учётную запись; повтор — новым запросом.
 	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
-		uc.d.Log.Error(ctx, "send password reset email", "user_id", u.ID, "err", err)
-		return outcome.Error, nil
+		return outcome.Error, fmt.Errorf("send password reset email: %w", err)
 	}
 	return outcome.OK, nil
 }

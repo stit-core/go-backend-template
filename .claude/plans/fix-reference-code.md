@@ -252,10 +252,9 @@ prod-дефолты, понятный контракт ошибок API, тес�
   `fx.As`); ошибки — `TrustedErrors`: исходы репозитория — тест Trusted, свои `return` — archtest (Trusted
   лишь делегирует), перевод — тесты адаптеров; киты — `auth/infra/`; HAR-08.
 - S7: префикс и `data` — archtest `TestHTTPTypes`; 401 — `TestBoot` по спецификации; e2e-модели строгие.
-- S8: `AUTH_ACCESS_EXPIRED` — `authgate.Secured`; `importsByName` знает `huma/v2`. B1: правило на каждую
-  ошибку `errors.go`, `Map` — таблицей домена в хендлерах (archtest; хелпер вправе вернуть `err`), таблица
-  операции — в `Declare` (без доменных ошибок не заводится); разный смысл — разная ошибка
-  (`ErrWrongOldPassword`, `ErrRefreshInvalid`); у ошибок портов — тоже правило.
+- S8: `AUTH_ACCESS_EXPIRED` — `authgate.Secured`; `importsByName` знает `huma/v2`. B1: правило на каждую ошибку
+  `errors.go`, `Map` — таблицей домена в хендлерах (archtest; хелпер вправе вернуть `err`), таблица операции —
+  в `Declare`; разный смысл — разная ошибка (`ErrWrongOldPassword`, `ErrRefreshInvalid`), у портов — тоже.
 - S10: гард — `config.Guard` (Invoke модуля; не dev — строго) и конструктор лог-mailer (сразу
   `verification/infra/logmail`, без аудита `mail_sent`). Вход fail-closed, неучитываемый ключ — 401, email ≤ 254
   байт. Сброс: ответ один, лимит — bruteforcekit на (пользователь, IP) портом `ResetLimiter` (кита нет в
@@ -271,6 +270,7 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Валидатор C: здоровье — `api healthcheck` (GET /health своего `HTTP_ADDR`; в distroless нет shell), кита
   нет — бэклог `healthcheck-kit`; `HEALTHCHECK` в Dockerfile нет — интервалы задаёт деплой. Старый subject
   `user.events.registered` ещё релиз читает прежний durable (без потерь и окна; `events-v1-reader`).
+  Запрос сброса: сбой после поиска учётной записи (лимитер, пустой IP, запись, письмо) — лог и метрика, ответ 204.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в OpenAPI) —

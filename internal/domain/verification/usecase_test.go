@@ -258,8 +258,9 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 		f.bus.Last(subjectPasswordResetRequested))
 }
 
-// Ответ один и тот же, есть ли учётная запись, пускают ли её, исчерпан ли лимит и ушло ли письмо:
-// строгие моки — токен, событие и письмо появляются только у разрешённого запроса.
+// Ответ один и тот же, есть ли учётная запись, пускают ли её, исчерпан ли лимит и что сломалось после
+// поиска: сбой видно только в логе. Строгие моки — токен, событие и письмо появляются только у
+// разрешённого запроса, сбой лимитера токен не выпускает (fail-closed).
 func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 	t.Parallel()
 	blocked := mocks.NewMockUserReader(t)
@@ -268,12 +269,14 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 	failingMailer.EXPECT().SendPasswordReset(mock.Anything, "a@b.com", mock.Anything).Return(errors.New("smtp unavailable")).Once()
 	issuing := mocks.NewMockRepository(t)
 	issuing.EXPECT().InsertPasswordReset(mock.Anything, "u1", mock.Anything, mock.Anything).Return("rid", nil).Once()
+	failingRepo := mocks.NewMockRepository(t)
+	failingRepo.EXPECT().InsertPasswordReset(mock.Anything, "u1", mock.Anything, mock.Anything).Return("", errors.New("db down")).Once()
 
 	cases := []struct {
 		name   string
 		opts   []ucOption
 		events int
-		logged string // ошибка в логе вместо ответа
+		failed string // причина в логе вместо ответа
 	}{
 		{name: "unknown email", opts: []ucOption{withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t))}},
 		{name: "account that cannot log in", opts: []ucOption{withUsers(blocked), withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t))}},
@@ -281,7 +284,14 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 			withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, nil)),
 			withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t)),
 		}},
-		{name: "mail not delivered", events: 1, logged: "send password reset email", opts: []ucOption{
+		{name: "limiter failure, client IP lost", failed: "guard store down", opts: []ucOption{
+			withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, errors.New("guard store down"))),
+			withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t)),
+		}},
+		{name: "reset not stored", failed: "db down", opts: []ucOption{
+			withUsers(activeUser(t)), withLimiter(limiter(t, "u1", true, nil)), withRepo(failingRepo), withMailer(mocks.NewMockMailer(t)),
+		}},
+		{name: "mail not delivered", events: 1, failed: "smtp unavailable", opts: []ucOption{
 			withUsers(activeUser(t)), withLimiter(limiter(t, "u1", true, nil)), withRepo(issuing), withMailer(failingMailer),
 		}},
 	}
@@ -292,23 +302,14 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 
 			require.NoError(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"))
 			require.Len(t, f.bus.Published(subjectPasswordResetRequested), tc.events)
-			if tc.logged != "" {
-				e, ok := f.log.Find(slog.LevelError, tc.logged)
-				require.True(t, ok, "the delivery failure is logged")
+			e, logged := f.log.Find(slog.LevelError, "password reset request")
+			require.Equal(t, tc.failed != "", logged, "a failure after the lookup is logged, not answered")
+			if logged {
 				require.Equal(t, "u1", e.Str("user_id"))
+				require.Contains(t, e.Str("err"), tc.failed)
 			}
 		})
 	}
-}
-
-// Fail-closed: без учёта запроса токен не выпускается.
-func TestRequestPasswordReset_LimiterFailure(t *testing.T) {
-	t.Parallel()
-	f := newUC(t, withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, errors.New("guard store down"))),
-		withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t)))
-
-	require.ErrorContains(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"), "guard store down")
-	require.Empty(t, f.bus.Published(subjectPasswordResetRequested))
 }
 
 // Исход каждого запроса сброса попадает в метрику: на «не ушло письмо» и «упёрлись в лимит» стоят алерты.
