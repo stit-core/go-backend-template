@@ -1,8 +1,11 @@
 package archtest
 
 import (
+	"encoding/json"
 	"errors"
 	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path"
@@ -188,4 +191,95 @@ func proseFiles(files []string) []string {
 		}
 	}
 	return docs
+}
+
+// TestNolintNamesEnabledLinters: //nolint выключенного линтера ничего не глушит, а nolintlint
+// ловит неиспользуемую директиву только у включённого — мёртвая прошла бы молча.
+func TestNolintNamesEnabledLinters(t *testing.T) {
+	t.Parallel()
+	enabled := golangciEnabled(t)
+	for _, f := range goFiles(t) {
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, filepath.Join(repoRoot(t), f.path), nil, parser.ParseComments)
+		require.NoError(t, err)
+		for _, group := range file.Comments {
+			for _, c := range group.List {
+				for _, name := range nolintNames(c.Text) {
+					if !enabled[name] {
+						t.Errorf("%s:%d: //nolint:%s — the linter is off in .golangci.yml, the directive silences nothing", f.path, fset.Position(c.Pos()).Line, name)
+					}
+				}
+			}
+		}
+	}
+}
+
+var nolintDirective = regexp.MustCompile(`^nolint( |:|$)`)
+
+// nolintNames — линтеры директивы по разбору golangci-lint: ведущие «/» и пробелы, регистр и
+// пробелы у имён не важны, после второго «//» — пояснение. nil — не директива или директива на
+// все линтеры (её запрещает nolintlint).
+func nolintNames(comment string) []string {
+	text := strings.TrimLeft(comment, "/ ")
+	if !nolintDirective.MatchString(text) || !strings.HasPrefix(text, "nolint:") {
+		return nil
+	}
+	text, _, _ = strings.Cut(strings.TrimPrefix(text, "nolint:"), "//")
+	var names []string
+	for item := range strings.SplitSeq(text, ",") {
+		switch name := strings.ToLower(strings.TrimSpace(item)); name {
+		case "all":
+			return nil
+		case "":
+		default:
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// golangciEnabled — линтеры и форматтеры, включённые конфигом гейта, по ответу самого
+// golangci-lint: проверка не повторяет его правила default и enable.
+func golangciEnabled(t *testing.T) map[string]bool {
+	t.Helper()
+	enabled := map[string]bool{}
+	for _, kind := range []string{"linters", "formatters"} {
+		cmd := exec.CommandContext(t.Context(), "golangci-lint", kind, "--json")
+		cmd.Dir = repoRoot(t)
+		out, err := cmd.Output()
+		require.NoError(t, err, "golangci-lint %s --json (pinned golangci-lint ставит make setup)", kind)
+		var list struct{ Enabled []struct{ Name string } }
+		require.NoError(t, json.Unmarshal(out, &list))
+		for _, l := range list.Enabled {
+			enabled[l.Name] = true
+		}
+	}
+	require.NotEmpty(t, enabled, "golangci-lint reports no enabled linters")
+	return enabled
+}
+
+func TestNolintNames(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		comment string
+		want    []string
+	}{
+		{"//nolint:errcheck // reason", []string{"errcheck"}},
+		{"//nolint: depguard // reason", []string{"depguard"}},
+		{"//nolint:forbidigo, depguard", []string{"forbidigo", "depguard"}},
+		{"//nolint:a,,b", []string{"a", "b"}},
+		{"// nolint:ErrCheck", []string{"errcheck"}},
+		{"/// nolint:gosec", []string{"gosec"}},
+		{"//nolint", nil},
+		{"//nolint:all", nil},
+		{"//nolint:errcheck,all", nil},
+		{"//nolintlint:errcheck", nil},
+		{"// see //nolint:depguard", nil},
+		{"/* nolint:depguard */", nil},
+	} {
+		t.Run(tc.comment, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, nolintNames(tc.comment))
+		})
+	}
 }

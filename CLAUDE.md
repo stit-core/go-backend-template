@@ -84,7 +84,7 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
   `slog.*` и запись в `os.Stdout`/`os.Stderr`, только `logkit.Logger`.
   errcheck (и `_ = f()`)/errorlint/gosec/govet/contextcheck/noctx/rowserrcheck/bodyclose
   /sqlclosecheck/testifylint — на. `//nolint` — ослабление гейта (§ Границы): с именем включённого
-  линтера и объяснением (nolintlint, `make lint`).
+  линтера и объяснением (nolintlint и archtest).
 - **Раскладка.** Бизнес-код — только `internal/domain/<d>/` (слои — rule `domain-architecture`);
   клей платформы — `internal/platform/`; общее для доменов — `pkg/`: чистые примитивы и
   сгенерированный код (gRPC-, OpenAPI-клиент; зовёт его `infra/` домена); входы — `cmd/`; тестовая
