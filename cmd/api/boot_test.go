@@ -175,6 +175,8 @@ func TestBoot(t *testing.T) {
 	require.ElementsMatch(t, sourceNames(sources.Kits), sourceNames(kitSources),
 		"sources.Kits (cmd/migrate) differs from the kit tables of the service graph (group %s)", pgkit.MigrationsGroup)
 
+	require.NoError(t, checkHealth(t.Context(), srv.Addr().String()), "api healthcheck gets 200 from /health of the service")
+
 	base := "http://" + srv.Addr().String()
 	call := func(c *http.Client, method, path, body string) int {
 		req, err := http.NewRequestWithContext(t.Context(), method, base+path, strings.NewReader(body))

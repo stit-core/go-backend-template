@@ -116,10 +116,9 @@ prod-дефолты, понятный контракт ошибок API, тес�
   внутренностей, с ID запроса, тот же ID — в логах; каждая операция объявляет свои ошибки в
   OpenAPI. Проверка: тест полноты — каждый sentinel каждого домена → (статус, `code`), ожидаемая
   ошибка не даёт 500; `openapi.json` содержит ошибки операций; handler-тесты по кодам → PASS
-  - Подтверждено: archtest `TestDomainErrorTables` — правило на каждую ошибку, `Map` таблицей домена
-    (500 исключён), таблица операции — в `Declare`; `TestErrorMaps` — объявления операций (ручной
-    список); handler-тесты кодов, 422, 401, 429 с `Retry-After`; `TestBoot` — 5xx без причины, она в
-    логе под тем же `request_id`
+  - Подтверждено: archtest `TestDomainErrorTables` (правило на каждую ошибку, `Map` таблицей домена, 500
+    исключён, таблица операции — в `Declare`); `TestErrorMaps`; handler-тесты кодов, 422, 401, 429 с
+    `Retry-After`; `TestBoot` — 5xx без причины, она в логе под тем же `request_id`
 
 ## Шаги
 ### Фундамент
@@ -137,10 +136,9 @@ prod-дефолты, понятный контракт ошибок API, тес�
   boot-тест проверяет, что HTTP-сервер стартует последним и гасится первым
   - Проверка: `make check` → зелёный; `grep -rn "beforeHTTP\|MapErr" --include=*.go .` → пусто;
     fx X6, X11, X15 → пойманы китом, `fx.ValidateApp` или boot-тестом · Закрывает: AC11, AC12 · Зависит от: —
-  - Сделано: `make check` → `✓ check clean`, grep пусто; X6 — порядок держит кит (HTTP последним
-    и первым при любом месте `pgkit.Module`), X11 — старт падает `ErrAuthNotConfigured`, X15 —
-    `TestFxGraphValidates`; `TestBoot` ловит и X12, X13, и `registerHTTP` в корне при зависимости с
-    хуком только у хендлеров (T-C); логи — `fdn-s1-*.log` в материалах программы
+  - Сделано: `make check` → `✓ check clean`, grep пусто; X6 держит кит (HTTP последним и первым), X11 —
+    `ErrAuthNotConfigured`, X15 — `TestFxGraphValidates`; `TestBoot` ловит X12, X13 и `registerHTTP` в
+    корне при зависимости с хуком только у хендлеров (T-C); логи — `fdn-s1-*.log` в материалах
 - [x] **S2** — DI-канон: зависимости usecase — одной структурой; одна идиома привязки к интерфейсу;
   имя модуля — путь пакета; конфиги китов — через их `NewConfig`, `App` — только конфиги приложения;
   без `context.Context` в графе; flagkit и cachekit вне графа до первого потребителя — `/ready`,
@@ -271,6 +269,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
   в каждом (`platform/shared` убран и из archtest); `nonamedreturns` в гейте; миграцию 0001 не правим.
 - S12: срез — только admin, строгий мок репозитория и настоящая policy; скрипт вставляет домен в блоки
   `cmd/api`, гонит `make gen` и ставит созданное в индекс — `gen-check` не терпит неотслеженных моков.
+- Валидатор C: здоровье — `api healthcheck` (GET /health своего `HTTP_ADDR`; в distroless нет shell), кита
+  нет — бэклог `healthcheck-kit`; `HEALTHCHECK` в Dockerfile нет — интервалы задаёт деплой.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в OpenAPI) —
@@ -293,8 +293,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
   35s), `HTTP_SHUTDOWN_TIMEOUT` + `NATS_DRAIN_TIMEOUT` ≤ 25s — иначе правка `fx.StopTimeout`. Argon2id —
   разом не больше `max(1, GOMAXPROCS/ARGON2_THREADS)` хэшей: при `ARGON2_THREADS=4` и < 8 CPU пароли
   хэшируются по одному — CPU пода и реплики под пик. API: problem+json с `code` и `request_id`.
-- Блоки S10 (`APP_ENV` и гард, образы от UID 65532) и S11 (subject'ы `.v2`, `OTEL_SDK_DISABLED`) — в
-  накопителе `.claude/plans/handoff.md`; прочее — через `/infra-handoff`, когда изменения лягут.
+- Блоки S10 и S11 — в накопителе `.claude/plans/handoff.md`; прочее — `/infra-handoff`, когда ляжет.
 
 ## Где мы сейчас
-S1–S8 приняты (отчёты A и B в материалах), S10–S12 сделаны. Дальше S9 (golibinfra v1.3.0), S13–S15.
+S1–S8 приняты (отчёты A и B в материалах), S10–S12 сделаны; FAIL валидатора C — круг фиксов: B1
+закрыт, неблокирующие идут. Дальше перепроверка C, S9 (golibinfra v1.3.0), S13–S15.

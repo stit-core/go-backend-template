@@ -97,6 +97,12 @@ services:
     environment:
       <<: *app-env
     entrypoint: ["api"]
+    # Как у деплоя: shell и wget в образе нет — бинарь сам спрашивает свой /health; up.sh ждёт healthy.
+    healthcheck:
+      test: ["CMD", "api", "healthcheck"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
     depends_on:
       postgres:
         condition: service_healthy

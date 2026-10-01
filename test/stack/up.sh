@@ -2,7 +2,7 @@
 # test/stack/up.sh — собрать бинари локально и поднять стек.
 #
 # Шаги:
-#   1. Build api/worker/migrate бинарей локально в test/stack/bin/
+#   1. Build api/migrate/seed-admin бинарей локально в test/stack/bin/
 #      (использует прогретый GOMODCACHE; не нужен ssh/.netrc в docker).
 #   2. docker compose up -d --build.
 #   3. Дождаться healthy / migrate completed.
@@ -85,12 +85,12 @@ E2E_PG_DSN=postgresql://postgres:postgres@127.0.0.1:${PG_PORT}/app
 E2E_NATS_URL=nats://127.0.0.1:${NATS_PORT}
 EOF
 
-# === Wait for api healthy via openapi ===
+# === Wait for api healthy: проверка здоровья образа (`api healthcheck`), та же, что у деплоя ===
 echo
-echo "== Wait for api (max 60s) =="
+echo "== Wait for api healthy (max 60s) =="
+API_CONTAINER=$(docker compose -p "$E2E_PROJECT" -f "$COMPOSE" ps -q api)
 for i in $(seq 1 30); do
-    if curl -fsS -o /dev/null --max-time 2 "${API_BASE}/openapi.yaml" 2>/dev/null \
-       || curl -fsS -o /dev/null --max-time 2 "${API_BASE}/healthz" 2>/dev/null; then
+    if [ "$(docker inspect -f '{{.State.Health.Status}}' "$API_CONTAINER" 2>/dev/null)" = healthy ]; then
         echo "  api up after ${i}s × 2s = $((i*2))s"
         echo
         docker compose -p "$E2E_PROJECT" -f "$COMPOSE" ps
@@ -101,6 +101,7 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-echo "FAIL: api did not become healthy in 60s. Logs:" >&2
+echo "FAIL: api did not become healthy in 60s. Health checks and logs:" >&2
+docker inspect -f '{{range .State.Health.Log}}{{.ExitCode}} {{.Output}}{{end}}' "$API_CONTAINER" >&2
 docker compose -p "$E2E_PROJECT" -f "$COMPOSE" logs --tail=80 api migrate >&2
 exit 1

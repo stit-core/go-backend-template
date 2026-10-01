@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -106,5 +107,8 @@ func logStart(log logkit.Logger) {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck(context.Background()))
+	}
 	fx.New(service).Run()
 }

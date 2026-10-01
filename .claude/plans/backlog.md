@@ -14,6 +14,9 @@
   синхронное письмо: с настоящим mailer время ответа выдаёт учётную запись. Канон — письмо через
   outbox-консьюмер с `sent_at`, как подтверждение email. Триггер: настоящий Mailer в форке или
   повторный аудит (SEC-06).
+- **healthcheck-kit** — проверка здоровья контейнера без shell (`api healthcheck`: `GET /health` по
+  `HTTP_ADDR`) живёт в `cmd/api/healthcheck.go`, а нужна каждому сервису на httpkit в distroless-образе:
+  место — httpkit, рядом с `/health`. Триггер: партия 3 golibinfra (v1.4.0) или второй сервис.
 - **vuln-scan** — govulncheck и сканирование образов не входят в гейт: им нужна сеть (база
   уязвимостей), а `make check` от сети не зависит. Место — `release-preflight` перед тегом. Триггер:
   `repair-harness` S9 (гейт) или первый релиз форка (SEC-11).

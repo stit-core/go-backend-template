@@ -14,14 +14,19 @@ RISK   без APP_ENV или с небезопасной настройкой в
 ===
 
 === INFRA HANDOFF · передай инфра-админу ===
-WHAT   образы api и migrate — distroless static (без shell и apk), процесс UID:GID 65532:65532,
-       базы закреплены digest'ом
+WHAT   образы api и migrate — distroless static (без shell, wget, curl и apk), процесс UID:GID
+       65532:65532, базы закреплены digest'ом; проверку здоровья api делает сам бинарь:
+       `/app healthcheck` — GET /health по HTTP_ADDR контейнера, код выхода 0 — здоров
 WHY    fix-reference-code S10 — образы не от root (SEC-08)
-ACTION тома, секреты-файлы и сертификаты, которые монтируются в контейнер, — читаемы UID 65532;
-       отладка — без `docker exec … sh` (в образе нет shell)
+ACTION healthcheck сервиса api в compose — `test: ["CMD", "/app", "healthcheck"]` вместо wget, curl
+       или CMD-SHELL (интервалы прежние); тома, секреты-файлы и сертификаты, которые монтируются в
+       контейнер, — читаемы UID 65532; отладка — без `docker exec … sh` (в образе нет shell)
 WHO    проект (compose)
 DECIDE —
-RISK   смонтированный файл, читаемый только root, — сервис его не прочтёт и не стартует
+RISK   прежний healthcheck через wget, curl или shell не найдёт программу: контейнер навсегда
+       unhealthy, прокси, который маршрутизирует только healthy-контейнеры, снимает api с
+       маршрутизации (404), `compose up --wait` падает; смонтированный файл, читаемый только root, —
+       сервис его не прочтёт и не стартует
 ===
 
 === INFRA HANDOFF · передай инфра-админу ===
