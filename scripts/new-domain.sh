@@ -19,11 +19,31 @@ if [ -z "$NAME" ]; then
     exit 1
 fi
 
-if ! [[ "$NAME" =~ ^[a-z][a-z0-9_]*$ ]]; then
-    echo "ERROR: имя домена — snake_case (a-z, 0-9, _), начинается с буквы" >&2
+# Имя проверяется до первой правки: срез с негодным именем не собрался бы, когда cmd/api и make gen
+# уже тронуты.
+if ! [[ "$NAME" =~ ^[a-z][a-z0-9]*(_[a-z0-9]+)*$ ]]; then
+    echo "ERROR: имя домена — snake_case: a-z и 0-9, «_» только между словами, начинается с буквы" >&2
     echo "       получено: '$NAME'" >&2
     exit 1
 fi
+# Пакет домена не может называться ключевым словом или встроенным именем Go, а также именем, которое
+# рядом с ним импортирует или объявляет код среза.
+reserved=(
+    break case chan const continue default defer else fallthrough for func go goto if import interface
+    map package range return select struct switch type var
+    any append bool byte cap clear close comparable complex complex64 complex128 copy delete error false
+    float32 float64 imag int int8 int16 int32 int64 iota len make max min new nil panic print println
+    real recover rune string true uint uint8 uint16 uint32 uint64 uintptr
+    authgate context db errors fmt fx handlertest http httpkit huma identity identitytest json logkit
+    mock mocks pgkit policy repopath require strings testing testkit time utf8
+    authorizer create create_input created get repository setup usecase usecase_deps
+)
+for word in "${reserved[@]}"; do
+    if [ "$NAME" = "$word" ]; then
+        echo "ERROR: '$NAME' — ключевое слово или встроенное имя Go либо имя из кода среза: возьми другое" >&2
+        exit 1
+    fi
+done
 
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
@@ -38,14 +58,28 @@ for tool in sqlc mockery gofumpt; do
 done
 
 # order_item → OrderItem (типы), orderItem (переменные), orderitem (алиасы импортов),
-# order-item (путь API), ORDER_ITEM (коды ошибок), order_items (таблица).
+# ORDER_ITEM (коды ошибок), order_items (таблица), order-items (путь API).
 TITLE=$(echo "$NAME" | sed -E 's/(^|_)([a-z])/\U\2/g')
 CAMEL=$(echo "$TITLE" | sed -E 's/^./\L&/')
 FLAT=${NAME//_/}
-KEBAB=${NAME//_/-}
 UPPER=$(echo "$NAME" | tr '[:lower:]' '[:upper:]')
-TABLE="${NAME}s"
+# Множественное число — по правилам английского (status → statuses, category → categories);
+# исключения (person → people) правят руками.
+case "$NAME" in
+    *s | *x | *z | *ch | *sh) TABLE="${NAME}es" ;;
+    *[!aeiou]y) TABLE="${NAME%y}ies" ;;
+    *) TABLE="${NAME}s" ;;
+esac
+ROUTE=${TABLE//_/-}
 MODULE_PATH=$(awk '/^module / {print $2}' go.mod)
+
+# Алиас импорта — имя без «_»: us_er дал бы usermod, который уже занят доменом user.
+for f in cmd/api/main.go cmd/api/http.go; do
+    if grep -qwE "${FLAT}(mod|http)" "$f"; then
+        echo "ERROR: алиас ${FLAT}mod или ${FLAT}http уже занят в $f — имя совпадает с другим доменом без «_»" >&2
+        exit 1
+    fi
+done
 
 last=$(ls migrations | grep -E '^[0-9]{4}_.*\.up\.sql$' | sort | tail -1 | cut -c1-4)
 MIGRATION="migrations/$(printf '%04d' $((10#${last:-0} + 1)))_${TABLE}"
@@ -502,8 +536,8 @@ func Register(api huma.API, h *Handler) {
 	huma.Register(api, createErrors.Declare(authgate.Secured(huma.Operation{
 		OperationID:   "create$TITLE",
 		Method:        http.MethodPost,
-		Path:          "/api/${KEBAB}s",
-		Tags:          []string{"${KEBAB}s"},
+		Path:          "/api/${ROUTE}",
+		Tags:          []string{"${ROUTE}"},
 		DefaultStatus: http.StatusCreated,
 		Summary:       "Создать $NAME",
 	})), h.create)
@@ -511,8 +545,8 @@ func Register(api huma.API, h *Handler) {
 	huma.Register(api, getErrors.Declare(authgate.Secured(huma.Operation{
 		OperationID: "get$TITLE",
 		Method:      http.MethodGet,
-		Path:        "/api/${KEBAB}s/{id}",
-		Tags:        []string{"${KEBAB}s"},
+		Path:        "/api/${ROUTE}/{id}",
+		Tags:        []string{"${ROUTE}"},
 		Summary:     "Получить $NAME по ID",
 	})), h.get)
 }
@@ -638,7 +672,7 @@ func TestCreate_Created(t *testing.T) {
 	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Create(mock.Anything, $NAME.CreateInput{Name: "first"}).Return(created, nil).Once()
 
-	resp := setup(t, uc).PostCtx(identitytest.Admin("a1"), "/api/${KEBAB}s", strings.NewReader(\`{"name":"first"}\`))
+	resp := setup(t, uc).PostCtx(identitytest.Admin("a1"), "/api/${ROUTE}", strings.NewReader(\`{"name":"first"}\`))
 
 	handlertest.AssertStatus(t, resp, http.StatusCreated)
 	assertView(t, resp.Body.Bytes())
@@ -662,7 +696,7 @@ func TestCreate_Errors(t *testing.T) {
 			uc := mocks.NewMockUsecase(t)
 			uc.EXPECT().Create(mock.Anything, $NAME.CreateInput{Name: "first"}).Return(nil, tc.err).Once()
 
-			resp := setup(t, uc).Post("/api/${KEBAB}s", strings.NewReader(\`{"name":"first"}\`))
+			resp := setup(t, uc).Post("/api/${ROUTE}", strings.NewReader(\`{"name":"first"}\`))
 
 			handlertest.AssertAPIError(t, resp, tc.status, tc.code)
 			if tc.field != "" {
@@ -679,7 +713,7 @@ func TestGet_OK(t *testing.T) {
 	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Get(mock.Anything, "id-1").Return(created, nil).Once()
 
-	resp := setup(t, uc).GetCtx(identitytest.Admin("a1"), "/api/${KEBAB}s/id-1")
+	resp := setup(t, uc).GetCtx(identitytest.Admin("a1"), "/api/${ROUTE}/id-1")
 
 	handlertest.AssertStatus(t, resp, http.StatusOK)
 	assertView(t, resp.Body.Bytes())
@@ -688,9 +722,9 @@ func TestGet_OK(t *testing.T) {
 func TestGet_NotFound(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Get(mock.Anything, "id-1").Return(nil, $NAME.ErrNotFound).Once()
+	uc.EXPECT().Get(mock.Anything, "id-2").Return(nil, $NAME.ErrNotFound).Once()
 
-	resp := setup(t, uc).Get("/api/${KEBAB}s/id-1")
+	resp := setup(t, uc).Get("/api/${ROUTE}/id-2")
 
 	handlertest.AssertAPIError(t, resp, http.StatusNotFound, "${UPPER}_NOT_FOUND")
 }
@@ -875,7 +909,7 @@ make --no-print-directory gen
 git add "$DOMAIN_DIR" "${MIGRATION}.up.sql" "${MIGRATION}.down.sql" sqlc.yaml .mockery.yml cmd/api/main.go cmd/api/http.go openapi.json
 
 echo
-echo "✓ домен $NAME: срез Create и Get (POST /api/${KEBAB}s, GET /api/${KEBAB}s/{id}, только admin),"
+echo "✓ домен $NAME: срез Create и Get (POST /api/${ROUTE}, GET /api/${ROUTE}/{id}, только admin),"
 echo "  таблица ${TABLE}, подключение в cmd/api; созданное — в индексе git"
 echo
 echo "Дальше:"

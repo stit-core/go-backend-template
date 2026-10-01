@@ -51,7 +51,7 @@ make new-domain NAME=<name>
 `scripts/new-domain.sh` создаёт рабочий вертикальный срез по канону и подключает его:
 
 ```
-migrations/NNNN_<name>s.{up,down}.sql   таблица <name>s (id, name, created_at); номер — следующий
+migrations/NNNN_<names>.{up,down}.sql   таблица <names> (id, name, created_at); номер — следующий
 internal/domain/<name>/
 ├── entity.go          <Name>{ID, Name, CreatedAt}, New<Name> проверяет имя
 ├── dto.go             CreateInput
@@ -59,7 +59,7 @@ internal/domain/<name>/
 ├── policy.go          CanCreate, CanGet — только admin; предел имени
 ├── usecase.go         Create, Get; порты Repository и Authorizer
 ├── *_test.go          entity (+fuzz), policy, usecase на строгом моке репозитория и настоящей policy
-├── delivery/http/     POST /api/<name>s и GET /api/<name>s/{id} под authgate.Secured, DTO с
+├── delivery/http/     POST /api/<names> и GET /api/<names>/{id} под authgate.Secured, DTO с
 │                      префиксом и envelope data, таблицы ошибок с Declare, handler- и errors-тесты
 ├── infra/postgres/    queries/<name>.sql (Insert<Name>, Get<Name>ByID), repository.go,
 │                      repository_test.go (integration), db/ — sqlc
@@ -70,6 +70,11 @@ internal/domain/<name>/
 в `.mockery.yml`, подключает модуль в `domainModules` (`cmd/api/main.go`) и HTTP-вход в
 `httpHandlers` и `registerHTTP` (`cmd/api/http.go`), гонит `make gen` и ставит созданное в индекс
 git. Границы домена держит `internal/archtest` без правки конфигов.
+
+`<names>` — множественное число по правилам английского (`status` → `statuses`, `category` →
+`categories`; в пути `_` → `-`), исключения (`person` → `people`) правят руками. Имя, с которым срез не
+собрался бы (ключевое слово или встроенное имя Go, имя из кода среза, алиас импорта другого домена),
+скрипт отвергает до первой правки.
 
 ### 3. Гейт
 
