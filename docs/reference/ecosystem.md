@@ -66,7 +66,7 @@ sibling-checkout'ами (`../<name>`).
   `<svc>` и путь к strategy-репо записаны в `docs/stack/service.md § Identity`; по ним `/scaffold`
   (вариант domain) разворачивает код, маппинг — [domain-mapping.md](domain-mapping.md).
   Проектируются домены там (`/domain-deep-dive`); рантайм-образ от strategy-репо не зависит.
-- **Киты — `golibinfra`** (версия в `go.mod`): logging, authn, outbox, NATS, cache, audit, clock.
+- **Киты — `golibinfra`** (версия в `go.mod`): logging, authn, outbox, brute-force, NATS, audit, clock.
   Переиспользуемый примитив — PR в `golibinfra`, не локально (`architecture.md § Граница с golibinfra`).
 - **Конфиг и секреты — из окружения контейнера.** В проде их задаёт `<org>/infra`: `.env` на VPS по
   контракту его `.env.example`, интерполяция в compose `environment:`. Схема ключей — артефакт

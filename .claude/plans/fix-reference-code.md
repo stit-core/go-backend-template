@@ -293,8 +293,7 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-«Фундамент» (S1–S3) сделан, валидатор — FAIL (`validation-fix-reference-code-A.md`); B1 (пароль —
-422 с полем) закрыт. Остаток круга фиксов: N1 (cachekit в `README.md:9`, `ecosystem.md:69`), N2
-(стрим домена-публикатора — проверка на старте), N3 (`Declare` в `new-domain.sh`), N4 (тест на
-`FxLogger`, `context.Context`, `fx.As`), N5 (Argon2id в Handoff), N6 (`StopTimeout` ↔ env), N7, N8.
-Дальше — перепроверка валидатором (всё после `77528f3`), затем S4; v1.3.0 — bump в S9.
+«Фундамент» (S1–S3) сделан, валидатор — FAIL (`validation-fix-reference-code-A.md`); круг фиксов:
+закрыты B1 (`0d78024`), N1 и N3. Остаток: N2 (стрим домена-публикатора — проверка на старте), N4
+(тест на `FxLogger`, `context.Context`, `fx.As`), N5 (Argon2id в Handoff), N6 (`StopTimeout` ↔
+env), N7, N8. Дальше — перепроверка валидатором (всё после `77528f3`), затем S4; v1.3.0 — bump в S9.

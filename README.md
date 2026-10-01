@@ -6,7 +6,7 @@
 
 Шаблон Go-бэкенда экосистемы stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx,
 поверх [`golibinfra`](https://git.stit.tech/stit-core/golibinfra) (authn,
-outbox, cache, NATS, audit, logging). Структурные логи, тесты и релиз — встроены;
+outbox, brute-force, NATS, audit, logging). Структурные логи, тесты и релиз — встроены;
 вы пишете домены, не обвязку.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2563eb)](LICENSE)
