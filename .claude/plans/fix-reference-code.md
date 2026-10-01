@@ -273,6 +273,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
   id — 404, `version` в ответе; auth: login — `data`, change-password — 404, 409, неверный старый
   пароль — 422, битый refresh — 401 вместо 500, истёкший access — 401 `AUTH_ACCESS_EXPIRED`, 429 — с
   `Retry-After`; verification: токен погашенный или в гонке — 409) — breaking для форков.
+- События verification: `TokenID` — id строки токена; `email_verification_requested` повторяется при
+  перевыпуске неотправленного письма — потребитель дедуплицирует по `TokenID`. Миграция 0004 — колонка.
 - Сессии на `authnkit/session`: при выкатке все пользователи входят заново один раз;
   `refresh_sessions` удаляется новой миграцией (`-- infra-handoff:`), таблица сессий кита — новый
   источник `cmd/migrate`.
