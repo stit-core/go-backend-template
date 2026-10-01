@@ -10,12 +10,9 @@
 
 ## Точка входа
 
-- **Как сюда попадают.** Обычно — агентом из операционного хаба `<org>/infra`: общий план
-  проекта ведёт хаб, задача приходит оттуда, а работаешь ты обвязкой этого репо (этот файл,
-  скиллы, гейт `make check`). Результат уходит обратно в хаб: образ в registry (`/release`) и
-  INFRA-HANDOFF-блок. Прямой заход разработчика — тоже нормальный режим с той же обвязкой;
-  последствия для соседей оформляются INFRA-HANDOFF-блоком для хаба (`/infra-handoff`). Карта —
-  `docs/reference/ecosystem.md`.
+- **Как сюда попадают.** Обычно — агентом из хаба `<org>/infra`: задача и общий план — оттуда,
+  обратно — образ в registry (`/release`) и INFRA-HANDOFF-блок. Прямой заход разработчика — с той
+  же обвязкой. Карта — `docs/reference/ecosystem.md`.
 - **`/smartdev`** — cockpit сессии: сводка состояния (ветка, drift, активный план, TODO) +
   переключение в нужный режим. Запускай в начале / после `/clear`.
 - **Потребителю шаблона** — `docs/getting-started.md`: форк → `/init-service` → проектирование
@@ -23,8 +20,7 @@
 
 ## Маршрут задачи
 
-Маршрут — первая подходящая строка сверху; `/smartdev` выбирает по этой же таблице. Отступил от
-неё — скажи почему: юзеру, а пришёл из хаба — в отчёте.
+Маршрут — первая подходящая строка сверху; `/smartdev` выбирает по этой же таблице.
 
 | Задача | Маршрут | Пример |
 |---|---|---|
@@ -45,22 +41,18 @@ Claim «готово» и коммит — только когда:
 
 ## Проектирование первично, код вторичен
 
-DDD-артефакты доменов живут в **соседнем strategy-репо** орга (`../strategy`, форк
-`business-strategy-template`): `docs/projects/<slug>/services/<svc>/domains/<ctx>/` — домены
-сервиса `<svc>`, который реализует этот репо; артефакты платформы/стека — локально `docs/stack/`.
-Это **source of truth**; код пишется/генерируется по ним, не наоборот. `auth`/`user`/`verification`
-— code-only референс-примеры (изучить, потом удалить под свой проект). Роль репо в экосистеме
-(образ в registry; выкатка — `make bump` в `<org>/infra`) — `docs/reference/ecosystem.md`.
+DDD-артефакты доменов — в **соседнем strategy-репо** (`../strategy`, форк
+`business-strategy-template`): `docs/projects/<slug>/services/<svc>/domains/<ctx>/`; артефакты
+стека — `docs/stack/`. Это **source of truth**: код пишется по ним, не наоборот.
+`auth`/`user`/`verification` — code-only референс-примеры (изучить, потом удалить под свой проект).
 
 ## Команды
 
-Единый интерфейс `make <verb>`; `make help` — полный список. Конциз-by-default
-(`FORMAT=detailed`/`VERBOSE=1` — полно; `PKG=./x/...` — подмножество; `make check` их не читает).
-Канонический gate перед claim «готово» / push — **`make check`** (fmt-check + vet + lint +
-migrations-check + test-int (юнит + integration, нужен Docker) + build + gen-check + cover-check
-≥75%). `make gen` — регенерация sqlc, mockery и `openapi.json` (контракт API из регистраций huma, без
-запуска сервиса). Реализация за таргетами — `scripts/tools/*`
-(напрямую не зови).
+Единый интерфейс `make <verb>` (`make help`; реализация — `scripts/tools/*`, напрямую не зови).
+Конциз-by-default: `FORMAT=detailed`/`VERBOSE=1` — полно, `PKG=./x/...` — подмножество; `make check`
+их не читает. `make check` = fmt-check + vet + lint + migrations-check + test-int (юнит +
+integration, нужен Docker) + build + gen-check + cover-check ≥75%. `make gen` — sqlc, mockery и
+`openapi.json` (контракт API из регистраций huma, без запуска сервиса).
 
 ## Карта: где что
 
@@ -80,11 +72,10 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
 ## Стиль кода (инварианты)
 
 - **gofumpt** обязателен (`make fmt`).
-- **golangci-lint** (`.golangci.yml`): **forbidigo** — нельзя `fmt.Print*`/`log.*`/`print(ln)`/
-  `slog.*` и запись в `os.Stdout`/`os.Stderr`, только `logkit.Logger`.
-  errcheck (и `_ = f()`)/errorlint/gosec/govet/contextcheck/noctx/rowserrcheck/bodyclose
-  /sqlclosecheck/testifylint — на. `//nolint` — ослабление гейта (§ Границы): с именем включённого
-  линтера и объяснением (nolintlint и archtest).
+- **golangci-lint** (`.golangci.yml`): логи — только `logkit.Logger`, не `fmt.Print*`/`log.*`/
+  `print(ln)`/`slog.*`/`os.Stdout`/`os.Stderr` (forbidigo); errcheck (и `_ = f()`), gosec и
+  остальные — по конфигу. `//nolint` — ослабление гейта (§ Границы): с именем включённого линтера
+  и объяснением (nolintlint и archtest).
 - **Раскладка.** Бизнес-код — только `internal/domain/<d>/` (слои — rule `domain-architecture`);
   клей платформы — `internal/platform/`; `pkg/` — правила и типы этого сервиса (`policy`, `paging`,
   `outcome`) и сгенерированные клиенты (gRPC, OpenAPI: зовёт `infra/` домена, не корень); входы —
@@ -96,33 +87,29 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
   `internal/archtest/archtest_test.go`, в правилах — пометка archtest у инварианта.
 - Ошибки — `%w` + `errors.Is/As`; sentinel в `errors.go` корня домена.
 - Комментарии — только WHY (rule `comments`).
-- **Не городить велосипеды**: нужен примитив — сначала `README.md` golibinfra § Пакеты той версии,
-  что в `go.mod` (каталог — `go list -m -f '{{.Dir}}' git.stit.tech/stit-core/golibinfra`), затем
-  README кита. Переиспользуемый/инфра-примитив (generic util, HTTP-client,
-  middleware, любой «kit») → `golibinfra`, не локальная полукалека. Нет нужного — PR в
-  `golibinfra` + строка в `.claude/plans/backlog.md`; временный shim только с явным OK юзера. Граница и
-  обоснование — `docs/reference/architecture.md § Граница с golibinfra`.
+- **Не городить велосипеды**: нужен примитив — сначала `README.md` golibinfra § Пакеты версии из
+  `go.mod` (каталог — `go list -m -f '{{.Dir}}' git.stit.tech/stit-core/golibinfra`), затем README
+  кита. Generic util, HTTP-клиент, middleware, любой «kit» — в `golibinfra`; нет нужного — PR туда и
+  строка в `.claude/plans/backlog.md`, временный shim — только с явным OK юзера
+  (`docs/reference/architecture.md § Граница с golibinfra`).
 
 ## Git workflow
 
 - **Conventional Commits** (`scripts/git-hooks/commit-msg`): типы `feat|fix|refactor|docs|test|chore|meta`,
   формат `<type>(<scope>)?: <subject>`, subject ≤72; сообщения самого git (`Revert "…"`,
   `fixup!`/`squash!`) тоже проходят.
-- **Push в `main` разрешён** (прямой или через PR); линейная история. Gate — git
-  `pre-push → make check` на чистом дереве, пушится только HEAD; обходы хуков из сессии блокирует
-  хук `.claude/hooks/guard-bash.sh`.
+- **Push в `main` разрешён** (прямой или через PR); линейная история; pre-push пускает только
+  чистый HEAD, обходы хуков из сессии блокирует `.claude/hooks/guard-bash.sh`.
 - git-хуки подключает `make setup` (`core.hooksPath=scripts/git-hooks`). Релиз — `/release`.
 
 ## Границы
 
 ### Делать всегда
-- **Тронул инфра-поверхность** (required env / sensitive-env-секрет; миграция destructive/lock/backfill/extension;
-  cross-service NATS/outbox-subject; breaking API; новый сетевой порт; новая runtime-dep в `go.mod`) →
-  до claim/коммита оформи **INFRA-HANDOFF**-блок для хаба `<org>/infra`: пришёл из хаба — блок
-  входит в твой отчёт хабу, прямой заход — попроси юзера передать его туда; тем же коммитом — в
-  накопитель `.claude/plans/handoff.md`, его печатает `make release` (rule `infra-impact` + skill
+- **Тронул инфра-поверхность** (required env или секрет; миграция с эффектом — destructive, lock,
+  backfill, extension; cross-service subject; breaking API; новый сетевой порт; runtime-dep в
+  `go.mod`) → до коммита **INFRA-HANDOFF**-блок: в отчёт хабу (прямой заход — юзеру, чтобы
+  передал) и тем же коммитом в накопитель `.claude/plans/handoff.md` (rule `infra-impact`, skill
   `/infra-handoff`).
-- Cross-domain — только порты + адаптеры. Логи — `logkit.Logger`. Generic-примитив → `golibinfra`.
 - `make gen` после правки `queries/`, `migrations/`, интерфейсов из `.mockery.yml` или HTTP-операций.
 - Conventional Commits. Дёргай `make <verb>`, не скрипты напрямую.
 
@@ -140,11 +127,10 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
   `permissions.deny` и хук `guard-bash`; `make check` не запускается с `-i` и `GOFLAGS`).
   Коммитить/цитировать `.env`, `.env.local`, `*.pem`, `*.key` (в репо живут только `*.example`-шаблоны).
 - Править сгенерированное руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
-- `fmt.Print*`/`log.*`/`print(ln)`/`slog.*`/`os.Stdout`/`os.Stderr` напрямую. Image-теги `:latest`/`:edge`/lightweight.
-- Deploy-команды (`make bump`, `make ship`, `ssh`, env-прокатка) — выкатка идёт только из
-  `<org>/infra`; после `make release` STOP.
-- Молча отступать от канона (правило, скилл, план): отступление — с OK юзера (спросить некого — как
-  в «Сначала спросить») и строкой в «Решениях» плана или в теле коммита.
+- Image-теги `:latest`/`:edge`/lightweight. Deploy-команды (`make bump`, `make ship`, `ssh`,
+  env-прокатка) — выкатка идёт только из `<org>/infra`; после `make release` STOP.
+- Молча отступать от маршрута, правил, скиллов или плана: отступление — с OK юзера (спросить
+  некого — как в «Сначала спросить») и строкой в «Решениях» плана или в теле коммита.
 
 ## Forward-only
 
