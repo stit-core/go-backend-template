@@ -151,8 +151,9 @@ DTO в порте — локальные (не re-export из B).
   `func(j *authnkit.HS256JWT) authnkit.JWTSigner { return j }`). `fx.As` не используется
   (archtest), `fx.Annotate` — только для тегов `name:` и `group:`.
 - **Конфиги** — конфиг кита читает его `<kit>.NewConfig` (`kitConfigs` в `cmd/api`), конфиги
-  самого приложения — структура `App` (`internal/platform/config`). `context.Context` в графе нет
-  (`TestFxGraphHasNoContext`).
+  самого приложения — структура `App` (`internal/platform/config`). `context.Context` граф не
+  провайдит: свой ctx компонент получает от хука или запроса. ctx, доступный корню графа, ловит
+  `TestFxGraphHasNoContext`; именованный и `fx.Private` он не видит.
 - **Порядок хуков** держит httpkit: сервер слушает после OnStart всех модулей и гасится первым.
   Условие — `httpkit.Module` на верхнем уровне `fx.New`, `registerHTTP` — внутри `fx.Module`
   (`httpModule`): Invoke модулей fx выполняет раньше корневых. Порядок проверяет `TestBoot`.

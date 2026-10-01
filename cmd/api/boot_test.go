@@ -37,12 +37,18 @@ type hookOrder struct {
 	start, stop []string
 }
 
+// Тексты событий хуков fxevent.SlogLogger, по которым hookOrder их узнаёт.
+const (
+	onStartExecuting = "OnStart hook executing"
+	onStopExecuting  = "OnStop hook executing"
+)
+
 func (h *hookOrder) Handle(_ context.Context, r slog.Record) error {
 	var hooks *[]string
 	switch r.Message {
-	case "OnStart hook executing":
+	case onStartExecuting:
 		hooks = &h.start
-	case "OnStop hook executing":
+	case onStopExecuting:
 		hooks = &h.stop
 	default:
 		return nil
@@ -169,7 +175,9 @@ func TestBoot(t *testing.T) {
 	}
 
 	app.RequireStop()
-	require.NotEmpty(t, hooks.start, "fx events must reach the service log: service sets logkit.FxLogger")
+	const noHookEvents = "no %q events in the service log: service does not set logkit.FxLogger, or fx renamed this fxevent.SlogLogger message"
+	require.NotEmpty(t, hooks.start, noHookEvents, onStartExecuting)
+	require.NotEmpty(t, hooks.stop, noHookEvents, onStopExecuting)
 	// Запросы в полёте держат всё, что стартовало раньше HTTP: сервер слушает последним и гасится первым.
 	const httpServe = "git.stit.tech/stit-core/golibinfra/httpkit.serve"
 	require.Equal(t, httpServe, hooks.start[len(hooks.start)-1], "HTTP must start last (OnStart: %v)", hooks.start)

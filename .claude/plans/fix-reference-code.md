@@ -266,10 +266,11 @@ prod-дефолты, понятный контракт ошибок API, тес�
   `weak_password`; ID — `idkit.NewV7()`, `google/uuid` вне `rootLibs` archtest.
 - Фиксы «Фундамента»: N2 — стрим публикатора старт не проверяет: покрытие subject'ов видит JetStream
   API кита, эквивалента в шаблоне нет (бэклог `publisher-stream-check`), `TestBoot` ждёт PubAck строк
-  `outbox_verification`. N4, N7 — порядок хуков `TestBoot` читает из лога сервиса (тройник поверх
-  logkit): без `FxLogger` событий нет, HTTP — ровно `httpkit.serve`; `context.Context` —
-  `TestFxGraphHasNoContext`, `fx.As` — archtest (через него порт обошёл бы проверку closure). N6 —
-  бюджет остановки — текстом и в Handoff: сверка env на старте повторила бы дефолты кита. N8 —
+  `outbox_verification`. N4, N7, н1 — порядок хуков `TestBoot` читает из лога сервиса (тройник поверх
+  logkit): HTTP — ровно `httpkit.serve`, нет событий — провал с обеими причинами (нет `FxLogger` или
+  fx сменил текст события). `context.Context`, доступный корню, — `TestFxGraphHasNoContext` (н2:
+  именованный и `fx.Private` ctx — нарочная конструкция, обхода графа у fx нет), `fx.As` — archtest.
+  N6 — бюджет остановки — текстом и в Handoff: сверка env на старте повторила бы дефолты кита. N8 —
   `outcome.Result` — структура с `outcome.New`: литерал в `Record*` не компилируется.
 
 ## Handoff
@@ -295,6 +296,5 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-«Фундамент» (S1–S3) и круг фиксов `validation-fix-reference-code-A.md` сделаны: B1 — `0d78024`, N1 и
-N3 — `2177f66`, N2 — `f03d5c9`, N4 и N7 — `82c1d51`, N5 и N6 — `cd0a2a9`, N8 — последний `fix(pkg)`
-круга. Дальше — перепроверка валидатором (всё после `77528f3`), затем S4; v1.3.0 — bump в S9.
+«Фундамент» (S1–S3) — PASS (`validation-fix-reference-code-A.md`, «Перепроверка 79fba97»), её н1 и
+н2 закрыты. Дальше — «Эталон доменов»: S4; v1.3.0 — bump в S9.

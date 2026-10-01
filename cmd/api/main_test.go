@@ -24,11 +24,11 @@ func TestFxGraphValidates(t *testing.T) {
 }
 
 // TestFxGraphHasNoContext: компонент графа живёт дольше любого ctx — свой ctx он получает от хука
-// или запроса, а не из графа.
+// или запроса, а не из графа. Видит ctx, доступный корню: именованный и fx.Private — нет.
 func TestFxGraphHasNoContext(t *testing.T) {
 	t.Parallel()
 	err := fx.ValidateApp(service, fx.NopLogger, fx.Invoke(func(context.Context) {}))
-	require.ErrorContains(t, err, "missing type: context.Context", "the fx graph provides a context.Context")
+	require.ErrorContains(t, err, "missing type: context.Context", "the fx graph provides a context.Context to its root")
 }
 
 // envAllowlist — required-переменные конфигов, которых нет в .env.example.

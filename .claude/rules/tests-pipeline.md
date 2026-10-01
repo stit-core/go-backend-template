@@ -37,7 +37,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `delivery/http` | handler-тест через `golibinfra/testkit/handlertest` |
 | `delivery/nats` | unit handler-функции (мок Usecase-порта) — включая дубль-доставку |
 | `infra/postgres/repository.go` | integration per-домен (build-tag) |
-| fx-граф | `cmd/api/main_test.go` `fx.ValidateApp`, `context.Context` в графе нет; `fx.As` нет — archtest |
+| fx-граф | `cmd/api/main_test.go` `fx.ValidateApp`, корню графа `context.Context` не доступен; `fx.As` нет — archtest |
 | HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь; `openapi.json` совпадает с кодом |
 | запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, 401, 429, событие до подписчика, outbox verification — до стрима, `/openapi.json` = `openapi.json`, kit-таблицы графа = источники `cmd/migrate`, события fx — в лог сервиса, HTTP стартует последним и гасится первым |
 
