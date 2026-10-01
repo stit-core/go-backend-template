@@ -13,8 +13,10 @@ blocked-by: —
 
 ## Контекст
 - **Планы фаз.** Шаблон: `fix-reference-code.md` → `repair-harness.md` (в
-  `.claude/plans/`). golibinfra: `../golibinfra/.claude/plans/harden-kits.md` (партия 1 → v1.2.0),
-  планы следующих партий — там же.
+  `.claude/plans/`). golibinfra (`../golibinfra/.claude/plans/`): партия 2 → v1.3.0 —
+  `harden-gate-defaults.md`, затем `harden-authn-release.md`; партия 3 → v1.4.0 — строки
+  `backlog.md` golibinfra с триггером «партия 3». Сводка базового аудита китов —
+  `kits-audit/summary.md` в материалах.
 - **Материалы** — `/home/mm/.cache/stit-audit-program/`: `audit-report.html` (копия отчёта аудита;
   оригинал — https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE), `fx-audit.md` и `fxexp/`,
   `replan-golibinfra.md` (пересмотр программы под правку golibinfra: §2 — объём и аудит китов, §6 —
@@ -124,15 +126,11 @@ blocked-by: —
   Отчёты углов — `kits-audit/` в материалах, ID находок `K<угол>-NN`.
 
 ## Где мы сейчас
-S1 и S2 закрыты: `harden-gate` удалён, golibinfra v1.2.0 в origin. Сессия 2 остановлена на
-границе этапов, фоновых агентов нет; агенты сессии 2 недоступны — во всех ролях запускать новых
-(промпты — `prompts.md` в каталоге материалов).
-- **S3** — `fix-reference-code`, этап «Фундамент» (S1–S3): валидатор — FAIL
-  (`validation-fix-reference-code-A.md`), B1 закрыт (`0d78024`); остаток круга фиксов N1–N8 —
-  «Где мы сейчас» плана. Дальше: исполнитель доделывает остаток → новый валидатор перепроверяет
-  всё после `77528f3` → этап «Эталон доменов» (S4–S8).
-- **S4** — базовый аудит golibinfra готов: сводка `kits-audit/summary.md` (углы 4.5–7). План
-  партии 2 закоммичен двумя планами в `../golibinfra/.claude/plans/` (`e573189`, не запушен):
-  `harden-gate-defaults` (гейт, B1–B3) → `harden-authn-release` (B4–B8, high, C, релиз v1.3.0);
-  партия 3 — строки бэклога golibinfra. Дальше: исполнитель этапа «гейт» → валидатор → …
-- Оперативные заметки дирижёра — `orchestrator-todo.md` («Как продолжить»).
+S1 и S2 закрыты: `harden-gate` удалён, golibinfra v1.2.0 в origin.
+- **S3** — `fix-reference-code`: этап «Фундамент» (S1–S3) — PASS после фиксов `0d78024`…`79fba97`
+  (`validation-fix-reference-code-A.md`, раздел «Перепроверка 79fba97»). Следующий — этап «Эталон
+  доменов» (S4–S8); S9 ждёт v1.3.0.
+- **S4** — базовый аудит golibinfra готов (`kits-audit/summary.md`); партия 2 идёт: этап «Гейт»
+  (S1–S5) плана `harden-gate-defaults`.
+- Промпты — `prompts.md`, оперативные заметки дирижёра — `orchestrator-todo.md` (оба — в каталоге
+  материалов).
