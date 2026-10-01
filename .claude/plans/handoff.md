@@ -37,12 +37,12 @@ WHAT   subject'ы без email: user.events.registered → user.events.registere
 WHY    fix-reference-code S11 — в логах и событиях только ID
 ACTION до выкатки — ничего: события user.events.registered, записанные до неё (строки outbox_user,
        недоставленное прежнему консьюмеру), дочитывает прежний durable; внешних потребителей старых
-       subject'ов verification перевести на .v2 (адрес — по ID у user); durable
+       subject'ов user и verification перевести на .v2 (адрес — по ID у user); durable
        verification-user-registered не удалять — его удаление придёт блоком релиза, который снимет его
        подписку
 WHO    проект + потребители событий
 DECIDE —
-RISK   внешний потребитель старых subject'ов verification после выкатки получит только события,
+RISK   внешний потребитель старых subject'ов user и verification после выкатки получит только события,
        записанные до неё; durable verification-user-registered, удалённый раньше, сервис создаст заново
        с начала стрима user — повторные письма подтверждения
 ===

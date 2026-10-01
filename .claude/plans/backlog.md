@@ -20,7 +20,12 @@
   после выкатки релиза с `.v2`.
 - **healthcheck-kit** — проверка здоровья контейнера без shell (`api healthcheck`: `GET /health` по
   `HTTP_ADDR`) живёт в `cmd/api/healthcheck.go`, а нужна каждому сервису на httpkit в distroless-образе:
-  место — httpkit, рядом с `/health`. Триггер: партия 3 golibinfra (v1.4.0) или второй сервис.
+  место — httpkit, рядом с `/health`. Триггер: golibinfra v1.3.0 (`harden-authn-release` S10) —
+  снимает `fix-reference-code` S9.
+- **new-domain-names** — `make new-domain` принимает имена, на которых срез не проходит гейт: `repo`
+  (не компилируется), инициализмы (`api_key` — замечания линтера), существующая таблица
+  (`password_reset` — `make gen` падает, дерево в полусостоянии). Триггер: S13–S14
+  `fix-reference-code` или первая жалоба.
 - **vuln-scan** — govulncheck и сканирование образов не входят в гейт: им нужна сеть (база
   уязвимостей), а `make check` от сети не зависит. Место — `release-preflight` перед тегом. Триггер:
   `repair-harness` S9 (гейт) или первый релиз форка (SEC-11).
