@@ -70,6 +70,28 @@ func TestMarkPasswordResetUsed(t *testing.T) {
 	require.NotNil(t, used.UsedAt)
 }
 
+// Сброс пароля гасит все ссылки сброса пользователя, ссылки соседа целы.
+func TestRevokePasswordResets(t *testing.T) {
+	t.Parallel()
+	db := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations())).DB(t)
+	users := userpg.NewRepository(db)
+	owner, neighbour := pgseed.InsertUser(t, users), pgseed.InsertUser(t, users)
+	repo := verifpg.NewRepository(db)
+	ctx := context.Background()
+	for hash, userID := range map[string]string{"hash:pr-1": owner.ID, "hash:pr-2": owner.ID, "hash:pr-n": neighbour.ID} {
+		_, err := repo.InsertPasswordReset(ctx, userID, hash, tokenExpiry)
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, repo.RevokePasswordResets(ctx, owner.ID))
+
+	for hash, revoked := range map[string]bool{"hash:pr-1": true, "hash:pr-2": true, "hash:pr-n": false} {
+		got, err := repo.GetPasswordReset(ctx, hash)
+		require.NoError(t, err)
+		require.Equal(t, revoked, got.UsedAt != nil, hash)
+	}
+}
+
 // Ожидающее подтверждение пользователя одно: повтор доставки до отправки письма перевыпускает
 // токен, после отправки — не трогает.
 func TestUpsertEmailVerification_Redelivery(t *testing.T) {

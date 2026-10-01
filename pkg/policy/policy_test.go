@@ -24,6 +24,8 @@ func TestPasswordStrong(t *testing.T) {
 		{"empty", "", false},
 		{"seven", "1234567", false},
 		{"eight", "12345678", true},
+		{"eight bytes, four characters", "паро", false},
+		{"eight characters", "пароль12", true},
 		{"long", "a-much-longer-password", true},
 	}
 	for _, tc := range cases {

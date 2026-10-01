@@ -10,3 +10,6 @@ WHERE token_hash = $1;
 
 -- name: MarkPasswordResetUsed :execrows
 UPDATE password_resets SET used_at = NOW() WHERE id = $1 AND used_at IS NULL;
+
+-- name: RevokePasswordResets :exec
+UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL;

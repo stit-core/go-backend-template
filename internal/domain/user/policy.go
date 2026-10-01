@@ -7,6 +7,9 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 )
 
+// maxEmailLen — предел адреса по RFC 5321 в байтах: длиннее не учтёт guard входа, и вход не состоится.
+const maxEmailLen = 254
+
 type Policy struct{}
 
 func NewPolicy() Authorizer { return &Policy{} }

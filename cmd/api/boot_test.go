@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -27,15 +28,17 @@ import (
 	"git.stit.tech/stit-core/golibinfra/testkit"
 
 	"git.stit.tech/stit-core/go-backend-template/cmd/migrate/sources"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
 )
 
 // serviceLog — что тест читает из лога сервиса: порядок хуков старта и остановки (кто добавил
-// хук — caller — по событиям fx, которые logkit.FxLogger пишет уровнем DEBUG) и request_id строк
-// handler error (причина 5xx).
+// хук — caller — по событиям fx, которые logkit.FxLogger пишет уровнем DEBUG), request_id строк
+// handler error (причина 5xx) и текст записей до маскирования — в нём не должно быть секретов.
 type serviceLog struct {
 	mu                         sync.Mutex
 	start, stop, handlerErrors []string
+	text                       []string
 }
 
 // Тексты событий хуков fxevent.SlogLogger, по которым serviceLog их узнаёт.
@@ -47,6 +50,11 @@ const (
 func (h *serviceLog) Handle(ctx context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.text = append(h.text, r.Message)
+	r.Attrs(func(a slog.Attr) bool {
+		h.text = append(h.text, a.String())
+		return true
+	})
 	switch r.Message {
 	case onStartExecuting:
 		h.start = append(h.start, attr(r, "caller"))
@@ -65,9 +73,59 @@ func (h *serviceLog) logged5xx(requestID string) bool {
 	return slices.Contains(h.handlerErrors, requestID)
 }
 
+// leaked — секреты, которые встречаются в логе сервиса.
+func (h *serviceLog) leaked(secrets []string) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var found []string
+	for _, secret := range secrets {
+		if slices.ContainsFunc(h.text, func(line string) bool { return strings.Contains(line, secret) }) {
+			found = append(found, secret)
+		}
+	}
+	return found
+}
+
 func (h *serviceLog) Enabled(context.Context, slog.Level) bool { return true }
-func (h *serviceLog) WithAttrs([]slog.Attr) slog.Handler       { return h }
 func (h *serviceLog) WithGroup(string) slog.Handler            { return h }
+
+func (h *serviceLog) WithAttrs(attrs []slog.Attr) slog.Handler {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, a := range attrs {
+		h.text = append(h.text, a.String())
+	}
+	return h
+}
+
+// mailTap — токены писем сервиса: тест ищет их в логе.
+type mailTap struct {
+	verification.Mailer
+	mu     sync.Mutex
+	tokens []string
+}
+
+func (m *mailTap) SendPasswordReset(ctx context.Context, email, token string) error {
+	m.add(token)
+	return m.Mailer.SendPasswordReset(ctx, email, token)
+}
+
+func (m *mailTap) SendEmailVerification(ctx context.Context, email, token string) error {
+	m.add(token)
+	return m.Mailer.SendEmailVerification(ctx, email, token)
+}
+
+func (m *mailTap) add(token string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tokens = append(m.tokens, token)
+}
+
+func (m *mailTap) sent() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.tokens)
+}
 
 func attr(r slog.Record, key string) string {
 	var v string
@@ -90,11 +148,13 @@ func TestBoot(t *testing.T) {
 		"PG_DSN": pg.DSN, "NATS_URL": nats.URL,
 		"NATS_JETSTREAM_ENABLED": "true", "NATS_JS_STREAM_NAMES": "user,verification",
 		"JWT_SECRET": strings.Repeat("s", 32), "HTTP_ADDR": "127.0.0.1:0", "LOG_SILENT": "true",
+		// dev: лог-mailer и cookie без Secure — клиент теста ходит по http.
+		"APP_ENV": "dev", "COOKIE_SECURE": "false",
 	} {
 		t.Setenv(k, v)
 	}
 
-	logs := &serviceLog{}
+	logs, mail := &serviceLog{}, &mailTap{}
 	var (
 		srv        *httpkit.Server
 		kitSources []pgkit.Source
@@ -102,6 +162,7 @@ func TestBoot(t *testing.T) {
 	app := fxtest.New(t, service,
 		// Тройник лога сервиса: события fx доходят до logs, только если service пишет их в logkit.
 		fx.Decorate(func(l *slog.Logger) *slog.Logger { return slog.New(slog.NewMultiHandler(l.Handler(), logs)) }),
+		fx.Decorate(func(m verification.Mailer) verification.Mailer { mail.Mailer = m; return mail }),
 		fx.Populate(&srv),
 		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
 	app.RequireStart()
@@ -125,17 +186,17 @@ func TestBoot(t *testing.T) {
 	user := &http.Client{Jar: jar, Timeout: 10 * time.Second}
 	anon := &http.Client{Timeout: 10 * time.Second}
 
-	const email = "boot@example.com"
+	const email, password, wrongPassword = "boot@example.com", "password123", "wrong-password"
 	require.Equal(t, http.StatusCreated, call(user, http.MethodPost, "/api/auth/register",
-		`{"email":"`+email+`","password":"password123","name":"Boot"}`), "register")
+		`{"email":"`+email+`","password":"`+password+`","name":"Boot"}`), "register")
 	require.Equal(t, http.StatusOK, call(user, http.MethodPost, "/api/auth/login",
-		`{"email":"`+email+`","password":"password123"}`), "login")
+		`{"email":"`+email+`","password":"`+password+`"}`), "login")
 	require.Equal(t, http.StatusOK, call(user, http.MethodGet, "/api/users/me", ""), "/me with the session cookie")
 	require.Equal(t, http.StatusNoContent, call(anon, http.MethodPost, "/api/auth/password-reset/request",
 		`{"email":"`+email+`"}`), "password reset request")
 	status := 0
 	for range 6 {
-		status = call(anon, http.MethodPost, "/api/auth/login", `{"email":"`+email+`","password":"wrong-password"}`)
+		status = call(anon, http.MethodPost, "/api/auth/login", `{"email":"`+email+`","password":"`+wrongPassword+`"}`)
 	}
 	require.Equal(t, http.StatusTooManyRequests, status, "the brute-force guard locks the account after repeated failures")
 
@@ -216,6 +277,18 @@ func TestBoot(t *testing.T) {
 	require.Empty(t, internal.Detail, "a 5xx carries no cause")
 	require.NotEmpty(t, internal.RequestID)
 	require.True(t, logs.logged5xx(internal.RequestID), "the cause is in the service log under the request_id of the response")
+
+	// Пароли, cookie сессии и токены писем не попадают в лог даже до маскирования.
+	require.Eventually(t, func() bool { return len(mail.sent()) == 2 }, 15*time.Second, 100*time.Millisecond,
+		"the service mails the email verification and the password reset")
+	baseURL, err := url.Parse(base)
+	require.NoError(t, err)
+	secrets := append(mail.sent(), password, wrongPassword)
+	for _, c := range jar.Cookies(baseURL) {
+		secrets = append(secrets, c.Value)
+	}
+	require.Len(t, secrets, 6, "two mail tokens, two passwords, two session cookies")
+	require.Empty(t, logs.leaked(secrets), "a secret reached the service log")
 
 	app.RequireStop()
 	const noHookEvents = "no %q events in the service log: service does not set logkit.FxLogger, or fx renamed this fxevent.SlogLogger message"

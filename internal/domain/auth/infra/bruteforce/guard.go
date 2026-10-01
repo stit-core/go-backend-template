@@ -3,6 +3,8 @@ package bruteforce
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
@@ -18,7 +20,10 @@ func NewLoginGuard(g bruteforcekit.Guard) auth.LoginGuard {
 
 func (g *loginGuard) Attempt(ctx context.Context, subject, ip string) (*auth.LockState, error) {
 	lock, err := g.guard.Attempt(ctx, subject, ip)
-	if err != nil || lock == nil {
+	switch {
+	case errors.Is(err, bruteforcekit.ErrInvalidKey):
+		return nil, fmt.Errorf("%w: %w", auth.ErrInvalidCredentials, err)
+	case err != nil || lock == nil:
 		return nil, err
 	}
 	return &auth.LockState{Until: lock.Until}, nil

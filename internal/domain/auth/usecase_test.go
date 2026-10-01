@@ -312,6 +312,46 @@ func TestLogin(t *testing.T) {
 		require.Equal(t, 15*time.Minute, locked.RetryAfter(), "retry when the lock ends")
 		require.True(t, f.audit.Has("login_locked"))
 	})
+
+	// Fail-closed: строгий мок пользователей — до поиска учётной записи и пароля вход не доходит.
+	t.Run("guard failure refuses the login", func(t *testing.T) {
+		t.Parallel()
+		g := mocks.NewMockLoginGuard(t)
+		g.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(nil, errors.New("guard store down")).Once()
+		f := newUC(t, withGuard(g))
+
+		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		require.ErrorContains(t, err, "guard store down")
+		require.NotErrorIs(t, err, auth.ErrInvalidCredentials, "a guard failure is not a wrong password")
+		require.False(t, f.audit.Has("login"))
+	})
+
+	t.Run("attempt the guard cannot count is invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		g := mocks.NewMockLoginGuard(t)
+		g.EXPECT().Attempt(mock.Anything, "", "").Return(nil, auth.ErrInvalidCredentials).Once()
+		f := newUC(t, withGuard(g))
+
+		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "", Password: "pass1234"})
+		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+	})
+
+	t.Run("success not recorded keeps the login", func(t *testing.T) {
+		t.Parallel()
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(
+			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}, nil,
+		).Once()
+		g := mocks.NewMockLoginGuard(t)
+		g.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(nil, nil).Once()
+		g.EXPECT().RecordSuccess(mock.Anything, "a@b.com", "").Return(errors.New("guard store down")).Once()
+		f := newUC(t, withUsers(users), withGuard(g))
+
+		out, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		require.NoError(t, err)
+		require.Equal(t, "access.u1.client", out.AccessToken)
+		require.True(t, f.audit.Has("login"))
+	})
 }
 
 func TestRefresh(t *testing.T) {

@@ -66,3 +66,12 @@ func (q *Queries) MarkPasswordResetUsed(ctx context.Context, id pgtype.UUID) (in
 	}
 	return result.RowsAffected(), nil
 }
+
+const revokePasswordResets = `-- name: RevokePasswordResets :exec
+UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL
+`
+
+func (q *Queries) RevokePasswordResets(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, revokePasswordResets, userID)
+	return err
+}

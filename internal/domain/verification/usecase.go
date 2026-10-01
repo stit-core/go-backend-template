@@ -38,6 +38,8 @@ type Repository interface {
 	InsertPasswordReset(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (id string, err error)
 	GetPasswordReset(ctx context.Context, tokenHash string) (*PasswordResetToken, error)
 	MarkPasswordResetUsed(ctx context.Context, id string) error
+	// RevokePasswordResets гасит все непогашенные токены сброса пользователя.
+	RevokePasswordResets(ctx context.Context, userID string) error
 	// UpsertEmailVerification выпускает ожидающее подтверждение пользователя: неотправленное —
 	// с новым токеном и тем же id, отправленное не трогает (issued=false).
 	UpsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (id string, issued bool, err error)
@@ -51,6 +53,12 @@ type Mailer interface {
 	SendEmailVerification(ctx context.Context, email, token string) error
 }
 
+// ResetLimiter: Allow учитывает запрос сброса пароля пользователя с адреса ip; false — лимит
+// запросов исчерпан, письмо не уходит.
+type ResetLimiter interface {
+	Allow(ctx context.Context, userID, ip string) (bool, error)
+}
+
 type UsecaseDeps struct {
 	fx.In
 
@@ -62,6 +70,7 @@ type UsecaseDeps struct {
 	Tx            pgkit.Transactor
 	Events        outboxkit.Publisher
 	Mailer        Mailer
+	Limiter       ResetLimiter
 	Audit         auditkit.Logger
 	Log           logkit.Logger
 	Clock         clockkit.Clock
@@ -124,22 +133,35 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID, email str
 	return nil
 }
 
+// RequestPasswordReset отвечает одинаково, есть ли учётная запись, пускают ли её, исчерпан ли лимит
+// запросов и ушло ли письмо: по ответу не узнать, чей email зарегистрирован.
 func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error {
 	u, err := uc.d.Users.GetByEmail(ctx, email)
+	if errors.Is(err, ErrUserNotFound) {
+		uc.d.Metrics.RecordPasswordResetRequested(ctx, resultUserNotFound)
+		return nil
+	}
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
-			uc.d.Metrics.RecordPasswordResetRequested(ctx, resultUserNotFound)
-			return nil // anti-enumeration: absence of an account must be indistinguishable
-		}
+		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
 		return fmt.Errorf("lookup user: %w", err)
 	}
 	if !u.CanLogin {
 		uc.d.Metrics.RecordPasswordResetRequested(ctx, resultInactive)
 		return nil
 	}
+	allowed, err := uc.d.Limiter.Allow(ctx, u.ID, identity.IPFrom(ctx))
+	if err != nil {
+		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
+		return fmt.Errorf("password reset limiter: %w", err)
+	}
+	if !allowed {
+		uc.d.Metrics.RecordPasswordResetRequested(ctx, resultThrottled)
+		return nil
+	}
 
 	token, err := tokens.Generate()
 	if err != nil {
+		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
 		return fmt.Errorf("generate reset token: %w", err)
 	}
 
@@ -160,9 +182,11 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error
 		return err
 	}
 
+	// Сбой доставки клиент не видит — иначе ответ выдал бы учётную запись; повтор — новым запросом.
 	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
+		uc.d.Log.Error(ctx, "send password reset email", "user_id", u.ID, "err", err)
 		uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.Error)
-		return fmt.Errorf("send password reset email: %w", err)
+		return nil
 	}
 	uc.d.Metrics.RecordPasswordResetRequested(ctx, outcome.OK)
 	return nil
@@ -203,9 +227,12 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 	}
 
 	// Погашение — первым в транзакции: параллельный confirm ждёт блокировку строки и получает
-	// ErrTokenUsed, не меняя пароль.
+	// ErrTokenUsed, не меняя пароль. Остальные ссылки сброса гаснут с ним: старое письмо пароль не сменит.
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
+			return err
+		}
+		if err := uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID); err != nil {
 			return err
 		}
 		return uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version)

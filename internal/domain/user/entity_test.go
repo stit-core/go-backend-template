@@ -1,6 +1,7 @@
 package user_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,6 +24,8 @@ func TestNewUser(t *testing.T) {
 		{"happy admin", "a@b.com", "h", "Alice", identity.RoleAdmin, nil},
 		{"default role", "a@b.com", "h", "Alice", identity.RoleUnknown, nil},
 		{"bad email", "not-an-email", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
+		{"email of 254 bytes", strings.Repeat("a", 64) + "@" + strings.Repeat("b", 185) + ".com", "h", "A", identity.RoleClient, nil},
+		{"email over 254 bytes", strings.Repeat("я", 125) + "@b.com", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"bad role", "a@b.com", "h", "A", identity.Role("hacker"), user.ErrInvalidRole},
 	}
 	for _, tc := range tests {

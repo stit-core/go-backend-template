@@ -60,6 +60,17 @@ func (r *Repository) MarkPasswordResetUsed(ctx context.Context, id string) error
 	return used(r.q.MarkPasswordResetUsed(ctx, uid))
 }
 
+func (r *Repository) RevokePasswordResets(ctx context.Context, userID string) error {
+	uid, err := pgkit.ParseUUID(userID)
+	if err != nil {
+		return fmt.Errorf("verification repo: invalid user id: %w", err)
+	}
+	if err := r.q.RevokePasswordResets(ctx, uid); err != nil {
+		return fmt.Errorf("verification repo: revoke password resets: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) UpsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (string, bool, error) {
 	uid, err := pgkit.ParseUUID(userID)
 	if err != nil {

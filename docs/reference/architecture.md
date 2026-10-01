@@ -110,7 +110,7 @@
 - Named returns не используются (кроме naked-return/defer-модификации — здесь таких нет).
 - Каждый **мутирующий** метод пишет `metrics.Record*` на всех исходах; read-методы — опционально.
 - Security-значимые операции (login/logout/смена+сброс пароля/verification) пишут `audit`
-  из usecase; технические записи адаптеров (`mail_sent`) допустимы в адаптере.
+  из usecase; техническая запись канала (факт доставки письма) — в его адаптере.
 - Транспортные значения из ctx (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`.
 - ID, которые создаёт код (не БД), — `idkit.NewV7()`.
 
@@ -164,7 +164,9 @@ DTO в порте — локальные (не re-export из B).
   `func(j *authnkit.HS256JWT) authnkit.JWTSigner { return j }`). `fx.As` не используется
   (archtest), `fx.Annotate` — только для тегов `name:` и `group:`.
 - **Конфиги** — конфиг кита читает его `<kit>.NewConfig` (`kitConfigs` в `cmd/api`), конфиги
-  самого приложения — структура `App` (`internal/platform/config`). `context.Context` граф не
+  самого приложения — структура `App` (`internal/platform/config`). Вне `APP_ENV=dev` старт не
+  пускает небезопасное: cookie без Secure, логи без маскирования и docs — `config.Guard`, лог-mailer —
+  его конструктор (`verification/infra/logmail`). `context.Context` граф не
   провайдит: свой ctx компонент получает от хука или запроса. ctx, доступный корню графа, ловит
   `TestFxGraphHasNoContext`; именованный и `fx.Private` он не видит.
 - **Порядок хуков** держит httpkit: сервер слушает после OnStart всех модулей и гасится первым.

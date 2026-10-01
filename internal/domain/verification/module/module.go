@@ -6,6 +6,8 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	verifhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/http"
 	verifnats "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/nats"
+	verifbruteforce "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/infra/bruteforce"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification/infra/logmail"
 	verifoutbox "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/infra/outbox"
 	verifpg "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/infra/postgres"
 )
@@ -19,7 +21,8 @@ var Module = fx.Module(
 		func(a *userAdapter) verification.UserReader { return a },
 		func(a *userAdapter) verification.PasswordSetter { return a },
 		func(a *userAdapter) verification.EmailVerificationSetter { return a },
-		newLogMailerAdapter,
+		logmail.New,
+		verifbruteforce.NewResetLimiter,
 		verification.NewMetrics,
 		verification.NewUsecase,
 		verifhttp.NewHandler,

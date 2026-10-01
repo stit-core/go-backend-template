@@ -3,6 +3,7 @@ package verification_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -13,10 +14,10 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification/mocks"
 	"git.stit.tech/stit-core/go-backend-template/pkg/tokens"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
-	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
+	"git.stit.tech/stit-core/golibinfra/testkit/logtest"
 	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
@@ -35,9 +36,11 @@ type ucFixture struct {
 	pwSet    *mocks.MockPasswordSetter
 	emailSet *mocks.MockEmailVerificationSetter
 	mailer   *mocks.MockMailer
+	limiter  *mocks.MockResetLimiter
 	bus      *outboxtest.Recorder
 	audit    *audittest.Recorder
 	tx       *pgtest.Recorder
+	log      *logtest.Recorder
 }
 
 type ucOpts struct {
@@ -46,6 +49,7 @@ type ucOpts struct {
 	pwSet    *mocks.MockPasswordSetter
 	emailSet *mocks.MockEmailVerificationSetter
 	mailer   *mocks.MockMailer
+	limiter  *mocks.MockResetLimiter
 }
 
 type ucOption func(*ucOpts)
@@ -60,6 +64,16 @@ func withEmailSet(e *mocks.MockEmailVerificationSetter) ucOption {
 }
 
 func withMailer(m *mocks.MockMailer) ucOption { return func(o *ucOpts) { o.mailer = m } }
+
+func withLimiter(l *mocks.MockResetLimiter) ucOption { return func(o *ucOpts) { o.limiter = l } }
+
+// limiter ждёт ровно одну проверку лимита сброса пользователя userID и отвечает allowed.
+func limiter(t *testing.T, userID string, allowed bool, err error) *mocks.MockResetLimiter {
+	t.Helper()
+	l := mocks.NewMockResetLimiter(t)
+	l.EXPECT().Allow(mock.Anything, userID, "").Return(allowed, err).Once()
+	return l
+}
 
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
@@ -100,10 +114,14 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		m.EXPECT().SendEmailVerification(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		o.mailer = m
 	}
+	if o.limiter == nil {
+		o.limiter = mocks.NewMockResetLimiter(t)
+	}
 
 	bus := &outboxtest.Recorder{}
 	aud := &audittest.Recorder{}
 	tx := &pgtest.Recorder{}
+	log := logtest.Capture()
 	uc := verification.NewUsecase(verification.UsecaseDeps{
 		Repo:          o.repo,
 		Users:         o.users,
@@ -113,13 +131,14 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Tx:            tx,
 		Events:        bus,
 		Mailer:        o.mailer,
+		Limiter:       o.limiter,
 		Audit:         aud,
-		Log:           logkit.Nop(),
+		Log:           log,
 		Clock:         clockkit.NewFixed(fixedNow),
 	})
 	return ucFixture{
-		uc: uc, repo: o.repo, users: o.users, pwSet: o.pwSet, emailSet: o.emailSet, mailer: o.mailer, bus: bus,
-		audit: aud, tx: tx,
+		uc: uc, repo: o.repo, users: o.users, pwSet: o.pwSet, emailSet: o.emailSet, mailer: o.mailer, limiter: o.limiter,
+		bus: bus, audit: aud, tx: tx, log: log,
 	}
 }
 
@@ -181,15 +200,20 @@ func TestIssueEmailVerification_Redelivery(t *testing.T) {
 	require.Len(t, f.bus.Published(subjectEmailVerificationRequested), 2, "one event per issued token")
 }
 
+func activeUser(t *testing.T) *mocks.MockUserReader {
+	t.Helper()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(
+		&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil,
+	).Once()
+	return users
+}
+
 func TestRequestPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
-	users := mocks.NewMockUserReader(t)
-	users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
-		&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil,
-	)
 	repo := mocks.NewMockRepository(t)
 	var capturedHash string
-	repo.EXPECT().InsertPasswordReset(mock.Anything, "u1", mock.Anything, fixedNow.Add(time.Hour)).
+	repo.EXPECT().InsertPasswordReset(mock.MatchedBy(pgkit.InTx), "u1", mock.Anything, fixedNow.Add(time.Hour)).
 		RunAndReturn(func(_ context.Context, _, h string, _ time.Time) (string, error) {
 			capturedHash = h
 			return "rid", nil
@@ -201,7 +225,7 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 			sentToken = token
 			return nil
 		}).Once()
-	f := newUC(t, withRepo(repo), withUsers(users), withMailer(mailer))
+	f := newUC(t, withRepo(repo), withUsers(activeUser(t)), withMailer(mailer), withLimiter(limiter(t, "u1", true, nil)))
 
 	require.NoError(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"))
 	require.Equal(t, tokens.Hash(sentToken), capturedHash)
@@ -209,10 +233,57 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 		f.bus.Last(subjectPasswordResetRequested))
 }
 
-func TestRequestPasswordReset_UnknownEmail(t *testing.T) {
+// Ответ один и тот же, есть ли учётная запись, пускают ли её, исчерпан ли лимит и ушло ли письмо:
+// строгие моки — токен, событие и письмо появляются только у разрешённого запроса.
+func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 	t.Parallel()
-	f := newUC(t)
-	require.NoError(t, f.uc.RequestPasswordReset(context.Background(), "x@y.com"), "anti-enumeration: must not error")
+	blocked := mocks.NewMockUserReader(t)
+	blocked.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(&verification.User{ID: "u1", CanLogin: false}, nil).Once()
+	failingMailer := mocks.NewMockMailer(t)
+	failingMailer.EXPECT().SendPasswordReset(mock.Anything, "a@b.com", mock.Anything).Return(errors.New("smtp unavailable")).Once()
+	issuing := mocks.NewMockRepository(t)
+	issuing.EXPECT().InsertPasswordReset(mock.Anything, "u1", mock.Anything, mock.Anything).Return("rid", nil).Once()
+
+	cases := []struct {
+		name   string
+		opts   []ucOption
+		events int
+		logged string // ошибка в логе вместо ответа
+	}{
+		{name: "unknown email", opts: []ucOption{withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t))}},
+		{name: "account that cannot log in", opts: []ucOption{withUsers(blocked), withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t))}},
+		{name: "limit exhausted", opts: []ucOption{
+			withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, nil)),
+			withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t)),
+		}},
+		{name: "mail not delivered", events: 1, logged: "send password reset email", opts: []ucOption{
+			withUsers(activeUser(t)), withLimiter(limiter(t, "u1", true, nil)), withRepo(issuing), withMailer(failingMailer),
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newUC(t, tc.opts...)
+
+			require.NoError(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"))
+			require.Len(t, f.bus.Published(subjectPasswordResetRequested), tc.events)
+			if tc.logged != "" {
+				e, ok := f.log.Find(slog.LevelError, tc.logged)
+				require.True(t, ok, "the delivery failure is logged")
+				require.Equal(t, "u1", e.Str("user_id"))
+			}
+		})
+	}
+}
+
+// Fail-closed: без учёта запроса токен не выпускается.
+func TestRequestPasswordReset_LimiterFailure(t *testing.T) {
+	t.Parallel()
+	f := newUC(t, withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, errors.New("guard store down"))),
+		withRepo(mocks.NewMockRepository(t)), withMailer(mocks.NewMockMailer(t)))
+
+	require.ErrorContains(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"), "guard store down")
+	require.Empty(t, f.bus.Published(subjectPasswordResetRequested))
 }
 
 func TestConfirmPasswordReset_HappyPath(t *testing.T) {
@@ -222,16 +293,17 @@ func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
 	)
 	claim := repo.EXPECT().MarkPasswordResetUsed(mock.MatchedBy(pgkit.InTx), "rid").Return(nil).Once()
+	revoke := repo.EXPECT().RevokePasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(claim)
 	users := mocks.NewMockUserReader(t)
 	users.EXPECT().GetByID(mock.Anything, "u1").Return(
 		&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true, Version: 3}, nil,
 	)
 	pwSet := mocks.NewMockPasswordSetter(t)
-	pwSet.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(claim)
+	pwSet.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(revoke)
 	f := newUC(t, withRepo(repo), withUsers(users), withPwSet(pwSet))
 
 	require.NoError(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"))
-	require.Equal(t, 1, f.tx.Calls(), "the claim and the password write share one transaction")
+	require.Equal(t, 1, f.tx.Calls(), "the claim, the revocation of the other links and the password write share one transaction")
 	require.True(t, f.audit.Has("password_reset_confirmed"))
 }
 
@@ -284,6 +356,7 @@ func TestConfirmPasswordReset_ConcurrentUpdate(t *testing.T) {
 		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
 	).Once()
 	repo.EXPECT().MarkPasswordResetUsed(mock.MatchedBy(pgkit.InTx), "rid").Return(nil).Once()
+	repo.EXPECT().RevokePasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
 	users := mocks.NewMockUserReader(t)
 	users.EXPECT().GetByID(mock.Anything, "u1").Return(&verification.User{ID: "u1", Version: 3}, nil).Once()
 	pwSet := mocks.NewMockPasswordSetter(t)

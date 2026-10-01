@@ -19,7 +19,7 @@ func FuzzNewUser(f *testing.F) {
 		u, err := user.NewUser(email, ph, name, role)
 
 		_, mailErr := mail.ParseAddress(email)
-		validEmail := mailErr == nil
+		validEmail := mailErr == nil && len(email) <= 254
 		validRole := role == identity.RoleAdmin || role == identity.RoleClient || role == identity.RoleUnknown
 
 		if validEmail && validRole {

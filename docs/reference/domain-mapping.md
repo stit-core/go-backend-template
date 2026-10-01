@@ -158,5 +158,5 @@
 | Перевод состояния агрегата | aggregate.method (через Lifecycle row) |
 | Выставление `CreatedAt` | репозиторий, не конструктор |
 | Уникальность по полю | use-case (нужен `repo.GetBy*`), не aggregate-invariant |
-| Нотификация (email, webhook) | port в use-case + адаптер в `module/` |
+| Нотификация (email, webhook) | port в use-case + адаптер канала в `infra/<канал>/` (dev-заглушка писем — `verification/infra/logmail`) |
 | Идемпотентность subscriber'а | схема потребителя: unique-индекс под natural key + `ON CONFLICT` (или idempotency-key из payload), у внешнего эффекта — отметка выполнения (`sent_at`) — rule `events-and-messaging` |

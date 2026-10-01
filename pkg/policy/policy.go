@@ -1,5 +1,7 @@
 package policy
 
+import "unicode/utf8"
+
 type Decision struct {
 	IsAllowed bool
 	Reason    string
@@ -18,8 +20,8 @@ func (e *ForbiddenError) Error() string {
 	return "forbidden: " + e.Reason
 }
 
-// MinPasswordLen — правило пароля продукта для всех доменов; тег minLength HTTP-схем паролей
-// повторяет его, handler-тесты держат их равными.
+// MinPasswordLen — правило пароля продукта для всех доменов, в символах, как тег minLength
+// HTTP-схем паролей; handler-тесты держат их равными.
 const MinPasswordLen = 8
 
-func PasswordStrong(plain string) bool { return len(plain) >= MinPasswordLen }
+func PasswordStrong(plain string) bool { return utf8.RuneCountInString(plain) >= MinPasswordLen }

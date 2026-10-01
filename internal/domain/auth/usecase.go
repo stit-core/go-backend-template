@@ -50,7 +50,8 @@ type Authorizer interface {
 	CanChangePassword(ctx context.Context, caller identity.Identity, targetID string) policy.Decision
 }
 
-// LoginGuard: Attempt учитывает попытку до проверки пароля — неудача отдельной записи не требует.
+// LoginGuard: Attempt учитывает попытку до проверки пароля — неудача отдельной записи не требует;
+// ключ, который guard не учитывает (пустой или длиннее предела email), — ErrInvalidCredentials.
 type LoginGuard interface {
 	Attempt(ctx context.Context, subject, ip string) (*LockState, error)
 	RecordSuccess(ctx context.Context, subject, ip string) error
@@ -87,10 +88,17 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, error) {
 	ip := identity.IPFrom(ctx)
 
-	lock, guardErr := uc.d.Guard.Attempt(ctx, in.Email, ip)
-	if guardErr != nil {
-		uc.d.Log.Error(ctx, "guard attempt", "err", guardErr)
-	} else if lock != nil {
+	lock, err := uc.d.Guard.Attempt(ctx, in.Email, ip)
+	switch {
+	case errors.Is(err, ErrInvalidCredentials):
+		uc.d.Metrics.RecordLogin(ctx, resultInvalidLogin)
+		return nil, err
+	case err != nil:
+		// Fail-closed: попытка, которую guard не учёл, до пароля не доходит — иначе сбой его хранилища
+		// снимал бы защиту от перебора.
+		uc.d.Metrics.RecordLogin(ctx, outcome.Error)
+		return nil, fmt.Errorf("login guard: %w", err)
+	case lock != nil:
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_locked", "locked")
 		uc.d.Metrics.RecordLogin(ctx, resultLocked)
 		return nil, &LockedError{Wait: lock.Until.Sub(uc.d.Clock.Now())}
@@ -123,8 +131,9 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 		return nil, ErrInvalidCredentials
 	}
 
-	if recordErr := uc.d.Guard.RecordSuccess(ctx, in.Email, ip); recordErr != nil {
-		uc.d.Log.Error(ctx, "guard record success", "err", recordErr)
+	// Пароль уже проверен: несброшенный счётчик лишь раньше заблокирует пару, если она снова ошибётся.
+	if err := uc.d.Guard.RecordSuccess(ctx, in.Email, ip); err != nil {
+		uc.d.Log.Error(ctx, "guard record success", "err", err)
 	}
 
 	access, err := uc.d.Tokens.IssueAccess(ctx, u)

@@ -17,7 +17,9 @@ x-app-env: &app-env
   JWT_ACCESS_TTL: 15m
   JWT_REFRESH_TTL: 720h
 
-  APP_ENV: smoke
+  # dev: лог-mailer (канала доставки писем у стека нет) и cookie без Secure — клиент ходит по http.
+  APP_ENV: dev
+  COOKIE_SECURE: "false"
 
   LOG_LEVEL: debug
 

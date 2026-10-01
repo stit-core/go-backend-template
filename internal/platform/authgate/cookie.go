@@ -8,7 +8,7 @@ const (
 )
 
 type CookieConfig struct {
-	Secure bool `default:"false" envconfig:"COOKIE_SECURE"`
+	Secure bool `default:"true" envconfig:"COOKIE_SECURE"`
 }
 
 func SetAuthCookies(w http.ResponseWriter, access, refresh string, cfg CookieConfig) {
@@ -30,7 +30,7 @@ func BuildExpiredAuthCookies(cfg CookieConfig) []http.Cookie {
 }
 
 func authCookie(name, value string, cfg CookieConfig) *http.Cookie {
-	return &http.Cookie{ //nolint:gosec // Secure controlled by COOKIE_SECURE env (false in dev)
+	return &http.Cookie{ //nolint:gosec // Secure — COOKIE_SECURE (по умолчанию true), false вне dev не пускает config.Guard
 		Name:     name,
 		Value:    value,
 		Path:     "/",
@@ -41,7 +41,7 @@ func authCookie(name, value string, cfg CookieConfig) *http.Cookie {
 }
 
 func expiredCookie(name string, cfg CookieConfig) *http.Cookie {
-	return &http.Cookie{ //nolint:gosec // Secure controlled by COOKIE_SECURE env (false in dev)
+	return &http.Cookie{ //nolint:gosec // Secure — COOKIE_SECURE (по умолчанию true), false вне dev не пускает config.Guard
 		Name:     name,
 		Value:    "",
 		Path:     "/",

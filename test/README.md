@@ -54,11 +54,11 @@ cross-user 403.
   `email_verifications` (`e2e/test_event_flow.py`).
 
 Сознательно вне e2e: **verification confirm-roundtrip** (email-verify /
-password-reset confirm). У шаблона нет канала доставки — `logMailerAdapter`
-заглушка by design, raw-токен в outbox/NATS осознанно отсутствует. Это не
-баг и не дыра харнеса: confirm-логика — дом Go usecase/integration-тестов,
-request-side покрыт e2e. Реальный Mailer + mail-capture (Mailpit) — extension
-point форка.
+password-reset confirm). У шаблона нет канала доставки: dev-заглушка
+`verification/infra/logmail` письмо не отправляет и токен не пишет никуда, в
+outbox и NATS токена тоже нет. Это не баг и не дыра харнеса: confirm-логика —
+дом Go usecase/integration-тестов, request-side покрыт e2e. Реальный Mailer +
+mail-capture (Mailpit) — extension point форка.
 
 ## Изоляция
 

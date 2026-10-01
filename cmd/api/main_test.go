@@ -32,7 +32,7 @@ func TestFxGraphHasNoContext(t *testing.T) {
 }
 
 // envAllowlist — required-переменные конфигов, которых нет в .env.example.
-var envAllowlist = allowlist.List{"JWT_SECRET": "SEC-10"}
+var envAllowlist = allowlist.List{}
 
 // TestEnvExampleHasRequired: .env.example — минимум, с которым сервис стартует; required-
 // переменная конфига, которой там нет, роняет запуск по примеру.

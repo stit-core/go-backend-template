@@ -15,11 +15,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
 
 ## Контекст
 - Гейт честный: integration-тесты в `make check`, archtest «границы 2.0», boot-тест `cmd/api`,
-  `openapi.json` из `make gen`. Здесь опустошаются allowlist'ы (`internal/testkit/allowlist`) и
-  снимается обход `beforeHTTP` (FX-01):
-  - ADP-03 — мёртвые ссылки `docs/reference/domain-mapping.md` на `internal/platform/shared/` и
-    `internal/platform/shared/errors.go`;
-  - SEC-10 — `JWT_SECRET` нет в `.env.example`.
+  `openapi.json` из `make gen`. Здесь опустошаются allowlist'ы (`internal/testkit/allowlist`): ADP-03 —
+  мёртвые ссылки `docs/reference/domain-mapping.md` на `internal/platform/shared/` и `…/errors.go`.
 - **golibinfra меняется своими планами** в `../golibinfra` (партии «исполнитель → валидатор», тег
   пушится с OK владельца), шаблон поднимает версию. Точный состав и шаги миграции — аннотации тегов:
   - **v1.2.0** — в шаблоне с S1; контракт ошибок httpkit (problem+json с `code` и `request_id`,
@@ -94,9 +91,11 @@ prod-дефолты, понятный контракт ошибок API, тес�
   потребителя. Проверка: тесты адаптеров и usecase → PASS
   - Подтверждено: `TestUserAdapter_MapsUserErrors` (auth, verification), `TestChangePassword`,
     `TestChangePassword_Errors` (409 `AUTH_CONCURRENT_UPDATE`) — PASS
-- [ ] **AC6** — Секретов и токенов нет в логах; дефолты безопасны; вне `APP_ENV=dev` сервис не
+- [x] **AC6** — Секретов и токенов нет в логах; дефолты безопасны; вне `APP_ENV=dev` сервис не
   стартует с небезопасной конфигурацией (insecure cookie, лог-mailer, выключенное маскирование,
   docs). Проверка: тест конфигурации и тест лог-полей → PASS
+  - Подтверждено: `TestGuard`, `TestModule` (config), `TestNew_DevOnly` (logmail), `TestBoot` — пароли,
+    cookie сессии и токены писем не в логе даже до маскирования; docs по умолчанию выключит v1.3.0
 - [ ] **AC7** — Каждая операция либо под `Security`, либо помечена `httpkit.Public` — иначе сервис
   не стартует; без cookie → 401, чужой ресурс → 403. Проверка: тест сборки API (операция без
   `Security` и пометки → ошибка старта), handler-тесты и boot-тест → PASS
@@ -210,12 +209,15 @@ prod-дефолты, понятный контракт ошибок API, тес�
   записях аудита (SEC-01, SEC-07, COD-01, COD-06, FX-03)
   - Проверка: AC1 для refresh, AC2 → PASS; операция без `Security` и пометки → ошибка старта в
     тесте сборки API · Закрывает: AC1, AC2, AC7, AC11 · Зависит от: S12, тег golibinfra v1.3.0
-- [ ] **S10** — Безопасные дефолты шаблона: mailer не логирует токен и email и работает только в dev;
+- [x] **S10** — Безопасные дефолты шаблона: mailer не логирует токен и email и работает только в dev;
   prod-гард конфигурации (`APP_ENV` обязателен; вне dev — secure cookie, без лог-mailer,
   маскирование включено, docs выключены); явное поведение при ошибке guard (fail-closed для
   логина); единый ответ и троттлинг сброса пароля; `JWT_SECRET` в `.env.example`; образы nonroot
   с закреплённой базой (SEC-02, SEC-04 – SEC-10)
   - Проверка: AC6 → PASS, allowlist SEC-10 пуст · Закрывает: AC6 · Зависит от: S8
+  - Сделано: AC6 подтверждён, allowlist `cmd/api` пуст, `make check` → `✓ check clean`, `make e2e` →
+    16 passed (стек — distroless от UID 65532); 12 поломок гарда, входа, лимита и отзыва ссылок
+    сброса, лог-mailer, cookie, правил email и пароля — пойманы, токен в логе — `TestBoot`
 
 ### Чистка и скелет
 - [ ] **S11** — Чистка эталона: канон соблюдён без исключений, мёртвый код и эссе удалены; метрики
@@ -245,56 +247,54 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Порог покрытия: гейт 90%, цель 95% (владелец: 90–95) — осмысленными тестами (силу держат мутации, AC9).
 - Граница с golibinfra: общая механика — в китах (auth-стек скопирован в `ai-gateway-template`, форки
   пишут её сами), здесь — bump и снятие взятого китом; эквивалентов китов в шаблоне нет, даже временно.
-- Два bump'а: v1.2.0 (S1) и v1.3.0 (S9); при задержке v1.3.0 S11 и S12 идут раньше S9 и S10.
-- Контракт ошибок — S8 и AC13 поверх httpkit, с полнотой маппинга; мутации, D02, allowlist'ы — S15.
-- Сессии — `authnkit/session` (механика); токены сброса и подтверждения — в SQL домена (S5).
-- flagkit, cachekit — вне графа до потребителя (FX-10); bump `go.mod` разрешён владельцем, env — в Handoff.
+- Два bump'а: v1.2.0 (S1) и v1.3.0 (S9); S10–S12 от v1.3.0 не зависят и идут раньше S9. Контракт ошибок —
+  S8 и AC13 поверх httpkit; мутации, D02, allowlist'ы — S15. Сессии — `authnkit/session`, токены сброса и
+  подтверждения — SQL домена (S5). flagkit, cachekit — вне графа (FX-10); bump `go.mod` разрешён, env — в Handoff.
 - «Фундамент»: `registerHTTP`, `Middlewares` — в `fx.Module("cmd/api")`; порт — тип провайдера; `App` —
-  envconfig; `pkg/policy`, `paging`, `outcome`, `idkit`; guard — в лог до S10; `publisher-stream-check`.
+  envconfig; `pkg/policy`, `paging`, `outcome`, `idkit`; `publisher-stream-check`.
 - S4: PATCH: нет — 404, чужая `version` — 409, поля одной записью, переход — `User.ChangeStatus`, `status`
   — `CanChangeStatus` (403); удаление — условная запись без версии (B1: повтор и гонка — 404).
 - S5: эффект помнит `sent_at` (upsert перевыпускает неотправленное); `TokenID` — id строки; погашение —
-  условный `UPDATE` в одной транзакции с записью (тесты — `pgkit.InTx` и `pgtest.Recorder`: транзакция
-  одна), истёкший токен — строгие моки.
+  условный `UPDATE` в одной транзакции с записью (`pgkit.InTx`, `pgtest.Recorder`); истёкший — строгие моки.
 - S6: `user.Trusted` — только адаптерам потребителей (archtest: свой `module/` — лишь `NewTrusted`, без
-  `fx.As`); ошибки — `TrustedErrors`: исходы репозитория — тест Trusted, свои `return` — archtest (ошибку
-  вызванной функции домена он не видит: Trusted лишь делегирует), перевод — тесты адаптеров; киты —
-  `auth/infra/`, mailer — S11; HAR-08.
+  `fx.As`); ошибки — `TrustedErrors`: исходы репозитория — тест Trusted, свои `return` — archtest (Trusted
+  лишь делегирует), перевод — тесты адаптеров; киты — `auth/infra/`; HAR-08.
 - S7: префикс и `data` — archtest `TestHTTPTypes`; 401 — `TestBoot` по спецификации; e2e-модели строгие.
 - S8: `AUTH_ACCESS_EXPIRED` — `authgate.Secured`; `importsByName` знает `huma/v2`. B1: правило на каждую
-  ошибку `errors.go`, `Map` — таблицей домена в хендлерах `huma.Register` (archtest; хелпер вправе
-  вернуть `err`), таблица операции — в `Declare` (archtest; операция без доменных ошибок таблицы не
-  заводит); разный смысл — разная ошибка (`ErrWrongOldPassword`, `ErrRefreshInvalid`); у ошибок портов
-  — тоже правило.
+  ошибку `errors.go`, `Map` — таблицей домена в хендлерах (archtest; хелпер вправе вернуть `err`), таблица
+  операции — в `Declare` (без доменных ошибок не заводится); разный смысл — разная ошибка
+  (`ErrWrongOldPassword`, `ErrRefreshInvalid`); у ошибок портов — тоже правило.
+- S10: гард — `config.Guard` (Invoke модуля; не dev — строго) и конструктор лог-mailer — сразу в
+  `verification/infra/logmail`, без аудита `mail_sent` (письмо не уходит). Вход fail-closed; ключ, который
+  guard не учтёт, — 401, email регистрации ≤ 254 байт. Сброс: ответ один, сбой письма — в лог, лимит —
+  bruteforcekit на (пользователь, IP) портом `ResetLimiter` (кита нет в `rootLibs`), confirm гасит прочие
+  ссылки; пароль — в символах; время ответа — бэклог `reset-timing`. Образ релиза не собран (сеть).
 
 ## Handoff
-- API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в
-  OpenAPI) — breaking для форков. user: PATCH целиком, `status` — только админ, неизвестный id и
-  повторный DELETE — 404, `version` в ответе, невалидный email регистрации — 422 поля `body.email`
-  (был 400); auth: login — `data`, change-password — 404, 409,
-  старый пароль — 422, битый refresh — 401, истёкший access — `AUTH_ACCESS_EXPIRED`, 429 —
-  `Retry-After`; verification: токен погашенный или в гонке — 409.
+- API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в OpenAPI) —
+  breaking для форков. user: PATCH целиком, `status` — только админ, неизвестный id и повторный DELETE —
+  404, `version` в ответе, невалидный email регистрации — 422 поля `body.email` (был 400); auth: login —
+  `data`, change-password — 404, 409, старый пароль — 422, битый refresh — 401, истёкший access —
+  `AUTH_ACCESS_EXPIRED`, 429 — `Retry-After`; verification: погашенный токен — 409, запрос сброса — 204.
 - События verification: `TokenID` — id строки токена; `email_verification_requested` повторяется при
   перевыпуске неотправленного письма — потребитель дедуплицирует по `TokenID`. Миграция 0004 —
   nullable-колонка без блокировок; ожидающие подтверждения после выкатки — неотправленные: повтор
   старой доставки `user.events.registered` пришлёт второе письмо, первая ссылка перестанет работать.
 - Сессии на `authnkit/session`: при выкатке все пользователи входят заново один раз; `refresh_sessions`
   удаляется новой миграцией (`-- infra-handoff:`), таблица сессий кита — новый источник `cmd/migrate`.
-- Env: `APP_ENV` обязателен; secure cookie по умолчанию; дефолты китов v1.3.0 (docs, конечный
-  `OUTBOX_MAX_ATTEMPTS`, флаг доверия прокси) — по аннотации тега; `OTEL_*` — если метрики
-  экспортируются через telemetry.
-- Образы от nonroot с закреплённой базой.
-- Лёг S1–S3 (golibinfra v1.2.0): `NATS_JETSTREAM_ENABLED=true` и
-  `NATS_JS_STREAM_NAMES=user,verification` — без JetStream или стрима `user` старт падает, без
-  `verification` её события не публикуются; маскирование логов всегда (`LOG_REDACT_ENABLED` не
-  читается, `LOG_REDACT_DISABLED=true` — не в проде); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64
-  (старые блокировки теряются ≤ `BRUTEFORCE_LOCK_DURATION`); Redis, `REDIS_URL`, `FEATURE_FLAGS`
-  не нужны; `PG_*`/`HTTP_*` без приставок `POSTGRES_`/`HTTP_HTTP_`. Остановка до 30s
-  (`stop_grace_period` ≥ 35s), `HTTP_SHUTDOWN_TIMEOUT` + `NATS_DRAIN_TIMEOUT` ≤ 25s — иначе правка
-  `fx.StopTimeout`. Argon2id — разом не больше `max(1, GOMAXPROCS/ARGON2_THREADS)` хэшей: при
-  `ARGON2_THREADS=4` и < 8 CPU логин и пароли хэшируются по одному — CPU пода и реплики под пик.
-  API: problem+json с `code` и `request_id`.
-- Блок — через `/infra-handoff`, когда изменения лягут.
+- Env: дефолты китов v1.3.0 (docs, конечный `OUTBOX_MAX_ATTEMPTS`, флаг доверия прокси) — по аннотации
+  тега; `OTEL_*` — если метрики экспортируются через telemetry.
+- Лёг S1–S3 (golibinfra v1.2.0): `NATS_JETSTREAM_ENABLED=true` и `NATS_JS_STREAM_NAMES=user,verification`
+  — без JetStream или стрима `user` старт падает, без `verification` её события не публикуются;
+  маскирование логов всегда (`LOG_REDACT_ENABLED` не читается); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64
+  (старые блокировки теряются ≤ `BRUTEFORCE_LOCK_DURATION`); Redis, `REDIS_URL`, `FEATURE_FLAGS` не
+  нужны; `PG_*`/`HTTP_*` без приставок `POSTGRES_`/`HTTP_HTTP_`. Остановка до 30s (`stop_grace_period` ≥
+  35s), `HTTP_SHUTDOWN_TIMEOUT` + `NATS_DRAIN_TIMEOUT` ≤ 25s — иначе правка `fx.StopTimeout`. Argon2id —
+  разом не больше `max(1, GOMAXPROCS/ARGON2_THREADS)` хэшей: при `ARGON2_THREADS=4` и < 8 CPU пароли
+  хэшируются по одному — CPU пода и реплики под пик. API: problem+json с `code` и `request_id`.
+- Блоки S10 (`APP_ENV` и гард, образы от UID 65532) — в накопителе `.claude/plans/handoff.md`; прочее —
+  через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-S1–S8 приняты (отчёты A и B в материалах). Дальше S10–S12 (v1.3.0 не нужен), S9 (v1.3.0), S13–S15.
+S1–S8 приняты (отчёты A и B в материалах), S10 сделан. Дальше S11–S12 (v1.3.0 не нужен), S9 (v1.3.0),
+S13–S15.

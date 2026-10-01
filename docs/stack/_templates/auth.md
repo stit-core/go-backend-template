@@ -23,7 +23,7 @@ claims/principal. authnkit-примитивы (хеш паролей, TOTP).>
 Публичного пути сделать admin нет.>
 
 ## Brute-force
-<bruteforcekit: что защищается (login), счётчики, lock-политика, cleanup-job.>
+<bruteforcekit: что защищается (вход, запросы сброса пароля), счётчики, lock-политика, поведение при сбое guard'а (вход — fail-closed), cleanup-job.>
 
 ## Generates
 <Что de-template родит:

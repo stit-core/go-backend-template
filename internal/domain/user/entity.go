@@ -30,7 +30,7 @@ type User struct {
 }
 
 func NewUser(email, passwordHash, name string, role identity.Role) (*User, error) {
-	if _, err := mail.ParseAddress(email); err != nil {
+	if _, err := mail.ParseAddress(email); err != nil || len(email) > maxEmailLen {
 		return nil, ErrInvalidEmail
 	}
 	if role == identity.RoleUnknown {

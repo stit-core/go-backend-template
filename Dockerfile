@@ -1,7 +1,8 @@
 ARG BUILDPLATFORM=linux/amd64
 ARG TARGETPLATFORM=linux/amd64
 
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+# Базы закреплены digest'ом: тег переезжает молча, образ с тем же тегом — уже другой.
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS build
 WORKDIR /src
 
 ARG TARGET=api
@@ -16,7 +17,7 @@ RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
 ENV GOPRIVATE=git.stit.tech/*
 
 # go-mod cache (/go/pkg/mod) и go-build cache (/root/.cache/go-build) через
-# --mount=type=cache: между билдами api/worker/migrate, между коммитами
+# --mount=type=cache: между билдами api/migrate, между коммитами
 # без изменения go.mod — переиспользуются. Эффект: первый билд тот же,
 # повторные ~5-15s вместо ~60-90s.
 COPY go.mod go.sum ./
@@ -41,8 +42,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${GIT_SHA}" \
       -o /app ./cmd/${TARGET}
 
-FROM alpine:3.21
-RUN apk add --no-cache ca-certificates
+# Без shell и пакетного менеджера, CA-сертификаты в базе, процесс — не root.
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 COPY --from=build /app /app
 EXPOSE 8080
+USER 65532:65532
 ENTRYPOINT ["/app"]

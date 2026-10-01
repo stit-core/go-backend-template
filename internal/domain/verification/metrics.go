@@ -16,6 +16,7 @@ var (
 	resultAlreadyUsed  = outcome.New("already_used")
 	resultUserNotFound = outcome.New("user_not_found")
 	resultInactive     = outcome.New("inactive")
+	resultThrottled    = outcome.New("throttled")
 )
 
 // Metrics — domain-уровень counters для verification (email confirm +
