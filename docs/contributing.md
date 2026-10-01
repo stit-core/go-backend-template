@@ -22,16 +22,14 @@ Progressive disclosure: на холодном старте — только им
 
 ```
 prompt → /smartdev (cockpit: make status, читает активные планы, чейнит режим)
-       → plan (planning-first: изменение идёт через план — файл в .claude/plans/)
-       → act (RED→GREEN→REFACTOR; инфра-поверхность задета → infra-handoff)
-       → verify (make test, make lint, make build; claim «готово» → make check)
-       → review (опц. /code-review)
+       → маршрут (CLAUDE.md § Маршрут задачи: triage-failure / plan / scaffold / напрямую)
+       → act (меняется поведение — тест первым; инфра-поверхность задета → infra-handoff)
+       → готово (CLAUDE.md § Готово)
        → commit (Conventional Commits)
 ```
 
-Планирование — **дефолт** (см. skill `plan`). Прямая правка — только truly-atomic и
-багфиксы (→ `triage-failure`). Планы — файлы `.claude/plans/<slug>.md`, бэклог —
-`.claude/plans/backlog.md`; закрытый план удаляется (история в git).
+Планы — файлы `.claude/plans/<slug>.md`, бэклог — `.claude/plans/backlog.md`; закрытый план
+удаляется (история в git).
 
 ## Кто что enforce'ит
 

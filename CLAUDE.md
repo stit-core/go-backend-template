@@ -19,10 +19,28 @@
   переключение в нужный режим. Запускай в начале / после `/clear`.
 - **Потребителю шаблона** — `docs/getting-started.md`: форк → `/init-service` → проектирование
   стека (домены уже готовы в соседнем strategy-репо) → `/de-template` → scaffold → свой проект.
-- **Planning-first.** Любое содержательное изменение этого репо идёт через план — файл в
-  `.claude/plans/` (skill `/plan`: критерии приёмки, шаги с проверками, «Где мы сейчас» для
-  продолжения после `/clear`); фаза программы хаба — план с `parent: infra:<slug>`. Прямая
-  правка — только truly-atomic и багфиксы (`/triage-failure`, RED-first).
+
+## Маршрут задачи
+
+Маршрут — первая подходящая строка сверху; `/smartdev` выбирает по этой же таблице. Отступил от
+неё — скажи почему: юзеру, а пришёл из хаба — в отчёте.
+
+| Задача | Маршрут | Пример |
+|---|---|---|
+| Упало или баг | `/triage-failure`: воспроизводящий тест → фикс, одним коммитом | красный `make check`, 500 вместо 409 |
+| Больше одного коммита; breaking API или события; миграция с эффектом (§ Границы); вход, сессии, токены, права (`pkg/policy`, `authgate`); фаза из хаба | `/plan` — план в `.claude/plans/`, его шаги идут по этой же таблице | домен по артефакту strategy со своим API и событиями |
+| Новый блок в один коммит: домен, ручка, событие, миграция, порт | `/scaffold`, вариант по блоку | «добавь колонку `phone` в users и поле в ответ» — вариант migration и правка слоёв |
+| Правка существующего в один коммит | напрямую; меняется поведение — сначала тест | переименование, правка запроса, текст доки |
+
+## Готово
+
+Claim «готово» и коммит — только когда:
+- `make check` → `✓ check clean`: CI нет, этот гейт (его же гоняет pre-push) — единственная
+  проверка изменения;
+- код прошёл `/code-review` по диффу, а вход, сессии, токены, секреты и миграции — ещё
+  `/security-review`; находки исправлены или отклонены с причиной;
+- сменилась конвенция — правило, скилл, reference и доки о ней обновлены тем же коммитом;
+- задета инфра-поверхность (§ Границы) — INFRA-HANDOFF оформлен.
 
 ## Проектирование первично, код вторичен
 
@@ -64,7 +82,8 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
 - **golangci-lint** (`.golangci.yml`): **forbidigo** — нельзя `fmt.Print*`/`log.*`/`print(ln)`/
   `slog.*` и запись в `os.Stdout`/`os.Stderr`, только `logkit.Logger`.
   errcheck (и `_ = f()`)/errorlint/gosec/govet/contextcheck/noctx/rowserrcheck/bodyclose
-  /sqlclosecheck/testifylint — на; `//nolint` — только с именем линтера и объяснением (nolintlint).
+  /sqlclosecheck/testifylint — на. `//nolint` — ослабление гейта (§ Границы): с именем включённого
+  линтера и объяснением (nolintlint, `make lint`).
 - **archtest** (`internal/archtest`, шаг тестов; `//nolint` на него не действует) — границы любого
   домена: чужой домен — только через порт и адаптер в `<domain>/module/adapters.go`, моки — только
   из тестов, `platform` и `pkg` доменов не знают.
@@ -81,16 +100,13 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
   формат `<type>(<scope>)?: <subject>`, subject ≤72; сообщения самого git (`Revert "…"`,
   `fixup!`/`squash!`) тоже проходят.
 - **Push в `main` разрешён** (прямой или через PR); линейная история. Gate — git
-  `pre-push → make check` на чистом дереве, пушится только HEAD. Обойти хуки может только
-  человек (`SKIP_PREPUSH=1`); из сессии Claude обходы блокирует хук `.claude/hooks/guard-bash.sh`.
+  `pre-push → make check` на чистом дереве, пушится только HEAD; обходы хуков из сессии блокирует
+  хук `.claude/hooks/guard-bash.sh`.
 - git-хуки подключает `make setup` (`core.hooksPath=scripts/git-hooks`). Релиз — `/release`.
 
 ## Границы
 
 ### Делать всегда
-- Перед claim «готово» — `make check`: CI нет, этот гейт (его же гоняет pre-push) — единственная
-  проверка изменения.
-- **Изменение — через план** (planning-first; skill `/plan`). Отклонение — осознанное, проговаривается.
 - **Тронул инфра-поверхность** (required env / sensitive-env-секрет; миграция destructive/lock/backfill/extension;
   cross-service NATS/outbox-subject; новый порт/breaking API; новая runtime-dep в `go.mod`) →
   до claim/коммита оформи **INFRA-HANDOFF**-блок для хаба `<org>/infra`: пришёл из хаба — блок
@@ -103,9 +119,11 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
 ### Сначала спросить
 - `migrations/` (skill `/scaffold`, вариант migration), `pkg/policy` + `pkg/tokens`, `internal/platform/authgate/`,
   `go.mod`/`go.sum`, `git tag -a` / `make release` (артефакт вне репо).
-- Ослабить гейт (правка `Makefile`, `scripts/`, `.golangci.yml`, `internal/archtest`,
+- Ослабить гейт (`//nolint`; правка `Makefile`, `scripts/`, `.golangci.yml`, `internal/archtest`,
   `.claude/settings.json`, `.claude/hooks/`, после которой он проверяет меньше) — только по явной
   просьбе юзера.
+- Спросить некого (агент из хаба без собеседника): пункт этого списка, которого нет в задаче или
+  плане хаба, не делай — вопрос в отчёт хабу и в «Открытые вопросы» плана, остальное продолжай.
 
 ### Не делать никогда
 - Обходить хуки и гейт: `--no-verify`, `git commit -n`, `SKIP_PREPUSH`, `core.hooksPath` (блокируют
@@ -115,7 +133,8 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
 - `fmt.Print*`/`log.*`/`print(ln)`/`slog.*`/`os.Stdout`/`os.Stderr` напрямую. Image-теги `:latest`/`:edge`/lightweight.
 - Deploy-команды (`make bump`, `make ship`, `ssh`, env-прокатка) — выкатка идёт только из
   `<org>/infra`; после `make release` STOP.
-- Принимать архитектурные решения без согласования — отклонение от skill/плана требует OK юзера.
+- Молча отступать от канона (правило, скилл, план): отступление — с OK юзера (спросить некого — как
+  в «Сначала спросить») и строкой в «Решениях» плана или в теле коммита.
 
 ## Forward-only
 

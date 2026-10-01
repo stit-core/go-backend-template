@@ -137,6 +137,8 @@ Integration-тесты поднимают Postgres через `golibinfra/testki
 
 `make gen-check` (шаг `make check`) проверяет что sqlc-код совпадает с тем что `make gen` производит. Если падает — `make gen` локально и закоммить дельту.
 
+Готово и коммит — по CLAUDE.md § Готово.
+
 ### 10. Коммит
 
 ```

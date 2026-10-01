@@ -201,6 +201,8 @@ make lint
 make gen-check  # если добавил интерфейс из .mockery.yml
 ```
 
+Готово и коммит — по CLAUDE.md § Готово.
+
 ### 9. Коммит
 
 `feat(<source>): emit <event> event` или `feat(<consumer>): handle <event>` — в зависимости от того, что добавил. Если оба в одном коммите — `feat(<source>): emit <event> + <consumer> handler`.

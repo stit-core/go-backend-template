@@ -16,7 +16,7 @@ description: Разбор падения — красный тест, lint, buil
 
 ## Когда НЕ применять
 
-- Юзер просит implement новую фичу — это не triage, это plan-skill или прямая работа.
+- Новая возможность, а не падение — маршрут по таблице «Маршрут задачи» (CLAUDE.md).
 - Лёгкая опечатка которую видно с первой строки — просто чини, не разводи процедуру.
 
 ## Категории падений
@@ -78,7 +78,8 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 3. **Только теперь** правь продакшен-код.
 4. `go test -run TestNew ./pkg` → green.
 5. `make test PKG=./pkg` → весь пакет green (не сломал соседние тесты).
-6. Коммит: оба файла одним `fix(<scope>): <one-liner>`.
+6. Коммит: оба файла одним `fix(<scope>): <one-liner>`; в теле — строка красного прогона из п. 2
+   (`--- FAIL: TestNew …`), чтобы RED-first был виден в истории.
 
 ### 5. Не-баг-флоу (build / lint / drift / race)
 
@@ -88,8 +89,8 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 | **Build error** после правки `.mockery.yml` или интерфейса | `make gen` — мок-файл регенерится. |
 | **forbidigo** | замени `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` / запись в `os.Stdout`/`os.Stderr` на `logkit.Logger`. Внутри тестов forbidigo выключен — если падает в тесте, путь не _test.go. |
 | **archtest** (`TestImportBoundaries` и др.) | граница домена или слоя: чужой домен — port + adapter (skill `scaffold`, вариант port); сообщение теста называет правило. |
-| **errcheck** | `_ = unhandledErr` — нет; разбери err-возврат и обработай. Если действительно игнор оправдан — `//nolint:errcheck // <причина>`. |
-| **gosec G115** | int-конверсия с потенциальным overflow. Если bounded — exclude в `.golangci.yml` (как сделано для `repository.go` G115). Если нет — добавь явный bound check. |
+| **errcheck** | `_ = unhandledErr` — нет; разбери err-возврат и обработай. `//nolint` — ослабление гейта: только по явной просьбе юзера (CLAUDE.md § Границы). |
+| **gosec G115** | int-конверсия с потенциальным overflow — добавь явную проверку границы. `repository.go` доменов уже исключён в `.golangci.yml` (версия — PG int4); новое исключение — только по явной просьбе юзера. |
 | **Race detector** | прочти оба стека целиком; найди shared state без синхронизации. Минимальный фикс — sync.Mutex или channel; идеальный — устрани shared state. |
 | **mocks drift** (`make gen-check`) | `make gen` локально, закоммить дельту. Если в `_test.go` остались устаревшие EXPECT'ы — обнови. |
 | **sqlc drift** (`make gen-check`) | `make gen`, проверь дельту в `infra/postgres/db/*`, закоммить. |
@@ -121,7 +122,7 @@ make lint PKG=./pkg                  # на свой пакет
 go test -run TestX -count=20 ./pkg   # для flaky — 20 прогонов подряд
 ```
 
-Перед коммитом — `make check`.
+Готово и коммит — по CLAUDE.md § Готово.
 
 ## Что искать дополнительно
 

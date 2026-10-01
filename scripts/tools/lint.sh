@@ -4,7 +4,8 @@
 # Использование:
 #   scripts/tools/lint.sh [--format=detailed] [pkg…]      (по умолчанию ./...)
 #
-# Сначала `golangci-lint config verify`, затем `run`. OK — только exit 0 вместе со строкой
+# Сначала `golangci-lint config verify` и директивы `//nolint` всего дерева (только включённые
+# линтеры), затем `run`. OK — только exit 0 вместе со строкой
 # отчёта «0 issues.». Замечания — по строке на каждое, до 40 строк (detailed — все, со
 # строками кода); любой другой исход (битый конфиг, неизвестный линтер, таймаут,
 # несуществующий пакет) — хвост вывода линтера и его код выхода. Последняя строка — `OK` /
@@ -44,6 +45,25 @@ unset GOLANGCI_DIFF_PROCESSOR_PATCH
 if ! out=$(golangci-lint config verify 2>&1); then
     echo "$out"
     echo "FAIL: .golangci.yml не прошёл golangci-lint config verify"
+    exit 1
+fi
+
+# nolintlint ловит неиспользуемую директиву только у включённого линтера: //nolint выключенного
+# ничего не глушит и проходит молча.
+if ! enabled=$(golangci-lint linters --json | sed 's/\],"Disabled":\[.*//' | grep -o '"name":"[^"]*"' | cut -d'"' -f4); then
+    echo "FAIL: golangci-lint linters не отдал список включённых линтеров"
+    exit 1
+fi
+dead=""
+while IFS= read -r hit; do
+    names=${hit##*//nolint:}
+    for name in ${names//,/ }; do
+        grep -qxF "$name" <<<"$enabled" || dead+="  ${hit%%//nolint:*} //nolint:$name"$'\n'
+    done
+done < <(git grep -nIoE --untracked '//nolint:[A-Za-z0-9_,-]+' -- '*.go')
+if [ -n "$dead" ]; then
+    printf '%s' "$dead"
+    echo "FAIL: //nolint для линтера, выключенного в .golangci.yml, — директива ничего не глушит, удали её"
     exit 1
 fi
 

@@ -170,6 +170,8 @@ make build
 make gen-check
 ```
 
+Готово и коммит — по CLAUDE.md § Готово.
+
 ### 10. Коммит
 
 `feat(<consumer>): add <Provider>Reader port + adapter`

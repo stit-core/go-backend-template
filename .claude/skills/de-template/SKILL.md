@@ -110,7 +110,7 @@ logging, subjects, authgate, pgkit, kit-prune. Процедура и маппи�
 
 ```bash
 make build      # фундамент компилируется
-make check      # перед claim «готово»: полный gate (CLAUDE.md § Команды)
+make check      # готово — по CLAUDE.md § Готово
 ```
 
 Зелёный `make build` на развёрнутом форке — главный критерий движка.
