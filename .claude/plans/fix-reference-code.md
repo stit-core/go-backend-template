@@ -253,20 +253,20 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Контракт ошибок — S8 и AC13 поверх httpkit, с полнотой маппинга; мутации, D02, allowlist'ы — S15.
 - Сессии — `authnkit/session` (механика); токены сброса и подтверждения — в SQL домена (S5).
 - flagkit, cachekit — вне графа до потребителя (FX-10); bump `go.mod` разрешён владельцем, env — в Handoff.
-- «Фундамент»: `registerHTTP`, `Middlewares` — в `fx.Module("cmd/api")`; порт — тип провайдера, без
-  `fx.As`; `App` — envconfig; `pkg/policy`, `paging.Page`, `outcome.Result`, `idkit`; ошибка guard — в
-  лог до S10; стрим публикатора — бэклог `publisher-stream-check`; хуки `TestBoot` — из лога сервиса.
+- «Фундамент»: `registerHTTP`, `Middlewares` — в `fx.Module("cmd/api")`; порт — тип провайдера; `App` —
+  envconfig; `pkg/policy`, `paging`, `outcome`, `idkit`; guard — в лог до S10; `publisher-stream-check`.
 - S4: PATCH: нет — 404, чужая `version` — 409, поля одной записью, переход — `User.ChangeStatus`, `status`
   — `CanChangeStatus` (403); удаление — условная запись без версии (B1: повтор и гонка — 404).
 - S5: эффект консьюмера помнит `sent_at`: upsert перевыпускает токен неотправленного, отправленное —
-  пропуск; `TokenID` — id строки; погашение — условный `UPDATE` первым в транзакции (`ErrTokenUsed`).
+  пропуск; `TokenID` — id строки; погашение — условный `UPDATE` первым в транзакции (`ErrTokenUsed`),
+  что оно в транзакции, держат моки с `pgkit.InTx` (N3); истёкший токен — строгие моки (N4).
 - S6: `user.Trusted` — без policy, только адаптерам `module/` потребителей (archtest; свой — лишь
   `NewTrusted`, N1); ошибки — `TrustedErrors`, тест Trusted и адаптеров идут по нему (N2); киты —
   `auth/infra/`, log-mailer — S11; HAR-08 — 95, 119, 120.
 - S7: префикс и `data` — archtest `TestHTTPTypes`; 401 — `TestBoot` по спецификации; e2e-модели строгие.
 - S8: `AUTH_ACCESS_EXPIRED` — `authgate.Secured`; `importsByName` знает `huma/v2`. B1: правило на каждую
-  ошибку `errors.go`, `Map` — таблицей домена (archtest), таблица операции — только `Declare`; разный
-  смысл — разная ошибка (`ErrWrongOldPassword`, `ErrRefreshInvalid`); у ошибок портов — тоже правило.
+  ошибку `errors.go`, `Map` — таблицей домена (archtest), таблица операции — `Declare`; разный смысл —
+  разная ошибка (`ErrWrongOldPassword`, `ErrRefreshInvalid`); у ошибок портов — тоже правило.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в

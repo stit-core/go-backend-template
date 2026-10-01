@@ -14,6 +14,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/pkg/tokens"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
@@ -218,13 +219,13 @@ func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	repo.EXPECT().GetPasswordReset(mock.Anything, tokens.Hash("tok")).Return(
 		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
 	)
-	claim := repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(nil).Once()
+	claim := repo.EXPECT().MarkPasswordResetUsed(mock.MatchedBy(pgkit.InTx), "rid").Return(nil).Once()
 	users := mocks.NewMockUserReader(t)
 	users.EXPECT().GetByID(mock.Anything, "u1").Return(
 		&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true, Version: 3}, nil,
 	)
 	pwSet := mocks.NewMockPasswordSetter(t)
-	pwSet.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(claim)
+	pwSet.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(claim)
 	f := newUC(t, withRepo(repo), withUsers(users), withPwSet(pwSet))
 
 	require.NoError(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"))
@@ -271,18 +272,19 @@ func TestConfirmPasswordReset_UserGone(t *testing.T) {
 	require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"), verification.ErrInvalidResetToken)
 }
 
-// Пароль сменили между чтением пользователя и записью: погашение откатывается, токен годен для повтора.
+// Пароль сменили между чтением пользователя и записью: погашение — в той же транзакции, что запись
+// пароля, и откатывается вместе с ней; токен годен для повтора.
 func TestConfirmPasswordReset_ConcurrentUpdate(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
 		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
 	).Once()
-	repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(nil).Once()
+	repo.EXPECT().MarkPasswordResetUsed(mock.MatchedBy(pgkit.InTx), "rid").Return(nil).Once()
 	users := mocks.NewMockUserReader(t)
 	users.EXPECT().GetByID(mock.Anything, "u1").Return(&verification.User{ID: "u1", Version: 3}, nil).Once()
 	pwSet := mocks.NewMockPasswordSetter(t)
-	pwSet.EXPECT().UpdatePassword(mock.Anything, "u1", mock.Anything, 3).Return(verification.ErrConcurrentUpdate).Once()
+	pwSet.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", mock.Anything, 3).Return(verification.ErrConcurrentUpdate).Once()
 	f := newUC(t, withRepo(repo), withUsers(users), withPwSet(pwSet))
 
 	require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"), verification.ErrConcurrentUpdate)
@@ -296,13 +298,15 @@ func TestConfirmPasswordReset_WeakPassword(t *testing.T) {
 	require.ErrorIs(t, err, verification.ErrWeakPassword)
 }
 
+// Истёкший токен не доходит ни до пользователя, ни до пароля: строгие моки без ожиданий.
 func TestConfirmPasswordReset_Expired(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
 		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(-time.Hour)}, nil,
-	)
-	f := newUC(t, withRepo(repo))
+	).Once()
+	f := newUC(t, withRepo(repo), withUsers(mocks.NewMockUserReader(t)), withPwSet(mocks.NewMockPasswordSetter(t)))
+
 	err := f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123")
 	require.ErrorIs(t, err, verification.ErrInvalidResetToken)
 }
@@ -313,9 +317,9 @@ func TestConfirmEmail_HappyPath(t *testing.T) {
 	repo.EXPECT().GetEmailVerification(mock.Anything, tokens.Hash("tok")).Return(
 		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
 	)
-	claim := repo.EXPECT().MarkEmailVerificationUsed(mock.Anything, "vid").Return(nil).Once()
+	claim := repo.EXPECT().MarkEmailVerificationUsed(mock.MatchedBy(pgkit.InTx), "vid").Return(nil).Once()
 	emailSet := mocks.NewMockEmailVerificationSetter(t)
-	emailSet.EXPECT().MarkEmailVerified(mock.Anything, "u1").Return(nil).Once().NotBefore(claim)
+	emailSet.EXPECT().MarkEmailVerified(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(claim)
 	f := newUC(t, withRepo(repo), withEmailSet(emailSet))
 
 	require.NoError(t, f.uc.ConfirmEmail(context.Background(), "tok"))
@@ -364,13 +368,15 @@ func TestConfirmEmail_UserGone(t *testing.T) {
 	require.False(t, f.audit.Has("email_confirmed"))
 }
 
+// Истёкший токен не доходит до отметки email: строгие моки без ожиданий.
 func TestConfirmEmail_Expired(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(
 		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: fixedNow.Add(-time.Hour)}, nil,
-	)
-	f := newUC(t, withRepo(repo))
+	).Once()
+	f := newUC(t, withRepo(repo), withEmailSet(mocks.NewMockEmailVerificationSetter(t)))
+
 	err := f.uc.ConfirmEmail(context.Background(), "tok")
 	require.ErrorIs(t, err, verification.ErrInvalidVerificationToken)
 }
