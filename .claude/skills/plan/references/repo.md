@@ -11,8 +11,10 @@
   PASS · `curl` к ручке → ожидаемый код · `make check` → зелёный.
 - **Handoff:** в хаб `<org>/infra` — INFRA-HANDOFF (skill `/infra-handoff`, правило
   `infra-impact`): required env и секреты, миграции с эффектом (destructive, lock, backfill,
-  extension), cross-service NATS/outbox-subject, новый порт или breaking API, новая runtime-зависимость
-  в `go.mod`. Пишется в раздел `## Handoff` плана; `make release` собирает его из активных планов.
+  extension), cross-service NATS/outbox-subject, новый сетевой порт или breaking API, новая
+  runtime-зависимость в `go.mod`. Готовый блок — в накопитель `.claude/plans/handoff.md`: его
+  печатает и очищает `make release`; раздел `## Handoff` плана — заметки до блока, при закрытии
+  плана недоставленное уходит в накопитель.
 - **Разбор падений:** skill `/triage-failure` — сначала падающий тест.
 - **До плана выясни** — только то, от чего зависят шаги; дизайн-решения — через `AskUserQuestion`:
   - скоуп и что не входит; связь с другими планами и программой хаба;
@@ -28,5 +30,5 @@
   - интеграции: outbox-событие и его потребитель, внешние API и ключ идемпотентности;
   - тесты: на каком слое TDD, нужен ли интеграционный тест, fuzz, bench;
   - выкатка и откат: feature-flag, поэтапно или сразу, откатывает ли down-миграция;
-  - инфра-поверхность (→ `## Handoff`): env, миграции с эффектом, subjects, порты, зависимости
-    в `go.mod`.
+  - инфра-поверхность (→ `## Handoff`): env, миграции с эффектом, subjects, сетевые порты,
+    зависимости в `go.mod`.

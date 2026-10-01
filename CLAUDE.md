@@ -116,10 +116,11 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
 
 ### Делать всегда
 - **Тронул инфра-поверхность** (required env / sensitive-env-секрет; миграция destructive/lock/backfill/extension;
-  cross-service NATS/outbox-subject; новый порт/breaking API; новая runtime-dep в `go.mod`) →
+  cross-service NATS/outbox-subject; breaking API; новый сетевой порт; новая runtime-dep в `go.mod`) →
   до claim/коммита оформи **INFRA-HANDOFF**-блок для хаба `<org>/infra`: пришёл из хаба — блок
-  входит в твой отчёт хабу, прямой заход — попроси юзера передать его туда (rule `infra-impact` +
-  skill `/infra-handoff`).
+  входит в твой отчёт хабу, прямой заход — попроси юзера передать его туда; тем же коммитом — в
+  накопитель `.claude/plans/handoff.md`, его печатает `make release` (rule `infra-impact` + skill
+  `/infra-handoff`).
 - Cross-domain — только порты + адаптеры. Логи — `logkit.Logger`. Generic-примитив → `golibinfra`.
 - `make gen` после правки `queries/`, `migrations/`, интерфейсов из `.mockery.yml` или HTTP-операций.
 - Conventional Commits. Дёргай `make <verb>`, не скрипты напрямую.

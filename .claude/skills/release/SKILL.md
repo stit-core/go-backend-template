@@ -56,7 +56,9 @@ make release VERSION=vX.Y.Z
 4. annotated tag, если на HEAD ещё нет (иначе использует существующий; конфликт версий → fail);
 5. `release-preflight.sh` — ветка=main / clean / annotated semver на HEAD / `docker buildx` / **`make doctor`** (docker-auth, sqlc-drift, непарные миграции — fail-fast);
 6. `docker buildx --platform linux/amd64 --push` двух image'ей lockstep: `<host>/<org>/backend:<v>` (`cmd/api`) и `<host>/<org>/backend-migrate:<v>` (`cmd/migrate` + вшитые SQL, init-контейнер), `VERSION`/`GIT_SHA` зашиты в бинарник;
-7. печатает агрегированный **INFRA-HANDOFF** (см. ниже) и STOP.
+7. печатает агрегированный **INFRA-HANDOFF** (см. ниже), очищает накопитель коммитом и STOP.
+
+Что уйдёт в хаб, видно заранее, без проверок, тега и образов: `make release VERSION=vX.Y.Z DRY_RUN=1`.
 
 `401 unauthorized` от registry → `make doctor` поймает это в preflight ещё до пуша; remediation — `docker login <host>` (креды оператора, не делай сам).
 
@@ -69,7 +71,7 @@ make release VERSION=vX.Y.Z
 `make release` сам печатает блок `=== INFRA HANDOFF ===`:
 
 - `BACKEND_TAG → <v>` (api+migrate lockstep);
-- **накопленный handoff** — `release.sh` собирает разделы `## Handoff` активных планов `.claude/plans/` (механизм — `.claude/rules/infra-impact.md` + skill `infra-handoff`). Если пусто — печатает напоминание убедиться, что инфра-затрагивающее зафиксировано;
+- **накопленный handoff** — накопитель `.claude/plans/handoff.md` (его пополняет skill `infra-handoff`) и разделы `## Handoff` активных планов. Если пусто — печатает напоминание убедиться, что инфра-затрагивающее зафиксировано. После печати накопитель очищается коммитом `meta(handoff): …`; отданное — `git show vX.Y.Z:.claude/plans/handoff.md`;
 - действие инфра-стороны:
   - проект: в `<org>/infra` — `make bump SVC=backend TAG=<v>` (правит `BACKEND_TAG` в `.env` на VPS + force-recreate).
 

@@ -4,6 +4,10 @@
 # api+migrate push lockstep → агрегированный INFRA-HANDOFF → STOP.
 #
 #   make release VERSION=vX.Y.Z
+#   make release VERSION=vX.Y.Z DRY_RUN=1   только handoff: без проверок, тега и образов
+#
+# Handoff — накопитель .claude/plans/handoff.md и разделы `## Handoff` активных планов; после
+# выкатки образов накопитель очищается коммитом (отданное остаётся в дереве тега).
 #
 # Зона ответственности этого репо: код → image в registry. На STOP — всё.
 # Деплой (make bump SVC=backend TAG=… — BACKEND_TAG в .env VPS) — в <client-org>/infra, НЕ здесь.
@@ -22,6 +26,34 @@ BR=$(git rev-parse --abbrev-ref HEAD)
 SHA=$(git rev-parse --short HEAD)
 HOST_ORG=$(git remote get-url origin | sed -E 's#^(git@|https?://)([^:/]+)[:/]([^/]+)/.*#\2/\3#')
 IMAGE_BASE="$HOST_ORG/backend"
+HANDOFF=.claude/plans/handoff.md
+
+# Агрегированный INFRA-HANDOFF: BACKEND_TAG и накопленные infra-изменения.
+print_handoff() {
+    local impacts
+    impacts=$(bash scripts/tools/validate-plan.sh --handoff)
+    echo
+    echo "=== INFRA HANDOFF · передай инфра-админу out-of-band ==="
+    echo "BACKEND_TAG → $VERSION   (api + migrate, lockstep)"
+    echo
+    if [ -n "$impacts" ]; then
+        echo "Накопленный handoff ($HANDOFF и раздел ## Handoff активных планов):"
+        echo "$impacts"
+    else
+        echo "(накопитель $HANDOFF пуст — убедись, что всё инфра-затрагивающее"
+        echo " зафиксировано: .claude/rules/infra-impact.md / skill infra-handoff)"
+    fi
+    echo
+    echo "Действия инфра-стороны:"
+    echo "  проект:  в <client-org>/infra — make bump SVC=backend TAG=$VERSION"
+    echo "           (правит BACKEND_TAG в .env на VPS + force-recreate)"
+}
+
+if [ "${DRY_RUN:-}" = "1" ]; then
+    echo "release: DRY_RUN=1 — без проверок, тега и образов; handoff, который уйдёт с $VERSION:"
+    print_handoff
+    exit 0
+fi
 
 # --- confirm (видимое вне репо действие — explicit OK обязателен) ---
 if [ "${RELEASE_YES:-}" = "1" ]; then
@@ -68,28 +100,17 @@ docker buildx build --platform linux/amd64 --push -f Dockerfile.migrate \
 
 echo "✓ released $IMAGE_BASE{,-migrate}:$VERSION"
 
-# --- агрегированный INFRA-HANDOFF (BACKEND_TAG + накопленные infra-изменения) ---
-echo
-echo "=== INFRA HANDOFF · передай инфра-админу out-of-band ==="
-echo "BACKEND_TAG → $VERSION   (api + migrate, lockstep)"
-
-# Handoff активных планов: разделы `## Handoff` в .claude/plans/*.md (validate-plan.sh --handoff).
-impacts=$(bash scripts/tools/validate-plan.sh --handoff)
-if [ -n "$impacts" ]; then
-    echo
-    echo "Накопленный handoff (раздел ## Handoff активных планов .claude/plans/):"
-    echo "$impacts"
-else
-    echo
-    echo "(в активных планах нет раздела ## Handoff — убедись, что всё инфра-затрагивающее"
-    echo " зафиксировано: .claude/rules/infra-impact.md / skill infra-handoff)"
+# --- агрегированный INFRA-HANDOFF; накопитель пустеет: отданное остаётся в дереве тега ---
+print_handoff
+if grep -qvE '^(# Handoff|_пусто_|[[:space:]]*)$' "$HANDOFF" 2>/dev/null; then
+    printf '# Handoff\n\n_пусто_\n' >"$HANDOFF"
+    if git commit -q -m "meta(handoff): передан с релизом $VERSION" -- "$HANDOFF"; then
+        echo
+        echo "release: накопитель очищен коммитом; отданное — git show $VERSION:$HANDOFF"
+    else
+        echo "release: закоммить очистку $HANDOFF вручную — иначе handoff уйдёт со следующим релизом повторно" >&2
+    fi
 fi
 
-cat <<EOF
-
-Действия инфра-стороны:
-  проект:  в <client-org>/infra — make bump SVC=backend TAG=$VERSION
-           (правит BACKEND_TAG в .env на VPS + force-recreate)
-
-=== STOP. Зона этого репо закрыта (image в registry). Деплой — не здесь. ===
-EOF
+echo
+echo "=== STOP. Зона этого репо закрыта (image в registry). Деплой — не здесь. ==="

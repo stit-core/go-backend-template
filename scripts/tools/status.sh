@@ -113,10 +113,19 @@ fi
 echo
 
 # === Infra-touch === (незакоммиченный diff по инфра-поверхности → infra-handoff)
+# Сигнал без шума: новый домен (таблица, wiring в cmd/, подписчик) инфре ничего не задаёт. Env,
+# конфиг, go.mod и события — всегда; миграция — только с эффектом для выкатки: маркер
+# `-- infra-handoff:` (его требует migrations-check у разрушительного up) или новое расширение.
 echo "== Infra-touch =="
-INFRA_RE='(^|/)\.env\.example|^internal/platform/config/|^migrations/|/events\.go$|/delivery/nats/|^cmd/api/|^cmd/migrate/|^go\.mod$'
+INFRA_RE='(^|/)\.env\.example|^internal/platform/config/|/events\.go$|^go\.mod$'
 # -uall: файлы внутри новых каталогов по одному; $NF — новый путь у переименования.
-INFRA_HITS=$(git status --porcelain -uall 2>/dev/null | awk '{print $NF}' | grep -E "$INFRA_RE" || true)
+CHANGED=$(git status --porcelain -uall 2>/dev/null | awk '{print $NF}')
+INFRA_HITS=$(grep -E "$INFRA_RE" <<<"$CHANGED" || true)
+for f in $(grep -E '^migrations/.*\.up\.sql$' <<<"$CHANGED" || true); do
+    [ -f "$f" ] && grep -qiE '^[[:space:]]*--[[:space:]]*infra-handoff:|create[[:space:]]+extension' "$f" &&
+        INFRA_HITS+=$'\n'"$f"
+done
+INFRA_HITS=$(sed '/^$/d' <<<"$INFRA_HITS")
 if [ -n "$INFRA_HITS" ]; then
     echo "незакоммиченные изменения задевают инфра-поверхность:"
     echo "$INFRA_HITS" | sed 's|^|  |'

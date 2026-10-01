@@ -49,7 +49,7 @@ Reference даёт variant-специфичные шаги; этот ритм о
    `make lint PKG=...`.
 6. **Conventional Commit:** `feat(<scope>): <subject>` (точный scope/subject — в reference).
    Тронул инфра-поверхность (env/секрет/миграция-с-эффектом/cross-service-subject/новый
-   порт/go.mod) → оформи INFRA-HANDOFF (skill `infra-handoff`) до коммита.
+   сетевой порт/go.mod) → оформи INFRA-HANDOFF (skill `infra-handoff`) до коммита.
 
 ## Anti-patterns (общие; variant-специфичные — в reference)
 

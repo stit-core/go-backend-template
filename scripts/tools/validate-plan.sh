@@ -4,14 +4,16 @@
 # Модель:
 #   .claude/plans/<slug>.md  — один активный план: frontmatter (status / parent / blocked-by),
 #                              H1 `# <slug> — <заголовок>`, разделы `## …`;
-#   .claude/plans/backlog.md — кандидаты в работу, по пункту `- **<id>** — …`.
+#   .claude/plans/backlog.md — кандидаты в работу, по пункту `- **<id>** — …`;
+#   .claude/plans/handoff.md — накопитель INFRA-HANDOFF до релиза: `# Handoff` и блоки
+#                              (пустой — `_пусто_`).
 # Закрытый план удаляется — история в git log.
 #
 # Использование:
-#   validate-plan.sh              проверить все планы и бэклог; exit 1 при ошибках
-#   validate-plan.sh <file>...    проверить указанные файлы (план или backlog.md)
+#   validate-plan.sh              проверить все планы, бэклог и накопитель; exit 1 при ошибках
+#   validate-plan.sh <file>...    проверить указанные файлы (план, backlog.md или handoff.md)
 #   validate-plan.sh --summary    сводка для status/smartdev: план · статус · прогресс · следующий шаг
-#   validate-plan.sh --handoff    содержимое разделов `## Handoff` активных планов (для release)
+#   validate-plan.sh --handoff    накопитель и разделы `## Handoff` активных планов (для release)
 #
 # Ошибки ломают формат, на который опираются скрипты и возобновление после /clear.
 # Предупреждения — сигнал к уборке (размер, покрытие критериев, план готов к закрытию).
@@ -28,7 +30,7 @@ declare -a FILES=()
 case "${1:-}" in
   --summary) MODE=summary; shift ;;
   --handoff) MODE=handoff; shift ;;
-  -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
 esac
 if [ "$#" -gt 0 ]; then
   FILES=("$@")
@@ -40,13 +42,15 @@ else
   fi
 fi
 
-# Один проход awk на файл: печатает записи `E|<msg>`, `W|<msg>`, `S|<line>`, `H|<line>`, `B|<n>`.
+# Один проход awk на файл: печатает записи `E|<msg>`, `W|<msg>`, `S|<line>`, `H|<line>`, `B|<n>`,
+# `A|<line>` (строка накопителя).
 check_file() {
   local file=$1 base slug kind
   base=$(basename "$file")
   slug=${base%.md}
   kind=plan
   [ "$base" = "backlog.md" ] && kind=backlog
+  [ "$base" = "handoff.md" ] && kind=handoff
   awk -v KIND="$kind" -v SLUG="$slug" '
 function e(msg) { print "E|" msg }
 function w(msg) { print "W|" msg }
@@ -128,6 +132,13 @@ KIND == "backlog" {
 }
 KIND == "backlog" { next }
 
+KIND == "handoff" {
+  nlines++
+  if (nlines == 1) { if ($0 != "# Handoff") e("первая строка накопителя — «# Handoff»"); next }
+  if (trim($0) != "_пусто_") acc[++nacc] = $0
+  next
+}
+
 # ---- план ----
 { nlines++ }
 nlines == 1 {
@@ -170,6 +181,14 @@ sec == "Handoff" { hand[++nhand] = $0 }
 sec == "Где мы сейчас" && /[^ \t]/ { has_now = 1 }
 
 END {
+  if (KIND == "handoff") {
+    if (nlines == 0) e("файл пуст — первая строка «# Handoff», пустой накопитель — «_пусто_»")
+    first = 1; last = nacc
+    while (first <= last && trim(acc[first]) == "") first++
+    while (last >= first && trim(acc[last]) == "") last--
+    for (i = first; i <= last; i++) print "A|" acc[i]
+    exit
+  }
   if (KIND == "backlog") {
     if (cur_len > 6) w("пункт бэклога «" cur_id "» длиннее 6 строк — это уже план или его надо сжать")
     if (nitems > 30) w("в бэклоге " nitems " пунктов — пора прополоть: неактуальное удалить")
@@ -224,6 +243,7 @@ plans=0
 backlog_items=-1
 summary=""
 handoff=""
+accumulated=""
 report=""
 
 if [ "$#" -eq 0 ] && [ -f "$PLANS_DIR/roadmap.md" ]; then
@@ -239,7 +259,7 @@ for f in "${FILES[@]}"; do
   [ -f "$f" ] || { report+="E $f: файл не найден"$'\n'; errors=$((errors + 1)); continue; }
   case "$(basename "$f")" in roadmap.md) continue ;; esac
   out=$(check_file "$f")
-  [ "$(basename "$f")" = "backlog.md" ] || plans=$((plans + 1))
+  case "$(basename "$f")" in backlog.md | handoff.md) ;; *) plans=$((plans + 1)) ;; esac
   while IFS= read -r rec; do
     [ -n "$rec" ] || continue
     tag=${rec%%|*}
@@ -249,6 +269,7 @@ for f in "${FILES[@]}"; do
       W) report+="W $f: $msg"$'\n'; warnings=$((warnings + 1)) ;;
       S) summary+="$msg"$'\n' ;;
       H) handoff+="$msg"$'\n' ;;
+      A) accumulated+="$msg"$'\n' ;;
       B) backlog_items=$msg ;;
     esac
   done <<< "$out"
@@ -258,10 +279,12 @@ case "$MODE" in
   summary)
     if [ -n "$summary" ]; then printf '%s' "$summary" | sort -t'|' -k1,1n -s | cut -d'|' -f2-; else echo "  none (нет активных планов)"; fi
     [ "$backlog_items" -ge 0 ] && echo "  backlog: $backlog_items"
+    [ -n "$accumulated" ] && echo "  handoff: ждёт релиза — $PLANS_DIR/handoff.md (make release)"
     [ "$errors" -gt 0 ] && echo "  ATTENTION: формат планов — $errors ошибк(и); подробности — проверка планов"
     exit 0
     ;;
   handoff)
+    [ -n "$accumulated" ] && printf -- '--- %s ---\n%s' "$PLANS_DIR/handoff.md" "$accumulated"
     printf '%s' "$handoff"
     exit 0
     ;;

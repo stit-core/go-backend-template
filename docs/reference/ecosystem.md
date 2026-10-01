@@ -54,7 +54,7 @@ sibling-checkout'ами (`../<name>`).
   [release.md](release.md)). `<host>/<org>` выводятся из `git remote get-url origin`: образы уходят
   в container registry той же Gitea, где лежит репо (`git.stit.tech`). `<org>/infra` тянет их из
   registry `REGISTRY_HOST` (дефолт `git.stit.tech`).
-- **INFRA-HANDOFF-блок**: `BACKEND_TAG` + накопленные разделы `## Handoff` активных планов.
+- **INFRA-HANDOFF-блок**: `BACKEND_TAG` + накопитель `.claude/plans/handoff.md` (`make release`).
 - **STOP после `/release`.** Выкатка тега — `make bump SVC=backend TAG=vX.Y.Z` в `<org>/infra`
   (правит `BACKEND_TAG` в `.env` на VPS + force-recreate); откат — тот же `make bump` с предыдущим
   тегом. Деплой-команды (`make bump`, `make ship`, `ssh`) отсюда не запускаются.

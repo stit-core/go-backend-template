@@ -137,7 +137,7 @@ search: ## Поиск по коду (Q=pattern [P=path]) — rg, fallback grep -
 	fi
 
 ##@ RELEASE
-release: ## release VERSION=vX.Y.Z — confirm→check→e2e-smoke→tag→preflight(+doctor)→push lockstep→handoff→STOP
+release: ## release VERSION=vX.Y.Z — confirm→check→e2e-smoke→tag→preflight(+doctor)→push lockstep→handoff→STOP (DRY_RUN=1 — только handoff)
 	@bash scripts/release.sh "$(VERSION)"
 
 ##@ SETUP

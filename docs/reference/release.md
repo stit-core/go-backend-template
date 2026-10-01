@@ -28,9 +28,10 @@ fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвер�
 
 ## INFRA-HANDOFF
 
-`make release` печатает агрегированный блок (`BACKEND_TAG`, накопленные разделы
-`## Handoff` активных планов `.claude/plans/` и команду выкатки `make bump`) —
-что передать в хаб `<org>/infra`. Сам репо `make bump` / `make ship` / `ssh` **не выполняет**.
+`make release` печатает агрегированный блок (`BACKEND_TAG`, накопитель `.claude/plans/handoff.md`
+с разделами `## Handoff` активных планов и команду выкатки `make bump`) — что передать в хаб
+`<org>/infra` — и очищает накопитель коммитом. Заранее, без проверок, тега и образов:
+`make release VERSION=vX.Y.Z DRY_RUN=1`. Сам репо `make bump` / `make ship` / `ssh` **не выполняет**.
 
 ## Handoff (другие репо)
 
