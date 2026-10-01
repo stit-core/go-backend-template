@@ -23,9 +23,11 @@ paths:
   нет: drop колонки откатывается её пересозданием). Держит лесенка up → down → up по каждой
   версии в `make check` (`cmd/migrate/migrate_test.go`). Миграция только данных схему не
   меняет — её `down` может быть `-- noop` + WHY-комментарий.
-- Разрушительный `up` (`DROP`, `TRUNCATE`, `ALTER … TYPE`, `RENAME`) — только со строкой
-  `-- infra-handoff: <что сделать инфре>` в файле и INFRA-HANDOFF-блоком (rule `infra-impact`):
-  выкатке нужен порядок или окно.
+- Миграция с эффектом для выкатки — разрушительная (`DROP`, `TRUNCATE`, `ALTER … TYPE`, `RENAME`),
+  backfill данных, долгий lock, новое расширение — только со строкой
+  `-- infra-handoff: <что сделать инфре>` в `up` и INFRA-HANDOFF-блоком (rule `infra-impact`):
+  выкатке нужен порядок или окно. Разрушительный `up` без строки не пропустит migrations-check, по
+  строке миграцию видит `make status`.
 - **Не правь уже накатившуюся в боевой среде миграцию.** Только новая.
 - `make migrate-up` / `make migrate-down` (нужна `PG_DSN`); `down` откатывает одну миграцию
   приложения, схему китов ведёт golibinfra. Integration-тесты (`make test-int`, шаг
