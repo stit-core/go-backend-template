@@ -1,6 +1,6 @@
 ---
 name: init-service
-description: Оркестратор онбординга форка go-backend-template — проектирование стека (stack-deep-dive) → de-template → scaffold доменов из соседнего `<org>/strategy` → удаление reference-доменов, пока проект не перестанет помнить про шаблон. Используй на свежем форке (module path ещё go-backend-template, reference-домены auth/user/verification на месте) или когда юзер хочет развернуть свой сервис из шаблона. Сам не проектирует и не де-темплейтит — чейнит специализированные скиллы по порядку.
+description: Оркестратор онбординга форка go-backend-template — проектирование стека (stack-deep-dive) → de-template → код доменов из соседнего `<org>/strategy` → удаление reference-доменов, пока проект не перестанет помнить про шаблон. Используй на свежем форке (module path ещё go-backend-template, reference-домены auth/user/verification на месте) или когда юзер хочет развернуть свой сервис из шаблона. Сам не проектирует и не де-темплейтит — чейнит специализированные скиллы по порядку.
 ---
 
 # Skill: init-service (онбординг-оркестратор)
@@ -20,7 +20,8 @@ description: Оркестратор онбординга форка go-backend-t
 
 - Проект уже де-темплейтизирован (свой module path, reference-домены удалены) — это обычный
   день-в-день, иди в `/smartdev`.
-- Юзер хочет добавить домен/endpoint в уже-свой проект — это `scaffold`, не онбординг.
+- Юзер хочет добавить домен или ручку в уже свой проект — не онбординг: маршрут по таблице
+  «Маршрут задачи» (CLAUDE.md).
 
 ## Pre-flight
 
@@ -73,16 +74,17 @@ description: Оркестратор онбординга форка go-backend-t
   `go.mod`, `.env.example`, нужные kit'ы. Механика детерминирована (Phase A); platform/main
   wiring — reviewable diff (Phase B).
 
-### 4. Scaffold спроектированных доменов → `scaffold` (вариант domain)
+### 4. Свои домены — по таблице «Маршрут задачи»
 
-Платформа развёрнута — теперь по каждому **stable**-домену из strategy-репо разверни Go-код:
+Платформа развёрнута — теперь каждый **stable**-домен из strategy-репо идёт в Go-код по таблице
+«Маршрут задачи» (CLAUDE.md):
 
-- **Чейнь в `scaffold` (domain)** per домен: читает
+- Слои домена разворачивает `scaffold` (вариант domain): читает
   `<strategy-path>/docs/projects/<slug>/services/<svc>/domains/<ctx>/` (slug, сервис и strategy-path —
-  из `docs/stack/service.md`), разворачивает слои `internal/domain/<ctx>/`.
+  из `docs/stack/service.md`), разворачивает `internal/domain/<ctx>/`.
   Маппинг секций → код — `docs/reference/domain-mapping.md`.
-- **Инвариант порядка**: scaffold своих доменов идёт **до** удаления reference (этап 5) — иначе
-  потеряешь живой Go-образец.
+- **Инвариант порядка**: свои домены — **до** удаления reference (этап 5), иначе потеряешь живой
+  Go-образец.
 
 ### 5. Удалить reference-домены
 

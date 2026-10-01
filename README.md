@@ -42,7 +42,7 @@ project-infra-template-compose (<org>/infra)   ← хаб проекта: пла
 В Gitea помечен `template: true`. **Полный путь** от форка к своему проекту —
 [`docs/getting-started.md`](docs/getting-started.md): форк → `/init-service` →
 проектирование стека (`docs/stack/`; домены — в соседнем strategy-репо) →
-`/de-template` → scaffold → проект, который ничего не помнит про шаблон.
+`/de-template` → свои домены → проект, который ничего не помнит про шаблон.
 
 Быстрый старт (чтобы собралось):
 

@@ -21,7 +21,7 @@
 ## 1. `/init-service`
 
 Скилл-оркестратор ведёт весь онбординг: домены — **готовый вход** из соседнего strategy-репо;
-он проектирует стек, скаффолдит домены в код и в конце де-темплейтит + прунит reference.
+он ведёт проектирование стека, код доменов и в конце де-темплейт с удалением reference.
 Дальше шаги 2–7 — под его управлением.
 
 ## 2. Домены — уже спроектированы (в соседнем strategy-репо)
@@ -52,11 +52,12 @@
 - Гибрид: механика (module path, README, env, prune, strip шаблонной мета) —
   детерминирована; platform/main wiring — reviewable diff поверх скелета.
 
-## 5. Сгенерируй свои домены — `/scaffold` (вариант domain)
+## 5. Свои домены — по таблице «Маршрут задачи»
 
-По каждому stable-домену из strategy-репо разверни Go-код: `/scaffold domain <name>` читает
+Каждый stable-домен из strategy-репо идёт в Go-код по таблице «Маршрут задачи» (`CLAUDE.md`). Слои
+домена разворачивает `/scaffold` (вариант domain): читает
 `../strategy/docs/projects/<slug>/services/<svc>/domains/<ctx>/` (slug, сервис и strategy-path — из
-`docs/stack/service.md`) и разворачивает слои `internal/domain/<ctx>/`. Маппинг секций артефакта → код —
+`docs/stack/service.md`) и разворачивает `internal/domain/<ctx>/`. Маппинг секций артефакта → код —
 [reference/domain-mapping.md](reference/domain-mapping.md). Делай это **до** удаления reference
 (шаг 6) — иначе теряешь живой Go-образец.
 

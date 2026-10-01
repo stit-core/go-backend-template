@@ -81,7 +81,8 @@ blocked-by: —
   остальные места ссылаются на него, противоречий нет. Проверка: прочитать CLAUDE.md, скиллы
   plan, scaffold, smartdev, triage-failure → одна таблица и ссылки на неё
   - Подтверждено: таблица — CLAUDE.md § Маршрут задачи; plan, scaffold (и его references),
-    smartdev, triage-failure, `docs/contributing.md` своих критериев не держат — ссылаются на неё
+    smartdev, triage-failure, онбординг (init-service, de-template, `docs/getting-started.md`) и
+    `docs/contributing.md` своих критериев не держат — ссылаются на неё
 - [x] **AC2** — Автогружаемые правила содержат инварианты аудита: тонкий хендлер, нет логики в
   SQL, репозиториях и адаптерах, тест проверяет поведение, публичная ручка — только явно, policy
   на каждом пользовательском методе usecase, никаких токенов и PII в логах и outbox; каждый
