@@ -102,6 +102,9 @@ func TestHTTPOperations(t *testing.T) {
 		routes[route] = op.OperationID
 		switch {
 		case len(op.Security) > 0:
+			if resp := op.Responses["401"]; resp == nil || !strings.Contains(resp.Description, "AUTH_ACCESS_EXPIRED") {
+				t.Errorf("operation %s is under Security without the session 401 codes in OpenAPI: register it through authgate.Secured", op.OperationID)
+			}
 		case slices.Contains(publicOperations, op.OperationID):
 			public = append(public, op.OperationID)
 		default:

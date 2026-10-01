@@ -30,43 +30,55 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
 )
 
-// hookOrder — порядок хуков старта и остановки: кто добавил каждый хук (caller), по событиям fx,
-// которые logkit.FxLogger пишет в лог сервиса уровнем DEBUG.
-type hookOrder struct {
-	mu          sync.Mutex
-	start, stop []string
+// serviceLog — что тест читает из лога сервиса: порядок хуков старта и остановки (кто добавил
+// хук — caller — по событиям fx, которые logkit.FxLogger пишет уровнем DEBUG) и request_id строк
+// handler error (причина 5xx).
+type serviceLog struct {
+	mu                         sync.Mutex
+	start, stop, handlerErrors []string
 }
 
-// Тексты событий хуков fxevent.SlogLogger, по которым hookOrder их узнаёт.
+// Тексты событий хуков fxevent.SlogLogger, по которым serviceLog их узнаёт.
 const (
 	onStartExecuting = "OnStart hook executing"
 	onStopExecuting  = "OnStop hook executing"
 )
 
-func (h *hookOrder) Handle(_ context.Context, r slog.Record) error {
-	var hooks *[]string
+func (h *serviceLog) Handle(ctx context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	switch r.Message {
 	case onStartExecuting:
-		hooks = &h.start
+		h.start = append(h.start, attr(r, "caller"))
 	case onStopExecuting:
-		hooks = &h.stop
-	default:
-		return nil
+		h.stop = append(h.stop, attr(r, "caller"))
+	case "handler error":
+		h.handlerErrors = append(h.handlerErrors, httpkit.RequestIDFrom(ctx))
 	}
-	r.Attrs(func(a slog.Attr) bool {
-		if a.Key == "caller" {
-			h.mu.Lock()
-			defer h.mu.Unlock()
-			*hooks = append(*hooks, a.Value.String())
-		}
-		return true
-	})
 	return nil
 }
 
-func (h *hookOrder) Enabled(context.Context, slog.Level) bool { return true }
-func (h *hookOrder) WithAttrs([]slog.Attr) slog.Handler       { return h }
-func (h *hookOrder) WithGroup(string) slog.Handler            { return h }
+// logged5xx — причина 5xx с этим request_id дошла до лога; запись идёт из горутины сервера.
+func (h *serviceLog) logged5xx(requestID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return slices.Contains(h.handlerErrors, requestID)
+}
+
+func (h *serviceLog) Enabled(context.Context, slog.Level) bool { return true }
+func (h *serviceLog) WithAttrs([]slog.Attr) slog.Handler       { return h }
+func (h *serviceLog) WithGroup(string) slog.Handler            { return h }
+
+func attr(r slog.Record, key string) string {
+	var v string
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			v = a.Value.String()
+		}
+		return v == ""
+	})
+	return v
+}
 
 // TestBoot поднимает сервис набором опций main поверх Postgres и NATS в контейнерах:
 // конструкторы, Invoke и хуки выполняются по-настоящему, чего fx.ValidateApp не делает.
@@ -82,14 +94,14 @@ func TestBoot(t *testing.T) {
 		t.Setenv(k, v)
 	}
 
-	hooks := &hookOrder{}
+	logs := &serviceLog{}
 	var (
 		srv        *httpkit.Server
 		kitSources []pgkit.Source
 	)
 	app := fxtest.New(t, service,
-		// Тройник лога сервиса: события fx доходят до hooks, только если service пишет их в logkit.
-		fx.Decorate(func(l *slog.Logger) *slog.Logger { return slog.New(slog.NewMultiHandler(l.Handler(), hooks)) }),
+		// Тройник лога сервиса: события fx доходят до logs, только если service пишет их в logkit.
+		fx.Decorate(func(l *slog.Logger) *slog.Logger { return slog.New(slog.NewMultiHandler(l.Handler(), logs)) }),
 		fx.Populate(&srv),
 		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
 	app.RequireStart()
@@ -187,14 +199,32 @@ func TestBoot(t *testing.T) {
 		}
 	}
 
+	// 5xx — без причины и с request_id, причина — в лог сервиса с тем же request_id.
+	_, err = db.Exec(t.Context(), `ALTER TABLE users RENAME TO users_offline`)
+	require.NoError(t, err)
+	req, err = http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/api/users/me", nil)
+	require.NoError(t, err)
+	resp, err = user.Do(req)
+	require.NoError(t, err)
+	var internal httpkit.APIError
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&internal))
+	require.NoError(t, resp.Body.Close())
+	_, err = db.Exec(t.Context(), `ALTER TABLE users_offline RENAME TO users`)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.Equal(t, "INTERNAL", internal.Code)
+	require.Empty(t, internal.Detail, "a 5xx carries no cause")
+	require.NotEmpty(t, internal.RequestID)
+	require.True(t, logs.logged5xx(internal.RequestID), "the cause is in the service log under the request_id of the response")
+
 	app.RequireStop()
 	const noHookEvents = "no %q events in the service log: service does not set logkit.FxLogger, or fx renamed this fxevent.SlogLogger message"
-	require.NotEmpty(t, hooks.start, noHookEvents, onStartExecuting)
-	require.NotEmpty(t, hooks.stop, noHookEvents, onStopExecuting)
+	require.NotEmpty(t, logs.start, noHookEvents, onStartExecuting)
+	require.NotEmpty(t, logs.stop, noHookEvents, onStopExecuting)
 	// Запросы в полёте держат всё, что стартовало раньше HTTP: сервер слушает последним и гасится первым.
 	const httpServe = "git.stit.tech/stit-core/golibinfra/httpkit.serve"
-	require.Equal(t, httpServe, hooks.start[len(hooks.start)-1], "HTTP must start last (OnStart: %v)", hooks.start)
-	require.Equal(t, httpServe, hooks.stop[0], "HTTP must stop first (OnStop: %v)", hooks.stop)
+	require.Equal(t, httpServe, logs.start[len(logs.start)-1], "HTTP must start last (OnStart: %v)", logs.start)
+	require.Equal(t, httpServe, logs.stop[0], "HTTP must stop first (OnStop: %v)", logs.stop)
 }
 
 func sourceNames(srcs []pgkit.Source) []string {

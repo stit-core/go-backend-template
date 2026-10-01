@@ -96,7 +96,7 @@
 | Steps | последовательность вызовов внутри метода `Usecase` |
 | Called aggregate methods | вызовы методов на entity внутри метода Usecase |
 | Events emitted | `outboxkit.Publisher` + struct из `events.go`, в одной транзакции с persist |
-| Errors | sentinel-ошибки из `errors.go`; маппинг на HTTP — в `delivery/http/handler.go` (errMapping) |
+| Errors | sentinel-ошибки из `errors.go`; маппинг на HTTP — таблица `httpkit.ErrorMap` операции в `delivery/http/handler.go` (architecture.md § Контракт ошибок API) |
 | Side effects beyond aggregate | external clients (email, billing) — через отдельные ports, инжектируются |
 
 ## Policy

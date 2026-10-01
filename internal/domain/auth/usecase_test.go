@@ -307,6 +307,9 @@ func TestLogin(t *testing.T) {
 
 		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "p"})
 		require.ErrorIs(t, err, auth.ErrAccountLocked)
+		var locked *auth.LockedError
+		require.ErrorAs(t, err, &locked)
+		require.Equal(t, 15*time.Minute, locked.RetryAfter(), "retry when the lock ends")
 		require.True(t, f.audit.Has("login_locked"))
 	})
 }

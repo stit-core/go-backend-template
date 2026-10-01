@@ -9,7 +9,7 @@
 - [contributing.md](contributing.md) — как устроена `.claude`-система (rules/skills/settings), что enforce'ится, как вмешаться, troubleshooting. **[META]**.
 
 ## Reference (переезжает в проект)
-- [reference/architecture.md](reference/architecture.md) — слои домена, ports/adapters, fx, outbox, non-goals, граница с golibinfra.
+- [reference/architecture.md](reference/architecture.md) — слои домена, ports/adapters, fx, контракт ошибок API, outbox, non-goals, граница с golibinfra.
 - [reference/domain-mapping.md](reference/domain-mapping.md) — как DDD-артефакт (из соседнего strategy-репо) ложится в Go-код этого репо; потребляет `scaffold`.
 - [reference/release.md](reference/release.md) — релиз образов, handoff в infra, откат, версионирование.
 - [reference/ecosystem.md](reference/ecosystem.md) — роль репо и соседи, как сюда приходят агенты (из хаба `<org>/infra` или прямым заходом), что репо отдаёт и берёт, контракт с `<org>/infra`.

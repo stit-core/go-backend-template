@@ -190,8 +190,30 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 
 Операции всех доменов регистрирует одна функция — `registerHTTP` в `cmd/api/http.go`; по ней
 же `cmd/api/api_test.go` собирает API без БД и брокера и проверяет: у каждой операции
-`Security` или место в `publicOperations` (операция без `Security` публична в рантайме), пара
-метод+путь уникальна (huma и chi молча перезаписывают маршрут), дубль `OperationID` — паника.
+`Security` (с кодами 401 сессии) или место в `publicOperations` (операция без `Security` публична
+в рантайме), пара метод+путь уникальна (huma и chi молча перезаписывают маршрут), дубль
+`OperationID` — паника.
+
+## Контракт ошибок API
+
+Ответ-ошибка — `httpkit.APIError` (problem+json, RFC 9457): машинный `code`, `request_id`, у 422 —
+`errors[]` полей; 5xx — без причины, она в логе сервиса с тем же `request_id` (контракт кита).
+
+- Доменную ошибку переводит таблица `httpkit.ErrorMap` **операции**: `Map` — в хендлере,
+  `Declare` — при регистрации (статусы и коды — в `openapi.json`); правило, общее для операций, —
+  переменная `delivery/http`. Операция без доменных ошибок таблицы не заводит.
+- Код — `<DOMAIN>_<WHAT>`; одна ошибка в разных операциях значит разное: неверный пароль входа —
+  401, смены пароля — 422 поля `body.old_password` (сессия цела).
+- Ошибка поля — 422 с `Field`: та же форма, что у валидации huma.
+- 401 `UNAUTHORIZED` (нет или битый cookie) и 401 refresh — «войти заново», 401
+  `AUTH_ACCESS_EXPIRED` — «обновить сессию» (`POST /api/auth/refresh`), 403 `FORBIDDEN` — «нет
+  прав». Операцию под cookie регистрирует `authgate.Secured(op)`: Security и коды 401 сессии в
+  OpenAPI.
+- 409 — свой код конфликта у каждой причины; 429 — `Retry-After` из `RetryAfter()` ошибки в цепочке
+  (`auth.LockedError`).
+- Полнота: `errors_test.go` в `delivery/http` — ошибки usecase каждой операции есть в её таблице,
+  внутренние ошибки домена (их переводит usecase) — списком; archtest `TestDomainErrorsReachHTTP`
+  сверяет оба списка с `errors.go`.
 
 ## События и messaging
 

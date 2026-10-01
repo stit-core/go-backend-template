@@ -74,7 +74,7 @@ type UserNewMethodOutput struct {
 func (h *Handler) newMethod(ctx context.Context, in *UserNewMethodInput) (*UserNewMethodOutput, error) {
     res, err := h.uc.NewMethod(ctx, /* mapping */)
     if err != nil {
-        return nil, userErrors.Map(err)
+        return nil, newMethodErrors.Map(err)
     }
     out := &UserNewMethodOutput{}
     out.Body.Data.FromEntity(res)
@@ -85,37 +85,51 @@ func (h *Handler) newMethod(ctx context.Context, in *UserNewMethodInput) (*UserN
 ### 6. Зарегистрировать в `Register`
 
 ```go
-huma.Register(api, huma.Operation{
+huma.Register(api, newMethodErrors.Declare(authgate.Secured(huma.Operation{
     OperationID:   "newMethod",
     Method:        http.MethodPost,
     Path:          "/api/users/{id}/...",
     Tags:          []string{"users"},
-    Security:      []map[string][]string{{"Cookie": {}}},  // если требуется auth (схема authgate.SecuritySchemeName)
-    DefaultStatus: http.StatusOK,                           // или 201/204
+    DefaultStatus: http.StatusOK, // или 201/204
     Summary:       "Краткое описание для OpenAPI",
-}, h.newMethod)
+})), h.newMethod)
 ```
 
-### 7. Error mapping
+`authgate.Secured` — операция под cookie: `Security` и коды 401 сессии в OpenAPI. Публичная
+операция — без него и в `publicOperations` (`cmd/api/api_test.go`).
 
-Если usecase возвращает новые sentinel-ошибки — добавь правила в таблицу домена
-(`httpkit.NewErrorMap` в `handler.go`, например `userErrors`):
+### 7. Таблица ошибок операции
+
+Ошибки, которые отдаёт usecase операции, переводит её таблица (`httpkit.NewErrorMap` в
+`handler.go`): `Map` — в хендлере, `Declare` — при регистрации (статусы и коды — в `openapi.json`).
+Правило, общее для операций (`notFoundRule`, `authgate.ForbiddenRule`), — переменная пакета:
 
 ```go
-httpkit.ErrorRule{Err: user.ErrXyz, Status: http.StatusBadRequest, Code: "USER_XYZ", Detail: "..."},
+var newMethodErrors = httpkit.NewErrorMap(
+    notFoundRule,
+    httpkit.ErrorRule{Err: user.ErrXyz, Status: http.StatusConflict, Code: "USER_XYZ", Detail: "..."},
+    authgate.ForbiddenRule,
+)
 ```
 
-Первое совпавшее правило выигрывает; правило, которое затеняет правило выше, — panic при сборке.
-Отказ policy (`policy.ForbiddenError`) мапит общее правило `authgate.ForbiddenRule` — оно уже в
-таблице домена, не дублируй.
+- Код — `<DOMAIN>_<WHAT>`; ошибка поля запроса — 422 с `Field: "body.<field>"`.
+- 429 — `Retry-After` из метода `RetryAfter() time.Duration` ошибки в цепочке (`auth.LockedError`).
+- Первое совпавшее правило выигрывает; правило, которое затеняет правило выше, — panic при сборке.
+- Операция без доменных ошибок таблицы не заводит: несопоставленная ошибка — 500 без причины.
 
-### 8. Тест в `handler_test.go`
+Контракт ошибок целиком — `docs/reference/architecture.md` § Контракт ошибок API.
 
-Минимум:
+### 8. Тесты
+
+`handler_test.go`, минимум:
 - Happy path (201/200)
 - Forbidden (мок usecase возвращает `&policy.ForbiddenError{…}` → 403)
-- Validation error (huma сам отдаёт 422 / 400)
-- Один specific error mapping (например, `ErrAlreadyExists` → 409)
+- Validation error (huma сам отдаёт 422)
+- Каждый код таблицы операции (`handlertest.AssertAPIError`)
+
+`errors_test.go` (white-box) — строка операции в `TestErrorMaps`: ошибки её usecase → таблица
+(`Unmapped` пуст). Новая ошибка домена, которая до HTTP не доходит, — в `internalErrors`; archtest
+`TestDomainErrorsReachHTTP` сверяет оба списка с `errors.go`.
 
 Используй `MockUsecase` (уже регенерирован после шага 3).
 

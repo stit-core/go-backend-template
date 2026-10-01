@@ -1,8 +1,8 @@
 // Package archtest машинно держит границы и слоевые инварианты доменов (rule
 // domain-architecture) для любого каталога internal/domain/*: импорты между доменами и
 // слоями, чистоту корня домена, адаптеры и таблицы между доменами, привязку портов без fx.As,
-// префикс, уникальность и envelope HTTP-типов, владение subject-литералами, запрет time.Now() и
-// тестов без утверждений. На archtest //nolint не действует.
+// префикс, уникальность и envelope HTTP-типов, ошибки домена в HTTP-контракте, владение
+// subject-литералами, запрет time.Now() и тестов без утверждений. На archtest //nolint не действует.
 package archtest
 
 import (
@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -105,7 +106,8 @@ func parseGo(t *testing.T, rel string) *ast.File {
 	return f
 }
 
-// importsByName — пакеты файла по имени, под которым файл их видит: алиас, "." или элемент пути.
+// importsByName — пакеты файла по имени, под которым файл их видит: алиас, "." или элемент пути
+// (у модуля v2+ — элемент перед версией: github.com/danielgtaylor/huma/v2 — huma).
 func importsByName(f *ast.File) map[string]string {
 	byName := map[string]string{}
 	for _, imp := range f.Imports {
@@ -114,13 +116,18 @@ func importsByName(f *ast.File) map[string]string {
 			continue
 		}
 		name := path.Base(p)
-		if imp.Name != nil {
+		switch {
+		case imp.Name != nil:
 			name = imp.Name.Name
+		case majorVersion.MatchString(name):
+			name = path.Base(path.Dir(p))
 		}
 		byName[name] = p
 	}
 	return byName
 }
+
+var majorVersion = regexp.MustCompile(`^v([2-9]|[1-9][0-9]+)$`)
 
 // splitDomain разбирает путь пакета от корня репо на домен и подпакет:
 // internal/domain/user/infra/postgres → "user", "infra/postgres", true.
@@ -198,6 +205,60 @@ func structField(expr ast.Expr, name string) *ast.Field {
 		}
 	}
 	return nil
+}
+
+// TestDomainErrorsReachHTTP: каждая ошибка домена, который регистрирует HTTP-операции, названа в его
+// delivery/http — правилом таблицы ошибок операции или в списке внутренних ошибок теста полноты:
+// новая ошибка не уходит клиенту 500 незамеченной.
+func TestDomainErrorsReachHTTP(t *testing.T) {
+	t.Parallel()
+	named := map[string]map[string]bool{} // домен → ошибки, названные в его delivery/http
+	registers := map[string]bool{}        // домен регистрирует операции huma
+	for _, f := range goFiles(t) {
+		domain, sub, ok := splitDomain(f.pkg)
+		if !ok || sub != "delivery/http" {
+			continue
+		}
+		file := parseGo(t, f.path)
+		byName := importsByName(file)
+		if named[domain] == nil {
+			named[domain] = map[string]bool{}
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if id, ok := sel.X.(*ast.Ident); ok {
+				switch pkg := byName[id.Name]; {
+				case pkg == module+"/internal/domain/"+domain && strings.HasPrefix(sel.Sel.Name, "Err"):
+					named[domain][sel.Sel.Name] = true
+				case pkg == "github.com/danielgtaylor/huma/v2" && sel.Sel.Name == "Register" && !f.test:
+					registers[domain] = true
+				}
+			}
+			return true
+		})
+	}
+	for domain, names := range named {
+		if !registers[domain] {
+			continue
+		}
+		path := "internal/domain/" + domain + "/errors.go"
+		for _, decl := range parseGo(t, path).Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.VAR {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				for _, id := range spec.(*ast.ValueSpec).Names {
+					if strings.HasPrefix(id.Name, "Err") && !names[id.Name] {
+						t.Errorf("%s declares %s, but internal/domain/%s/delivery/http names it neither in an operation's error table nor among the internal errors of its completeness test", path, id.Name, domain)
+					}
+				}
+			}
+		}
+	}
 }
 
 // TestSubjectLiteralOwnership: литерал "<domain>.events." встречается только в

@@ -34,8 +34,10 @@ paths:
   `time.Now()` запрещён.
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
-  Операция без `Security` публична в рантайме: она либо под `Security`, либо в
-  `publicOperations` (`cmd/api/api_test.go`); регистрация — в `registerHTTP` (`cmd/api/http.go`).
+  Операция без `Security` публична в рантайме: она либо под `Security` (`authgate.Secured(op)`),
+  либо в `publicOperations` (`cmd/api/api_test.go`); регистрация — в `registerHTTP`
+  (`cmd/api/http.go`). Ошибки — таблица `httpkit.ErrorMap` операции: `Map` в хендлере, `Declare`
+  при регистрации, полнота — `delivery/http/errors_test.go` (archtest); ошибка поля — 422 с `Field`.
   Каждая ручка — операция huma в контракте `openapi.json`: сырой маршрут chi (`Router()`) и
   `Hidden: true` обходят проверку `Security`, `TestBoot` их не пускает. Envelope — `data`;
   префикс, уникальность имён и envelope держит archtest `TestHTTPTypes`.

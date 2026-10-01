@@ -1,6 +1,9 @@
 package auth
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 var (
 	ErrInvalidCredentials = errors.New("auth: invalid credentials")
@@ -13,3 +16,11 @@ var (
 	ErrUserNotFound       = errors.New("auth: user not found")
 	ErrConcurrentUpdate   = errors.New("auth: concurrent update")
 )
+
+// LockedError — вход заблокирован guard'ом (errors.Is — ErrAccountLocked); Wait — до снятия
+// блокировки, его отдаёт заголовок Retry-After.
+type LockedError struct{ Wait time.Duration }
+
+func (e *LockedError) Error() string             { return ErrAccountLocked.Error() }
+func (e *LockedError) Unwrap() error             { return ErrAccountLocked }
+func (e *LockedError) RetryAfter() time.Duration { return e.Wait }

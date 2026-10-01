@@ -32,50 +32,59 @@ func Register(api huma.API, h *Handler) {
 		Summary:       "Запрос сброса пароля",
 	}, h.requestPasswordReset)
 
-	huma.Register(api, huma.Operation{
+	huma.Register(api, confirmPasswordResetErrors.Declare(huma.Operation{
 		OperationID:   "confirmPasswordReset",
 		Method:        http.MethodPost,
 		Path:          "/api/auth/password-reset/confirm",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Подтверждение сброса пароля",
-	}, h.confirmPasswordReset)
+	}), h.confirmPasswordReset)
 
-	huma.Register(api, huma.Operation{
+	huma.Register(api, confirmEmailErrors.Declare(huma.Operation{
 		OperationID:   "confirmEmail",
 		Method:        http.MethodPost,
 		Path:          "/api/auth/email-verify",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Подтверждение email",
-	}, h.confirmEmail)
+	}), h.confirmEmail)
 }
 
+// requestPasswordReset: доменных ошибок нет — отсутствие учётной записи неотличимо от успеха.
 func (h *Handler) requestPasswordReset(ctx context.Context, in *VerificationPasswordResetRequestInput) (*struct{}, error) {
 	if err := h.uc.RequestPasswordReset(ctx, in.Body.Email); err != nil {
-		return nil, verificationErrors.Map(err)
+		return nil, err
 	}
 	return nil, nil
 }
 
 func (h *Handler) confirmPasswordReset(ctx context.Context, in *VerificationPasswordResetConfirmInput) (*struct{}, error) {
 	if err := h.uc.ConfirmPasswordReset(ctx, in.Body.Token, in.Body.Password); err != nil {
-		return nil, verificationErrors.Map(err)
+		return nil, confirmPasswordResetErrors.Map(err)
 	}
 	return nil, nil
 }
 
 func (h *Handler) confirmEmail(ctx context.Context, in *VerificationEmailVerifyInput) (*struct{}, error) {
 	if err := h.uc.ConfirmEmail(ctx, in.Body.Token); err != nil {
-		return nil, verificationErrors.Map(err)
+		return nil, confirmEmailErrors.Map(err)
 	}
 	return nil, nil
 }
 
-var verificationErrors = httpkit.NewErrorMap(
-	httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "invalid or expired reset token"},
-	httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "invalid or expired verification token"},
-	httpkit.ErrorRule{Err: verification.ErrTokenUsed, Status: http.StatusConflict, Code: "VERIFICATION_TOKEN_USED", Detail: "token already used"},
-	httpkit.ErrorRule{Err: verification.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "VERIFICATION_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"},
-	httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"},
+// Таблица операции — правила того, что отдаёт её usecase (полноту держит тест).
+var (
+	tokenUsedRule = httpkit.ErrorRule{Err: verification.ErrTokenUsed, Status: http.StatusConflict, Code: "VERIFICATION_TOKEN_USED", Detail: "token already used"}
+
+	confirmPasswordResetErrors = httpkit.NewErrorMap(
+		httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"},
+		httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "invalid or expired reset token"},
+		tokenUsedRule,
+		httpkit.ErrorRule{Err: verification.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "VERIFICATION_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"},
+	)
+	confirmEmailErrors = httpkit.NewErrorMap(
+		httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "invalid or expired verification token"},
+		tokenUsedRule,
+	)
 )

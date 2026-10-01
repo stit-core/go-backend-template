@@ -26,7 +26,7 @@ func (e *Extractor) Extract(r *http.Request) (context.Context, error) {
 
 	claims, err := e.parser.ParseAccess(r.Context(), token)
 	if err != nil {
-		return r.Context(), fmt.Errorf("authgate: parse jwt: %w", err)
+		return r.Context(), SessionErrors.Map(fmt.Errorf("authgate: parse jwt: %w", err))
 	}
 
 	sub, _ := claims["sub"].(string)

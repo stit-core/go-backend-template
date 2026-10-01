@@ -66,6 +66,20 @@ func TestRegister_WeakPassword(t *testing.T) {
 	require.Equal(t, "body.password", errs[0].Location)
 }
 
+// Домен проверяет email строже формата схемы: его отказ — та же форма ошибки поля.
+func TestRegister_InvalidEmail(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrInvalidEmail)
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/register", strings.NewReader(registerBody(strings.Repeat("p", policy.MinPasswordLen))))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "USER_INVALID_EMAIL")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.email", errs[0].Location)
+}
+
 // Правило длины пароля — policy.MinPasswordLen; схема register отклоняет короче его до usecase.
 func TestRegister_ShortPassword(t *testing.T) {
 	t.Parallel()

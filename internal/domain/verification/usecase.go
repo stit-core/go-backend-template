@@ -208,7 +208,11 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
 			return err
 		}
-		return uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version)
+		err := uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version)
+		if errors.Is(err, ErrUserNotFound) {
+			return ErrInvalidResetToken // токен удалённого пользователя
+		}
+		return err
 	}); err != nil {
 		if errors.Is(err, ErrTokenUsed) {
 			uc.d.Metrics.RecordPasswordResetConfirmed(ctx, resultAlreadyUsed)

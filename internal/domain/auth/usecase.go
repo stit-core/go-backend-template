@@ -93,7 +93,7 @@ func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, err
 	} else if lock != nil {
 		uc.writeLoginFailedAudit(ctx, in.Email, "login_locked", "locked")
 		uc.d.Metrics.RecordLogin(ctx, resultLocked)
-		return nil, ErrAccountLocked
+		return nil, &LockedError{Wait: lock.Until.Sub(uc.d.Clock.Now())}
 	}
 
 	u, err := uc.d.Users.GetByEmail(ctx, in.Email)

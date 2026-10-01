@@ -28,60 +28,55 @@ type Handler struct {
 func NewHandler(uc Usecase) *Handler { return &Handler{uc: uc} }
 
 func Register(api huma.API, h *Handler) {
-	huma.Register(api, huma.Operation{
+	huma.Register(api, registerErrors.Declare(huma.Operation{
 		OperationID:   "registerUser",
 		Method:        http.MethodPost,
 		Path:          "/api/auth/register",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusCreated,
 		Summary:       "Регистрация нового пользователя",
-	}, h.register)
+	}), h.register)
 
-	huma.Register(api, huma.Operation{
+	huma.Register(api, meErrors.Declare(authgate.Secured(huma.Operation{
 		OperationID: "getMe",
 		Method:      http.MethodGet,
 		Path:        "/api/users/me",
 		Tags:        []string{"users"},
-		Security:    []map[string][]string{{"Cookie": {}}},
 		Summary:     "Текущий пользователь",
-	}, h.me)
+	})), h.me)
 
-	huma.Register(api, huma.Operation{
+	huma.Register(api, listErrors.Declare(authgate.Secured(huma.Operation{
 		OperationID: "listUsers",
 		Method:      http.MethodGet,
 		Path:        "/api/users",
 		Tags:        []string{"users"},
-		Security:    []map[string][]string{{"Cookie": {}}},
 		Summary:     "Список пользователей (admin)",
-	}, h.list)
+	})), h.list)
 
-	huma.Register(api, huma.Operation{
+	huma.Register(api, getErrors.Declare(authgate.Secured(huma.Operation{
 		OperationID: "getUser",
 		Method:      http.MethodGet,
 		Path:        "/api/users/{id}",
 		Tags:        []string{"users"},
-		Security:    []map[string][]string{{"Cookie": {}}},
 		Summary:     "Получить пользователя по ID",
-	}, h.getByID)
+	})), h.getByID)
 
-	huma.Register(api, huma.Operation{
+	huma.Register(api, updateErrors.Declare(authgate.Secured(huma.Operation{
 		OperationID: "updateUser",
 		Method:      http.MethodPatch,
 		Path:        "/api/users/{id}",
 		Tags:        []string{"users"},
-		Security:    []map[string][]string{{"Cookie": {}}},
 		Summary:     "Обновить пользователя",
-	}, h.update)
+	})), h.update)
 
-	huma.Register(api, huma.Operation{
+	huma.Register(api, deleteErrors.Declare(authgate.Secured(huma.Operation{
 		OperationID:   "deleteUser",
 		Method:        http.MethodDelete,
 		Path:          "/api/users/{id}",
 		Tags:          []string{"users"},
-		Security:      []map[string][]string{{"Cookie": {}}},
 		Summary:       "Удалить пользователя (soft-delete)",
 		DefaultStatus: http.StatusNoContent,
-	}, h.delete)
+	})), h.delete)
 }
 
 func (h *Handler) register(ctx context.Context, in *UserRegisterInput) (*UserRegisterOutput, error) {
@@ -91,7 +86,7 @@ func (h *Handler) register(ctx context.Context, in *UserRegisterInput) (*UserReg
 		Name:     in.Body.Name,
 	})
 	if err != nil {
-		return nil, userErrors.Map(err)
+		return nil, registerErrors.Map(err)
 	}
 	out := &UserRegisterOutput{}
 	out.Body.Data.FromEntity(u)
@@ -101,7 +96,7 @@ func (h *Handler) register(ctx context.Context, in *UserRegisterInput) (*UserReg
 func (h *Handler) getByID(ctx context.Context, in *UserGetInput) (*UserGetOutput, error) {
 	u, err := h.uc.GetByID(ctx, in.ID)
 	if err != nil {
-		return nil, userErrors.Map(err)
+		return nil, getErrors.Map(err)
 	}
 	out := &UserGetOutput{}
 	out.Body.Data.FromEntity(u)
@@ -111,7 +106,7 @@ func (h *Handler) getByID(ctx context.Context, in *UserGetInput) (*UserGetOutput
 func (h *Handler) me(ctx context.Context, _ *struct{}) (*UserMeOutput, error) {
 	u, err := h.uc.Me(ctx)
 	if err != nil {
-		return nil, userErrors.Map(err)
+		return nil, meErrors.Map(err)
 	}
 	out := &UserMeOutput{}
 	out.Body.Data.FromEntity(u)
@@ -127,7 +122,7 @@ func (h *Handler) list(ctx context.Context, in *UserListInput) (*UserListOutput,
 
 	list, total, err := h.uc.List(ctx, filter, in.Page)
 	if err != nil {
-		return nil, userErrors.Map(err)
+		return nil, listErrors.Map(err)
 	}
 
 	out := &UserListOutput{}
@@ -148,7 +143,7 @@ func (h *Handler) update(ctx context.Context, in *UserUpdateInput) (*UserUpdateO
 		Version: in.Body.Version,
 	})
 	if err != nil {
-		return nil, userErrors.Map(err)
+		return nil, updateErrors.Map(err)
 	}
 	out := &UserUpdateOutput{}
 	out.Body.Data.FromEntity(u)
@@ -157,19 +152,29 @@ func (h *Handler) update(ctx context.Context, in *UserUpdateInput) (*UserUpdateO
 
 func (h *Handler) delete(ctx context.Context, in *UserDeleteInput) (*struct{}, error) {
 	if err := h.uc.Delete(ctx, in.ID); err != nil {
-		return nil, userErrors.Map(err)
+		return nil, deleteErrors.Map(err)
 	}
 	return nil, nil
 }
 
-var userErrors = httpkit.NewErrorMap(
-	httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"},
-	httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusBadRequest, Code: "USER_INVALID_EMAIL", Detail: "invalid email"},
-	httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusBadRequest, Code: "USER_INVALID_ROLE", Detail: "invalid role"},
-	httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"},
-	httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"},
-	httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"},
-	httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"},
-	httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "status transition is not allowed"},
-	authgate.ForbiddenRule,
+// Правила ошибок домена; таблица операции — правила того, что отдаёт её usecase (полноту держит тест).
+var (
+	notFoundRule = httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"}
+
+	registerErrors = httpkit.NewErrorMap(
+		httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"},
+		httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_EMAIL", Detail: "invalid email", Field: "body.email"},
+		httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"},
+	)
+	meErrors     = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
+	listErrors   = httpkit.NewErrorMap(authgate.ForbiddenRule)
+	getErrors    = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
+	updateErrors = httpkit.NewErrorMap(
+		notFoundRule,
+		httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"},
+		httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"},
+		httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "status transition is not allowed"},
+		authgate.ForbiddenRule,
+	)
+	deleteErrors = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
 )

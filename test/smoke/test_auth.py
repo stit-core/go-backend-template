@@ -127,7 +127,7 @@ def test_change_password(
     uid = api.me().id
     new_password = "new-pass-123456"
 
-    # неверный old → 401
+    # неверный old → 422 поля old_password: сессия цела, входить заново не нужно
     assert (
         api.status(
             "POST",
@@ -138,7 +138,7 @@ def test_change_password(
                 "new_password": new_password,
             },
         )
-        == 401
+        == 422
     )
     # верный old → 204
     api.change_password(

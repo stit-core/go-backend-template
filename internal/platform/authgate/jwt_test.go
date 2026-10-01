@@ -6,11 +6,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
 type stubParser struct {
@@ -50,9 +52,9 @@ func TestExtract(t *testing.T) {
 		},
 		{
 			name:      "parser failure is wrapped",
-			cookie:    &http.Cookie{Name: authgate.CookieAccess, Value: "expired-token"},
-			parser:    stubParser{err: authnkit.ErrTokenExpired},
-			wantErrIs: authnkit.ErrTokenExpired,
+			cookie:    &http.Cookie{Name: authgate.CookieAccess, Value: "forged-token"},
+			parser:    stubParser{err: authnkit.ErrTokenSignature},
+			wantErrIs: authnkit.ErrTokenSignature,
 		},
 		{
 			name:   "valid claims populate identity",
@@ -98,4 +100,24 @@ func TestExtract(t *testing.T) {
 			require.Equal(t, tc.wantID, got)
 		})
 	}
+}
+
+// Истёкший access — свой код 401: клиент обновляет сессию, а не входит заново.
+func TestExtract_AccessExpired(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	r.AddCookie(&http.Cookie{Name: authgate.CookieAccess, Value: "expired-token"})
+
+	_, err := authgate.NewExtractor(stubParser{err: authnkit.ErrTokenExpired}).Extract(r)
+	var apiErr *httpkit.APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, http.StatusUnauthorized, apiErr.Status)
+	require.Equal(t, "AUTH_ACCESS_EXPIRED", apiErr.Code)
+}
+
+func TestSecured(t *testing.T) {
+	t.Parallel()
+	op := authgate.Secured(huma.Operation{OperationID: "getThing"})
+	require.Equal(t, []map[string][]string{{authgate.SecuritySchemeName: {}}}, op.Security)
+	require.Contains(t, op.Errors, http.StatusUnauthorized, "the session codes are declared in OpenAPI")
 }
