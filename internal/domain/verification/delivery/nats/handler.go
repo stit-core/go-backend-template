@@ -14,6 +14,8 @@ const (
 	// streamUser — JetStream-стрим, покрывающий user.> (источник user.events.registered.v2).
 	streamUser  = "user"
 	durableName = "verification-user-registered-v2"
+	// durableNameV1 — прежний консьюмер: события до .v2 он дочитывает с места, где остановился.
+	durableNameV1 = "verification-user-registered"
 )
 
 type Usecase interface {
@@ -38,8 +40,14 @@ func (h *Handler) onUserRegistered(ctx context.Context, e UserRegisteredEvent) e
 	return nil
 }
 
+// Register: старый subject читает прежний durable тем же обработчиком — событие, записанное в outbox
+// до перехода на .v2 или не доставленное прежнему консьюмеру, письма не теряет (бэклог events-v1-reader).
 func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
-	natskit.SubscribeOnStart(lc, func(ctx context.Context) (natskit.Subscription, error) {
-		return natskit.SubscribeStreamJSON(bus, ctx, streamUser, SubjectUserRegistered, durableName, h.onUserRegistered)
-	})
+	subscribe := func(subject, durable string) {
+		natskit.SubscribeOnStart(lc, func(ctx context.Context) (natskit.Subscription, error) {
+			return natskit.SubscribeStreamJSON(bus, ctx, streamUser, subject, durable, h.onUserRegistered)
+		})
+	}
+	subscribe(SubjectUserRegistered, durableName)
+	subscribe(subjectUserRegisteredV1, durableNameV1)
 }

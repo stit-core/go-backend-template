@@ -15,8 +15,7 @@ prod-дефолты, понятный контракт ошибок API, тес�
 
 ## Контекст
 - Гейт честный: integration-тесты в `make check`, archtest «границы 2.0», boot-тест `cmd/api`,
-  `openapi.json` из `make gen`. Здесь опустошаются allowlist'ы (`internal/testkit/allowlist`): ADP-03 —
-  мёртвые ссылки `docs/reference/domain-mapping.md` на `internal/platform/shared/` и `…/errors.go`.
+  `openapi.json` из `make gen`; allowlist'ы (`internal/testkit/allowlist`) опустошает этот план.
 - **golibinfra меняется своими планами** в `../golibinfra` (партии «исполнитель → валидатор», тег
   пушится с OK владельца), шаблон поднимает версию. Точный состав и шаги миграции — аннотации тегов:
   - **v1.2.0** — в шаблоне с S1; контракт ошибок httpkit (problem+json с `code` и `request_id`,
@@ -270,7 +269,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - S12: срез — только admin, строгий мок репозитория и настоящая policy; скрипт вставляет домен в блоки
   `cmd/api`, гонит `make gen` и ставит созданное в индекс — `gen-check` не терпит неотслеженных моков.
 - Валидатор C: здоровье — `api healthcheck` (GET /health своего `HTTP_ADDR`; в distroless нет shell), кита
-  нет — бэклог `healthcheck-kit`; `HEALTHCHECK` в Dockerfile нет — интервалы задаёт деплой.
+  нет — бэклог `healthcheck-kit`; `HEALTHCHECK` в Dockerfile нет — интервалы задаёт деплой. Старый subject
+  `user.events.registered` ещё релиз читает прежний durable (без потерь и окна; `events-v1-reader`).
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в OpenAPI) —

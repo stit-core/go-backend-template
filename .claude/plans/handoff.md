@@ -32,14 +32,19 @@ RISK   прежний healthcheck через wget, curl или shell не най
 === INFRA HANDOFF · передай инфра-админу ===
 WHAT   subject'ы без email: user.events.registered → user.events.registered.v2,
        verification.events.email_verification_requested и …password_reset_requested → ….v2 (payload —
-       ID и время); durable verification-user-registered → verification-user-registered-v2 (стрим user)
+       ID и время); новый durable verification-user-registered-v2 (стрим user), а прежний
+       verification-user-registered этот релиз дочитывает user.events.registered
 WHY    fix-reference-code S11 — в логах и событиях только ID
-ACTION до выкатки — дренировать outbox_user и консьюмер verification-user-registered (v1 новая версия
-       не читает); после — удалить durable verification-user-registered; внешних потребителей старых
-       subject'ов перевести на .v2 (адрес — по ID у user)
+ACTION до выкатки — ничего: события user.events.registered, записанные до неё (строки outbox_user,
+       недоставленное прежнему консьюмеру), дочитывает прежний durable; внешних потребителей старых
+       subject'ов verification перевести на .v2 (адрес — по ID у user); durable
+       verification-user-registered не удалять — его удаление придёт блоком релиза, который снимет его
+       подписку
 WHO    проект + потребители событий
 DECIDE —
-RISK   событие v1, не вычитанное до выкатки, не даст письма подтверждения email
+RISK   внешний потребитель старых subject'ов verification после выкатки получит только события,
+       записанные до неё; durable verification-user-registered, удалённый раньше, сервис создаст заново
+       с начала стрима user — повторные письма подтверждения
 ===
 
 === INFRA HANDOFF · передай инфра-админу ===

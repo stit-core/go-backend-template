@@ -14,6 +14,10 @@
   синхронное письмо: с настоящим mailer время ответа выдаёт учётную запись. Канон — письмо через
   outbox-консьюмер с `sent_at`, как подтверждение email. Триггер: настоящий Mailer в форке или
   повторный аудит (SEC-06).
+- **events-v1-reader** — прежний durable `verification-user-registered` дочитывает
+  `user.events.registered` (события до `.v2`, `verification/delivery/nats`): снять подписку и
+  `subjectUserRegisteredV1`, в накопитель — INFRA-HANDOFF «удалить durable». Триггер: следующий релиз
+  после выкатки релиза с `.v2`.
 - **healthcheck-kit** — проверка здоровья контейнера без shell (`api healthcheck`: `GET /health` по
   `HTTP_ADDR`) живёт в `cmd/api/healthcheck.go`, а нужна каждому сервису на httpkit в distroless-образе:
   место — httpkit, рядом с `/health`. Триггер: партия 3 golibinfra (v1.4.0) или второй сервис.
