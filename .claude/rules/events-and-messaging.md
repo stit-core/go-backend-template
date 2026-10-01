@@ -41,12 +41,15 @@ paths:
 - Объявляют **локальный** payload-DTO (`delivery/nats/dto.go`) — прямой импорт домена-
   источника запрещён archtest. Регистрируются в `module/module.go` потребителя.
 - **Идемпотентность обязательна** (at-least-once), и она — свойство **схемы, не удачи**:
-  unique-индекс под natural key + `ON CONFLICT DO NOTHING` (`:execrows`; 0 rows → skip
-  side-effects: письмо/событие не повторяются), либо `UPDATE … WHERE status='pending'`,
-  либо idempotency-key из payload. Канон — `verification.IssueEmailVerification` +
-  партиал-индекс `email_verifications(user_id) WHERE used_at IS NULL`. Redelivery-кейс
-  покрыт юнит-тестом (rule tests-pipeline). Poison consumer'а —
-  `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
+  unique-индекс под natural key (`INSERT … ON CONFLICT`), либо `UPDATE … WHERE
+  status='pending'`, либо idempotency-key из payload. **Внешний эффект** (письмо, вебхук) схема
+  помнит отдельно от записи: отметка «выполнен» (`sent_at`) — после эффекта; повтор доставки
+  выполненный эффект пропускает, невыполненный повторяет, сбой эффекта — ошибка обработчика
+  (redelivery). Пропуск по одной лишь записи теряет эффект: запись есть, письмо не ушло. Канон —
+  `verification.IssueEmailVerification`: upsert по партиал-индексу `email_verifications(user_id)
+  WHERE used_at IS NULL` перевыпускает токен неотправленного письма, отправленное не трогает.
+  Redelivery (сбой эффекта, повтор после успеха) покрыт юнит-тестом (rule tests-pipeline).
+  Poison consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - Subscriber — быстрый. Тяжёлое (PDF, batch на 1M) → отдельный job/usecase.
 
 ## Background jobs (timerkit)

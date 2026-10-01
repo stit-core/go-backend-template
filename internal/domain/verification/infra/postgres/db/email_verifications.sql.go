@@ -36,31 +36,48 @@ func (q *Queries) GetEmailVerification(ctx context.Context, tokenHash string) (G
 	return i, err
 }
 
-const insertEmailVerification = `-- name: InsertEmailVerification :execrows
-INSERT INTO email_verifications (user_id, token_hash, expires_at)
-VALUES ($1, $2, $3)
-ON CONFLICT (user_id) WHERE used_at IS NULL DO NOTHING
+const markEmailVerificationSent = `-- name: MarkEmailVerificationSent :exec
+UPDATE email_verifications SET sent_at = NOW() WHERE id = $1
 `
 
-type InsertEmailVerificationParams struct {
-	UserID    pgtype.UUID
-	TokenHash string
-	ExpiresAt pgtype.Timestamptz
+func (q *Queries) MarkEmailVerificationSent(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markEmailVerificationSent, id)
+	return err
 }
 
-func (q *Queries) InsertEmailVerification(ctx context.Context, arg InsertEmailVerificationParams) (int64, error) {
-	result, err := q.db.Exec(ctx, insertEmailVerification, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+const markEmailVerificationUsed = `-- name: MarkEmailVerificationUsed :execrows
+UPDATE email_verifications SET used_at = NOW() WHERE id = $1 AND used_at IS NULL
+`
+
+func (q *Queries) MarkEmailVerificationUsed(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markEmailVerificationUsed, id)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const markEmailVerificationUsed = `-- name: MarkEmailVerificationUsed :exec
-UPDATE email_verifications SET used_at = NOW() WHERE id = $1
+const upsertEmailVerification = `-- name: UpsertEmailVerification :one
+INSERT INTO email_verifications (user_id, token_hash, expires_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id) WHERE used_at IS NULL DO UPDATE
+SET token_hash = EXCLUDED.token_hash,
+    expires_at = EXCLUDED.expires_at
+WHERE email_verifications.sent_at IS NULL
+RETURNING id
 `
 
-func (q *Queries) MarkEmailVerificationUsed(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, markEmailVerificationUsed, id)
-	return err
+type UpsertEmailVerificationParams struct {
+	UserID    pgtype.UUID
+	TokenHash string
+	ExpiresAt pgtype.Timestamptz
+}
+
+// Ожидающее подтверждение пользователя одно (партиал-индекс): неотправленное получает новый токен,
+// отправленное не трогается — RETURNING пуст.
+func (q *Queries) UpsertEmailVerification(ctx context.Context, arg UpsertEmailVerificationParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertEmailVerification, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }

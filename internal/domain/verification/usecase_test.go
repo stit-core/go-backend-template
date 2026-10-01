@@ -2,6 +2,7 @@ package verification_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification/mocks"
+	"git.stit.tech/stit-core/go-backend-template/pkg/tokens"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
@@ -19,6 +21,11 @@ import (
 )
 
 var fixedNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+const (
+	subjectEmailVerificationRequested = "verification.events.email_verification_requested"
+	subjectPasswordResetRequested     = "verification.events.password_reset_requested"
+)
 
 type ucFixture struct {
 	uc       *verification.Usecase
@@ -60,10 +67,11 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	}
 	if o.repo == nil {
 		r := mocks.NewMockRepository(t)
-		r.EXPECT().InsertPasswordReset(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+		r.EXPECT().InsertPasswordReset(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("rid", nil).Maybe()
 		r.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(nil, verification.ErrInvalidResetToken).Maybe()
 		r.EXPECT().MarkPasswordResetUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
-		r.EXPECT().InsertEmailVerification(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
+		r.EXPECT().UpsertEmailVerification(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("vid", true, nil).Maybe()
+		r.EXPECT().MarkEmailVerificationSent(mock.Anything, mock.Anything).Return(nil).Maybe()
 		r.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(nil, verification.ErrInvalidVerificationToken).Maybe()
 		r.EXPECT().MarkEmailVerificationUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
 		o.repo = r
@@ -114,40 +122,60 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 
 func TestIssueEmailVerification_HappyPath(t *testing.T) {
 	t.Parallel()
-	var sentEmail, sentToken string
+	var storedHash, sentToken string
+	repo := mocks.NewMockRepository(t)
+	upsert := repo.EXPECT().UpsertEmailVerification(mock.Anything, "u1", mock.Anything, fixedNow.Add(24*time.Hour)).
+		RunAndReturn(func(_ context.Context, _, hash string, _ time.Time) (string, bool, error) {
+			storedHash = hash
+			return "vid", true, nil
+		}).Once()
 	mailer := mocks.NewMockMailer(t)
-	mailer.EXPECT().SendEmailVerification(mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, email, token string) error {
-			sentEmail = email
+	send := mailer.EXPECT().SendEmailVerification(mock.Anything, "a@b.com", mock.Anything).
+		RunAndReturn(func(_ context.Context, _, token string) error {
 			sentToken = token
 			return nil
-		})
-	f := newUC(t, withMailer(mailer))
-
-	require.NoError(t, f.uc.IssueEmailVerification(context.Background(), "u1", "a@b.com"))
-	require.Equal(t, 1, f.bus.Count())
-
-	ev, ok := f.bus.Last("user.email_verification.requested").(verification.EmailVerificationRequested)
-	if !ok {
-		ev, ok = f.bus.All()[0].Payload.(verification.EmailVerificationRequested)
-	}
-	require.True(t, ok, "expected EmailVerificationRequested event")
-	require.NotEmpty(t, ev.TokenID)
-	require.Equal(t, "a@b.com", sentEmail)
-	require.NotEmpty(t, sentToken)
-	require.NotEqual(t, ev.TokenID, sentToken, "TokenID must not equal plaintext token")
-}
-
-func TestIssueEmailVerification_RedeliveryIsNoOp(t *testing.T) {
-	t.Parallel()
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().InsertEmailVerification(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(false, nil)
-	mailer := mocks.NewMockMailer(t) // no expectations: any Send* call fails the test
+		}).Once().NotBefore(upsert)
+	repo.EXPECT().MarkEmailVerificationSent(mock.Anything, "vid").Return(nil).Once().NotBefore(send)
 	f := newUC(t, withRepo(repo), withMailer(mailer))
 
 	require.NoError(t, f.uc.IssueEmailVerification(context.Background(), "u1", "a@b.com"))
-	require.Equal(t, 0, f.bus.Count(), "duplicate delivery must not publish a second event")
+	require.Equal(t, tokens.Hash(sentToken), storedHash, "the mailed token is the one stored by hash")
+	require.Equal(t, verification.EmailVerificationRequested{TokenID: "vid", UserID: "u1", Email: "a@b.com", At: fixedNow},
+		f.bus.Last(subjectEmailVerificationRequested), "TokenID is the id of the stored token, not the token")
+}
+
+// Доставка at-least-once: сбой mailer не теряет письмо, повтор после успеха его не дублирует.
+func TestIssueEmailVerification_Redelivery(t *testing.T) {
+	t.Parallel()
+	var hashes, mailed []string
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().UpsertEmailVerification(mock.Anything, "u1", mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, _, hash string, _ time.Time) (string, bool, error) {
+			hashes = append(hashes, hash)
+			return "vid", true, nil
+		}).Twice()
+	repo.EXPECT().UpsertEmailVerification(mock.Anything, "u1", mock.Anything, mock.Anything).Return("", false, nil).Once()
+	repo.EXPECT().MarkEmailVerificationSent(mock.Anything, "vid").Return(nil).Once()
+	mailer := mocks.NewMockMailer(t)
+	mailer.EXPECT().SendEmailVerification(mock.Anything, "a@b.com", mock.Anything).
+		RunAndReturn(func(_ context.Context, _, token string) error {
+			mailed = append(mailed, token)
+			if len(mailed) == 1 {
+				return errors.New("smtp unavailable")
+			}
+			return nil
+		}).Twice()
+	f := newUC(t, withRepo(repo), withMailer(mailer))
+	ctx := context.Background()
+
+	require.Error(t, f.uc.IssueEmailVerification(ctx, "u1", "a@b.com"), "a mailer failure goes back to the broker for redelivery")
+	require.NoError(t, f.uc.IssueEmailVerification(ctx, "u1", "a@b.com"), "redelivery sends the email")
+	require.NoError(t, f.uc.IssueEmailVerification(ctx, "u1", "a@b.com"), "redelivery after success is a no-op")
+
+	require.Len(t, mailed, 2)
+	require.NotEqual(t, mailed[0], mailed[1], "the resent email carries a new token")
+	require.Equal(t, []string{tokens.Hash(mailed[0]), tokens.Hash(mailed[1])}, hashes)
+	require.Len(t, f.bus.Published(subjectEmailVerificationRequested), 2, "one event per issued token")
 }
 
 func TestRequestPasswordReset_HappyPath(t *testing.T) {
@@ -158,32 +186,24 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 	)
 	repo := mocks.NewMockRepository(t)
 	var capturedHash string
-	repo.EXPECT().InsertPasswordReset(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, _, h string, _ time.Time) error {
+	repo.EXPECT().InsertPasswordReset(mock.Anything, "u1", mock.Anything, fixedNow.Add(time.Hour)).
+		RunAndReturn(func(_ context.Context, _, h string, _ time.Time) (string, error) {
 			capturedHash = h
-			return nil
-		})
-	var sentEmail, sentToken string
+			return "rid", nil
+		}).Once()
+	var sentToken string
 	mailer := mocks.NewMockMailer(t)
-	mailer.EXPECT().SendPasswordReset(mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, email, token string) error {
-			sentEmail = email
+	mailer.EXPECT().SendPasswordReset(mock.Anything, "a@b.com", mock.Anything).
+		RunAndReturn(func(_ context.Context, _, token string) error {
 			sentToken = token
 			return nil
-		})
+		}).Once()
 	f := newUC(t, withRepo(repo), withUsers(users), withMailer(mailer))
 
 	require.NoError(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"))
-	require.Len(t, capturedHash, 64)
-	require.Equal(t, "a@b.com", sentEmail)
-	require.NotEmpty(t, sentToken)
-
-	ev, ok := f.bus.All()[0].Payload.(verification.PasswordResetRequested)
-	require.True(t, ok)
-	require.NotEmpty(t, ev.TokenID)
-	require.Equal(t, "u1", ev.UserID)
-	require.Equal(t, "a@b.com", ev.Email)
-	require.NotEqual(t, ev.TokenID, sentToken)
+	require.Equal(t, tokens.Hash(sentToken), capturedHash)
+	require.Equal(t, verification.PasswordResetRequested{TokenID: "rid", UserID: "u1", Email: "a@b.com", At: fixedNow},
+		f.bus.Last(subjectPasswordResetRequested))
 }
 
 func TestRequestPasswordReset_UnknownEmail(t *testing.T) {
@@ -195,29 +215,48 @@ func TestRequestPasswordReset_UnknownEmail(t *testing.T) {
 func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
+	repo.EXPECT().GetPasswordReset(mock.Anything, tokens.Hash("tok")).Return(
 		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
 	)
-	repo.EXPECT().MarkPasswordResetUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
+	claim := repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(nil).Once()
 	users := mocks.NewMockUserReader(t)
-	users.EXPECT().GetByID(mock.Anything, mock.Anything).Return(
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(
 		&verification.User{ID: "u1", Email: "a@b.com", Active: true, Version: 3}, nil,
 	)
 	pwSet := mocks.NewMockPasswordSetter(t)
-	var lastHash string
-	var lastVersion int
-	pwSet.EXPECT().UpdatePassword(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, _, hash string, version int) error {
-			lastHash = hash
-			lastVersion = version
-			return nil
-		})
+	pwSet.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(claim)
 	f := newUC(t, withRepo(repo), withUsers(users), withPwSet(pwSet))
 
 	require.NoError(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"))
-	require.Equal(t, "hash:newpassword123", lastHash)
-	require.Equal(t, 3, lastVersion)
 	require.True(t, f.audit.Has("password_reset_confirmed"))
+}
+
+func TestConfirmPasswordReset_AlreadyUsed(t *testing.T) {
+	t.Parallel()
+	usedAt := fixedNow.Add(-time.Minute)
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
+		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour), UsedAt: &usedAt}, nil,
+	).Once()
+	f := newUC(t, withRepo(repo), withPwSet(mocks.NewMockPasswordSetter(t)))
+
+	require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"), verification.ErrTokenUsed)
+}
+
+// Параллельный confirm погасил токен первым: условное погашение — 0 строк, пароль не меняется.
+func TestConfirmPasswordReset_ClaimedInParallel(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
+		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
+	).Once()
+	repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(verification.ErrTokenUsed).Once()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(&verification.User{ID: "u1", Version: 3}, nil).Once()
+	f := newUC(t, withRepo(repo), withUsers(users), withPwSet(mocks.NewMockPasswordSetter(t)))
+
+	require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"), verification.ErrTokenUsed)
+	require.False(t, f.audit.Has("password_reset_confirmed"))
 }
 
 func TestConfirmPasswordReset_WeakPassword(t *testing.T) {
@@ -241,22 +280,42 @@ func TestConfirmPasswordReset_Expired(t *testing.T) {
 func TestConfirmEmail_HappyPath(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(
+	repo.EXPECT().GetEmailVerification(mock.Anything, tokens.Hash("tok")).Return(
 		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
 	)
-	repo.EXPECT().MarkEmailVerificationUsed(mock.Anything, mock.Anything).Return(nil).Maybe()
+	claim := repo.EXPECT().MarkEmailVerificationUsed(mock.Anything, "vid").Return(nil).Once()
 	emailSet := mocks.NewMockEmailVerificationSetter(t)
-	var markedID string
-	emailSet.EXPECT().MarkEmailVerified(mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, userID string) error {
-			markedID = userID
-			return nil
-		})
+	emailSet.EXPECT().MarkEmailVerified(mock.Anything, "u1").Return(nil).Once().NotBefore(claim)
 	f := newUC(t, withRepo(repo), withEmailSet(emailSet))
 
 	require.NoError(t, f.uc.ConfirmEmail(context.Background(), "tok"))
-	require.Equal(t, "u1", markedID)
 	require.True(t, f.audit.Has("email_confirmed"))
+}
+
+func TestConfirmEmail_AlreadyUsed(t *testing.T) {
+	t.Parallel()
+	usedAt := fixedNow.Add(-time.Minute)
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(
+		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour), UsedAt: &usedAt}, nil,
+	).Once()
+	f := newUC(t, withRepo(repo), withEmailSet(mocks.NewMockEmailVerificationSetter(t)))
+
+	require.ErrorIs(t, f.uc.ConfirmEmail(context.Background(), "tok"), verification.ErrTokenUsed)
+}
+
+// Параллельный confirm погасил токен первым: условное погашение — 0 строк, email не отмечается.
+func TestConfirmEmail_ClaimedInParallel(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(
+		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
+	).Once()
+	repo.EXPECT().MarkEmailVerificationUsed(mock.Anything, "vid").Return(verification.ErrTokenUsed).Once()
+	f := newUC(t, withRepo(repo), withEmailSet(mocks.NewMockEmailVerificationSetter(t)))
+
+	require.ErrorIs(t, f.uc.ConfirmEmail(context.Background(), "tok"), verification.ErrTokenUsed)
+	require.False(t, f.audit.Has("email_confirmed"))
 }
 
 func TestConfirmEmail_Expired(t *testing.T) {

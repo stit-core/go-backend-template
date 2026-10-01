@@ -36,9 +36,10 @@ func (q *Queries) GetPasswordReset(ctx context.Context, tokenHash string) (GetPa
 	return i, err
 }
 
-const insertPasswordReset = `-- name: InsertPasswordReset :exec
+const insertPasswordReset = `-- name: InsertPasswordReset :one
 INSERT INTO password_resets (user_id, token_hash, expires_at)
 VALUES ($1, $2, $3)
+RETURNING id
 `
 
 type InsertPasswordResetParams struct {
@@ -47,16 +48,21 @@ type InsertPasswordResetParams struct {
 	ExpiresAt pgtype.Timestamptz
 }
 
-func (q *Queries) InsertPasswordReset(ctx context.Context, arg InsertPasswordResetParams) error {
-	_, err := q.db.Exec(ctx, insertPasswordReset, arg.UserID, arg.TokenHash, arg.ExpiresAt)
-	return err
+func (q *Queries) InsertPasswordReset(ctx context.Context, arg InsertPasswordResetParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, insertPasswordReset, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
-const markPasswordResetUsed = `-- name: MarkPasswordResetUsed :exec
-UPDATE password_resets SET used_at = NOW() WHERE id = $1
+const markPasswordResetUsed = `-- name: MarkPasswordResetUsed :execrows
+UPDATE password_resets SET used_at = NOW() WHERE id = $1 AND used_at IS NULL
 `
 
-func (q *Queries) MarkPasswordResetUsed(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, markPasswordResetUsed, id)
-	return err
+func (q *Queries) MarkPasswordResetUsed(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markPasswordResetUsed, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

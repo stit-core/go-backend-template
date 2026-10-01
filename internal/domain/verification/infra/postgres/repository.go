@@ -20,19 +20,20 @@ func NewRepository(database *pgkit.DB) verification.Repository {
 	return &Repository{q: db.New(database)}
 }
 
-func (r *Repository) InsertPasswordReset(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+func (r *Repository) InsertPasswordReset(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (string, error) {
 	uid, err := pgkit.ParseUUID(userID)
 	if err != nil {
-		return fmt.Errorf("verification repo: invalid user id: %w", err)
+		return "", fmt.Errorf("verification repo: invalid user id: %w", err)
 	}
-	if err := r.q.InsertPasswordReset(ctx, db.InsertPasswordResetParams{
+	id, err := r.q.InsertPasswordReset(ctx, db.InsertPasswordResetParams{
 		UserID:    uid,
 		TokenHash: tokenHash,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	}); err != nil {
-		return fmt.Errorf("verification repo: insert password reset: %w", err)
+	})
+	if err != nil {
+		return "", fmt.Errorf("verification repo: insert password reset: %w", err)
 	}
-	return nil
+	return pgkit.UUIDString(id), nil
 }
 
 func (r *Repository) GetPasswordReset(ctx context.Context, tokenHash string) (*verification.PasswordResetToken, error) {
@@ -56,26 +57,37 @@ func (r *Repository) MarkPasswordResetUsed(ctx context.Context, id string) error
 	if err != nil {
 		return verification.ErrInvalidResetToken
 	}
-	if err := r.q.MarkPasswordResetUsed(ctx, uid); err != nil {
-		return fmt.Errorf("verification repo: mark password reset used: %w", err)
-	}
-	return nil
+	return used(r.q.MarkPasswordResetUsed(ctx, uid))
 }
 
-func (r *Repository) InsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (bool, error) {
+func (r *Repository) UpsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (string, bool, error) {
 	uid, err := pgkit.ParseUUID(userID)
 	if err != nil {
-		return false, fmt.Errorf("verification repo: invalid user id: %w", err)
+		return "", false, fmt.Errorf("verification repo: invalid user id: %w", err)
 	}
-	rows, err := r.q.InsertEmailVerification(ctx, db.InsertEmailVerificationParams{
+	id, err := r.q.UpsertEmailVerification(ctx, db.UpsertEmailVerificationParams{
 		UserID:    uid,
 		TokenHash: tokenHash,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
-	if err != nil {
-		return false, fmt.Errorf("verification repo: insert email verification: %w", err)
+	if pgkit.IsNoRows(err) {
+		return "", false, nil
 	}
-	return rows > 0, nil
+	if err != nil {
+		return "", false, fmt.Errorf("verification repo: upsert email verification: %w", err)
+	}
+	return pgkit.UUIDString(id), true, nil
+}
+
+func (r *Repository) MarkEmailVerificationSent(ctx context.Context, id string) error {
+	uid, err := pgkit.ParseUUID(id)
+	if err != nil {
+		return fmt.Errorf("verification repo: invalid email verification id: %w", err)
+	}
+	if err := r.q.MarkEmailVerificationSent(ctx, uid); err != nil {
+		return fmt.Errorf("verification repo: mark email verification sent: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) GetEmailVerification(ctx context.Context, tokenHash string) (*verification.EmailVerificationToken, error) {
@@ -99,8 +111,17 @@ func (r *Repository) MarkEmailVerificationUsed(ctx context.Context, id string) e
 	if err != nil {
 		return verification.ErrInvalidVerificationToken
 	}
-	if err := r.q.MarkEmailVerificationUsed(ctx, uid); err != nil {
-		return fmt.Errorf("verification repo: mark email verification used: %w", err)
+	return used(r.q.MarkEmailVerificationUsed(ctx, uid))
+}
+
+// used — итог условного погашения: ни одной строки — токен уже погашен, в том числе параллельным
+// запросом, который успел раньше.
+func used(rows int64, err error) error {
+	switch {
+	case err != nil:
+		return fmt.Errorf("verification repo: mark token used: %w", err)
+	case rows == 0:
+		return verification.ErrTokenUsed
 	}
 	return nil
 }

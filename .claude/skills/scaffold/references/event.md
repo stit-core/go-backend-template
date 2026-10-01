@@ -172,11 +172,20 @@ Subscriber фактически — это просто ещё один тран
 ### 6. Idempotency
 
 JetStream доставляет at-least-once, поэтому идемпотентность — свойство **схемы**, а не удачи:
-- unique-индекс под natural key + `INSERT … ON CONFLICT DO NOTHING` (`:execrows`; 0 rows → пропусти side-effects: письмо/событие не повторяются) — канон `verification.IssueEmailVerification` + партиал-индекс `email_verifications(user_id) WHERE used_at IS NULL`;
+- unique-индекс под natural key + `INSERT … ON CONFLICT` — одна запись на ключ;
 - `UPDATE … WHERE status = 'pending'` для state-machine'ов;
 - idempotency-key из payload — для внешних API.
 
-Redelivery-кейс покрой юнит-тестом (шаг 7).
+Внешний эффект (письмо, вебхук) при сбое не теряется: схема помнит, выполнен ли он. Канон —
+`verification.IssueEmailVerification`:
+1. upsert по партиал-индексу `email_verifications(user_id) WHERE used_at IS NULL`: новое ожидающее
+   подтверждение или новый токен неотправленного; отправленное (`sent_at`) не трогается — `RETURNING`
+   пуст, обработчик пропускает эффект;
+2. эффект — после коммита; сбой — ошибка обработчика, сообщение придёт снова;
+3. отметка `sent_at` — после эффекта.
+
+Пропуск эффекта по одной лишь записи («0 строк → пропусти») теряет его навсегда: запись есть, а
+письмо не ушло. Redelivery-кейсы — сбой эффекта и повтор после успеха — покрой юнит-тестом (шаг 7).
 
 ### 7. Тесты
 

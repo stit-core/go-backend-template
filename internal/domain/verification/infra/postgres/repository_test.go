@@ -4,6 +4,8 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,11 +35,12 @@ func TestInsertPasswordResetAndGet(t *testing.T) {
 	repo, userID := setup(t)
 	ctx := context.Background()
 
-	require.NoError(t, repo.InsertPasswordReset(ctx, userID, "hash:pr-1", tokenExpiry))
+	id, err := repo.InsertPasswordReset(ctx, userID, "hash:pr-1", tokenExpiry)
+	require.NoError(t, err)
 
 	got, err := repo.GetPasswordReset(ctx, "hash:pr-1")
 	require.NoError(t, err)
-	require.NotEmpty(t, got.ID)
+	require.Equal(t, id, got.ID, "the event carries the id of the stored token")
 	require.Equal(t, userID, got.UserID)
 	require.WithinDuration(t, tokenExpiry, got.ExpiresAt, time.Second)
 	require.Nil(t, got.UsedAt)
@@ -56,49 +59,115 @@ func TestMarkPasswordResetUsed(t *testing.T) {
 	repo, userID := setup(t)
 	ctx := context.Background()
 
-	require.NoError(t, repo.InsertPasswordReset(ctx, userID, "hash:pr-1", tokenExpiry))
-	got, err := repo.GetPasswordReset(ctx, "hash:pr-1")
+	id, err := repo.InsertPasswordReset(ctx, userID, "hash:pr-1", tokenExpiry)
 	require.NoError(t, err)
 
-	require.NoError(t, repo.MarkPasswordResetUsed(ctx, got.ID))
+	require.NoError(t, repo.MarkPasswordResetUsed(ctx, id))
+	require.ErrorIs(t, repo.MarkPasswordResetUsed(ctx, id), verification.ErrTokenUsed)
 
 	used, err := repo.GetPasswordReset(ctx, "hash:pr-1")
 	require.NoError(t, err)
 	require.NotNil(t, used.UsedAt)
 }
 
-func TestInsertEmailVerification_PendingIdempotency(t *testing.T) {
+// Ожидающее подтверждение пользователя одно: повтор доставки до отправки письма перевыпускает
+// токен, после отправки — не трогает.
+func TestUpsertEmailVerification_Redelivery(t *testing.T) {
 	t.Parallel()
 	repo, userID := setup(t)
 	ctx := context.Background()
 
-	inserted, err := repo.InsertEmailVerification(ctx, userID, "hash:ev-1", tokenExpiry)
+	id, issued, err := repo.UpsertEmailVerification(ctx, userID, "hash:ev-1", tokenExpiry)
 	require.NoError(t, err)
-	require.True(t, inserted, "first insert must create a pending verification")
+	require.True(t, issued)
 
-	// Redelivery: a pending row exists -> ON CONFLICT no-op (partial unique
-	// index email_verifications_pending_user_idx, migration 0004).
-	inserted, err = repo.InsertEmailVerification(ctx, userID, "hash:ev-2", tokenExpiry)
+	reissued, issued, err := repo.UpsertEmailVerification(ctx, userID, "hash:ev-2", tokenExpiry.Add(time.Hour))
 	require.NoError(t, err)
-	require.False(t, inserted, "second insert while pending must report inserted=false")
+	require.True(t, issued, "an unsent verification is issued again")
+	require.Equal(t, id, reissued, "the same pending verification")
+	_, err = repo.GetEmailVerification(ctx, "hash:ev-1")
+	require.ErrorIs(t, err, verification.ErrInvalidVerificationToken, "the unsent token is replaced")
+	got, err := repo.GetEmailVerification(ctx, "hash:ev-2")
+	require.NoError(t, err)
+	require.Equal(t, id, got.ID)
+	require.WithinDuration(t, tokenExpiry.Add(time.Hour), got.ExpiresAt, time.Second)
 
+	require.NoError(t, repo.MarkEmailVerificationSent(ctx, id))
+	_, issued, err = repo.UpsertEmailVerification(ctx, userID, "hash:ev-3", tokenExpiry)
+	require.NoError(t, err)
+	require.False(t, issued, "a sent verification is not issued again")
+	_, err = repo.GetEmailVerification(ctx, "hash:ev-3")
+	require.ErrorIs(t, err, verification.ErrInvalidVerificationToken)
 	_, err = repo.GetEmailVerification(ctx, "hash:ev-2")
-	require.ErrorIs(t, err, verification.ErrInvalidVerificationToken, "no-op insert must not create a row")
+	require.NoError(t, err, "the sent token stays valid")
 
-	got, err := repo.GetEmailVerification(ctx, "hash:ev-1")
+	require.NoError(t, repo.MarkEmailVerificationUsed(ctx, id))
+	require.ErrorIs(t, repo.MarkEmailVerificationUsed(ctx, id), verification.ErrTokenUsed)
+	next, issued, err := repo.UpsertEmailVerification(ctx, userID, "hash:ev-4", tokenExpiry)
 	require.NoError(t, err)
-	require.Equal(t, userID, got.UserID)
-	require.Nil(t, got.UsedAt)
+	require.True(t, issued, "a used verification no longer blocks a new one")
+	require.NotEqual(t, id, next)
+}
 
-	require.NoError(t, repo.MarkEmailVerificationUsed(ctx, got.ID))
+// Одновременные погашения одного токена: ровно одно успешное, остальные — ErrTokenUsed. Каждое — в
+// своей транзакции, как в usecase; первая держит блокировку строки, остальные ждут её.
+func TestMarkUsed_Concurrent(t *testing.T) {
+	t.Parallel()
+	pg := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
+	repo := verifpg.NewRepository(pg.DB(t))
+	tx := pg.Transactor(t)
+	ctx := context.Background()
+	userID := pgseed.InsertUser(t, userpg.NewRepository(pg.DB(t))).ID
 
-	used, err := repo.GetEmailVerification(ctx, "hash:ev-1")
+	resetID, err := repo.InsertPasswordReset(ctx, userID, "hash:pr", tokenExpiry)
 	require.NoError(t, err)
-	require.NotNil(t, used.UsedAt)
-
-	inserted, err = repo.InsertEmailVerification(ctx, userID, "hash:ev-3", tokenExpiry)
+	verifyID, _, err := repo.UpsertEmailVerification(ctx, userID, "hash:ev", tokenExpiry)
 	require.NoError(t, err)
-	require.True(t, inserted, "insert after the pending token is used must succeed")
+
+	tests := []struct {
+		name  string
+		claim func(ctx context.Context) error
+	}{
+		{"password reset", func(ctx context.Context) error { return repo.MarkPasswordResetUsed(ctx, resetID) }},
+		{"email verification", func(ctx context.Context) error { return repo.MarkEmailVerificationUsed(ctx, verifyID) }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			const n = 8
+			errs := make(chan error, n)
+			start := make(chan struct{})
+			var wg sync.WaitGroup
+			for range n {
+				wg.Go(func() {
+					<-start
+					errs <- tx.WithTx(ctx, func(txCtx context.Context) error {
+						if err := tc.claim(txCtx); err != nil {
+							return err
+						}
+						time.Sleep(50 * time.Millisecond)
+						return nil
+					})
+				})
+			}
+			close(start)
+			wg.Wait()
+			close(errs)
+
+			var claimed, used int
+			for err := range errs {
+				switch {
+				case err == nil:
+					claimed++
+				case errors.Is(err, verification.ErrTokenUsed):
+					used++
+				default:
+					require.NoError(t, err)
+				}
+			}
+			require.Equal(t, 1, claimed, "exactly one claim succeeds")
+			require.Equal(t, n-1, used)
+		})
+	}
 }
 
 func TestGetEmailVerification_UnknownTokenHash(t *testing.T) {

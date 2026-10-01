@@ -206,9 +206,11 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   подписки и выключенный JetStream валят старт). Объявляют
   **локальный** payload-DTO (archtest запрещает импорт домена-источника). Регистрируются в
   `module/module.go` consumer'а.
-- **Idempotency.** JetStream = at-least-once → subscriber обязан быть идемпотентен (`ON
-  CONFLICT DO NOTHING`, `UPDATE … WHERE status='pending'`, idempotency-key). Не «вряд ли
-  задвоится». Poison у consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
+- **Idempotency.** JetStream = at-least-once → subscriber обязан быть идемпотентен (unique-индекс
+  + `ON CONFLICT`, `UPDATE … WHERE status='pending'`, idempotency-key). Не «вряд ли задвоится».
+  Внешний эффект не теряется: схема помнит, выполнен ли он (`sent_at`), повтор выполненный
+  пропускает, невыполненный повторяет — канон `verification.IssueEmailVerification`. Poison у
+  consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - **Jobs.** Периодические задачи без события-триггера — `timerkit.Job`, регистрируются
   `timerkit.Provide` в модуле-владельце и гоняются `timerkit.Module` той же fx.Lifecycle.
   Обслуживание kit-таблиц приходит с модулями китов (`bruteforcepg.Module` — cleanup,

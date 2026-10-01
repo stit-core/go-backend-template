@@ -59,8 +59,8 @@ func TestOnUserRegistered_DuplicateDelivery(t *testing.T) {
 
 	e := testEvent()
 	uc := mocks.NewMockUsecase(t)
-	// Dedup lives in the usecase (ON CONFLICT no-op): on redelivery the
-	// handler must call it again, not short-circuit.
+	// Dedup lives in the usecase (the schema records the sent email): on
+	// redelivery the handler must call it again, not short-circuit.
 	uc.EXPECT().IssueEmailVerification(mock.Anything, e.ID, e.Email).Return(nil).Times(2)
 
 	h := NewHandler(uc, logkit.Nop())

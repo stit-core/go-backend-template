@@ -38,7 +38,7 @@ paths:
 - Аннотация обязательна: `-- name: <Method> :<one|many|exec|execrows>`.
   - `:one` — одна строка; отсутствие → `pgx.ErrNoRows`, маппь на sentinel (`ErrNotFound`).
   - `:many` — срез; пусто → пустой срез.
-  - `:exec` — без возврата; `:execrows` — число затронутых строк (optimistic-lock, idempotent insert).
+  - `:exec` — без возврата; `:execrows` — число затронутых строк (optimistic-lock, погашение).
 - Создание — `Insert<Entity>` (repo-метод и sqlc-name), не `Create*`.
 - Repository мапит ошибки: no-rows (`pgkit.IsNoRows`) → sentinel not-found домена; невалидный
   UUID в **lookup-ключе** → тот же sentinel not-found (не отличим снаружи); невалидный UUID в
@@ -56,6 +56,10 @@ paths:
   Теневые флаги `deleted_at` без политики — нет.
 - Optimistic lock через `version`: `WHERE id=$1 AND version=$2 … RETURNING` (`:one`;
   no-rows → `ErrConcurrentUpdate`) либо `:execrows`=0 → `ErrConcurrentUpdate`.
+- Одноразовое погашение (токен, инвайт, купон) — условный `UPDATE … SET used_at = NOW() WHERE
+  id = $1 AND used_at IS NULL` (`:execrows`, 0 строк → sentinel «уже использован») первым в
+  транзакции эффекта: чтение `used_at` и безусловный `UPDATE` пропускают параллельный повтор.
+  Канон — `MarkPasswordResetUsed` домена `verification`.
 - **Kit-таблицы** (`outbox_<domain>`/`audit_log`/`bruteforce_attempts`) схему держат
   `golibinfra/{outboxkit,auditkit,bruteforcekit}/pgstore` (`Migrations`,
   `TableMigrations(table)`), `cmd/migrate` накатывает рядом — таблица версий у каждого
