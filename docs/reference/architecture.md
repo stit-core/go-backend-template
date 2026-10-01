@@ -210,7 +210,9 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   `outboxkit.Instance` — drain/партиции/retention); свой job поверх kit-таблицы не пишется.
 - **JetStream-стримы.** drain и subscriber'ы требуют включённого JetStream
   (`NATS_JETSTREAM_ENABLED=true`) и стримов, покрывающих subject-префиксы доменов
-  (`NATS_JS_STREAM_NAMES`, напр. `user,verification` → `user.>`/`verification.>`).
+  (`NATS_JS_STREAM_NAMES`, напр. `user,verification` → `user.>`/`verification.>`). Без стрима
+  подписки старт падает; без стрима публикатора сервис стартует, а строки его outbox не получают
+  PubAck и копятся.
 - **Таблицы.** `audit_log`/`bruteforce_attempts`/`outbox_<domain>` — схему держит
   golibinfra-kit (`auditpg.Migrations`, `bruteforcepg.Migrations`,
   `outboxpg.TableMigrations(Table)` из `infra/outbox/outbox.go`); источники перечислены в

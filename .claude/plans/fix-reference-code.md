@@ -24,16 +24,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
   - SEC-10 — `JWT_SECRET` нет в `.env.example`.
 - **golibinfra меняется своими планами** в `../golibinfra` (партии «исполнитель → валидатор», тег
   пушится с OK владельца), шаблон поднимает версию. Точный состав и шаги миграции — аннотации тегов:
-  - **v1.2.0** (план `../golibinfra/.claude/plans/harden-kits.md`, его Handoff — обязательные
-    правки при bump) — httpkit: HTTP стартует последним и останавливается первым, fail-closed без
-    `AuthExtractor`, middleware потребителя — одним упорядоченным `httpkit.Middlewares` вместо
-    группы, контракт ошибок (problem+json с `code` и `request_id`, `errors[]` у 422, `Retry-After`)
-    и `httpkit.ErrorMap` (`Map`, `Unmapped`, `Declare`) вместо `MapErr`/`MapIs`/`MapAs`;
-    outboxkit: без `timerkit.Module` граф не собирается, миграции инстанса — в группе
-    `pgkit.migrations`, `outboxtest` без транзакции — `ErrNoTx`; logkit: `FxLogger`, маскирование
-    по ключу и hex-токенов включено по умолчанию; bruteforcekit: нормализация subject, IPv6 /64,
-    атомарный `Guard.Attempt`; natskit: `SubscribeOnStart` (выключенный JetStream — ошибка
-    старта); authnkit: предел параллельности Argon2id.
+  - **v1.2.0** — в шаблоне с S1; контракт ошибок httpkit (problem+json с `code` и `request_id`,
+    `errors[]` у 422, `Retry-After`, `httpkit.ErrorMap`: `Map`, `Unmapped`, `Declare`) — основа S8.
   - **v1.3.0** — httpkit: операция без `Security` и без пометки `httpkit.Public`, дубль
     METHOD+path — ошибка старта; IP клиента в ctx стандартной цепочкой; безопасные дефолты (docs
     выключены, конечный `OUTBOX_MAX_ATTEMPTS`); auditkit: `RequestID` и `IP` из ctx; authnkit:
@@ -272,6 +264,10 @@ prod-дефолты, понятный контракт ошибок API, тес�
   тег `minLength` схем паролей повторяет правило (держат handler-тесты), `ErrWeakPassword` — 422 с
   `Field` (AC13). `paging.Page` — вход huma, usecase и SQL; исходы — `outcome.Result`, `weak` →
   `weak_password`; ID — `idkit.NewV7()`, `google/uuid` вне `rootLibs` archtest.
+- Фиксы «Фундамента»: N2 — стрим домена-публикатора старт не проверяет: покрытие subject'ов
+  стримом видит только JetStream API кита, эквивалент в шаблоне не пишется (бэклог
+  `publisher-stream-check`); `.env.example` и `architecture.md` — как есть, `TestBoot` ждёт
+  `published_at` у строк `outbox_verification`.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, envelope `data`, problem+json с машинным `code`,
@@ -284,16 +280,17 @@ prod-дефолты, понятный контракт ошибок API, тес�
   прокси) — по аннотациям v1.2.0 и v1.3.0; `REDIS_URL` сервису не нужен; `OTEL_*` — если метрики
   экспортируются через telemetry.
 - Образы от nonroot с закреплённой базой.
-- Лёг S1–S3 (golibinfra v1.2.0): для старта нужны `NATS_JETSTREAM_ENABLED=true` и стрим `user` в
-  `NATS_JS_STREAM_NAMES`; `LOG_REDACT_ENABLED` не читается — маскирование включено всегда
-  (`LOG_REDACT_DISABLED=true` — не в проде); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64 (старые
-  блокировки теряются ≤ `BRUTEFORCE_LOCK_DURATION`); Redis, `REDIS_URL`, `FEATURE_FLAGS` не нужны;
-  `PG_*`/`HTTP_*` без приставок `POSTGRES_`/`HTTP_HTTP_`; остановка до 30s — `stop_grace_period`
-  ≥ 35s. API: problem+json с `code` и `request_id`.
+- Лёг S1–S3 (golibinfra v1.2.0): `NATS_JETSTREAM_ENABLED=true` и
+  `NATS_JS_STREAM_NAMES=user,verification` — без JetStream или стрима `user` старт падает, без
+  `verification` её события не публикуются; маскирование логов всегда (`LOG_REDACT_ENABLED` не
+  читается, `LOG_REDACT_DISABLED=true` — не в проде); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64
+  (старые блокировки теряются ≤ `BRUTEFORCE_LOCK_DURATION`); Redis, `REDIS_URL`, `FEATURE_FLAGS`
+  не нужны; `PG_*`/`HTTP_*` без приставок `POSTGRES_`/`HTTP_HTTP_`; остановка до 30s —
+  `stop_grace_period` ≥ 35s. API: problem+json с `code` и `request_id`.
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
 «Фундамент» (S1–S3) сделан, валидатор — FAIL (`validation-fix-reference-code-A.md`); круг фиксов:
-закрыты B1 (`0d78024`), N1 и N3. Остаток: N2 (стрим домена-публикатора — проверка на старте), N4
-(тест на `FxLogger`, `context.Context`, `fx.As`), N5 (Argon2id в Handoff), N6 (`StopTimeout` ↔
-env), N7, N8. Дальше — перепроверка валидатором (всё после `77528f3`), затем S4; v1.3.0 — bump в S9.
+закрыты B1 (`0d78024`), N1 и N3 (`2177f66`), N2. Остаток: N4 (тест на `FxLogger`, `context.Context`,
+`fx.As`), N5 (Argon2id в Handoff), N6 (`StopTimeout` ↔ env), N7, N8. Дальше — перепроверка
+валидатором (всё после `77528f3`), затем S4; v1.3.0 — bump в S9.

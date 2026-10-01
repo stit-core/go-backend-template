@@ -39,7 +39,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `infra/postgres/repository.go` | integration per-домен (build-tag) |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp` |
 | HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь; `openapi.json` совпадает с кодом |
-| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, 401, 429, событие до подписчика, `/openapi.json` = `openapi.json`, kit-таблицы графа = источники `cmd/migrate`, HTTP стартует последним и гасится первым |
+| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, 401, 429, событие до подписчика, outbox verification — до стрима, `/openapi.json` = `openapi.json`, kit-таблицы графа = источники `cmd/migrate`, HTTP стартует последним и гасится первым |
 
 ## TDD для багфиксов — обязательно
 

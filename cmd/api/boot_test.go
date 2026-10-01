@@ -111,10 +111,13 @@ func TestBoot(t *testing.T) {
 			JOIN users u ON u.id = ev.user_id WHERE u.email = $1`, email).Scan(&n)
 		return err == nil && n == 1
 	}, 15*time.Second, 100*time.Millisecond, "user.registered goes outbox → JetStream → verification subscriber")
-	var own int
-	require.NoError(t, db.QueryRow(t.Context(),
-		`SELECT count(*) FROM outbox_verification WHERE subject LIKE 'verification.%'`).Scan(&own))
-	require.Positive(t, own, "verification publishes into its own outbox")
+	// Стрим публикатора старт не проверяет: без него строки outbox не получают PubAck.
+	require.Eventually(t, func() bool {
+		var n int
+		err := db.QueryRow(t.Context(), `SELECT count(*) FROM outbox_verification
+			WHERE subject LIKE 'verification.%' AND published_at IS NOT NULL`).Scan(&n)
+		return err == nil && n > 0
+	}, 15*time.Second, 100*time.Millisecond, "verification publishes through its own outbox into its stream")
 
 	humaAPI, ok := srv.API().(interface{ Config() huma.Config })
 	require.True(t, ok, "the huma API exposes its Config")
