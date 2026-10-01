@@ -1,37 +1,48 @@
 """Pydantic-зеркало wire-DTO huma (internal/domain/{auth,user}/delivery/http).
 
-Поля и их json-имена держать в синхроне с *Input/*Output/*View Go-структур.
+Поля и их json-имена — те же, что у *Input/*Output/*View Go-структур: лишнее поле и тип не того
+вида — ошибка разбора, а не молчаливое приведение.
 """
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class RegisterRequest(BaseModel):
+class Wire(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class Body(Wire):
+    """Тело ответа: huma добавляет ссылку на схему тела — `$schema`."""
+
+    schema_: str | None = Field(default=None, alias="$schema")
+
+
+class RegisterRequest(Wire):
     email: str
     password: str
     name: str
 
 
-class LoginRequest(BaseModel):
+class LoginRequest(Wire):
     email: str
     password: str
 
 
-class ChangePasswordRequest(BaseModel):
+class ChangePasswordRequest(Wire):
     user_id: str
     old_password: str
     new_password: str
 
 
-class UserUpdateRequest(BaseModel):
+class UserUpdateRequest(Wire):
     name: str | None = None
     status: str | None = None
     version: int
 
 
-class UserView(BaseModel):
+class UserView(Wire):
     id: str
     email: str
     name: str
@@ -41,24 +52,28 @@ class UserView(BaseModel):
     updated_at: datetime
 
 
-class AuthUserView(BaseModel):
+class AuthUserView(Wire):
     id: str
     email: str
     name: str
     role: str
 
 
-class RegisterResponse(BaseModel):
+class UserRegisterResponse(Body):
     data: UserView
 
 
-class MeResponse(BaseModel):
+class UserMeResponse(Body):
     data: UserView
 
 
-class UserUpdateResponse(BaseModel):
+class UserGetResponse(Body):
     data: UserView
 
 
-class LoginResponse(BaseModel):
-    user: AuthUserView
+class UserUpdateResponse(Body):
+    data: UserView
+
+
+class AuthLoginResponse(Body):
+    data: AuthUserView

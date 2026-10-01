@@ -42,7 +42,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `infra/postgres/repository.go` | integration per-домен (build-tag) |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp`, корню графа `context.Context` не доступен; `fx.As` нет — archtest |
 | HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь; `openapi.json` совпадает с кодом |
-| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, 401, 429, событие до подписчика, outbox verification — до стрима, `/openapi.json` = `openapi.json`, kit-таблицы графа = источники `cmd/migrate`, события fx — в лог сервиса, HTTP стартует последним и гасится первым |
+| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, 401 у каждой операции под `Security`, 429, событие до подписчика, outbox verification — до стрима, `/openapi.json` = `openapi.json`, kit-таблицы графа = источники `cmd/migrate`, события fx — в лог сервиса, HTTP стартует последним и гасится первым |
 
 ## TDD для багфиксов — обязательно
 

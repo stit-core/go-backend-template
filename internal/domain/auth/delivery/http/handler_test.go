@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	authhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/delivery/http"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth/delivery/http/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
@@ -40,13 +42,21 @@ func TestLogin_HappyPath(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Login(mock.Anything, mock.Anything).
-		Return(&auth.LoginOutput{AccessToken: "a", RefreshToken: "r", User: &auth.User{ID: "u1"}}, nil)
+		Return(&auth.LoginOutput{AccessToken: "a", RefreshToken: "r", User: &auth.User{ID: "u1", Role: identity.RoleClient}}, nil)
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/login", strings.NewReader(`{"email":"a@b.com","password":"pass1234"}`))
 	handlertest.AssertStatus(t, resp, http.StatusOK)
 	require.ElementsMatch(t, []string{authgate.CookieAccess, authgate.CookieRefresh}, setCookieNames(resp.Header()))
-	require.Contains(t, resp.Body.String(), `"id":"u1"`)
+	var body struct {
+		Data struct {
+			ID   string `json:"id"`
+			Role string `json:"role"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.Equal(t, "u1", body.Data.ID, "the user goes in the data envelope")
+	require.Equal(t, "client", body.Data.Role)
 }
 
 func TestLogin_InvalidCredentials(t *testing.T) {

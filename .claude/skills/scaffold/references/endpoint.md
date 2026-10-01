@@ -47,7 +47,8 @@ type Usecase interface {
 ### 4. DTO в `delivery/http/dto.go`
 
 Имена — `<Domain><Op>Input/Output` (huma собирает все DTO в одну OpenAPI-registry по имени типа;
-`NewMethodInput` в двух доменах → panic):
+`NewMethodInput` в двух доменах → panic), тело ответа — envelope `data`; держит archtest
+`TestHTTPTypes`:
 
 ```go
 type UserNewMethodInput struct {

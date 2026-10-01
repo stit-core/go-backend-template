@@ -66,7 +66,7 @@ func Register(api huma.API, h *Handler) {
 	}, h.changePassword)
 }
 
-func (h *Handler) login(ctx context.Context, in *LoginInput) (*LoginOutput, error) {
+func (h *Handler) login(ctx context.Context, in *AuthLoginInput) (*AuthLoginOutput, error) {
 	result, err := h.uc.Login(ctx, &auth.LoginInput{
 		Email:    in.Body.Email,
 		Password: in.Body.Password,
@@ -74,14 +74,14 @@ func (h *Handler) login(ctx context.Context, in *LoginInput) (*LoginOutput, erro
 	if err != nil {
 		return nil, authErrors.Map(err)
 	}
-	out := &LoginOutput{
+	out := &AuthLoginOutput{
 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, result.RefreshToken, h.cookieCfg),
 	}
-	out.Body.User.FromEntity(result.User)
+	out.Body.Data.FromEntity(result.User)
 	return out, nil
 }
 
-func (h *Handler) refresh(ctx context.Context, in *RefreshInput) (*RefreshOutput, error) {
+func (h *Handler) refresh(ctx context.Context, in *AuthRefreshInput) (*AuthRefreshOutput, error) {
 	if in.RefreshCookie.Value == "" {
 		return nil, refreshErrors.Map(auth.ErrRefreshExpired)
 	}
@@ -89,12 +89,12 @@ func (h *Handler) refresh(ctx context.Context, in *RefreshInput) (*RefreshOutput
 	if err != nil {
 		return nil, refreshErrors.Map(err)
 	}
-	return &RefreshOutput{
+	return &AuthRefreshOutput{
 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, result.RefreshToken, h.cookieCfg),
 	}, nil
 }
 
-func (h *Handler) logout(ctx context.Context, in *LogoutInput) (*LogoutOutput, error) {
+func (h *Handler) logout(ctx context.Context, in *AuthLogoutInput) (*AuthLogoutOutput, error) {
 	if in.RefreshCookie.Value != "" {
 		if err := h.uc.Logout(ctx, in.RefreshCookie.Value); err != nil {
 			// Битый/просроченный/reused refresh — всё равно очищаем cookies и отвечаем 204
@@ -104,10 +104,10 @@ func (h *Handler) logout(ctx context.Context, in *LogoutInput) (*LogoutOutput, e
 			}
 		}
 	}
-	return &LogoutOutput{SetCookie: authgate.BuildExpiredAuthCookies(h.cookieCfg)}, nil
+	return &AuthLogoutOutput{SetCookie: authgate.BuildExpiredAuthCookies(h.cookieCfg)}, nil
 }
 
-func (h *Handler) changePassword(ctx context.Context, in *ChangePasswordInput) (*struct{}, error) {
+func (h *Handler) changePassword(ctx context.Context, in *AuthChangePasswordInput) (*struct{}, error) {
 	if err := h.uc.ChangePassword(ctx, in.Body.UserID, in.Body.OldPassword, in.Body.NewPassword); err != nil {
 		return nil, authErrors.Map(err)
 	}

@@ -11,12 +11,14 @@ from types import TracebackType
 import httpx
 
 from client.models import (
+    AuthLoginResponse,
     AuthUserView,
+    ChangePasswordRequest,
     LoginRequest,
-    LoginResponse,
-    MeResponse,
     RegisterRequest,
-    RegisterResponse,
+    UserGetResponse,
+    UserMeResponse,
+    UserRegisterResponse,
     UserUpdateRequest,
     UserUpdateResponse,
     UserView,
@@ -89,15 +91,19 @@ class Api:
         r = self.expect(
             "POST", "/api/auth/register", expected=201, json=req.model_dump()
         )
-        return RegisterResponse.model_validate_json(r.content).data
+        return UserRegisterResponse.model_validate_json(r.content).data
 
     def login(self, req: LoginRequest) -> AuthUserView:
         r = self.expect("POST", "/api/auth/login", expected=200, json=req.model_dump())
-        return LoginResponse.model_validate_json(r.content).user
+        return AuthLoginResponse.model_validate_json(r.content).data
 
     def me(self) -> UserView:
         r = self.expect("GET", "/api/users/me", expected=200)
-        return MeResponse.model_validate_json(r.content).data
+        return UserMeResponse.model_validate_json(r.content).data
+
+    def get_user(self, user_id: str) -> UserView:
+        r = self.expect("GET", f"/api/users/{user_id}", expected=200)
+        return UserGetResponse.model_validate_json(r.content).data
 
     def update_user(self, user_id: str, req: UserUpdateRequest) -> UserView:
         r = self.expect(
@@ -107,6 +113,9 @@ class Api:
             json=req.model_dump(exclude_none=True),
         )
         return UserUpdateResponse.model_validate_json(r.content).data
+
+    def change_password(self, req: ChangePasswordRequest) -> None:
+        self.expect("POST", "/api/auth/change-password", expected=204, json=req.model_dump())
 
     def refresh(self) -> None:
         self.expect("POST", "/api/auth/refresh", expected=204)

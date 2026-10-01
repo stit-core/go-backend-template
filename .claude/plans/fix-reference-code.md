@@ -111,6 +111,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - [ ] **AC7** — Каждая операция либо под `Security`, либо помечена `httpkit.Public` — иначе сервис
   не стартует; без cookie → 401, чужой ресурс → 403. Проверка: тест сборки API (операция без
   `Security` и пометки → ошибка старта), handler-тесты и boot-тест → PASS
+  - Подтверждено, кроме ошибки старта (пометка `httpkit.Public` — S9): `TestHTTPOperations`,
+    `TestBoot` (401 без cookie у каждой операции под `Security`), 403 — тесты policy и handler
 - [ ] **AC8** — Покрытие по широкому scope (domain, delivery, platform, module, infra; без
   сгенерированного, моков и `cmd/`), unit + integration в одном профиле: гейт ≥ 90%, фактически
   ≥ 95% или поштучное объяснение, почему нет. Проверка: `make cover-check` → OK
@@ -191,9 +193,11 @@ prod-дефолты, понятный контракт ошибок API, тес�
   - Проверка: AC5 → PASS, allowlist ADP-02 пуст · Закрывает: AC5 · Зависит от: S4
   - Сделано: AC5 подтверждён, allowlist closure удалён, `make check` → `✓ check clean`; 9 поломок
     адаптеров, `Trusted`, closure и 409 — пойманы
-- [ ] **S7** — HTTP-канон в auth и verification: префиксы DTO, envelope `data`, `Security` на всех
+- [x] **S7** — HTTP-канон в auth и verification: префиксы DTO, envelope `data`, `Security` на всех
   непубличных операциях; e2e-модели обновлены и строгие (SEC-03)
   - Проверка: handler-тесты и `TestHTTPOperations` → PASS · Закрывает: AC7 · Зависит от: S6
+  - Сделано: handler-тесты, `TestHTTPOperations`, `TestHTTPTypes`, `TestBoot` — PASS, `make check` →
+    `✓ check clean`; e2e-модели сверены с `openapi.json` (поля и обязательность), ruff, mypy
 - [ ] **S8** — Контракт ошибок API поверх контракта httpkit: машинный `code` на каждую доменную
   ошибку, поля в 422, разные коды 401 и 403 (войти заново, обновить сессию, нет прав),
   `Retry-After` у 429 блокировки логина, код конфликта у 409, 5xx с ID запроса; ошибки операций
@@ -249,33 +253,29 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Порог покрытия: гейт 90%, цель 95% (владелец: 90–95) — осмысленными тестами (силу держат мутации, AC9).
 - Граница с golibinfra: общая механика — в китах (auth-стек скопирован в `ai-gateway-template`, форки
   пишут её сами), здесь — bump и снятие взятого китом; эквивалентов китов в шаблоне нет, даже временно.
-- Два bump'а: v1.2.0 (S1) и v1.3.0 (S9); S2–S8 вторая партия не нужна, при задержке v1.3.0 S11 и
-  S12 идут раньше S9 и S10. DI-канон — S2, раньше доменов (FX-01 и FX-05 закрыл кит в S1).
+- Два bump'а: v1.2.0 (S1) и v1.3.0 (S9); при задержке v1.3.0 S11 и S12 идут раньше S9 и S10.
 - Контракт ошибок — S8 и AC13 поверх httpkit, с полнотой маппинга; мутации, D02, allowlist'ы — S15.
-- Сессии — `authnkit/session` (отзыв и ротация — механика); погашение токенов сброса и
-  подтверждения — условным `UPDATE` в SQL домена: таблицы доменные, кит даёт генерацию и хеш.
+- Сессии — `authnkit/session` (механика); токены сброса и подтверждения — в SQL домена (S5).
 - flagkit, cachekit — вне графа до потребителя (FX-10); bump `go.mod` разрешён владельцем, env — в Handoff.
 - «Фундамент»: `registerHTTP` и `Middlewares` — в `fx.Module("cmd/api")`; порт — тип результата
-  провайдера, без `fx.As`; `App` — envconfig без `golibinfra/config`; `fx.StopTimeout` 30s;
-  `ForbiddenError`, `MinPasswordLen` — `pkg/policy` (тег `minLength` держат handler-тесты);
-  `paging.Page`, `outcome.Result` (структура), `idkit`; ошибка guard — в лог до S10 (SEC-05). Фиксы:
-  стрим публикатора — бэклог `publisher-stream-check`, `TestBoot` ждёт PubAck и читает хуки из лога
-  сервиса (нет событий — провал с обеими причинами); `TestFxGraphHasNoContext` видит ctx корня.
-- S4: PATCH читает пользователя (нет — 404), сверяет `version` (иначе 409), пишет поля одной записью;
-  переход — `User.ChangeStatus` (тот же статус — без перехода, deleted — только `Delete`); `status`
-  во входе требует `CanChangeStatus` (403 на весь PATCH); запросы `users` удалённых не пишут.
-- S5: эффект консьюмера помнит `sent_at` (миграция 0004): upsert перевыпускает токен неотправленного
-  (тот же id), отправленное — пропуск; событие — на каждый выпуск, `TokenID` — id строки. Погашение —
-  условный `UPDATE` первым в транзакции, «уже погашен» — `ErrTokenUsed` (409).
+  провайдера, без `fx.As`; `App` — envconfig; `fx.StopTimeout` 30s; `pkg/policy` (`ForbiddenError`,
+  `MinPasswordLen`), `paging.Page`, `outcome.Result`, `idkit`; ошибка guard — в лог до S10. Стрим
+  публикатора — бэклог `publisher-stream-check`; хуки `TestBoot` читает из лога сервиса.
+- S4: PATCH: нет — 404, чужая `version` — 409, поля — одной записью; переход — `User.ChangeStatus`
+  (deleted — только `Delete`); `status` — `CanChangeStatus`, 403 на весь PATCH; удалённых не пишут.
+- S5: эффект консьюмера помнит `sent_at`: upsert перевыпускает токен неотправленного, отправленное —
+  пропуск; `TokenID` — id строки; погашение — условный `UPDATE` первым в транзакции (`ErrTokenUsed`).
 - S6: `user.Trusted` — без policy, только адаптерам `module/` (archtest); адаптер — тип на поставщика,
   ошибки `Trusted` → sentinel потребителя; токен удалённого недействителен; киты — `auth/infra/`,
   log-mailer — S11; `domain-mapping` 95, 119, 120 — под канон (часть HAR-08).
+- S7: префикс домена и envelope `data` держит archtest `TestHTTPTypes`; 401 — `TestBoot` по всем
+  операциям под `Security` из живой спецификации; e2e-модели — `extra="forbid"`, `strict`.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, envelope `data`, problem+json с машинным `code`,
   новые коды ответов, ошибки в OpenAPI; user: PATCH целиком, `status` — только админ, неизвестный
-  id — 404, `version` в ответе; auth: change-password — 404, 409; verification: погашенный токен,
-  гонка записи — 409) — breaking для форков, которые повторяли пример API.
+  id — 404, `version` в ответе; auth: login — `data`, change-password — 404, 409; verification: токен,
+  погашенный или в гонке записи — 409) — breaking для форков, которые повторяли пример API.
 - Сессии на `authnkit/session`: при выкатке все пользователи входят заново один раз;
   `refresh_sessions` удаляется новой миграцией (`-- infra-handoff:`), таблица сессий кита — новый
   источник `cmd/migrate`.
@@ -296,5 +296,5 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-«Фундамент» (S1–S3) — PASS, н1 и н2 перепроверки закрыты; «Эталон доменов»: S4–S6 сделаны, дальше —
-S7 (HTTP-канон); v1.3.0 — bump в S9.
+«Фундамент» (S1–S3) — PASS, н1 и н2 перепроверки закрыты; «Эталон доменов»: S4–S7 сделаны, дальше —
+S8 (контракт ошибок); v1.3.0 — bump в S9.

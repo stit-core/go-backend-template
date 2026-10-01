@@ -7,6 +7,7 @@ refresh_sessions state-машина, bruteforce_attempts счётчик.
 import pytest
 
 from client.http import Api
+from client.models import ChangePasswordRequest
 from conftest import RegisteredUser
 from infra.pg import Pg
 from scenarios.auth import login, replay_refresh_status, rotate_refresh
@@ -140,15 +141,8 @@ def test_change_password(
         == 401
     )
     # верный old → 204
-    api.expect(
-        "POST",
-        "/api/auth/change-password",
-        expected=204,
-        json={
-            "user_id": uid,
-            "old_password": user.password,
-            "new_password": new_password,
-        },
+    api.change_password(
+        ChangePasswordRequest(user_id=uid, old_password=user.password, new_password=new_password)
     )
     # старый пароль больше не логинит, новый — да
     with Api(stack) as fresh:

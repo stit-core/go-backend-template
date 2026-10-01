@@ -51,21 +51,21 @@ func Register(api huma.API, h *Handler) {
 	}, h.confirmEmail)
 }
 
-func (h *Handler) requestPasswordReset(ctx context.Context, in *PasswordResetRequestInput) (*struct{}, error) {
+func (h *Handler) requestPasswordReset(ctx context.Context, in *VerificationPasswordResetRequestInput) (*struct{}, error) {
 	if err := h.uc.RequestPasswordReset(ctx, in.Body.Email); err != nil {
 		return nil, verificationErrors.Map(err)
 	}
 	return nil, nil
 }
 
-func (h *Handler) confirmPasswordReset(ctx context.Context, in *PasswordResetConfirmInput) (*struct{}, error) {
+func (h *Handler) confirmPasswordReset(ctx context.Context, in *VerificationPasswordResetConfirmInput) (*struct{}, error) {
 	if err := h.uc.ConfirmPasswordReset(ctx, in.Body.Token, in.Body.Password); err != nil {
 		return nil, verificationErrors.Map(err)
 	}
 	return nil, nil
 }
 
-func (h *Handler) confirmEmail(ctx context.Context, in *EmailVerifyInput) (*struct{}, error) {
+func (h *Handler) confirmEmail(ctx context.Context, in *VerificationEmailVerifyInput) (*struct{}, error) {
 	if err := h.uc.ConfirmEmail(ctx, in.Body.Token); err != nil {
 		return nil, verificationErrors.Map(err)
 	}

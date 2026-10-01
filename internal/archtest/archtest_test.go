@@ -1,8 +1,8 @@
 // Package archtest машинно держит границы и слоевые инварианты доменов (rule
 // domain-architecture) для любого каталога internal/domain/*: импорты между доменами и
 // слоями, чистоту корня домена, адаптеры и таблицы между доменами, привязку портов без fx.As,
-// huma-уникальность HTTP-типов, владение subject-литералами, запрет time.Now() и тестов без
-// утверждений. На archtest //nolint не действует.
+// префикс, уникальность и envelope HTTP-типов, владение subject-литералами, запрет time.Now() и
+// тестов без утверждений. На archtest //nolint не действует.
 package archtest
 
 import (
@@ -135,33 +135,69 @@ func under(p, dir string) bool {
 	return p == dir || strings.HasPrefix(p, dir+"/")
 }
 
-// TestHTTPDTONamesGloballyUnique: huma регистрирует схемы по имени Go-типа на весь API, и
-// одноимённые типы двух доменов роняют старт паникой. Handler и Usecase — канон пакета, в
-// схемы не попадают.
-func TestHTTPDTONamesGloballyUnique(t *testing.T) {
+// TestHTTPTypes: huma регистрирует схемы по имени Go-типа на весь API, и одноимённые типы двух
+// доменов роняют старт паникой — поэтому у типа delivery/http префикс домена и уникальное имя;
+// тело ответа — envelope {data}. Handler и Usecase — канон пакета, в схемы не попадают.
+func TestHTTPTypes(t *testing.T) {
 	t.Parallel()
 	seen := map[string]string{} // имя типа → файл
 	for _, f := range goFiles(t) {
-		if _, sub, ok := splitDomain(f.pkg); !ok || sub != "delivery/http" || f.test {
+		domain, sub, ok := splitDomain(f.pkg)
+		if !ok || sub != "delivery/http" || f.test {
 			continue
 		}
+		prefix := exportedName(domain)
 		for _, decl := range parseGo(t, f.path).Decls {
 			gd, ok := decl.(*ast.GenDecl)
 			if !ok || gd.Tok != token.TYPE {
 				continue
 			}
 			for _, spec := range gd.Specs {
-				name := spec.(*ast.TypeSpec).Name.Name
+				ts := spec.(*ast.TypeSpec)
+				name := ts.Name.Name
 				if !ast.IsExported(name) || name == "Handler" || name == "Usecase" {
 					continue
 				}
+				if !strings.HasPrefix(name, prefix) {
+					t.Errorf("%s declares %s: an HTTP type starts with the domain prefix %s", f.path, name, prefix)
+				}
 				if prev, dup := seen[name]; dup {
-					t.Errorf("type %s is declared in both %s and %s: huma names schemas by Go type, prefix it with the domain", name, prev, f.path)
+					t.Errorf("type %s is declared in both %s and %s: huma names schemas by Go type", name, prev, f.path)
 				}
 				seen[name] = f.path
+				if body := structField(ts.Type, "Body"); strings.HasSuffix(name, "Output") && body != nil && structField(body.Type, "Data") == nil {
+					t.Errorf("%s declares %s with a Body without Data: a response body is the envelope {data}", f.path, name)
+				}
 			}
 		}
 	}
+}
+
+// exportedName — имя домена в CamelCase: order_item → OrderItem.
+func exportedName(domain string) string {
+	var b strings.Builder
+	for part := range strings.SplitSeq(domain, "_") {
+		if part != "" {
+			b.WriteString(strings.ToUpper(part[:1]) + part[1:])
+		}
+	}
+	return b.String()
+}
+
+// structField — поле name структурного типа expr или nil.
+func structField(expr ast.Expr, name string) *ast.Field {
+	st, ok := expr.(*ast.StructType)
+	if !ok {
+		return nil
+	}
+	for _, field := range st.Fields.List {
+		for _, n := range field.Names {
+			if n.Name == name {
+				return field
+			}
+		}
+	}
+	return nil
 }
 
 // TestSubjectLiteralOwnership: литерал "<domain>.events." встречается только в

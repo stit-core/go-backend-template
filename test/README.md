@@ -9,7 +9,7 @@
 | Зона | Где | Отвечает за |
 |---|---|---|
 | Стек | `stack/` | docker-compose + креды seed-admin (bash). `up.sh`/`down.sh`, `lib.sh`, `compose.yml`, `Dockerfile.local`. |
-| Транспорт+модели | `client/` | типизированная httpx-обёртка + pydantic-DTO (зеркало huma). |
+| Транспорт+модели | `client/` | типизированная httpx-обёртка + pydantic-DTO (строгое зеркало huma: лишнее поле или тип — ошибка разбора). |
 | Сценарии | `scenarios/` | переиспользуемые step-функции над `client` (без ассертов). |
 | Infra-интроспекция | `infra/` | типизированный доступ к side-effects: `pg.py` (psycopg, users/refresh_sessions/bruteforce/email_verifications), `outbox.py` (per-domain `outbox_<domain>`), `nats.py` (core-NATS collector). |
 | Smoke-тесты | `smoke/` | boot + критический happy-path, `@pytest.mark.smoke`. |

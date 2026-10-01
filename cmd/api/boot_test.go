@@ -119,7 +119,6 @@ func TestBoot(t *testing.T) {
 	require.Equal(t, http.StatusOK, call(user, http.MethodPost, "/api/auth/login",
 		`{"email":"`+email+`","password":"password123"}`), "login")
 	require.Equal(t, http.StatusOK, call(user, http.MethodGet, "/api/users/me", ""), "/me with the session cookie")
-	require.Equal(t, http.StatusUnauthorized, call(anon, http.MethodGet, "/api/users/me", ""), "/me without a cookie")
 	require.Equal(t, http.StatusNoContent, call(anon, http.MethodPost, "/api/auth/password-reset/request",
 		`{"email":"`+email+`"}`), "password reset request")
 	status := 0
@@ -160,12 +159,26 @@ func TestBoot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(spec), live.String()+"\n", "the running service serves openapi.json")
 
-	// Сырой маршрут chi (Router().Get, Mount) и Hidden-операция huma обходят проверку Security и
-	// openapi.json: каждый маршрут роутера — операция контракта или маршрут спецификации huma.
 	var contract struct {
-		Paths map[string]map[string]any `json:"paths"`
+		Paths map[string]map[string]struct {
+			Security []map[string][]string `json:"security"`
+		} `json:"paths"`
 	}
 	require.NoError(t, json.Unmarshal(spec, &contract))
+	// Операция под Security без cookie — 401: аутентификация стоит на каждой, а не на одной /me.
+	secured := 0
+	for path, ops := range contract.Paths {
+		for method, op := range ops {
+			if len(op.Security) > 0 {
+				secured++
+				require.Equal(t, http.StatusUnauthorized, call(anon, strings.ToUpper(method), pathParam.ReplaceAllString(path, "00000000-0000-0000-0000-000000000001"), "{}"),
+					"%s %s without a cookie", method, path)
+			}
+		}
+	}
+	require.NotZero(t, secured, "the contract has operations under Security")
+	// Сырой маршрут chi (Router().Get, Mount) и Hidden-операция huma обходят проверку Security и
+	// openapi.json: каждый маршрут роутера — операция контракта или маршрут спецификации huma.
 	for _, route := range srv.Router().Routes() {
 		for method := range route.Handlers {
 			_, op := contract.Paths[route.Pattern][strings.ToLower(method)]

@@ -37,7 +37,8 @@ paths:
   Операция без `Security` публична в рантайме: она либо под `Security`, либо в
   `publicOperations` (`cmd/api/api_test.go`); регистрация — в `registerHTTP` (`cmd/api/http.go`).
   Каждая ручка — операция huma в контракте `openapi.json`: сырой маршрут chi (`Router()`) и
-  `Hidden: true` обходят проверку `Security`, `TestBoot` их не пускает. Envelope — `data`.
+  `Hidden: true` обходят проверку `Security`, `TestBoot` их не пускает. Envelope — `data`;
+  префикс, уникальность имён и envelope держит archtest `TestHTTPTypes`.
   OperationID — lowerCamel `<verb><Noun>`, глобально уникален.
 - **I/O — это use-case, не метод агрегата.** Нужен repo/сеть/время → метод `*Usecase`.
   Чистое правило/константа правила → `policy.go` домена, общее для доменов (правило пароля,

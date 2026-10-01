@@ -1,19 +1,19 @@
 package http
 
-type PasswordResetRequestInput struct {
+type VerificationPasswordResetRequestInput struct {
 	Body struct {
 		Email string `json:"email" required:"true"`
 	}
 }
 
-type PasswordResetConfirmInput struct {
+type VerificationPasswordResetConfirmInput struct {
 	Body struct {
 		Token    string `json:"token"    required:"true"`
 		Password string `json:"password" minLength:"8"   required:"true"`
 	}
 }
 
-type EmailVerifyInput struct {
+type VerificationEmailVerifyInput struct {
 	Body struct {
 		Token string `json:"token" required:"true"`
 	}

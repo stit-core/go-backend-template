@@ -185,8 +185,8 @@ huma собирает все DTO-структуры всех доменов в �
 Go-типа. Два домена с одинаковым `ListOutput` → коллизия `ListOutputBody` → panic. Поэтому
 имена publicly-named DTO в `delivery/http/dto.go` — domain-specific: `EventListOutput`,
 не `ListOutput`. Inline `Body struct{...}` именуется по Outer-типу — уникальность Outer
-гарантирует уникальность Body. Уникальность экспортируемых типов `delivery/http` (кроме
-`Handler` и `Usecase`) держит archtest.
+гарантирует уникальность Body. Префикс домена, уникальность и envelope `data` экспортируемых
+типов `delivery/http` (кроме `Handler` и `Usecase`) держит archtest `TestHTTPTypes`.
 
 Операции всех доменов регистрирует одна функция — `registerHTTP` в `cmd/api/http.go`; по ней
 же `cmd/api/api_test.go` собирает API без БД и брокера и проверяет: у каждой операции

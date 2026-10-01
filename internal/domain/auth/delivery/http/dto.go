@@ -2,37 +2,37 @@ package http
 
 import "net/http"
 
-type LoginInput struct {
+type AuthLoginInput struct {
 	Body struct {
 		Email    string `json:"email"    required:"true"`
 		Password string `json:"password" required:"true"`
 	}
 }
 
-type LoginOutput struct {
+type AuthLoginOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 	Body      struct {
-		User AuthUserView `json:"user"`
+		Data AuthUserView `json:"data"`
 	}
 }
 
-type RefreshInput struct {
+type AuthRefreshInput struct {
 	RefreshCookie http.Cookie `cookie:"refresh_token"`
 }
 
-type RefreshOutput struct {
+type AuthRefreshOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 }
 
-type LogoutInput struct {
+type AuthLogoutInput struct {
 	RefreshCookie http.Cookie `cookie:"refresh_token"`
 }
 
-type LogoutOutput struct {
+type AuthLogoutOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 }
 
-type ChangePasswordInput struct {
+type AuthChangePasswordInput struct {
 	Body struct {
 		UserID      string `json:"user_id"      required:"true"`
 		OldPassword string `json:"old_password" required:"true"`
