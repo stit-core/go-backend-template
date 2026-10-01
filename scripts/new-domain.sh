@@ -36,6 +36,8 @@ fi
 
 # Title-case для типов: order → Order, multi_word → MultiWord
 TITLE=$(echo "$NAME" | sed -E 's/(^|_)([a-z])/\U\2/g')
+# lowerCamel для переменных — имя таблицы ошибок, которое ждёт archtest: multi_word → multiWordErrors
+CAMEL=$(echo "$TITLE" | sed -E 's/^./\L&/')
 MODULE_PATH=$(awk '/^module / {print $2}' "$ROOT/go.mod")
 
 echo "→ создаю $DOMAIN_DIR/"
@@ -257,7 +259,7 @@ func Register(api huma.API, h *Handler) {
 	_ = h
 	// huma.Register(api, huma.Operation{OperationID: "create${TITLE}", ...}, h.create)
 	// HTTP-DTO — в dto.go, имена ${TITLE}<Op>Input/Output (huma-registry глобальна);
-	// ошибки — таблица домена ${NAME}Errors (правило на каждую ошибку errors.go, Map в хендлере) и
+	// ошибки — таблица домена ${CAMEL}Errors (правило на каждую ошибку errors.go, Map в хендлере) и
 	// таблица операции из тех же правил для Declare (см. user/delivery/http).
 }
 EOF
