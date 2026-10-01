@@ -19,14 +19,18 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
+	"git.stit.tech/stit-core/golibinfra/telemetry"
 	"git.stit.tech/stit-core/golibinfra/testkit"
 
 	"git.stit.tech/stit-core/go-backend-template/cmd/migrate/sources"
@@ -100,33 +104,32 @@ func (h *serviceLog) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return h
 }
 
-// mailTap — токены писем сервиса: тест ищет их в логе.
+// mailTap — токены писем сервиса: тест гасит их, как получатель письма, и ищет в логе и таблицах.
 type mailTap struct {
 	verification.Mailer
-	mu     sync.Mutex
-	tokens []string
+	mu            sync.Mutex
+	reset, verify []string
 }
 
 func (m *mailTap) SendPasswordReset(ctx context.Context, email, token string) error {
-	m.add(token)
+	m.mu.Lock()
+	m.reset = append(m.reset, token)
+	m.mu.Unlock()
 	return m.Mailer.SendPasswordReset(ctx, email, token)
 }
 
 func (m *mailTap) SendEmailVerification(ctx context.Context, email, token string) error {
-	m.add(token)
+	m.mu.Lock()
+	m.verify = append(m.verify, token)
+	m.mu.Unlock()
 	return m.Mailer.SendEmailVerification(ctx, email, token)
 }
 
-func (m *mailTap) add(token string) {
+// sent — токены писем сброса и подтверждения адреса.
+func (m *mailTap) sent() ([]string, []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.tokens = append(m.tokens, token)
-}
-
-func (m *mailTap) sent() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return slices.Clone(m.tokens)
+	return slices.Clone(m.reset), slices.Clone(m.verify)
 }
 
 func attr(r slog.Record, key string) string {
@@ -156,7 +159,7 @@ func TestBoot(t *testing.T) {
 		t.Setenv(k, v)
 	}
 
-	logs, mail := &serviceLog{}, &mailTap{}
+	logs, mail, metrics := &serviceLog{}, &mailTap{}, sdkmetric.NewManualReader()
 	var (
 		srv        *httpkit.Server
 		kitSources []pgkit.Source
@@ -165,6 +168,13 @@ func TestBoot(t *testing.T) {
 		// Тройник лога сервиса: события fx доходят до logs, только если service пишет их в logkit.
 		fx.Decorate(func(l *slog.Logger) *slog.Logger { return slog.New(slog.NewMultiHandler(l.Handler(), logs)) }),
 		fx.Decorate(func(m verification.Mailer) verification.Mailer { mail.Mailer = m; return mail }),
+		// Провайдер метрик telemetry — с ридером теста: метрики доменов доходят до metrics, только если
+		// домены пишут в провайдер, который экспортирует сигналы.
+		fx.Decorate(func(p *telemetry.Providers) *telemetry.Providers {
+			tapped := *p
+			tapped.MeterProvider = sdkmetric.NewMeterProvider(sdkmetric.WithReader(metrics))
+			return &tapped
+		}),
 		fx.Populate(&srv),
 		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
 	app.RequireStart()
@@ -284,17 +294,36 @@ func TestBoot(t *testing.T) {
 	require.NotEmpty(t, internal.RequestID)
 	require.True(t, logs.logged5xx(internal.RequestID), "the cause is in the service log under the request_id of the response")
 
+	require.Eventually(t, func() bool { resets, verifies := mail.sent(); return len(resets) == 1 && len(verifies) == 1 },
+		15*time.Second, 100*time.Millisecond, "the service mails the email verification and the password reset")
+	resets, verifies := mail.sent()
+	// Получатель гасит обе ссылки: подтверждения пишут свой аудит.
+	const newPassword = "new-password123"
+	require.Equal(t, http.StatusNoContent, call(anon, http.MethodPost, "/api/auth/email-verify",
+		`{"token":"`+verifies[0]+`"}`), "email verification")
+	require.Equal(t, http.StatusNoContent, call(anon, http.MethodPost, "/api/auth/password-reset/confirm",
+		`{"token":"`+resets[0]+`","password":"`+newPassword+`"}`), "password reset confirmation")
+
 	// Адрес, пароли, cookie сессии и токены писем не попадают в лог даже до маскирования.
-	require.Eventually(t, func() bool { return len(mail.sent()) == 2 }, 15*time.Second, 100*time.Millisecond,
-		"the service mails the email verification and the password reset")
 	baseURL, err := url.Parse(base)
 	require.NoError(t, err)
-	secrets := append(mail.sent(), email, password, wrongPassword)
+	secrets := []string{resets[0], verifies[0], email, password, wrongPassword, newPassword}
 	for _, c := range jar.Cookies(baseURL) {
 		secrets = append(secrets, c.Value)
 	}
-	require.Len(t, secrets, 7, "two mail tokens, the address, two passwords, two session cookies")
+	require.Len(t, secrets, 8, "two mail tokens, the address, three passwords, two session cookies")
 	require.Empty(t, logs.leaked(secrets), "a secret reached the service log")
+	// Их нет и в таблицах, которые хранят дольше лога и читают шире: аудит и outbox.
+	for _, table := range []string{"audit_log", "outbox_user", "outbox_verification"} {
+		require.Empty(t, storedLeaks(t, db, table, secrets), "a secret is stored in %s", table)
+	}
+
+	var recorded metricdata.ResourceMetrics
+	require.NoError(t, metrics.Collect(t.Context(), &recorded))
+	require.Equal(t, int64(1), counter(recorded, "biz_auth_login_attempts_total", "ok"),
+		"the auth domain writes its metrics to the meter provider of telemetry")
+	require.Equal(t, int64(1), counter(recorded, "biz_verification_password_reset_requested_total", "ok"),
+		"the verification domain writes its metrics to the meter provider of telemetry")
 
 	app.RequireStop()
 	const noHookEvents = "no %q events in the service log: service does not set logkit.FxLogger, or fx renamed this fxevent.SlogLogger message"
@@ -304,6 +333,42 @@ func TestBoot(t *testing.T) {
 	const httpServe = "git.stit.tech/stit-core/golibinfra/httpkit.serve"
 	require.Equal(t, httpServe, logs.start[len(logs.start)-1], "HTTP must start last (OnStart: %v)", logs.start)
 	require.Equal(t, httpServe, logs.stop[0], "HTTP must stop first (OnStop: %v)", logs.stop)
+}
+
+// storedLeaks — секреты, которые встречаются в строках таблицы table (строка целиком, как текст).
+func storedLeaks(t *testing.T, db *pgxpool.Pool, table string, secrets []string) []string {
+	t.Helper()
+	rows, err := db.Query(t.Context(), "SELECT t::text FROM "+table+" t")
+	require.NoError(t, err)
+	stored, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+	require.NotEmpty(t, stored, "%s is empty: nothing to check", table)
+	var found []string
+	for _, secret := range secrets {
+		if slices.ContainsFunc(stored, func(row string) bool { return strings.Contains(row, secret) }) {
+			found = append(found, secret)
+		}
+	}
+	return found
+}
+
+// counter — значение счётчика name с меткой result.
+func counter(rm metricdata.ResourceMetrics, name, result string) int64 {
+	var n int64
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if m.Name != name || !ok {
+				continue
+			}
+			for _, dp := range sum.DataPoints {
+				if v, _ := dp.Attributes.Value("result"); v.AsString() == result {
+					n += dp.Value
+				}
+			}
+		}
+	}
+	return n
 }
 
 func sourceNames(srcs []pgkit.Source) []string {

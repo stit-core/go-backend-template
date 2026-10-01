@@ -579,18 +579,21 @@ func TestLogin_RecordsOutcome(t *testing.T) {
 	locked.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(&auth.LockState{Until: fixedNow.Add(time.Minute)}, nil).Once()
 	failing := mocks.NewMockLoginGuard(t)
 	failing.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(nil, errors.New("guard store down")).Once()
+	unkeyable := mocks.NewMockLoginGuard(t)
+	unkeyable.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(nil, auth.ErrInvalidCredentials).Once()
 	tests := []struct {
-		result, password string
-		opts             []ucOption
+		name, result, password string
+		opts                   []ucOption
 	}{
-		{"ok", "pass1234", []ucOption{found(true), withGuard(loginGuard(t, "a@b.com", true))}},
-		{"invalid_credentials", "wrong", []ucOption{found(true), withGuard(loginGuard(t, "a@b.com", false))}},
-		{"blocked", "pass1234", []ucOption{found(false), withGuard(loginGuard(t, "a@b.com", false))}},
-		{"locked", "pass1234", []ucOption{withGuard(locked)}},
-		{"error", "pass1234", []ucOption{withGuard(failing)}},
+		{"ok", "ok", "pass1234", []ucOption{found(true), withGuard(loginGuard(t, "a@b.com", true))}},
+		{"wrong password", "invalid_credentials", "wrong", []ucOption{found(true), withGuard(loginGuard(t, "a@b.com", false))}},
+		{"attempt the guard cannot count", "invalid_credentials", "pass1234", []ucOption{withGuard(unkeyable)}},
+		{"blocked", "blocked", "pass1234", []ucOption{found(false), withGuard(loginGuard(t, "a@b.com", false))}},
+		{"locked", "locked", "pass1234", []ucOption{withGuard(locked)}},
+		{"guard failure", "error", "pass1234", []ucOption{withGuard(failing)}},
 	}
 	for _, tc := range tests {
-		t.Run(tc.result, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			reader := sdkmetric.NewManualReader()
 			m := auth.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
@@ -605,6 +608,10 @@ func TestLogin_RecordsOutcome(t *testing.T) {
 
 func TestRefresh_RecordsOutcome(t *testing.T) {
 	t.Parallel()
+	fresh := newMemSessions()
+	require.NoError(t, fresh.Insert(context.Background(), "jti-old", "u1", fixedNow.Add(time.Hour)))
+	owner := mocks.NewMockUserReader(t)
+	owner.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", Role: identity.RoleClient}, nil).Once()
 	reused := newMemSessions()
 	require.NoError(t, reused.Insert(context.Background(), "jti-u1", "u1", fixedNow.Add(time.Hour)))
 	require.NoError(t, reused.MarkUsed(context.Background(), "jti-u1", "jti-next"))
@@ -612,6 +619,7 @@ func TestRefresh_RecordsOutcome(t *testing.T) {
 		result string
 		opts   []ucOption
 	}{
+		{"ok", []ucOption{withSessions(fresh), withUsers(owner), withParser(parserReturning(t, "u1", "jti-old", nil))}},
 		{"reused", []ucOption{withSessions(reused)}},
 		{"invalid", []ucOption{withParser(parserReturning(t, "", "", errors.New("not a refresh token")))}},
 		{"expired", []ucOption{withParser(parserReturning(t, "", "", auth.ErrTokenExpired))}},
@@ -624,7 +632,7 @@ func TestRefresh_RecordsOutcome(t *testing.T) {
 			f := newUC(t, append(tc.opts, withMetrics(m))...)
 
 			_, err := f.uc.Refresh(context.Background(), "tok")
-			require.Error(t, err)
+			require.Equal(t, tc.result == "ok", err == nil, "refresh error: %v", err)
 			require.Equal(t, map[string]int64{tc.result: 1}, counted(t, reader, "biz_auth_refresh_total"))
 		})
 	}

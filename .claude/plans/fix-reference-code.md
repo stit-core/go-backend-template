@@ -259,12 +259,12 @@ prod-дефолты, понятный контракт ошибок API, тес�
   `verification/infra/logmail`, без аудита `mail_sent`). Вход fail-closed, неучитываемый ключ — 401, email ≤ 254
   байт. Сброс: ответ один, лимит — bruteforcekit на (пользователь, IP) портом `ResetLimiter` (кита нет в
   `rootLibs`), confirm гасит прочие ссылки; пароль — в символах; тайминг — бэклог `reset-timing`.
-- S11: метрики — `telemetry.Module` (`OTEL_SDK_DISABLED=true` до коллектора, SDK-провайдер видит `TestBoot`);
-  бизнес-метрики — исходы входа, refresh и запросов сброса, исход пишется раз, запись — SDK `ManualReader`
-  (`testkit/metrictest` — v1.3.0); CRUD-счётчики удалены (сбои консьюмера считает natskit). События `.v2`
-  без email (адрес — `UserReader` по ID), старые не публикуются, durable `-v2`; аудит — ID, неизвестный адрес и
-  блокировка — только метрика. Смена пароля — под guard'ом входа (SEC-11). VO нескольких контекстов — копия
-  в каждом (`platform/shared` убран и из archtest); `nonamedreturns` в гейте; миграцию 0001 не правим.
+- S11: метрики — `telemetry.Module` (`OTEL_SDK_DISABLED=true` до коллектора); `Meter` доменов — из
+  `*telemetry.Providers`, запись — SDK `ManualReader` в тестах и `TestBoot` (`testkit/metrictest` — v1.3.0);
+  бизнес-метрики — исходы входа, refresh и запросов сброса, исход пишется раз; CRUD-счётчики удалены (сбои
+  консьюмера считает natskit). События `.v2` без email (адрес — `UserReader` по ID), durable `-v2`; аудит — ID,
+  неизвестный адрес и блокировка — только метрика. Смена пароля — под guard'ом входа (SEC-11). VO нескольких
+  контекстов — копия в каждом (`platform/shared` убран и из archtest); `nonamedreturns`; 0001 не правим.
 - S12: срез — только admin, строгий мок репозитория и настоящая policy; скрипт вставляет домен в блоки
   `cmd/api`, гонит `make gen` и ставит созданное в индекс — `gen-check` не терпит неотслеженных моков.
 - Валидатор C: здоровье — `api healthcheck` (GET /health своего `HTTP_ADDR`; в distroless нет shell), кита

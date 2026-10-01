@@ -110,3 +110,13 @@ func TestModule(t *testing.T) {
 		})
 	}
 }
+
+// APP_ENV= (задан, но пуст) — не dev: гард строг, как к любому окружению, кроме dev.
+func TestModule_EmptyEnvIsNotDev(t *testing.T) {
+	t.Setenv("APP_ENV", "")
+	setenv(t, "COOKIE_SECURE", "")
+
+	app := fx.New(fx.NopLogger, appconfig.Module, fx.Supply(logkit.RedactConfig{}, httpkit.Config{DocsEnabled: true}))
+
+	require.ErrorIs(t, app.Err(), appconfig.ErrUnsafe)
+}

@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/fx"
 
@@ -52,10 +51,11 @@ var kitConfigs = []any{
 var (
 	infraModules = fx.Options(
 		fx.Provide(kitConfigs...),
-		// Первым: глобальные провайдеры OTel, в которые пишут киты и метрики доменов; при
-		// OTEL_SDK_DISABLED=true сигналы не экспортируются, логи — только в stdout.
+		// Первым: глобальные провайдеры OTel, в которые пишут киты; при OTEL_SDK_DISABLED=true сигналы
+		// не экспортируются, логи — только в stdout.
 		telemetry.Module,
-		fx.Provide(func() metric.Meter { return otel.Meter("app") }),
+		// Meter доменов — провайдер telemetry из графа, а не глобал: порядок модулей ему не важен.
+		fx.Provide(func(p *telemetry.Providers) metric.Meter { return p.MeterProvider.Meter("app") }),
 		logkit.Module,
 		pgkit.Module,
 		natskit.Module(""),
