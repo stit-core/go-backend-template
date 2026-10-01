@@ -73,6 +73,48 @@ func TestTrustedOnlyInModules(t *testing.T) {
 	}
 }
 
+// TestTrustedErrors: Trusted отдаёт ошибки домена только из TrustedErrors — их переводят адаптеры
+// потребителей, другая ушла бы им 500. Исходы репозитория держит тест trusted.go, свои return — этот.
+func TestTrustedErrors(t *testing.T) {
+	t.Parallel()
+	for _, f := range goFiles(t) {
+		domain, sub, ok := splitDomain(f.pkg)
+		if !ok || sub != "" || !strings.HasSuffix(f.path, "/trusted.go") {
+			continue
+		}
+		file := parseGo(t, f.path)
+		listed := map[string]bool{}
+		ast.Inspect(file, func(n ast.Node) bool {
+			vs, ok := n.(*ast.ValueSpec)
+			if !ok || len(vs.Names) != 1 || vs.Names[0].Name != "TrustedErrors" || len(vs.Values) != 1 {
+				return true
+			}
+			if lit, ok := vs.Values[0].(*ast.CompositeLit); ok {
+				for _, elt := range lit.Elts {
+					if id, ok := elt.(*ast.Ident); ok {
+						listed[id.Name] = true
+					}
+				}
+			}
+			return false
+		})
+		sentinels := domainErrors(t, domain)
+		ast.Inspect(file, func(n ast.Node) bool {
+			ret, ok := n.(*ast.ReturnStmt)
+			if !ok {
+				return true
+			}
+			ast.Inspect(ret, func(n ast.Node) bool {
+				if id, ok := n.(*ast.Ident); ok && slices.Contains(sentinels, id.Name) && !listed[id.Name] {
+					t.Errorf("%s returns %s, which is not in TrustedErrors: consumer adapters translate only the listed errors", f.path, id.Name)
+				}
+				return true
+			})
+			return false
+		})
+	}
+}
+
 // TestNoFxAs: порт привязывает тип результата провайдера или identity-closure (architecture.md § fx);
 // fx.As — вторая идиома, и порт между доменами через неё обошёл бы TestNoCrossDomainIdentityClosure.
 func TestNoFxAs(t *testing.T) {

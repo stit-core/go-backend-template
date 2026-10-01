@@ -25,13 +25,13 @@ paths:
   `infra/postgres`; корень домена — ни своих подпакетов, ни транспорта, драйверов и I/O ОС;
   `infra/outbox` — только свой `module/` и `cmd/migrate`. Порт объявляешь в домене-потребителе
   (`usecase.go`), адаптер — в `<consumer>/module/adapters.go` поверх `Trusted` поставщика
-  (`trusted.go`: без policy, берут только адаптеры `module/` — archtest). DTO в порте — локальные;
-  порт возвращает **sentinel'ы потребителя** (адаптер мапит каждую ошибку `TrustedErrors`, тест — по
-  этому списку на каждом методе) и **вычисленные свойства** — методы сущности поставщика (`CanLogin()`): в
-  адаптере нет условий по полям поставщика. Identity-closure (`return uc`) — только внутри
-  домена (delivery-порты своего usecase); порт между доменами — типовой адаптер, тип и
-  конструктор в `adapters.go` (archtest). Clock в адаптерах инжектится (`clockkit.Clock`),
-  `time.Now()` запрещён.
+  (`trusted.go`: без policy, ошибки — только `TrustedErrors`, берут только адаптеры `module/` —
+  archtest). DTO в порте — локальные; порт возвращает **sentinel'ы потребителя** (адаптер мапит каждую
+  ошибку `TrustedErrors`, тест — по этому списку на каждом методе) и **вычисленные свойства** — методы
+  сущности поставщика (`CanLogin()`): в адаптере нет условий по полям поставщика. Identity-closure
+  (`return uc`) — только внутри домена (delivery-порты своего usecase); порт между доменами — типовой
+  адаптер, тип и конструктор в `adapters.go` (archtest). Clock в адаптерах инжектится
+  (`clockkit.Clock`), `time.Now()` запрещён.
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
   Операция без `Security` публична в рантайме: она либо под `Security` (`authgate.Secured(op)`),

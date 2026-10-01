@@ -72,7 +72,7 @@ type UsecaseDeps struct {
 решение принял вызывающий. Методы `Usecase` с policy — только входам самого поставщика (HTTP,
 NATS); `Trusted` берут только адаптеры `module/` потребителей, свой `module/` лишь провайдит
 `NewTrusted` (archtest `TestTrustedOnlyInModules`). Нужной операции нет — добавь её в `Trusted`, а
-её ошибки — в `TrustedErrors` (тест `Trusted` держит, что других нет); канон —
+её ошибки — в `TrustedErrors` (что других нет, держат тест `Trusted` и archtest); канон —
 `internal/domain/user/trusted.go`.
 
 Адаптер — один тип на домен-поставщика, он реализует все порты потребителя к нему; тип **и его

@@ -133,8 +133,9 @@ DTO в порте — локальные (не re-export из B).
 - **Поставщик отдаёт `Trusted`** (`trusted.go`): операции для других доменов без policy —
   решение принял вызывающий. Методы с policy (`Usecase`) — только входам самого домена (HTTP,
   NATS); `Trusted` берут только адаптеры `module/` потребителей, свой `module/` лишь провайдит
-  `NewTrusted` (archtest `TestTrustedOnlyInModules`). Ошибки `Trusted` — список `TrustedErrors`: тест
-  `Trusted` держит, что других нет, тест адаптера — что каждая переводится.
+  `NewTrusted` (archtest `TestTrustedOnlyInModules`). Ошибки `Trusted` — список `TrustedErrors`: что
+  других нет, держат тест `Trusted` (исходы репозитория) и archtest `TestTrustedErrors` (`return` в
+  `trusted.go`), что каждая переводится — тест адаптера.
 - **Identity-closure** (`func(u *user.Usecase) userhttp.Usecase { return u }`) — только внутри
   домена: delivery-порт своего usecase. Порт между доменами closure не реализует — чужие
   sentinel'ы уйдут потребителю без маппинга (archtest `TestNoCrossDomainIdentityClosure`).

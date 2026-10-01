@@ -23,7 +23,7 @@ type Trusted struct {
 
 // TrustedErrors — ошибки, которые отдают методы Trusted (кроме сбоев инфраструктуры): Lookup*,
 // VerifyPassword, MarkEmailVerified — ErrNotFound (нет или удалён); UpdatePassword — ErrConcurrentUpdate
-// (версия устарела или удалён). Адаптер потребителя переводит каждую, тест держит список.
+// (версия устарела или удалён). Адаптер потребителя переводит каждую, тест и archtest держат список.
 var TrustedErrors = []error{ErrNotFound, ErrConcurrentUpdate}
 
 func NewTrusted(d TrustedDeps) *Trusted { return &Trusted{d: d} }

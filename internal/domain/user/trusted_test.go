@@ -82,8 +82,8 @@ func TestTrusted_MarkEmailVerified(t *testing.T) {
 	require.ErrorIs(t, tr.MarkEmailVerified(context.Background(), "gone"), user.ErrNotFound)
 }
 
-// Методы Trusted отдают только ошибки TrustedErrors и сбои инфраструктуры: их переводят адаптеры
-// потребителей, а новая ошибка без перевода ушла бы им 500.
+// На каждом исходе репозитория методы Trusted отдают только ошибки TrustedErrors и сбои инфраструктуры
+// (свои return — archtest): их переводят адаптеры потребителей, новая ошибка без перевода ушла бы им 500.
 func TestTrusted_ErrorsAreDeclared(t *testing.T) {
 	t.Parallel()
 	infra := errors.New("db down")
