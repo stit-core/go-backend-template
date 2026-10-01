@@ -120,6 +120,9 @@ blocked-by: —
   - вопросов владельцу по ходу программы не задавать.
 - Обходы шаблона в ожидании китов (`beforeHTTP`, `publicOperations`, client-IP, `pkg/tokens`)
   снимаются bump'ами в `fix-reference-code` S1 и S9 — `replan-golibinfra.md` §3–4.
+- Пока шаблон ждёт golibinfra v1.3.0 (`fix-reference-code` S9), `repair-harness` S1, S2 и S5
+  идут досрочно: проза и обвязка, не зависящие от кода S9–S15; S3 (проход правды), S4 и
+  «Жизненный цикл» — после закрытия `fix-reference-code`, чтобы проза описала итоговый код.
 - Базовый аудит golibinfra (S4) идёт двумя частями: киты вне httpkit и `testkit/handlertest` —
   сразу после PASS этапа S1–S9 `harden-kits` (их код до v1.2.0 уже не меняется), httpkit и
   handlertest — после тега v1.2.0 — партия 2 на критическом пути, так она стартует раньше.
@@ -127,10 +130,9 @@ blocked-by: —
 
 ## Где мы сейчас
 S1 и S2 закрыты: `harden-gate` удалён, golibinfra v1.2.0 в origin.
-- **S3** — `fix-reference-code`: этап «Фундамент» (S1–S3) — PASS после фиксов `0d78024`…`79fba97`
-  (`validation-fix-reference-code-A.md`, раздел «Перепроверка 79fba97»). Следующий — этап «Эталон
-  доменов» (S4–S8); S9 ждёт v1.3.0.
-- **S4** — базовый аудит golibinfra готов (`kits-audit/summary.md`); партия 2 идёт: этап «Гейт»
-  (S1–S5) плана `harden-gate-defaults`.
-- Промпты — `prompts.md`, оперативные заметки дирижёра — `orchestrator-todo.md` (оба — в каталоге
-  материалов).
+- **S3** — `fix-reference-code`: «Фундамент» и «Эталон доменов» (S1–S8) приняты валидаторами;
+  S9 ждёт golibinfra v1.3.0. Пока — досрочно `repair-harness` S1, S2, S5 («Решения»).
+- **S4** — базовый аудит golibinfra готов (`kits-audit/summary.md`); партия 2: `harden-gate-defaults`
+  — «Гейт» (S1–S5) принят, этап B1–B3 (S6–S10) доделывается; затем S11 и `harden-authn-release`.
+- Предел контекста агента — 950 тыс. (владелец): наблюдатель `ctxwatch.py`, сворачивание и
+  продолжатель — `prompts.md`. Оперативные заметки — `orchestrator-todo.md` (каталог материалов).

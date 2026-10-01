@@ -1,7 +1,7 @@
 ---
-status: blocked
+status: in-progress
 parent: —
-blocked-by: после закрытия fix-reference-code
+blocked-by: —
 ---
 
 # repair-harness — точная обвязка, живой жизненный цикл шаблона, совместный повторный аудит
@@ -195,4 +195,5 @@ blocked-by: после закрытия fix-reference-code
 
 ## Где мы сейчас
 План составлен по итогам аудита. Общие машинные правила едут в форки версией golibinfra (v1.4.0),
-остальное — git-способом. Стартует после закрытия `fix-reference-code`. Следующий шаг — S1.
+остальное — git-способом. S1, S2 и S5 идут досрочно, пока `fix-reference-code` ждёт golibinfra
+v1.3.0; S3, S4 и «Жизненный цикл» — после закрытия `fix-reference-code`. Следующий шаг — S1.
