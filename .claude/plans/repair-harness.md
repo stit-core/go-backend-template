@@ -226,7 +226,8 @@ blocked-by: —
 - S2: «в лог и payload — ID и факты, без токенов, секретов и PII» строже эталона: verification
   логирует email (`delivery/nats/handler.go`, лог-mailer), `Email` — в payload
   `user.events.registered` и событий verification (email берётся портом `UserReader`); эталон
-  приводит `fix-reference-code` (S10, S11) — передано дирижёру.
+  приводит `fix-reference-code` (S10, S11) — передано дирижёру; `event.md` берёт у образца
+  `user.events.registered` только поток, поля payload — по правилу.
 - S2: раскладку `internal/` держит archtest `TestInternalLayout` — пакет вне domain, platform,
   testkit и archtest не видит ни одно правило слоёв (HAR-09). `pkg/` — правила и типы сервиса и
   сгенерированные клиенты; корень домена берёт из `pkg/` только пакеты без транспорта и I/O

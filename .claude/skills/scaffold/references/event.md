@@ -5,7 +5,7 @@
 
 Эвент-флоу: usecase домена-источника пишет событие в **per-domain outbox** (`outbox_<source>`) в той же транзакции, что и основное изменение → drain этого инстанса (поднимается fx.Lifecycle того же `cmd/api`) публикует в **JetStream** через `natskit.StreamBus` → durable-subscriber потребляющего домена (`internal/domain/<consumer>/delivery/nats/`) обрабатывает. Отдельного worker-процесса нет — всё в одном бинаре.
 
-Как и почему — `docs/reference/architecture.md § События и messaging`. Живой образец — `user.events.registered`: публикация в `internal/domain/user/usecase.go`, потребление в `internal/domain/verification/delivery/nats/`.
+Как и почему — `docs/reference/architecture.md § События и messaging`. Живой образец потока — `user.events.registered`: публикация в `internal/domain/user/usecase.go`, потребление в `internal/domain/verification/delivery/nats/`. Поля payload бери по правилу «ID и факты» (rule `domain-architecture`), не из образца.
 
 > `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
 > `git.stit.tech/<org>/backend`). Подставляй фактический, не копируй буквально.
