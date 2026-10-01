@@ -16,9 +16,10 @@ type EmailVerificationToken struct {
 	UsedAt    *time.Time
 }
 
+// CanLogin вычисляет домен user: порт переносит решение, а не сырой статус.
 type User struct {
-	ID      string
-	Email   string
-	Active  bool
-	Version int
+	ID       string
+	Email    string
+	CanLogin bool
+	Version  int
 }

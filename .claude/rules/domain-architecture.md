@@ -14,19 +14,22 @@ paths:
 
 - **Раскладка по слоям.** `entity.go` (типы, без I/O) · `dto.go` (`<Op>Input/Output`) ·
   `errors.go` (все sentinel и error-типы домена — только здесь) · `policy.go` (authorization
-  + чистые правила, без I/O) · `usecase.go` (логика, зависимости через порты) · `events.go`
-  (payload + unexported subject-const) · `metrics.go` (`biz_<domain>_*`, nil-safe) ·
-  `delivery/{http,nats}/` · `infra/postgres/` · `module/`. Файл существует только вместе со
+  + чистые правила, без I/O) · `usecase.go` (логика, зависимости через порты) · `trusted.go`
+  (операции для других доменов без policy) · `events.go` (payload + unexported subject-const) ·
+  `metrics.go` (`biz_<domain>_*`, nil-safe) · `delivery/{http,nats}/` · `infra/postgres/` ·
+  `infra/<kit>/` (адаптер порта к киту) · `module/`. Файл существует только вместе со
   своим содержимым (таблица обязательности — architecture.md); мёртвые типы/файлы удаляются.
 - **Cross-domain — только порты + адаптеры.** archtest (`internal/archtest`) держит импорты
   любого каталога `internal/domain/*`: чужой домен — только из `module/` и только корневым
   пакетом (и из `*_test.go`); `delivery` не импортирует `infra`; `infra/postgres/db` — только
   `infra/postgres`; корень домена — ни своих подпакетов, ни транспорта, драйверов и I/O ОС;
   `infra/outbox` — только свой `module/` и `cmd/migrate`. Порт объявляешь в домене-потребителе
-  (`usecase.go`), адаптер — в `<consumer>/module/adapters.go`. DTO в порте — локальные; порт
-  возвращает **sentinel'ы потребителя** (адаптер мапит чужие) и **вычисленные свойства**
-  (`Active bool`), не сырые чужие enum'ы. Identity-closure (`return uc`) — только внутри домена
-  (delivery-порты своего usecase); порт между доменами — типовой адаптер с маппингом, тип и
+  (`usecase.go`), адаптер — в `<consumer>/module/adapters.go` поверх `Trusted` поставщика
+  (`trusted.go`: без policy, берут только адаптеры `module/` — archtest). DTO в порте — локальные;
+  порт возвращает **sentinel'ы потребителя** (адаптер мапит каждую ошибку `Trusted`, тест — на
+  каждый метод) и **вычисленные свойства** — методы сущности поставщика (`CanLogin()`): в
+  адаптере нет условий по полям поставщика. Identity-closure (`return uc`) — только внутри
+  домена (delivery-порты своего usecase); порт между доменами — типовой адаптер, тип и
   конструктор в `adapters.go` (archtest). Clock в адаптерах инжектится (`clockkit.Clock`),
   `time.Now()` запрещён.
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по

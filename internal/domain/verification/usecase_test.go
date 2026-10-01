@@ -182,7 +182,7 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
 	users := mocks.NewMockUserReader(t)
 	users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
-		&verification.User{ID: "u1", Email: "a@b.com", Active: true}, nil,
+		&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil,
 	)
 	repo := mocks.NewMockRepository(t)
 	var capturedHash string
@@ -221,7 +221,7 @@ func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	claim := repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(nil).Once()
 	users := mocks.NewMockUserReader(t)
 	users.EXPECT().GetByID(mock.Anything, "u1").Return(
-		&verification.User{ID: "u1", Email: "a@b.com", Active: true, Version: 3}, nil,
+		&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true, Version: 3}, nil,
 	)
 	pwSet := mocks.NewMockPasswordSetter(t)
 	pwSet.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(claim)
@@ -256,6 +256,36 @@ func TestConfirmPasswordReset_ClaimedInParallel(t *testing.T) {
 	f := newUC(t, withRepo(repo), withUsers(users), withPwSet(mocks.NewMockPasswordSetter(t)))
 
 	require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"), verification.ErrTokenUsed)
+	require.False(t, f.audit.Has("password_reset_confirmed"))
+}
+
+// Токен пользователя, удалённого после запроса сброса, недействителен.
+func TestConfirmPasswordReset_UserGone(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
+		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
+	).Once()
+	f := newUC(t, withRepo(repo), withPwSet(mocks.NewMockPasswordSetter(t)))
+
+	require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"), verification.ErrInvalidResetToken)
+}
+
+// Пароль сменили между чтением пользователя и записью: погашение откатывается, токен годен для повтора.
+func TestConfirmPasswordReset_ConcurrentUpdate(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetPasswordReset(mock.Anything, mock.Anything).Return(
+		&verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
+	).Once()
+	repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(nil).Once()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(&verification.User{ID: "u1", Version: 3}, nil).Once()
+	pwSet := mocks.NewMockPasswordSetter(t)
+	pwSet.EXPECT().UpdatePassword(mock.Anything, "u1", mock.Anything, 3).Return(verification.ErrConcurrentUpdate).Once()
+	f := newUC(t, withRepo(repo), withUsers(users), withPwSet(pwSet))
+
+	require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"), verification.ErrConcurrentUpdate)
 	require.False(t, f.audit.Has("password_reset_confirmed"))
 }
 
@@ -315,6 +345,22 @@ func TestConfirmEmail_ClaimedInParallel(t *testing.T) {
 	f := newUC(t, withRepo(repo), withEmailSet(mocks.NewMockEmailVerificationSetter(t)))
 
 	require.ErrorIs(t, f.uc.ConfirmEmail(context.Background(), "tok"), verification.ErrTokenUsed)
+	require.False(t, f.audit.Has("email_confirmed"))
+}
+
+// Токен пользователя, удалённого после выпуска, недействителен.
+func TestConfirmEmail_UserGone(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetEmailVerification(mock.Anything, mock.Anything).Return(
+		&verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: fixedNow.Add(time.Hour)}, nil,
+	).Once()
+	repo.EXPECT().MarkEmailVerificationUsed(mock.Anything, "vid").Return(nil).Once()
+	emailSet := mocks.NewMockEmailVerificationSetter(t)
+	emailSet.EXPECT().MarkEmailVerified(mock.Anything, "u1").Return(verification.ErrUserNotFound).Once()
+	f := newUC(t, withRepo(repo), withEmailSet(emailSet))
+
+	require.ErrorIs(t, f.uc.ConfirmEmail(context.Background(), "tok"), verification.ErrInvalidVerificationToken)
 	require.False(t, f.audit.Has("email_confirmed"))
 }
 

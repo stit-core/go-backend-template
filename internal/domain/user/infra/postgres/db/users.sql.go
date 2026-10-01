@@ -163,16 +163,19 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 	return items, nil
 }
 
-const setUserEmailVerified = `-- name: SetUserEmailVerified :exec
+const setUserEmailVerified = `-- name: SetUserEmailVerified :execrows
 UPDATE users
 SET email_verified = true
 WHERE id = $1
   AND status != 'deleted'
 `
 
-func (q *Queries) SetUserEmailVerified(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, setUserEmailVerified, id)
-	return err
+func (q *Queries) SetUserEmailVerified(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserEmailVerified, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateUser = `-- name: UpdateUser :one

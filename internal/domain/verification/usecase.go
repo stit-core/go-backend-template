@@ -133,7 +133,7 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error
 		}
 		return fmt.Errorf("lookup user: %w", err)
 	}
-	if !u.Active {
+	if !u.CanLogin {
 		uc.d.Metrics.RecordPasswordResetRequested(ctx, resultInactive)
 		return nil
 	}
@@ -194,6 +194,10 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 	}
 
 	current, err := uc.d.Users.GetByID(ctx, pr.UserID)
+	if errors.Is(err, ErrUserNotFound) {
+		uc.d.Metrics.RecordPasswordResetConfirmed(ctx, outcome.Invalid)
+		return ErrInvalidResetToken // токен удалённого пользователя
+	}
 	if err != nil {
 		return fmt.Errorf("load user: %w", err)
 	}
@@ -237,7 +241,11 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 		if err := uc.d.Repo.MarkEmailVerificationUsed(txCtx, ev.ID); err != nil {
 			return err
 		}
-		return uc.d.EmailVerifier.MarkEmailVerified(txCtx, ev.UserID)
+		err := uc.d.EmailVerifier.MarkEmailVerified(txCtx, ev.UserID)
+		if errors.Is(err, ErrUserNotFound) {
+			return ErrInvalidVerificationToken // токен удалённого пользователя
+		}
+		return err
 	}); err != nil {
 		if errors.Is(err, ErrTokenUsed) {
 			uc.d.Metrics.RecordEmailConfirmed(ctx, resultAlreadyUsed)

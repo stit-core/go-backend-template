@@ -17,6 +17,7 @@ var Module = fx.Module(
 		user.NewPolicy,
 		user.NewMetrics,
 		user.NewUsecase,
+		user.NewTrusted,
 		userhttp.NewHandler,
 		func(u *user.Usecase) userhttp.Usecase { return u },
 	),

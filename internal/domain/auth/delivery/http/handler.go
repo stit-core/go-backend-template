@@ -120,6 +120,8 @@ var authErrors = httpkit.NewErrorMap(
 	httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "refresh token reused"},
 	httpkit.ErrorRule{Err: auth.ErrAccountLocked, Status: http.StatusTooManyRequests, Code: "AUTH_ACCOUNT_LOCKED", Detail: "account temporarily locked"},
 	httpkit.ErrorRule{Err: auth.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_WEAK_PASSWORD", Detail: "password too weak", Field: "body.new_password"},
+	httpkit.ErrorRule{Err: auth.ErrUserNotFound, Status: http.StatusNotFound, Code: "AUTH_USER_NOT_FOUND", Detail: "user not found"},
+	httpkit.ErrorRule{Err: auth.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "AUTH_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"},
 	authgate.ForbiddenRule,
 )
 

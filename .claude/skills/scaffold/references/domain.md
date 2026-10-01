@@ -71,7 +71,8 @@ internal/domain/<name>/
 Остальные файлы появляются вместе с содержимым (таблица обязательности —
 `docs/reference/architecture.md`): `delivery/http/dto.go` и `view.go` — с первым endpoint'ом,
 `events.go` + `infra/outbox/outbox.go` — с первой публикацией (`references/event.md`),
-`module/adapters.go` — с первым cross-domain портом (`references/port.md`).
+`module/adapters.go` — с первым cross-domain портом, `trusted.go` — с первым доменом-потребителем
+(`references/port.md`).
 
 ### 3. Миграция
 
@@ -200,8 +201,9 @@ var Module = fx.Module(
 
 Имя модуля — путь пакета; порт в графе — тип результата провайдера (`NewPolicy` возвращает
 `Authorizer`), `fx.As` не нужен (`docs/reference/architecture.md` § fx).
-Дальше дополняй его провайдерами по мере роста: адаптеры портов (`new<Port>Adapter` из
-`adapters.go`), `outbox.Providers` домена-публикатора, NATS-handler (`references/event.md`).
+Дальше дополняй его провайдерами по мере роста: адаптеры портов (`new<Provider>Adapter` из
+`adapters.go`, `infra/<kit>` — для китов), `<name>.NewTrusted` — когда домен нужен другим,
+`outbox.Providers` домена-публикатора, NATS-handler (`references/event.md`).
 HTTP-операции домен сам не регистрирует — это делает `registerHTTP` в `cmd/api` (шаг 12).
 
 ### 12. Подключить в cmd/api

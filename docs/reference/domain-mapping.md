@@ -92,7 +92,7 @@
 | Actor | проверяется на handler-уровне (`delivery/http`) или в первом шаге метода |
 | Inputs | DTO в `dto.go` (доменный) и `delivery/http/dto.go` (huma-теги) |
 | Outputs | `dto.go` или domain entity (mapping в `delivery/http/view.go`) |
-| Dependencies (ports) | интерфейсы рядом в `usecase.go`; реализации — в `module/adapters.go` чужого домена или `infra/postgres/repository.go` |
+| Dependencies (ports) | интерфейсы рядом в `usecase.go`; реализации — адаптер в своём `module/adapters.go` (поверх `Trusted` другого домена), `infra/postgres/repository.go` или `infra/<kit>/` |
 | Steps | последовательность вызовов внутри метода `Usecase` |
 | Called aggregate methods | вызовы методов на entity внутри метода Usecase |
 | Events emitted | `outboxkit.Publisher` + struct из `events.go`, в одной транзакции с persist |
@@ -116,8 +116,8 @@
 |---|---|
 | Purpose | пакет-doc в `<context>/doc.go` (опционально) |
 | Ubiquitous Language | проверяется на код-ревью; имена в коде должны соответствовать |
-| Cross-context dependencies (outbound) | порт в `<context>/usecase.go` + адаптер в чужом `module/adapters.go` |
-| Cross-context dependencies (inbound) | другой контекст имеет порт; этот контекст реализует через адаптер |
+| Cross-context dependencies (outbound) | порт в `<context>/usecase.go` + адаптер в `<context>/module/adapters.go` поверх `Trusted` поставщика |
+| Cross-context dependencies (inbound) | другой контекст имеет порт; этот контекст отдаёт ему операции без policy в `trusted.go` (`Trusted`) |
 | Architecture notes | живёт в `.claude/rules/<context>-*.md` если требует rule-уровня |
 
 ## Cross-context relations

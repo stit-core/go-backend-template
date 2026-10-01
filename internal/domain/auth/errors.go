@@ -11,4 +11,5 @@ var (
 	ErrWeakPassword       = errors.New("auth: password too weak")
 	ErrSessionNotFound    = errors.New("auth: refresh session not found")
 	ErrUserNotFound       = errors.New("auth: user not found")
+	ErrConcurrentUpdate   = errors.New("auth: concurrent update")
 )

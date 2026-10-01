@@ -15,10 +15,12 @@
 ├── events.go        outbox-эвенты: payload-типы + unexported subject-const
 ├── policy.go        authorization + чистые правила; решения без I/O
 ├── usecase.go       бизнес-логика; зависимости через интерфейсы (порты)
+├── trusted.go       операции для других доменов без policy (Trusted)
 ├── metrics.go       bizmetric-счётчики домена (biz_<domain>_*_total); nil-safe Record*
 ├── delivery/http/   huma/v2 + chi: handler.go, dto.go, view.go
 ├── delivery/nats/   NATS-subscriber (опц.): handler.go, dto.go
 ├── infra/postgres/  repository.go + queries/*.sql + db/ (sqlc, read-only)
+├── infra/<kit>/     адаптер порта домена к киту (infra/jwt, infra/bruteforce)
 └── module/          module.go (fx) + adapters.go (cross-domain)
 ```
 
@@ -27,11 +29,13 @@
 | Доменные типы | `entity.go` |
 | Ошибки (sentinel) | `errors.go` |
 | Логика | `usecase.go` |
+| Операции для других доменов (без policy) | `trusted.go` |
 | Authorization + чистые валидационные правила | `policy.go` |
 | Outbox-события | `events.go` |
 | Domain-метрики (bizmetric-счётчики) | `metrics.go` |
 | HTTP handler / DTO / mapping | `delivery/http/{handler,dto,view}.go` |
 | sqlc-запросы / repository | `infra/postgres/queries/*.sql`, `repository.go` |
+| Адаптер порта к киту | `infra/<kit>/` |
 | fx-wiring / cross-domain адаптеры | `module/{module,adapters}.go` |
 
 ### Обязательность файлов
@@ -48,6 +52,7 @@
 | `events.go` | домен публикует хотя бы одно outbox-событие; вместе с ним — `infra/outbox/outbox.go` |
 | `delivery/http/view.go` | есть хоть один response с телом (mapping entity → view) |
 | `delivery/nats/` | домен подписан хотя бы на один subject |
+| `trusted.go` | другой домен берёт данные или действия домена через порт |
 | `module/adapters.go` | у домена есть хоть один cross-domain порт с логикой маппинга |
 
 Мёртвый слой (тип/файл без потребителя) не хранится «на будущее» — удаляется, история в git.
@@ -64,7 +69,7 @@
 | `usecase.go` | прямой транспорт: `httpkit`/`natskit`/huma/`net/http`; ctx-геттеры транспорта — только через `internal/platform/identity`; inline-константы правил (место — `policy.go`) |
 | `delivery/*` | бизнес-решения (все ветвления — в usecase), импорт чужих доменов и своего `infra/` (archtest) |
 | `infra/postgres` | бизнес-логика в SQL (сложные CASE-ветвления политик); запросы держат CRUD/фильтры |
-| `module/` | бизнес-логика; только wiring + маппинг типов/ошибок между доменами |
+| `module/` | бизнес-логика и обёртки китов (место — `infra/<kit>/`); только wiring + маппинг типов/ошибок между доменами |
 
 ### Канон именования
 
@@ -125,16 +130,20 @@ DTO в порте — локальные (не re-export из B).
 
 Канон адаптера:
 
+- **Поставщик отдаёт `Trusted`** (`trusted.go`): операции для других доменов без policy —
+  решение принял вызывающий. Методы с policy (`Usecase`) — только входам самого домена (HTTP,
+  NATS); `Trusted` берут только адаптеры `module/` потребителей (archtest
+  `TestTrustedOnlyInModules`). Ошибки `Trusted` перечислены в его doc-комментарии.
 - **Identity-closure** (`func(u *user.Usecase) userhttp.Usecase { return u }`) — только внутри
   домена: delivery-порт своего usecase. Порт между доменами closure не реализует — чужие
   sentinel'ы уйдут потребителю без маппинга (archtest `TestNoCrossDomainIdentityClosure`).
-- **Типовой адаптер** — при любой логике (маппинг DTO, clock, преобразование ошибок):
-  тип **и его конструктор** — в `adapters.go` (не расщеплять между module.go/adapters.go).
-- **Sentinel-маппинг обязателен:** порт возвращает sentinel'ы домена-потребителя
-  (`user.ErrNotFound` → `verification.ErrUserNotFound` в адаптере) — usecase-потребитель
-  не может `errors.Is` по чужим sentinel'ам (archtest).
-- **Порт переносит решения, не сырьё:** вычисленное свойство (`Active bool`,
-  `CanLogin() bool`) вместо сырого статуса-строки чужого enum'а.
+- **Типовой адаптер** — тип **и его конструктор** в `adapters.go` (не расщеплять между
+  module.go/adapters.go); один тип на домен-поставщика реализует все порты потребителя к нему.
+- **Sentinel-маппинг исчерпывающий:** каждая ошибка `Trusted` поставщика → sentinel
+  потребителя (`user.ErrConcurrentUpdate` → `auth.ErrConcurrentUpdate`), usecase-потребитель не
+  может `errors.Is` по чужим sentinel'ам (archtest); держит тест адаптера на каждый метод.
+- **Порт переносит решения, не сырьё:** вычисленное свойство — метод сущности поставщика
+  (`CanLogin()`), в адаптере нет условий по полям поставщика.
 - Времени в адаптерах нет: `clockkit.Clock` инжектится так же, как в usecase.
 
 ## fx

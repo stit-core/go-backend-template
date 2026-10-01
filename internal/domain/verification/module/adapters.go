@@ -11,40 +11,55 @@ import (
 	"git.stit.tech/stit-core/golibinfra/logkit"
 )
 
-type userReaderAdapter struct {
-	uc *user.Usecase
+// userAdapter — порты verification к домену user (UserReader, PasswordSetter, EmailVerificationSetter).
+type userAdapter struct {
+	users *user.Trusted
 }
 
-func (a *userReaderAdapter) GetByID(ctx context.Context, id string) (*verification.User, error) {
-	u, err := a.uc.LookupByID(ctx, id)
+func newUserAdapter(u *user.Trusted) *userAdapter { return &userAdapter{users: u} }
+
+func (a *userAdapter) GetByID(ctx context.Context, id string) (*verification.User, error) {
+	u, err := a.users.LookupByID(ctx, id)
 	if err != nil {
 		return nil, mapUserErr(err)
 	}
 	return userToVerification(u), nil
 }
 
-func (a *userReaderAdapter) GetByEmail(ctx context.Context, email string) (*verification.User, error) {
-	u, err := a.uc.LookupByEmail(ctx, email)
+func (a *userAdapter) GetByEmail(ctx context.Context, email string) (*verification.User, error) {
+	u, err := a.users.LookupByEmail(ctx, email)
 	if err != nil {
 		return nil, mapUserErr(err)
 	}
 	return userToVerification(u), nil
 }
 
-// Ports carry consumer-domain sentinels: callers can't errors.Is against user's (archtest).
+func (a *userAdapter) UpdatePassword(ctx context.Context, userID, hash string, version int) error {
+	return mapUserErr(a.users.UpdatePassword(ctx, userID, hash, version))
+}
+
+func (a *userAdapter) MarkEmailVerified(ctx context.Context, userID string) error {
+	return mapUserErr(a.users.MarkEmailVerified(ctx, userID))
+}
+
+// mapUserErr переводит каждую ошибку user.Trusted в ошибку verification: sentinel'ов user потребитель
+// не видит.
 func mapUserErr(err error) error {
-	if errors.Is(err, user.ErrNotFound) {
+	switch {
+	case errors.Is(err, user.ErrNotFound):
 		return verification.ErrUserNotFound
+	case errors.Is(err, user.ErrConcurrentUpdate):
+		return verification.ErrConcurrentUpdate
 	}
 	return err
 }
 
 func userToVerification(u *user.User) *verification.User {
 	return &verification.User{
-		ID:      u.ID,
-		Email:   u.Email,
-		Active:  u.Status == user.StatusActive,
-		Version: u.Version,
+		ID:       u.ID,
+		Email:    u.Email,
+		CanLogin: u.CanLogin(),
+		Version:  u.Version,
 	}
 }
 

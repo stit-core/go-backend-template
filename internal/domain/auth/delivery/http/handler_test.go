@@ -143,6 +143,33 @@ func TestLogout_ExpiredTokenStillClears(t *testing.T) {
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
 }
 
+func TestChangePassword_Errors(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{"wrong old password", auth.ErrInvalidCredentials, http.StatusUnauthorized, "AUTH_INVALID_CREDENTIALS"},
+		{"not self, not admin", &policy.ForbiddenError{Reason: "not self"}, http.StatusForbidden, "FORBIDDEN"},
+		{"unknown user", auth.ErrUserNotFound, http.StatusNotFound, "AUTH_USER_NOT_FOUND"},
+		{"concurrent update", auth.ErrConcurrentUpdate, http.StatusConflict, "AUTH_CONCURRENT_UPDATE"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			uc := mocks.NewMockUsecase(t)
+			uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", mock.Anything).Return(tc.err).Once()
+			api := setup(t, uc)
+
+			resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",
+				strings.NewReader(changePasswordBody(strings.Repeat("p", policy.MinPasswordLen))))
+			handlertest.AssertAPIError(t, resp, tc.status, tc.code)
+		})
+	}
+}
+
 func TestChangePassword_WeakPassword(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)

@@ -5,21 +5,23 @@ import (
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	authhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/delivery/http"
+	authbruteforce "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/infra/bruteforce"
+	authjwt "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/infra/jwt"
 	authpg "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/infra/postgres"
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 )
 
 var Module = fx.Module(
 	"internal/domain/auth/module",
 	fx.Provide(
-		newUserReaderAdapter,
-		func(uc *user.Usecase) auth.PasswordVerifier { return uc },
-		func(uc *user.Usecase) auth.PasswordSetter { return uc },
+		newUserAdapter,
+		func(a *userAdapter) auth.UserReader { return a },
+		func(a *userAdapter) auth.PasswordVerifier { return a },
+		func(a *userAdapter) auth.PasswordSetter { return a },
 		authpg.NewRepository,
+		authjwt.NewTokens,
+		authjwt.NewTokenParser,
+		authbruteforce.NewLoginGuard,
 		auth.NewPolicy,
-		newTokensAdapter,
-		newTokenParserAdapter,
-		newLoginGuardAdapter,
 		auth.NewMetrics,
 		auth.NewUsecase,
 		authhttp.NewHandler,

@@ -8,4 +8,5 @@ var (
 	ErrTokenUsed                = errors.New("verification: token already used")
 	ErrWeakPassword             = errors.New("verification: password too weak")
 	ErrUserNotFound             = errors.New("verification: user not found")
+	ErrConcurrentUpdate         = errors.New("verification: concurrent update")
 )

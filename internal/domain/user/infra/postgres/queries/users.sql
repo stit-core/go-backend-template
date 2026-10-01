@@ -34,7 +34,7 @@ WHERE id = $2
   AND status != 'deleted'
 RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at;
 
--- name: SetUserEmailVerified :exec
+-- name: SetUserEmailVerified :execrows
 UPDATE users
 SET email_verified = true
 WHERE id = $1

@@ -12,17 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"git.stit.tech/stit-core/go-backend-template/internal/testkit/allowlist"
 )
-
-// closureAllowlist — identity-closure между доменами в текущем коде.
-var closureAllowlist = allowlist.List{
-	"internal/domain/auth/module/module.go: *user.Usecase → auth.PasswordVerifier":                        "ADP-02",
-	"internal/domain/auth/module/module.go: *user.Usecase → auth.PasswordSetter":                          "ADP-02",
-	"internal/domain/verification/module/module.go: *user.Usecase → verification.PasswordSetter":          "ADP-02",
-	"internal/domain/verification/module/module.go: *user.Usecase → verification.EmailVerificationSetter": "ADP-02",
-}
 
 // TestNoCrossDomainIdentityClosure: `func(uc *user.Usecase) auth.Port { return uc }` отдаёт
 // потребителю чужие ошибки и типы мимо маппинга — порт между доменами реализует
@@ -49,7 +39,32 @@ func TestNoCrossDomainIdentityClosure(t *testing.T) {
 			return true
 		})
 	}
-	closureAllowlist.Check(t, found, "a port between domains is implemented by a typed adapter in module/adapters.go that maps errors and types")
+	require.Empty(t, found, "a port between domains is implemented by a typed adapter in module/adapters.go that maps errors and types")
+}
+
+// TestTrustedOnlyInModules: Trusted домена — операции без policy для других доменов; их берут только
+// адаптеры module/ потребителей, иначе вход (HTTP, NATS) обошёл бы авторизацию.
+func TestTrustedOnlyInModules(t *testing.T) {
+	t.Parallel()
+	for _, f := range goFiles(t) {
+		if _, sub, ok := splitDomain(f.pkg); f.test || ok && sub == "module" {
+			continue
+		}
+		file := parseGo(t, f.path)
+		byName := importsByName(file)
+		ast.Inspect(file, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "Trusted" {
+				return true
+			}
+			if id, ok := sel.X.(*ast.Ident); ok {
+				if _, sub, ok := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/")); ok && sub == "" {
+					t.Errorf("%s uses %s.Trusted: operations without policy are for adapters in module/ only", f.path, id.Name)
+				}
+			}
+			return true
+		})
+	}
 }
 
 // TestNoFxAs: порт привязывает тип результата провайдера или identity-closure (architecture.md § fx);

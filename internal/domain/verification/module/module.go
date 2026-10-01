@@ -3,7 +3,6 @@ package module
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	verifhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/http"
 	verifnats "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/nats"
@@ -16,9 +15,10 @@ var Module = fx.Module(
 	verifoutbox.Providers,
 	fx.Provide(
 		verifpg.NewRepository,
-		newUserReaderAdapter,
-		func(uc *user.Usecase) verification.PasswordSetter { return uc },
-		func(uc *user.Usecase) verification.EmailVerificationSetter { return uc },
+		newUserAdapter,
+		func(a *userAdapter) verification.UserReader { return a },
+		func(a *userAdapter) verification.PasswordSetter { return a },
+		func(a *userAdapter) verification.EmailVerificationSetter { return a },
 		newLogMailerAdapter,
 		verification.NewMetrics,
 		verification.NewUsecase,
@@ -29,7 +29,3 @@ var Module = fx.Module(
 	),
 	fx.Invoke(verifnats.Register),
 )
-
-func newUserReaderAdapter(uc *user.Usecase) verification.UserReader {
-	return &userReaderAdapter{uc: uc}
-}

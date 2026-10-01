@@ -36,6 +36,9 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `usecase.go` | unit через моки портов, fixture `newUC(t, opts...)` |
 | `delivery/http` | handler-тест через `golibinfra/testkit/handlertest` |
 | `delivery/nats` | unit handler-функции (мок Usecase-порта) — включая дубль-доставку |
+| `module/adapters.go` | unit (white-box) поверх `Trusted` поставщика: маппинг полей и каждая его ошибка → sentinel потребителя |
+| `infra/<kit>/` | unit на настоящем ките или фейке из `testkit` |
+| `trusted.go` | unit через моки портов |
 | `infra/postgres/repository.go` | integration per-домен (build-tag) |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp`, корню графа `context.Context` не доступен; `fx.As` нет — archtest |
 | HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь; `openapi.json` совпадает с кодом |
@@ -72,9 +75,9 @@ RED→GREEN: падающий тест, воспроизводящий баг �
 
 ## Coverage
 
-`make cover-check` — юнит-профиль по `internal/{domain,platform}/...` без сгенерированного
-(`/mocks/`, `infra/postgres/db/`) и integration-only (`infra/postgres`) кода; **floor 75%**,
-ниже — красный. Входит в `make check` (pre-push). Полный отчёт — `make test-cover`.
+`make cover-check` — юнит-профиль по `internal/{domain,platform}/...` без `/mocks/`, `infra/`,
+`module/` и `platform/events`; **floor 75%**, ниже — красный. Входит в `make check` (pre-push).
+Полный отчёт — `make test-cover`.
 
 ## Anti-patterns
 

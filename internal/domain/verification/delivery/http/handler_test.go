@@ -55,6 +55,16 @@ func TestPasswordResetConfirm_TokenUsed(t *testing.T) {
 	handlertest.AssertAPIError(t, resp, http.StatusConflict, "VERIFICATION_TOKEN_USED")
 }
 
+func TestPasswordResetConfirm_ConcurrentUpdate(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().ConfirmPasswordReset(mock.Anything, "x", "newpass123").Return(verification.ErrConcurrentUpdate).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/password-reset/confirm", strings.NewReader(`{"token":"x","password":"newpass123"}`))
+	handlertest.AssertAPIError(t, resp, http.StatusConflict, "VERIFICATION_CONCURRENT_UPDATE")
+}
+
 func TestEmailVerify_TokenUsed(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)

@@ -25,6 +25,7 @@ type Repository interface {
 	// Update пишет имя и статус u при версии в БД u.Version; иначе, и для удалённого, — ErrConcurrentUpdate.
 	Update(ctx context.Context, u *User) (*User, error)
 	UpdatePassword(ctx context.Context, id, passwordHash string, version int) (*User, error)
+	// SetEmailVerified: нет пользователя или удалён — ErrNotFound.
 	SetEmailVerified(ctx context.Context, id string) error
 	List(ctx context.Context, filter ListFilter, page paging.Page) ([]*User, error)
 	Count(ctx context.Context, filter ListFilter) (int, error)
@@ -266,29 +267,4 @@ func (uc *Usecase) Delete(ctx context.Context, id string) error {
 	}
 
 	return nil
-}
-
-func (uc *Usecase) LookupByID(ctx context.Context, id string) (*User, error) {
-	return uc.d.Repo.GetByID(ctx, id)
-}
-
-func (uc *Usecase) LookupByEmail(ctx context.Context, email string) (*User, error) {
-	return uc.d.Repo.GetByEmail(ctx, email)
-}
-
-func (uc *Usecase) UpdatePassword(ctx context.Context, userID, hash string, version int) error {
-	_, err := uc.d.Repo.UpdatePassword(ctx, userID, hash, version)
-	return err
-}
-
-func (uc *Usecase) VerifyPassword(ctx context.Context, userID, plain string) (bool, error) {
-	u, err := uc.d.Repo.GetByID(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	return uc.d.Hasher.Verify(ctx, plain, u.PasswordHash)
-}
-
-func (uc *Usecase) MarkEmailVerified(ctx context.Context, userID string) error {
-	return uc.d.Repo.SetEmailVerified(ctx, userID)
 }

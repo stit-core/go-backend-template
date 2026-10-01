@@ -110,8 +110,12 @@ func (r *Repository) SetEmailVerified(ctx context.Context, id string) error {
 	if err != nil {
 		return user.ErrNotFound
 	}
-	if err := r.q.SetUserEmailVerified(ctx, uid); err != nil {
+	rows, err := r.q.SetUserEmailVerified(ctx, uid)
+	if err != nil {
 		return fmt.Errorf("user repo: set email verified: %w", err)
+	}
+	if rows == 0 {
+		return user.ErrNotFound
 	}
 	return nil
 }

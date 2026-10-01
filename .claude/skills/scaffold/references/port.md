@@ -68,8 +68,15 @@ type UsecaseDeps struct {
 
 ### 5. Адаптер в `module/adapters.go` потребителя
 
-Тип адаптера **и его конструктор** — в `adapters.go` (не расщеплять между `module.go` и
-`adapters.go`); канон — `internal/domain/auth/module/adapters.go`.
+Другим доменам поставщик отдаёт **`Trusted`** (`<provider>/trusted.go`): операции без policy —
+решение принял вызывающий. Методы `Usecase` с policy — только входам самого поставщика (HTTP,
+NATS); `Trusted` берут только адаптеры `module/` (archtest `TestTrustedOnlyInModules`). Нужной
+операции нет — добавь её в `Trusted`, а её ошибки — в его doc-комментарий; канон —
+`internal/domain/user/trusted.go`.
+
+Адаптер — один тип на домен-поставщика, он реализует все порты потребителя к нему; тип **и его
+конструктор** — в `adapters.go` (не расщеплять между `module.go` и `adapters.go`); канон —
+`internal/domain/auth/module/adapters.go`.
 
 ```go
 package module
@@ -82,42 +89,43 @@ import (
     "<module-path>/internal/domain/<provider>"
 )
 
-type <provider>ReaderAdapter struct {
-    uc *<provider>.Usecase
+type <provider>Adapter struct {
+    <provider>s *<provider>.Trusted
 }
 
-func new<Provider>ReaderAdapter(uc *<provider>.Usecase) <consumer>.<Provider>Reader {
-    return &<provider>ReaderAdapter{uc: uc}
+func new<Provider>Adapter(t *<provider>.Trusted) *<provider>Adapter {
+    return &<provider>Adapter{<provider>s: t}
 }
 
-func (a *<provider>ReaderAdapter) GetByID(ctx context.Context, id string) (*<consumer>.<DTO>, error) {
-    src, err := a.uc.LookupByID(ctx, id)
+func (a *<provider>Adapter) GetByID(ctx context.Context, id string) (*<consumer>.<DTO>, error) {
+    src, err := a.<provider>s.LookupByID(ctx, id)
     if err != nil {
         return nil, map<Provider>Err(err)
     }
     return <provider>To<Consumer>(src), nil
 }
 
-// Ports carry consumer-domain sentinels: callers can't errors.Is against <provider>'s (archtest).
+// map<Provider>Err переводит каждую ошибку <provider>.Trusted в ошибку <consumer>.
 func map<Provider>Err(err error) error {
-    if errors.Is(err, <provider>.ErrNotFound) {
+    switch {
+    case errors.Is(err, <provider>.ErrNotFound):
         return <consumer>.Err<Provider>NotFound
+    case errors.Is(err, <provider>.ErrConcurrentUpdate):
+        return <consumer>.ErrConcurrentUpdate
     }
     return err
 }
 
 func <provider>To<Consumer>(s *<provider>.<Entity>) *<consumer>.<DTO> {
     return &<consumer>.<DTO>{
-        ID:    s.ID,
-        Email: s.Email,
+        ID:       s.ID,
+        CanLogin: s.CanLogin(), // решение поставщика — его метод, не условие по его полям
         // ...только нужные поля
     }
 }
 ```
 
-`module/adapters.go` имеет право импортить корневой пакет другого домена (не его `infra`/`delivery`). Время в адаптере — только через инжектированный `clockkit.Clock`, не `time.Now()`.
-
-Если в провайдере нет `LookupByID`-метода (т.е. publicly не выставлен) — добавь его в `<provider>/usecase.go`. Lookup-методы без проверки policy — нормальная практика для cross-domain (вызывающий уже сделал свою проверку).
+`module/adapters.go` имеет право импортить корневой пакет другого домена (не его `infra`/`delivery`). Время в адаптере — только через инжектированный `clockkit.Clock`, не `time.Now()`. Обёртка кита (JWT, brute-force guard) — не здесь: адаптер порта к киту живёт в `<consumer>/infra/<kit>/`.
 
 ### 6. Зарегистрировать в `module/module.go` потребителя
 
@@ -126,11 +134,15 @@ var Module = fx.Module(
     "internal/domain/<consumer>/module",
     fx.Provide(
         // ...уже было
-        new<Provider>ReaderAdapter,
+        new<Provider>Adapter,
+        func(a *<provider>Adapter) <consumer>.<Provider>Reader { return a },
     ),
     // ...
 )
 ```
+
+Тип адаптера реализует несколько портов — каждый привязывает identity-closure над **своим** типом
+адаптера (канон fx — `docs/reference/architecture.md § fx`).
 
 Identity-closure (`func(uc *<provider>.Usecase) <consumer>.<Port> { return uc }`) для порта между доменами запрещён (archtest): чужие sentinel'ы ушли бы потребителю без маппинга. Всегда типовой адаптер.
 
@@ -146,8 +158,7 @@ make test PKG=./internal/archtest/...
 ### 8. Тесты
 
 - `usecase_test.go` потребителя: используй `Mock<Provider>Reader` (свежесгенерированный). Тестируй именно поведение consumer'а.
-- `module/adapters_test.go` (опционально): тест маппинг-функции `<provider>To<Consumer>` — pure function, тривиально тестируется.
-- Integration: уже покрыто existing integration-тестами модуля, если адаптер не делает ничего хитрого.
+- `module/adapters_test.go` (white-box, обязателен): адаптер поверх настоящего `<provider>.Trusted` с моком его репозитория — маппинг полей и каждая ошибка `Trusted` → sentinel потребителя на каждом методе (чужой sentinel не протекает); канон — `internal/domain/auth/module/adapters_test.go`.
 
 ### 9. Верификация
 

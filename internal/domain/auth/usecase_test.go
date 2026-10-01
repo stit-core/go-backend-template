@@ -437,6 +437,31 @@ func TestChangePassword(t *testing.T) {
 		require.True(t, f.audit.Has("change_password"))
 	})
 
+	t.Run("concurrent update", func(t *testing.T) {
+		t.Parallel()
+		verify := mocks.NewMockPasswordVerifier(t)
+		verify.EXPECT().VerifyPassword(mock.Anything, "u1", "old").Return(true, nil).Once()
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", Version: 7}, nil).Once()
+		setter := mocks.NewMockPasswordSetter(t)
+		setter.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 7).Return(auth.ErrConcurrentUpdate).Once()
+		f := newUC(t, withUsers(users), withVerifier(verify), withSetter(setter), withPolicy(defaultPolicy(t, true)))
+
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
+		require.ErrorIs(t, err, auth.ErrConcurrentUpdate)
+		require.False(t, f.audit.Has("change_password"))
+	})
+
+	t.Run("unknown user", func(t *testing.T) {
+		t.Parallel()
+		verify := mocks.NewMockPasswordVerifier(t)
+		verify.EXPECT().VerifyPassword(mock.Anything, "u2", "old").Return(false, auth.ErrUserNotFound).Once()
+		f := newUC(t, withVerifier(verify), withPolicy(defaultPolicy(t, true)))
+
+		err := f.uc.ChangePassword(identitytest.Admin("a1"), "u2", "old", "newpassword123")
+		require.ErrorIs(t, err, auth.ErrUserNotFound)
+	})
+
 	t.Run("wrong old", func(t *testing.T) {
 		t.Parallel()
 		verify := mocks.NewMockPasswordVerifier(t)

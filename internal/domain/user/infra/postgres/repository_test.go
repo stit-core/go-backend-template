@@ -120,6 +120,20 @@ func TestUpdate_StaleVersion(t *testing.T) {
 	}
 }
 
+func TestSetEmailVerified(t *testing.T) {
+	t.Parallel()
+	repo := setup(t)
+	ctx := context.Background()
+
+	u := pgseed.InsertUser(t, repo)
+	require.NoError(t, repo.SetEmailVerified(ctx, u.ID))
+	got, err := repo.GetByID(ctx, u.ID)
+	require.NoError(t, err)
+	require.True(t, got.EmailVerified)
+
+	require.ErrorIs(t, repo.SetEmailVerified(ctx, "00000000-0000-0000-0000-000000000000"), user.ErrNotFound)
+}
+
 // Удалённый пользователь снаружи не существует: чтение его не находит, запись не трогает.
 func TestDeletedUserIsUntouched(t *testing.T) {
 	t.Parallel()
@@ -144,7 +158,7 @@ func TestDeletedUserIsUntouched(t *testing.T) {
 	require.ErrorIs(t, err, user.ErrConcurrentUpdate)
 	_, err = repo.UpdatePassword(ctx, u.ID, "new-hash", deleted.Version)
 	require.ErrorIs(t, err, user.ErrConcurrentUpdate)
-	require.NoError(t, repo.SetEmailVerified(ctx, u.ID))
+	require.ErrorIs(t, repo.SetEmailVerified(ctx, u.ID), user.ErrNotFound)
 
 	var (
 		name, status, hash string
