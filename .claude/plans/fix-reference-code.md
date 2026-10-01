@@ -94,8 +94,9 @@ prod-дефолты, понятный контракт ошибок API, тес�
   ≥ 95% или поштучное объяснение, почему нет. Проверка: `make cover-check` → OK
 - [ ] **AC9** — Мутации аудита: из 34 гейт убивает не меньше 32, каждый выживший объяснён в
   «Решениях» (эквивалентный мутант); D02 убит. Проверка: повторить мутации → таблица
-- [ ] **AC10** — `make new-domain NAME=probe` без правок проходит `make check`, включая покрытие.
+- [x] **AC10** — `make new-domain NAME=probe` без правок проходит `make check`, включая покрытие.
   Проверка: в worktree → `make check` зелёный
+  - Подтверждено: в worktree `make new-domain NAME=probe` (и `order_item`) → `make check` → `✓ check clean`
 - [ ] **AC11** — Allowlist'ы archtest и `cmd/api` пусты, обходов в ожидании китов
   нет (`beforeHTTP`, client-IP middleware, `pkg/tokens`, `publicOperations`); гейт зелёный.
   Проверка: `grep -rn "beforeHTTP\|WithIP\|pkg/tokens\|publicOperations" --include=*.go .` → пусто;
@@ -217,9 +218,11 @@ prod-дефолты, понятный контракт ошибок API, тес�
   - Сделано: `make check` → `✓ check clean` (покрытие 88,1%), allowlist ADP-03 пуст, `make e2e` → 16
     passed (payload `.v2` — только ID); 12 поломок метрик, аудита, событий, guard'а смены пароля,
     telemetry и пагинации — пойманы, email в логе — `TestBoot`
-- [ ] **S12** — Скелет `new-domain.sh`: минимальный вертикальный срез (Create и Get) по канону, с
+- [x] **S12** — Скелет `new-domain.sh`: минимальный вертикальный срез (Create и Get) по канону, с
   настоящими тестами, без стабов → nil, подключён в `cmd/api` (COD-09)
   - Проверка: AC10 → PASS · Закрывает: AC10 · Зависит от: S11
+  - Сделано: AC10 подтверждён, `make check` → `✓ check clean`; 10 поломок среза (репозиторий,
+    policy, usecase, сущность, хендлер, view, поле ошибки) — пойманы его тестами
 
 ### Тесты и итог
 - [ ] **S13** — Канон тестов: без `.Maybe()` на побочных эффектах, policy с точными аргументами или
@@ -256,18 +259,18 @@ prod-дефолты, понятный контракт ошибок API, тес�
   ошибку `errors.go`, `Map` — таблицей домена в хендлерах (archtest; хелпер вправе вернуть `err`), таблица
   операции — в `Declare` (без доменных ошибок не заводится); разный смысл — разная ошибка
   (`ErrWrongOldPassword`, `ErrRefreshInvalid`); у ошибок портов — тоже правило.
-- S10: гард — `config.Guard` (Invoke модуля; не dev — строго) и конструктор лог-mailer — сразу в
-  `verification/infra/logmail`, без аудита `mail_sent` (письмо не уходит). Вход fail-closed; ключ, который
-  guard не учтёт, — 401, email регистрации ≤ 254 байт. Сброс: ответ один, сбой письма — в лог, лимит —
-  bruteforcekit на (пользователь, IP) портом `ResetLimiter` (кита нет в `rootLibs`), confirm гасит прочие
-  ссылки; пароль — в символах; время ответа — бэклог `reset-timing`. Образ релиза не собран (сеть).
-- S11: метрики — `telemetry.Module` (`OTEL_SDK_DISABLED=true` до коллектора; SDK-провайдер видит
-  `TestBoot`), бизнес-метрики — исходы входа, refresh и запросов сброса (алерты), исход пишется раз, запись —
-  SDK `ManualReader` в тестах (`testkit/metrictest` — v1.3.0); счётчики CRUD и подтверждений удалены
-  (сбои консьюмера считает natskit). События — `.v2` без email (адрес — `UserReader` по ID), старые subject'ы
-  не публикуются, durable `-v2`; в аудите ID: неизвестный адрес и блокировка — только метрика. Смена
-  пароля — guard входа по email учётной записи (SEC-11). VO нескольких контекстов — копия в каждом
-  (`platform/shared` убран и из archtest); `nonamedreturns` в гейте; миграцию 0001 не правим.
+- S10: гард — `config.Guard` (Invoke модуля; не dev — строго) и конструктор лог-mailer (сразу
+  `verification/infra/logmail`, без аудита `mail_sent`). Вход fail-closed, неучитываемый ключ — 401, email ≤ 254
+  байт. Сброс: ответ один, лимит — bruteforcekit на (пользователь, IP) портом `ResetLimiter` (кита нет в
+  `rootLibs`), confirm гасит прочие ссылки; пароль — в символах; тайминг — бэклог `reset-timing`.
+- S11: метрики — `telemetry.Module` (`OTEL_SDK_DISABLED=true` до коллектора, SDK-провайдер видит `TestBoot`);
+  бизнес-метрики — исходы входа, refresh и запросов сброса, исход пишется раз, запись — SDK `ManualReader`
+  (`testkit/metrictest` — v1.3.0); CRUD-счётчики удалены (сбои консьюмера считает natskit). События `.v2`
+  без email (адрес — `UserReader` по ID), старые не публикуются, durable `-v2`; аудит — ID, неизвестный адрес и
+  блокировка — только метрика. Смена пароля — под guard'ом входа (SEC-11). VO нескольких контекстов — копия
+  в каждом (`platform/shared` убран и из archtest); `nonamedreturns` в гейте; миграцию 0001 не правим.
+- S12: срез — только admin, строгий мок репозитория и настоящая policy; скрипт вставляет домен в блоки
+  `cmd/api`, гонит `make gen` и ставит созданное в индекс — `gen-check` не терпит неотслеженных моков.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в OpenAPI) —
@@ -276,14 +279,12 @@ prod-дефолты, понятный контракт ошибок API, тес�
   `data`, change-password — 404, 409, старый пароль — 422, битый refresh — 401, истёкший access —
   `AUTH_ACCESS_EXPIRED`, 429 — `Retry-After` (и у change-password); verification: погашенный токен —
   409, запрос сброса — 204; `page` ≤ 100000.
-- События verification: `TokenID` — id строки токена; `email_verification_requested` повторяется при
-  перевыпуске неотправленного письма — потребитель дедуплицирует по `TokenID`. Миграция 0004 —
-  nullable-колонка без блокировок; ожидающие подтверждения после выкатки — неотправленные: повтор
-  старой доставки `user.events.registered` пришлёт второе письмо, первая ссылка перестанет работать.
+- События verification: `TokenID` — id строки; `email_verification_requested` повторяется при перевыпуске
+  неотправленного письма — дедуп по `TokenID`. Миграция 0004 — nullable-колонка без блокировок; после
+  выкатки ожидающие — неотправленные: повтор старой доставки пришлёт второе письмо, первая ссылка умрёт.
 - Сессии на `authnkit/session`: при выкатке все пользователи входят заново один раз; `refresh_sessions`
   удаляется новой миграцией (`-- infra-handoff:`), таблица сессий кита — новый источник `cmd/migrate`.
-- Env: дефолты китов v1.3.0 (docs, конечный `OUTBOX_MAX_ATTEMPTS`, флаг доверия прокси) — по аннотации
-  тега; `OTEL_*` — если метрики экспортируются через telemetry.
+- Env: дефолты китов v1.3.0 (docs, конечный `OUTBOX_MAX_ATTEMPTS`, флаг доверия прокси) — по аннотации тега.
 - Лёг S1–S3 (golibinfra v1.2.0): `NATS_JETSTREAM_ENABLED=true` и `NATS_JS_STREAM_NAMES=user,verification`
   — без JetStream или стрима `user` старт падает, без `verification` её события не публикуются;
   маскирование логов всегда (`LOG_REDACT_ENABLED` не читается); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64
@@ -296,5 +297,4 @@ prod-дефолты, понятный контракт ошибок API, тес�
   накопителе `.claude/plans/handoff.md`; прочее — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
-S1–S8 приняты (отчёты A и B в материалах), S10 и S11 сделаны. Дальше S12 (v1.3.0 не нужен), S9
-(v1.3.0), S13–S15.
+S1–S8 приняты (отчёты A и B в материалах), S10–S12 сделаны. Дальше S9 (golibinfra v1.3.0), S13–S15.

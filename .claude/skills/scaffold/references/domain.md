@@ -42,229 +42,69 @@
 
 Если неясно — спроси одним вопросом до начала.
 
-### 2. Скаффолд директорий
+### 2. Срез Create и Get
 
 ```bash
 make new-domain NAME=<name>
 ```
 
-Скрипт `scripts/new-domain.sh` создаёт stub-файлы и сам вписывает конфиги:
+`scripts/new-domain.sh` создаёт рабочий вертикальный срез по канону и подключает его:
+
 ```
+migrations/NNNN_<name>s.{up,down}.sql   таблица <name>s (id, name, created_at); номер — следующий
 internal/domain/<name>/
-├── entity.go
-├── dto.go
-├── errors.go
-├── policy.go
-├── policy_test.go
-├── usecase.go
-├── usecase_test.go
-├── delivery/http/
-│   ├── handler.go
-│   └── handler_test.go
-├── infra/postgres/
-│   ├── repository.go
-│   └── queries/<name>.sql
-└── module/
-    └── module.go
-```
-+ интерфейсы `Repository`, `Authorizer`, `delivery/http.Usecase` в `.mockery.yml`. Границы
-нового домена держит `internal/archtest` — правка конфигов не нужна.
-
-Остальные файлы появляются вместе с содержимым (таблица обязательности —
-`docs/reference/architecture.md`): `delivery/http/dto.go` и `view.go` — с первым endpoint'ом,
-`events.go` + `infra/outbox/outbox.go` — с первой публикацией (`references/event.md`),
-`module/adapters.go` — с первым cross-domain портом, `trusted.go` — с первым доменом-потребителем
-(`references/port.md`).
-
-### 3. Миграция
-
-Добавь `migrations/NNNN_<name>.up.sql` + `.down.sql`. Нумерация — следующая после максимальной существующей.
-
-Структура `up`:
-```sql
-CREATE TABLE <name>s (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    -- ...поля
-    version INT NOT NULL DEFAULT 1,  -- для optimistic lock
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+├── entity.go          <Name>{ID, Name, CreatedAt}, New<Name> проверяет имя
+├── dto.go             CreateInput
+├── errors.go          ErrNotFound, ErrInvalidName
+├── policy.go          CanCreate, CanGet — только admin; предел имени
+├── usecase.go         Create, Get; порты Repository и Authorizer
+├── *_test.go          entity (+fuzz), policy, usecase на строгом моке репозитория и настоящей policy
+├── delivery/http/     POST /api/<name>s и GET /api/<name>s/{id} под authgate.Secured, DTO с
+│                      префиксом и envelope data, таблицы ошибок с Declare, handler- и errors-тесты
+├── infra/postgres/    queries/<name>.sql (Insert<Name>, Get<Name>ByID), repository.go,
+│                      repository_test.go (integration), db/ — sqlc
+└── module/module.go   fx.Module "internal/domain/<name>/module"
 ```
 
-`down`: `DROP TABLE <name>s;`
+Ещё скрипт вписывает блок домена в `sqlc.yaml` и интерфейсы `Repository` и `delivery/http.Usecase`
+в `.mockery.yml`, подключает модуль в `domainModules` (`cmd/api/main.go`) и HTTP-вход в
+`httpHandlers` и `registerHTTP` (`cmd/api/http.go`), гонит `make gen` и ставит созданное в индекс
+git. Границы домена держит `internal/archtest` без правки конфигов.
 
-### 4. sqlc-конфиг
+### 3. Гейт
 
-В `sqlc.yaml` добавь блок:
-```yaml
-- engine: postgresql
-  schema: migrations/
-  queries: internal/domain/<name>/infra/postgres/queries/
-  gen:
-    go:
-      package: db
-      out: internal/domain/<name>/infra/postgres/db
-      sql_package: pgx/v5
-      emit_interface: false
-      emit_exact_table_names: false
-      emit_pointers_for_null_types: true
-      emit_json_tags: false
-      emit_prepared_queries: false
-      emit_methods_with_db_argument: false
-      omit_unused_structs: true
-```
+`make check` — срез проходит его как есть, с покрытием. Красный — сначала причина (skill
+`triage-failure`), не правка теста под код.
 
-### 5. Запросы
+### 4. Домен по артефакту
 
-В `internal/domain/<name>/infra/postgres/queries/<name>.sql` (создание — `Insert<Entity>`, rule `sqlc-and-migrations`):
-```sql
--- name: Get<Name>ByID :one
-SELECT * FROM <name>s WHERE id = $1;
+Срез — основа, а не образец продукта: дальше домен растёт по stable-артефакту strategy
+(`docs/reference/domain-mapping.md`), по правилам шага 0.
 
--- name: Insert<Name> :exec
-INSERT INTO <name>s (id, ...) VALUES ($1, ...);
+- **Поля** — новая миграция (вариант `migration`, номер — следующий), запросы в
+  `infra/postgres/queries/` (создание — `Insert<Entity>`), поля сущности, `view.go`, `make gen`.
+- **Права** — `policy.go`: срез пускает только admin, остальное открывает правило продукта.
+- **Операции** — вариант `endpoint`; ошибка домена — sentinel в `errors.go` и правило в таблице
+  `<домен>Errors`.
+- **События** — вариант `event` (`events.go`, `infra/outbox/outbox.go`, источник в `cmd/migrate`).
+- **Данные другого домена** — вариант `port` (`module/adapters.go`, `trusted.go` поставщика).
+- **Метрика** — только под алерт (`docs/reference/architecture.md` § Обязательность файлов).
 
--- name: Update<Name> :execrows
-UPDATE <name>s
-SET ..., version = version + 1, updated_at = NOW()
-WHERE id = $1 AND version = $2;
-```
+Остальные файлы появляются вместе с содержимым (таблица обязательности — architecture.md).
+Модуль растёт провайдерами: адаптеры портов (`new<Provider>Adapter` из `adapters.go`, `infra/<kit>` —
+для китов), `<name>.NewTrusted` — когда домен нужен другим, `outbox.Providers` домена-публикатора,
+NATS-handler. Порт в графе — тип результата провайдера, `fx.As` не нужен (architecture.md § fx).
+Новый интерфейс из `usecase.go` или `delivery/*` — в `.mockery.yml`, затем `make gen`.
 
-Минимально — чтобы домен компилировался. Расширяй по мере usecase.
+### 5. Готово и коммит
 
-### 6. Сгенерировать sqlc-код
-
-```bash
-make gen
-```
-
-Создаёт `internal/domain/<name>/infra/postgres/db/`. Не правь руками.
-
-### 7. Доменные типы
-
-`entity.go`:
-```go
-package <name>
-
-type <Name> struct {
-    ID        string
-    // ...поля
-    Version   int
-    CreatedAt time.Time
-    UpdatedAt time.Time
-}
-```
-
-`errors.go`:
-```go
-package <name>
-
-import "errors"
-
-var (
-    ErrNotFound = errors.New("<name>: not found")
-    ErrConcurrentUpdate = errors.New("<name>: concurrent update")
-)
-```
-
-### 8. Repository
-
-`infra/postgres/repository.go` — имплементит порт `Repository` из `usecase.go`. Использует sqlc-методы.
-
-### 9. Usecase
-
-`usecase.go`:
-- Объяви интерфейсы зависимостей (порты) и `UsecaseDeps{fx.In}`; `Usecase` хранит deps целиком
-  (`uc.d.Repo`), `NewUsecase` меняет только `d.Log`.
-- Методы — бизнес-логика. Метрика (`metrics.go`) — только под алерт (`docs/reference/architecture.md`
-  § Обязательность файлов): исход пишется ровно раз, тест сверяет запись.
-
-### 10. Adapters (если нужны cross-domain)
-
-Если domain нужны данные другого домена — порт в `usecase.go`, адаптер в `module/adapters.go` (`references/port.md`). archtest блокирует прямые импорты.
-
-### 11. fx-модуль
-
-`module/module.go` генерирует `new-domain.sh`:
-```go
-package module
-
-var Module = fx.Module(
-    "internal/domain/<name>/module",
-    fx.Provide(
-        <name>pg.NewRepository,
-        <name>.NewPolicy,
-        <name>.NewUsecase,
-        <name>http.NewHandler,
-        func(u *<name>.Usecase) <name>http.Usecase { return u },
-    ),
-)
-```
-
-Имя модуля — путь пакета; порт в графе — тип результата провайдера (`NewPolicy` возвращает
-`Authorizer`), `fx.As` не нужен (`docs/reference/architecture.md` § fx).
-Дальше дополняй его провайдерами по мере роста: адаптеры портов (`new<Provider>Adapter` из
-`adapters.go`, `infra/<kit>` — для китов), `<name>.NewTrusted` — когда домен нужен другим,
-`outbox.Providers` домена-публикатора, NATS-handler (`references/event.md`).
-HTTP-операции домен сам не регистрирует — это делает `registerHTTP` в `cmd/api` (шаг 12).
-
-### 12. Подключить в cmd/api
-
-`cmd/api/main.go` — модуль:
-```go
-import <name>mod "<module-path>/internal/domain/<name>/module"
-
-domainModules = fx.Options(
-    usermod.Module,
-    authmod.Module,
-    verifmod.Module,
-    <name>mod.Module,  // добавить
-)
-```
-
-`cmd/api/http.go` — HTTP-вход: поле `<Name> *<name>http.Handler` в `httpHandlers` и
-`<name>http.Register(api, h.<Name>)` в `registerHTTP`. Публичная операция (без `Security`) —
-ещё и в `publicOperations` (`cmd/api/api_test.go`). Неподключённый домен (модуль, HTTP- или
-NATS-вход) валит `TestDomainsAreWired`; outbox-таблица домена вне `sources.Kits`
-(`cmd/migrate/sources/sources.go`) — `TestBoot`.
-
-### 13. Моки
-
-`new-domain.sh` уже вписал в `.mockery.yml` `Repository`, `Authorizer` и `delivery/http.Usecase`.
-Новые интерфейсы из `usecase.go` и `delivery/*` добавляй туда же:
-```yaml
-<module-path>/internal/domain/<name>:
-  interfaces:
-    Repository:
-    # другие интерфейсы из usecase.go
-```
-
-```bash
-make gen
-```
-
-### 14. Тесты
-
-`usecase_test.go` — тесты основной логики через моки портов.
-`policy_test.go` — тесты authorization policy.
-`delivery/http/handler_test.go` — тесты HTTP-уровня через моки Usecase.
-
-Минимальный набор — happy path + основная error path.
-
-### 15. Верификация
-
-Готово и коммит — по CLAUDE.md § Готово. Отдельные шаги (`make lint`, `make test`, `make build`,
-`make gen-check`) — для быстрой итерации.
-
-### 16. Коммит
-
-`feat(<name>): scaffold <name> domain with CRUD`
-
-Если есть outbox-события: `feat(<name>): scaffold <name> domain with CRUD and outbox events`.
+Готово и коммит — по CLAUDE.md § Готово; для итерации — `make test PKG=./internal/domain/<name>/...`,
+`make lint PKG=...`. Коммит — `feat(<name>): scaffold <name> domain`; с событиями —
+`feat(<name>): scaffold <name> domain with outbox events`.
 
 ## Что не делать
 
-- Не копируй существующий домен (`auth`/`user`/`verification`) целиком — это референсы, у них своя специфика. Используй `make new-domain` который даст чистый stub.
-- Не правь сгенерированные `db/`-файлы. Регенерируй через `make gen`.
-- Не пропускай миграцию (`down`-файл обязателен).
-- Не подключай домен в main.go до того как он компилируется в изоляции.
+- Не копируй существующий домен (`auth`/`user`/`verification`) целиком — у референсов своя
+  специфика; основа — `make new-domain`.
+- Не правь сгенерированные `db/` и `mocks/` — только `make gen`.
+- Не правь уже накатанную миграцию — поле добавляет новая.
