@@ -1,6 +1,9 @@
 # scaffold › migration — миграция схемы БД
 
-Создаёт новую миграцию по конвенции (см. `.claude/rules/sqlc-and-migrations.md`) и регенерирует sqlc-код.
+**Шаг 0** — прочитай инструментом Read `.claude/rules/sqlc-and-migrations.md` и
+`.claude/rules/infra-impact.md`.
+
+Создаёт новую миграцию по конвенции и регенерирует sqlc-код.
 
 ## Когда применять
 

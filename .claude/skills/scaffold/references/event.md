@@ -1,8 +1,11 @@
 # scaffold › event — outbox-эвент + subscriber
 
+**Шаг 0** — прочитай инструментом Read `.claude/rules/events-and-messaging.md`,
+`.claude/rules/domain-architecture.md` и `.claude/rules/tests-pipeline.md`.
+
 Эвент-флоу: usecase домена-источника пишет событие в **per-domain outbox** (`outbox_<source>`) в той же транзакции, что и основное изменение → drain этого инстанса (поднимается fx.Lifecycle того же `cmd/api`) публикует в **JetStream** через `natskit.StreamBus` → durable-subscriber потребляющего домена (`internal/domain/<consumer>/delivery/nats/`) обрабатывает. Отдельного worker-процесса нет — всё в одном бинаре.
 
-См. `.claude/rules/events-and-messaging.md` (бэкграунд — автогрузится при правке `events.go` / `delivery/nats/` / `infra/outbox/`) и `docs/reference/architecture.md § События и messaging`. Живой образец — `user.events.registered`: публикация в `internal/domain/user/usecase.go`, потребление в `internal/domain/verification/delivery/nats/`.
+Как и почему — `docs/reference/architecture.md § События и messaging`. Живой образец — `user.events.registered`: публикация в `internal/domain/user/usecase.go`, потребление в `internal/domain/verification/delivery/nats/`.
 
 > `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
 > `git.stit.tech/<org>/backend`). Подставляй фактический, не копируй буквально.
@@ -32,7 +35,7 @@ Outbox оправдан когда:
 ### 1. Уточнить контракт события
 
 - Какой домен **публикует**?
-- Какие поля в payload (минимум — ID агрегата + `At`)?
+- Какие поля в payload (ID и факты, минимум — ID агрегата + `At`; токенов и PII нет)?
 - Какой Subject? Формат: `<source>.events.<event>` (реф. — `user.events.registered`, `verification.events.password_reset_requested` в `internal/domain/*/events.go`).
 - Какой домен **обрабатывает** (или несколько)?
 - Idempotency: на каком natural key consumer отсечёт повторную доставку?

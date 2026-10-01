@@ -29,7 +29,8 @@ paths:
   источника, рядом с payload (не inline-литерал в usecase, не экспорт). Consumer заводит
   свою const в `delivery/nats/`. Breaking-change payload → новый subject (`….v2`).
 - payload-типы — в `events.go` источника: `<Aggregate><PastEvent>`, поля **без json-тегов**
-  (wire = Go-имена; смена формата = `.v2`), timestamp — `At time.Time`.
+  (wire = Go-имена; смена формата = `.v2`), timestamp — `At time.Time`. Поля — ID и факты:
+  токенов, секретов и PII нет (rule `domain-architecture`).
 
 ## Subscribers (in-domain)
 

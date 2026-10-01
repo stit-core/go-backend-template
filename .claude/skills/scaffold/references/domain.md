@@ -1,6 +1,9 @@
 # scaffold › domain — новый бизнес-домен
 
-Создаёт новый домен по конвенции этого шаблона. Соответствует `.claude/rules/domain-architecture.md` — открой его если ещё не загружено.
+**Шаг 0** — прочитай инструментом Read `.claude/rules/domain-architecture.md`,
+`.claude/rules/sqlc-and-migrations.md` и `.claude/rules/tests-pipeline.md`.
+
+Создаёт новый домен по конвенции этого шаблона.
 
 > `<module-path>` в примерах ниже — module path репо из `go.mod` (строка `module`).
 > В форке после `/de-template` это уже свой путь (`git.stit.tech/<org>/backend`),

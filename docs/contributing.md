@@ -8,7 +8,7 @@ enforce'ится детерминированно, как вмешаться. (�
 | Слой | Где | Когда грузится | Сила |
 |---|---|---|---|
 | Ядро + роутер | `CLAUDE.md` (реальный файл) | всегда, каждый запуск | advisory |
-| Path-scoped правила | `.claude/rules/*.md` с `paths:` | когда matching-файл в контексте | advisory |
+| Path-scoped правила | `.claude/rules/*.md` с `paths:` | когда matching-файл прочитан инструментом Read (не Bash, не Write) | advisory |
 | Skills (процедуры) | `.claude/skills/<name>/SKILL.md` | по `description` или `/<name>` | procedural |
 | Settings / permissions | `.claude/settings.json` | старт сессии | детерминированно (deny) |
 
@@ -69,7 +69,7 @@ string-replace edit.
 | Симптом | Куда смотреть |
 |---|---|
 | Skill не активируется | `description` в frontmatter: ключевой сценарий первым, категории намерений вместо списка фраз; `description` + `when_to_use` ≤ 1536 символов (дальше листинг обрезает) |
-| Path-scoped rule не грузится | frontmatter `paths:` (не `globs:`!) — проверить glob |
+| Path-scoped rule не грузится | файл читали через Bash или создали через Write — открой его через Read; frontmatter `paths:` (не `globs:`!) — проверить glob |
 | CLAUDE.md игнорируется | длина >200 строк, либо конфликт инструкций между секциями |
 | Коммит reject'нут | `scripts/git-hooks/commit-msg` — type ∈ {feat,fix,refactor,docs,test,chore,meta} |
 | `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса или HTTP-операции (`openapi.json`) |

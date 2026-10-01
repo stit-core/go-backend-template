@@ -1,5 +1,8 @@
 # scaffold › endpoint — новый HTTP-метод в существующем домене
 
+**Шаг 0** — прочитай инструментом Read `.claude/rules/domain-architecture.md` и
+`.claude/rules/tests-pipeline.md`.
+
 Расширение `delivery/http/` существующего домена новым HTTP-методом. Новый домен — вариант `domain`; переделка существующего метода — точечная правка без scaffold.
 
 ## Когда применять

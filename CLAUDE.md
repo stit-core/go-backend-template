@@ -4,8 +4,9 @@
 (logging, authn, outbox, brute-force, NATS, audit, clock).
 
 Этот файл — **ядро (always-on) + роутер**. Детали — в `docs/`, контекстные правила — в
-`.claude/rules/` (path-scoped, грузятся когда matching-файл в контексте), процедуры — в
-`.claude/skills/`. Карта документации — `docs/README.md`.
+`.claude/rules/`, процедуры — в `.claude/skills/`. Карта документации — `docs/README.md`.
+Правило грузится, когда файл под его `paths:` прочитан инструментом Read; чтение через Bash и
+запись через Write его не грузят — перед правкой открой файл или само правило через Read.
 
 ## Точка входа
 
@@ -84,12 +85,19 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
   errcheck (и `_ = f()`)/errorlint/gosec/govet/contextcheck/noctx/rowserrcheck/bodyclose
   /sqlclosecheck/testifylint — на. `//nolint` — ослабление гейта (§ Границы): с именем включённого
   линтера и объяснением (nolintlint, `make lint`).
-- **archtest** (`internal/archtest`, шаг тестов; `//nolint` на него не действует) — границы любого
-  домена: чужой домен — только через порт и адаптер в `<domain>/module/adapters.go`, моки — только
-  из тестов, `platform` и `pkg` доменов не знают.
+- **Раскладка.** Бизнес-код — только `internal/domain/<d>/` (слои — rule `domain-architecture`);
+  клей платформы — `internal/platform/`; общее для доменов — `pkg/`: чистые примитивы и
+  сгенерированный код (gRPC-, OpenAPI-клиент; зовёт его `infra/` домена); входы — `cmd/`; тестовая
+  обвязка — `internal/testkit/` и `internal/archtest/`. Других каталогов в `internal/` нет.
+- **archtest** (`internal/archtest`, шаг тестов; `//nolint` на него не действует) — раскладка и
+  границы любого домена: чужой домен — только через порт и адаптер в `<domain>/module/adapters.go`,
+  моки — только из тестов, `platform` и `pkg` доменов не знают. Перечень — комментарий пакета в
+  `internal/archtest/archtest_test.go`, в правилах — пометка archtest у инварианта.
 - Ошибки — `%w` + `errors.Is/As`; sentinel в `errors.go` корня домена.
 - Комментарии — только WHY (rule `comments`).
-- **Не городить велосипеды**: переиспользуемый/инфра-примитив (generic util, HTTP-client,
+- **Не городить велосипеды**: нужен примитив — сначала `README.md` golibinfra § Пакеты той версии,
+  что в `go.mod` (каталог — `go list -m -f '{{.Dir}}' git.stit.tech/stit-core/golibinfra`), затем
+  README кита. Переиспользуемый/инфра-примитив (generic util, HTTP-client,
   middleware, любой «kit») → `golibinfra`, не локальная полукалека. Нет нужного — PR в
   `golibinfra` + строка в `.claude/plans/backlog.md`; временный shim только с явным OK юзера. Граница и
   обоснование — `docs/reference/architecture.md § Граница с golibinfra`.

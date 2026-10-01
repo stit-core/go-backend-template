@@ -7,6 +7,19 @@ import (
 	"testing"
 )
 
+// internalRoots — каталоги internal/: пакет вне них не видит ни одно правило слоёв, а бизнес-код
+// в нём обошёл бы границы доменов.
+var internalRoots = []string{"internal/archtest", "internal/domain", "internal/platform", "internal/testkit"}
+
+func TestInternalLayout(t *testing.T) {
+	t.Parallel()
+	for _, f := range goFiles(t) {
+		if under(f.pkg, "internal") && !slices.ContainsFunc(internalRoots, func(root string) bool { return under(f.pkg, root) }) {
+			t.Errorf("%s: internal/ holds domain, platform, testkit and archtest only — business code goes to internal/domain/<d>, code shared by domains to pkg/", f.path)
+		}
+	}
+}
+
 // TestImportBoundaries держит границы для не-тестового кода любого каталога internal/domain/*.
 func TestImportBoundaries(t *testing.T) {
 	t.Parallel()

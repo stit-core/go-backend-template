@@ -1,8 +1,9 @@
 # scaffold › port — cross-domain порт + адаптер
 
-Кросс-доменный вызов через порт + адаптер. Прямой импорт между бизнес-доменами запрещает `internal/archtest` — это enforce-ит границу.
+**Шаг 0** — прочитай инструментом Read `.claude/rules/domain-architecture.md` и
+`.claude/rules/tests-pipeline.md`.
 
-См. `.claude/rules/domain-architecture.md` для бэкграунда (автогрузится при работе с `internal/domain/`).
+Кросс-доменный вызов через порт + адаптер. Прямой импорт между бизнес-доменами запрещает `internal/archtest` — это enforce-ит границу.
 
 > `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
 > `git.stit.tech/<org>/backend`). Подставляй фактический, не копируй буквально.
