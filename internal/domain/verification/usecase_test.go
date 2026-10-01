@@ -37,6 +37,7 @@ type ucFixture struct {
 	mailer   *mocks.MockMailer
 	bus      *outboxtest.Recorder
 	audit    *audittest.Recorder
+	tx       *pgtest.Recorder
 }
 
 type ucOpts struct {
@@ -102,13 +103,14 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 
 	bus := &outboxtest.Recorder{}
 	aud := &audittest.Recorder{}
+	tx := &pgtest.Recorder{}
 	uc := verification.NewUsecase(verification.UsecaseDeps{
 		Repo:          o.repo,
 		Users:         o.users,
 		PasswordSet:   o.pwSet,
 		EmailVerifier: o.emailSet,
 		Hasher:        authntest.DeterministicHasher{},
-		Tx:            pgtest.Identity{},
+		Tx:            tx,
 		Events:        bus,
 		Mailer:        o.mailer,
 		Audit:         aud,
@@ -117,7 +119,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	})
 	return ucFixture{
 		uc: uc, repo: o.repo, users: o.users, pwSet: o.pwSet, emailSet: o.emailSet, mailer: o.mailer, bus: bus,
-		audit: aud,
+		audit: aud, tx: tx,
 	}
 }
 
@@ -229,6 +231,7 @@ func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	f := newUC(t, withRepo(repo), withUsers(users), withPwSet(pwSet))
 
 	require.NoError(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"))
+	require.Equal(t, 1, f.tx.Calls(), "the claim and the password write share one transaction")
 	require.True(t, f.audit.Has("password_reset_confirmed"))
 }
 
@@ -288,6 +291,7 @@ func TestConfirmPasswordReset_ConcurrentUpdate(t *testing.T) {
 	f := newUC(t, withRepo(repo), withUsers(users), withPwSet(pwSet))
 
 	require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"), verification.ErrConcurrentUpdate)
+	require.Equal(t, 1, f.tx.Calls(), "the claim and the password write share one transaction")
 	require.False(t, f.audit.Has("password_reset_confirmed"))
 }
 
@@ -323,6 +327,7 @@ func TestConfirmEmail_HappyPath(t *testing.T) {
 	f := newUC(t, withRepo(repo), withEmailSet(emailSet))
 
 	require.NoError(t, f.uc.ConfirmEmail(context.Background(), "tok"))
+	require.Equal(t, 1, f.tx.Calls(), "the claim and the email mark share one transaction")
 	require.True(t, f.audit.Has("email_confirmed"))
 }
 
