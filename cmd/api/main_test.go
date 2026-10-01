@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"regexp"
@@ -20,6 +21,14 @@ import (
 // обращения к pg/nats.
 func TestFxGraphValidates(t *testing.T) {
 	require.NoError(t, fx.ValidateApp(service, fx.NopLogger), "fx graph invalid")
+}
+
+// TestFxGraphHasNoContext: компонент графа живёт дольше любого ctx — свой ctx он получает от хука
+// или запроса, а не из графа.
+func TestFxGraphHasNoContext(t *testing.T) {
+	t.Parallel()
+	err := fx.ValidateApp(service, fx.NopLogger, fx.Invoke(func(context.Context) {}))
+	require.ErrorContains(t, err, "missing type: context.Context", "the fx graph provides a context.Context")
 }
 
 // envAllowlist — required-переменные конфигов, которых нет в .env.example.

@@ -4,8 +4,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
@@ -18,7 +20,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
-	"go.uber.org/fx/fxevent"
 	"go.uber.org/fx/fxtest"
 
 	"git.stit.tech/stit-core/golibinfra/httpkit"
@@ -29,22 +30,37 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
 )
 
-// hookOrder — порядок хуков старта и остановки: кто добавил каждый хук (CallerName).
+// hookOrder — порядок хуков старта и остановки: кто добавил каждый хук (caller), по событиям fx,
+// которые logkit.FxLogger пишет в лог сервиса уровнем DEBUG.
 type hookOrder struct {
 	mu          sync.Mutex
 	start, stop []string
 }
 
-func (h *hookOrder) LogEvent(e fxevent.Event) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	switch ev := e.(type) {
-	case *fxevent.OnStartExecuting:
-		h.start = append(h.start, ev.CallerName)
-	case *fxevent.OnStopExecuting:
-		h.stop = append(h.stop, ev.CallerName)
+func (h *hookOrder) Handle(_ context.Context, r slog.Record) error {
+	var hooks *[]string
+	switch r.Message {
+	case "OnStart hook executing":
+		hooks = &h.start
+	case "OnStop hook executing":
+		hooks = &h.stop
+	default:
+		return nil
 	}
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == "caller" {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			*hooks = append(*hooks, a.Value.String())
+		}
+		return true
+	})
+	return nil
 }
+
+func (h *hookOrder) Enabled(context.Context, slog.Level) bool { return true }
+func (h *hookOrder) WithAttrs([]slog.Attr) slog.Handler       { return h }
+func (h *hookOrder) WithGroup(string) slog.Handler            { return h }
 
 // TestBoot поднимает сервис набором опций main поверх Postgres и NATS в контейнерах:
 // конструкторы, Invoke и хуки выполняются по-настоящему, чего fx.ValidateApp не делает.
@@ -66,7 +82,9 @@ func TestBoot(t *testing.T) {
 		kitSources []pgkit.Source
 	)
 	app := fxtest.New(t, service,
-		fx.WithLogger(func() fxevent.Logger { return hooks }), fx.Populate(&srv),
+		// Тройник лога сервиса: события fx доходят до hooks, только если service пишет их в logkit.
+		fx.Decorate(func(l *slog.Logger) *slog.Logger { return slog.New(slog.NewMultiHandler(l.Handler(), hooks)) }),
+		fx.Populate(&srv),
 		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
 	app.RequireStart()
 
@@ -151,10 +169,11 @@ func TestBoot(t *testing.T) {
 	}
 
 	app.RequireStop()
+	require.NotEmpty(t, hooks.start, "fx events must reach the service log: service sets logkit.FxLogger")
 	// Запросы в полёте держат всё, что стартовало раньше HTTP: сервер слушает последним и гасится первым.
-	const httpHook = "/golibinfra/httpkit."
-	require.Contains(t, hooks.start[len(hooks.start)-1], httpHook, "HTTP must start last (OnStart: %v)", hooks.start)
-	require.Contains(t, hooks.stop[0], httpHook, "HTTP must stop first (OnStop: %v)", hooks.stop)
+	const httpServe = "git.stit.tech/stit-core/golibinfra/httpkit.serve"
+	require.Equal(t, httpServe, hooks.start[len(hooks.start)-1], "HTTP must start last (OnStart: %v)", hooks.start)
+	require.Equal(t, httpServe, hooks.stop[0], "HTTP must stop first (OnStop: %v)", hooks.stop)
 }
 
 func sourceNames(srcs []pgkit.Source) []string {

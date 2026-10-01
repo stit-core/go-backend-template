@@ -147,17 +147,18 @@ DTO в порте — локальные (не re-export из B).
 - **Привязка к порту** — тип результата провайдера. Свой конструктор возвращает порт
   (repository, policy, адаптер); тип, который реализует несколько портов или приходит из кита,
   привязывает identity-closure (`func(u *user.Usecase) userhttp.Usecase { return u }`,
-  `func(j *authnkit.HS256JWT) authnkit.JWTSigner { return j }`). `fx.As` не используется,
-  `fx.Annotate` — только для тегов `name:` и `group:`.
+  `func(j *authnkit.HS256JWT) authnkit.JWTSigner { return j }`). `fx.As` не используется
+  (archtest), `fx.Annotate` — только для тегов `name:` и `group:`.
 - **Конфиги** — конфиг кита читает его `<kit>.NewConfig` (`kitConfigs` в `cmd/api`), конфиги
-  самого приложения — структура `App` (`internal/platform/config`). `context.Context` в графе нет.
+  самого приложения — структура `App` (`internal/platform/config`). `context.Context` в графе нет
+  (`TestFxGraphHasNoContext`).
 - **Порядок хуков** держит httpkit: сервер слушает после OnStart всех модулей и гасится первым.
   Условие — `httpkit.Module` на верхнем уровне `fx.New`, `registerHTTP` — внутри `fx.Module`
   (`httpModule`): Invoke модулей fx выполняет раньше корневых. Порядок проверяет `TestBoot`.
 - **Таймауты** — явные `fx.StartTimeout`/`fx.StopTimeout`; бюджет остановки покрывает
   `HTTP_SHUTDOWN_TIMEOUT` и `NATS_DRAIN_TIMEOUT`.
-- **События fx** — в лог через `logkit.FxLogger`; паника конструктора или Invoke — ошибка старта
-  (`fx.RecoverFromPanics`).
+- **События fx** — в лог через `logkit.FxLogger` (порядок хуков `TestBoot` читает из лога
+  сервиса); паника конструктора или Invoke — ошибка старта (`fx.RecoverFromPanics`).
 - **Группы** — `httpkit.security_scheme`, `healthkit.probes`, `timerkit.jobs` (через
   `timerkit.Provide`), `pgkit.migrations`; middleware и правки huma — одним значением
   `httpkit.Middlewares` и `httpkit.HumaConfigs` из `cmd/api`. Per-domain outbox

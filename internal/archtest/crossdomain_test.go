@@ -52,6 +52,29 @@ func TestNoCrossDomainIdentityClosure(t *testing.T) {
 	closureAllowlist.Check(t, found, "a port between domains is implemented by a typed adapter in module/adapters.go that maps errors and types")
 }
 
+// TestNoFxAs: порт привязывает тип результата провайдера или identity-closure (architecture.md § fx);
+// fx.As — вторая идиома, и порт между доменами через неё обошёл бы TestNoCrossDomainIdentityClosure.
+func TestNoFxAs(t *testing.T) {
+	t.Parallel()
+	for _, f := range goFiles(t) {
+		if f.test || !slices.Contains(f.imports, "go.uber.org/fx") {
+			continue
+		}
+		file := parseGo(t, f.path)
+		byName := importsByName(file)
+		ast.Inspect(file, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "As" {
+				return true
+			}
+			if id, ok := sel.X.(*ast.Ident); ok && byName[id.Name] == "go.uber.org/fx" {
+				t.Errorf("%s uses fx.As: a port is bound by the provider's result type or an identity closure (architecture.md § fx)", f.path)
+			}
+			return true
+		})
+	}
+}
+
 // identityFunc распознаёт функцию вида func(x T) R { return x } или func(x T) (R, error)
 // { return x, nil } (конструктор fx с ошибкой) и возвращает типы T и R.
 func identityFunc(n ast.Node) (ast.Expr, ast.Expr, bool) {

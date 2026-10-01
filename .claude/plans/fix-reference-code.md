@@ -264,10 +264,11 @@ prod-дефолты, понятный контракт ошибок API, тес�
   тег `minLength` схем паролей повторяет правило (держат handler-тесты), `ErrWeakPassword` — 422 с
   `Field` (AC13). `paging.Page` — вход huma, usecase и SQL; исходы — `outcome.Result`, `weak` →
   `weak_password`; ID — `idkit.NewV7()`, `google/uuid` вне `rootLibs` archtest.
-- Фиксы «Фундамента»: N2 — стрим домена-публикатора старт не проверяет: покрытие subject'ов
-  стримом видит только JetStream API кита, эквивалент в шаблоне не пишется (бэклог
-  `publisher-stream-check`); `.env.example` и `architecture.md` — как есть, `TestBoot` ждёт
-  `published_at` у строк `outbox_verification`.
+- Фиксы «Фундамента»: N2 — стрим публикатора старт не проверяет: покрытие subject'ов видит JetStream
+  API кита, эквивалента в шаблоне нет (бэклог `publisher-stream-check`), `TestBoot` ждёт PubAck строк
+  `outbox_verification`. N4, N7 — порядок хуков `TestBoot` читает из лога сервиса (тройник поверх
+  logkit): без `FxLogger` событий нет, HTTP — ровно `httpkit.serve`; `context.Context` —
+  `TestFxGraphHasNoContext`, `fx.As` — archtest (через него порт обошёл бы проверку closure).
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, envelope `data`, problem+json с машинным `code`,
@@ -291,6 +292,6 @@ prod-дефолты, понятный контракт ошибок API, тес�
 
 ## Где мы сейчас
 «Фундамент» (S1–S3) сделан, валидатор — FAIL (`validation-fix-reference-code-A.md`); круг фиксов:
-закрыты B1 (`0d78024`), N1 и N3 (`2177f66`), N2. Остаток: N4 (тест на `FxLogger`, `context.Context`,
-`fx.As`), N5 (Argon2id в Handoff), N6 (`StopTimeout` ↔ env), N7, N8. Дальше — перепроверка
-валидатором (всё после `77528f3`), затем S4; v1.3.0 — bump в S9.
+закрыты B1 (`0d78024`), N1 и N3 (`2177f66`), N2 (`f03d5c9`), N4 и N7. Остаток: N5 (Argon2id в
+Handoff), N6 (`StopTimeout` ↔ env), N8. Дальше — перепроверка валидатором (всё после `77528f3`),
+затем S4; v1.3.0 — bump в S9.
