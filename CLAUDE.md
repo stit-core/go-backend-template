@@ -86,9 +86,10 @@ migrations-check + test-int (юнит + integration, нужен Docker) + build 
   /sqlclosecheck/testifylint — на. `//nolint` — ослабление гейта (§ Границы): с именем включённого
   линтера и объяснением (nolintlint и archtest).
 - **Раскладка.** Бизнес-код — только `internal/domain/<d>/` (слои — rule `domain-architecture`);
-  клей платформы — `internal/platform/`; общее для доменов — `pkg/`: чистые примитивы и
-  сгенерированный код (gRPC-, OpenAPI-клиент; зовёт его `infra/` домена); входы — `cmd/`; тестовая
-  обвязка — `internal/testkit/` и `internal/archtest/`. Других каталогов в `internal/` нет.
+  клей платформы — `internal/platform/`; `pkg/` — правила и типы этого сервиса (`policy`, `paging`,
+  `outcome`) и сгенерированные клиенты (gRPC, OpenAPI: зовёт `infra/` домена, не корень); входы —
+  `cmd/`; тестовая обвязка — `internal/testkit/` и `internal/archtest/`. Других каталогов в
+  `internal/` нет; generic-примитив — golibinfra (ниже).
 - **archtest** (`internal/archtest`, шаг тестов; `//nolint` на него не действует) — раскладка и
   границы любого домена: чужой домен — только через порт и адаптер в `<domain>/module/adapters.go`,
   моки — только из тестов, `platform` и `pkg` доменов не знают. Перечень — комментарий пакета в

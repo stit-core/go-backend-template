@@ -103,19 +103,30 @@ var rootLibs = []string{
 
 func TestDomainRootIsTransportAgnostic(t *testing.T) {
 	t.Parallel()
+	pkgImports := map[string][]string{} // пакет pkg/ → импорты его не-тестовых файлов
+	for _, f := range goFiles(t) {
+		if under(f.pkg, "pkg") && !f.test {
+			pkgImports[f.pkg] = append(pkgImports[f.pkg], f.imports...)
+		}
+	}
 	for _, f := range domainRootFiles(t) {
 		for _, imp := range f.imports {
-			if !rootAllowed(imp) {
-				t.Errorf("%s imports %s: the domain root sees stdlib without I/O, the module's packages and rootLibs only — transport, drivers and I/O go through ports", f.path, imp)
+			if !rootAllowed(imp, pkgImports) {
+				t.Errorf("%s imports %s: the domain root sees stdlib without I/O, rootLibs, the module's packages and of pkg/ only packages without I/O — transport, drivers and I/O (a client in pkg/ too) go through ports", f.path, imp)
 			}
 		}
 	}
 }
 
-// rootAllowed — импорт корня домена: пакеты модуля (их границы держит TestImportBoundaries),
-// rootLibs или stdlib без I/O.
-func rootAllowed(imp string) bool {
-	if strings.HasPrefix(imp, module+"/") || slices.Contains(rootLibs, imp) {
+// rootAllowed — импорт корня домена: rootLibs, stdlib без I/O, пакеты модуля (их границы держит
+// TestImportBoundaries), а из pkg/ — только пакеты, которые сами видят то же: сгенерированный
+// клиент в pkg/ зовёт infra/ домена, не корень.
+func rootAllowed(imp string, pkgImports map[string][]string) bool {
+	rel, inModule := strings.CutPrefix(imp, module+"/")
+	switch {
+	case inModule && under(rel, "pkg"):
+		return !slices.ContainsFunc(pkgImports[rel], func(i string) bool { return !rootAllowed(i, pkgImports) })
+	case inModule, slices.Contains(rootLibs, imp):
 		return true
 	}
 	return !strings.Contains(imp, ".") && !underAny(imp, ioStdlib)

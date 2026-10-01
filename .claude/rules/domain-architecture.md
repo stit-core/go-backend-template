@@ -35,9 +35,9 @@ paths:
 - **Cross-domain — только порты + адаптеры.** archtest (`internal/archtest`) держит импорты
   любого каталога `internal/domain/*`: чужой домен — только из `module/` и только корневым
   пакетом (и из `*_test.go`); `delivery` не импортирует `infra`; `infra/postgres/db` — только
-  `infra/postgres`; корень домена — ни своих подпакетов, ни транспорта, драйверов и I/O ОС;
-  `infra/outbox` — только свой `module/` и `cmd/migrate`. Порт объявляешь в домене-потребителе
-  (`usecase.go`), адаптер — в `<consumer>/module/adapters.go` поверх `Trusted` поставщика
+  `infra/postgres`; корень домена — ни своих подпакетов, ни транспорта, драйверов и I/O ОС, в том
+  числе через пакет `pkg/`; `infra/outbox` — только свой `module/` и `cmd/migrate`. Порт объявляешь
+  в домене-потребителе (`usecase.go`), адаптер — в `<consumer>/module/adapters.go` поверх `Trusted` поставщика
   (`trusted.go`: без policy, ошибки — только `TrustedErrors`, берут только адаптеры `module/` —
   archtest). DTO в порте — локальные; порт возвращает **sentinel'ы потребителя** (адаптер мапит каждую
   ошибку `TrustedErrors`, тест — по этому списку на каждом методе) и **вычисленные свойства** — методы

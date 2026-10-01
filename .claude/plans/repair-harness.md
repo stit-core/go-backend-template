@@ -228,7 +228,9 @@ blocked-by: —
   `user.events.registered` и событий verification (email берётся портом `UserReader`); эталон
   приводит `fix-reference-code` (S10, S11) — передано дирижёру.
 - S2: раскладку `internal/` держит archtest `TestInternalLayout` — пакет вне domain, platform,
-  testkit и archtest не видит ни одно правило слоёв (HAR-09); сгенерированный клиент — `pkg/`.
+  testkit и archtest не видит ни одно правило слоёв (HAR-09). `pkg/` — правила и типы сервиса и
+  сгенерированные клиенты; корень домена берёт из `pkg/` только пакеты без транспорта и I/O
+  насквозь (archtest `TestDomainRootIsTransportAgnostic`), клиент зовёт `infra/` домена.
 - S5: накопитель `.claude/plans/handoff.md` живёт в репо всегда (пустой — `_пусто_`; его видят
   самопроверка прозы, `make status` и de-template); блок кладёт `/infra-handoff` тем же коммитом,
   раздел `## Handoff` плана — заметки, при закрытии недоставленное уходит в накопитель.
