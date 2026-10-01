@@ -155,8 +155,10 @@ DTO в порте — локальные (не re-export из B).
 - **Порядок хуков** держит httpkit: сервер слушает после OnStart всех модулей и гасится первым.
   Условие — `httpkit.Module` на верхнем уровне `fx.New`, `registerHTTP` — внутри `fx.Module`
   (`httpModule`): Invoke модулей fx выполняет раньше корневых. Порядок проверяет `TestBoot`.
-- **Таймауты** — явные `fx.StartTimeout`/`fx.StopTimeout`; бюджет остановки покрывает
-  `HTTP_SHUTDOWN_TIMEOUT` и `NATS_DRAIN_TIMEOUT`.
+- **Таймауты** — явные `fx.StartTimeout`/`fx.StopTimeout`. `StopTimeout` (30s) — общий бюджет
+  хуков остановки: хуки китов укладываются в его остаток, `HTTP_SHUTDOWN_TIMEOUT` и
+  `NATS_DRAIN_TIMEOUT` действуют не дольше него. Бюджет покрывает их дефолты (15s и 10s); подняли
+  их — поднимите и `StopTimeout`, иначе остановка режется раньше.
 - **События fx** — в лог через `logkit.FxLogger` (порядок хуков `TestBoot` читает из лога
   сервиса); паника конструктора или Invoke — ошибка старта (`fx.RecoverFromPanics`).
 - **Группы** — `httpkit.security_scheme`, `healthkit.probes`, `timerkit.jobs` (через

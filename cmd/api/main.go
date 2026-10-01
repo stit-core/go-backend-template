@@ -91,7 +91,7 @@ var service = fx.Options(
 	logkit.FxLogger,
 	fx.RecoverFromPanics(),
 	fx.StartTimeout(15*time.Second),
-	// HTTP_SHUTDOWN_TIMEOUT (15s) + NATS_DRAIN_TIMEOUT (10s) + запас; оркестратор ждёт дольше.
+	// Бюджет остановки: дефолты HTTP_SHUTDOWN_TIMEOUT (15s) + NATS_DRAIN_TIMEOUT (10s) + запас; env выше он режет.
 	fx.StopTimeout(30*time.Second),
 	infraModules,
 	platformModules,

@@ -259,7 +259,7 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - S2: порт — тип результата провайдера (`NewPolicy` → `Authorizer`), identity-closure —
   delivery-порты и типы китов, без `fx.As` (closure видит archtest). `App` (Cookie) читает
   envconfig без `golibinfra/config` (`config.Load` требует ctx); строка старта —
-  `context.Background()` корня процесса. `fx.StopTimeout` 30s = HTTP 15s + NATS 10s + запас.
+  `context.Background()` корня процесса. `fx.StopTimeout` 30s = дефолты HTTP 15s + NATS 10s + запас.
 - S3: `ForbiddenError` и `policy.MinPasswordLen` — в `pkg/policy`, 403 — `authgate.ForbiddenRule`;
   тег `minLength` схем паролей повторяет правило (держат handler-тесты), `ErrWeakPassword` — 422 с
   `Field` (AC13). `paging.Page` — вход huma, usecase и SQL; исходы — `outcome.Result`, `weak` →
@@ -268,7 +268,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
   API кита, эквивалента в шаблоне нет (бэклог `publisher-stream-check`), `TestBoot` ждёт PubAck строк
   `outbox_verification`. N4, N7 — порядок хуков `TestBoot` читает из лога сервиса (тройник поверх
   logkit): без `FxLogger` событий нет, HTTP — ровно `httpkit.serve`; `context.Context` —
-  `TestFxGraphHasNoContext`, `fx.As` — archtest (через него порт обошёл бы проверку closure).
+  `TestFxGraphHasNoContext`, `fx.As` — archtest (через него порт обошёл бы проверку closure). N6 —
+  бюджет остановки — текстом и в Handoff: сверка env на старте повторила бы дефолты кита.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, envelope `data`, problem+json с машинным `code`,
@@ -276,9 +277,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Сессии на `authnkit/session`: при выкатке все пользователи входят заново один раз;
   `refresh_sessions` удаляется новой миграцией (`-- infra-handoff:`), таблица сессий кита — новый
   источник `cmd/migrate`.
-- Env: `APP_ENV` обязателен; secure cookie по умолчанию; NATS с JetStream обязателен на старте
-  (`SubscribeOnStart`); дефолты китов (маскирование, docs, `OUTBOX_MAX_ATTEMPTS`, флаг доверия
-  прокси) — по аннотациям v1.2.0 и v1.3.0; `REDIS_URL` сервису не нужен; `OTEL_*` — если метрики
+- Env: `APP_ENV` обязателен; secure cookie по умолчанию; дефолты китов v1.3.0 (docs, конечный
+  `OUTBOX_MAX_ATTEMPTS`, флаг доверия прокси) — по аннотации тега; `OTEL_*` — если метрики
   экспортируются через telemetry.
 - Образы от nonroot с закреплённой базой.
 - Лёг S1–S3 (golibinfra v1.2.0): `NATS_JETSTREAM_ENABLED=true` и
@@ -286,12 +286,15 @@ prod-дефолты, понятный контракт ошибок API, тес�
   `verification` её события не публикуются; маскирование логов всегда (`LOG_REDACT_ENABLED` не
   читается, `LOG_REDACT_DISABLED=true` — не в проде); `BRUTEFORCE_IPV6_PREFIX` по умолчанию 64
   (старые блокировки теряются ≤ `BRUTEFORCE_LOCK_DURATION`); Redis, `REDIS_URL`, `FEATURE_FLAGS`
-  не нужны; `PG_*`/`HTTP_*` без приставок `POSTGRES_`/`HTTP_HTTP_`; остановка до 30s —
-  `stop_grace_period` ≥ 35s. API: problem+json с `code` и `request_id`.
+  не нужны; `PG_*`/`HTTP_*` без приставок `POSTGRES_`/`HTTP_HTTP_`. Остановка до 30s
+  (`stop_grace_period` ≥ 35s), `HTTP_SHUTDOWN_TIMEOUT` + `NATS_DRAIN_TIMEOUT` ≤ 25s — иначе правка
+  `fx.StopTimeout`. Argon2id — разом не больше `max(1, GOMAXPROCS/ARGON2_THREADS)` хэшей: при
+  `ARGON2_THREADS=4` и < 8 CPU логин и пароли хэшируются по одному — CPU пода и реплики под пик.
+  API: problem+json с `code` и `request_id`.
 - Блок — через `/infra-handoff`, когда изменения лягут.
 
 ## Где мы сейчас
 «Фундамент» (S1–S3) сделан, валидатор — FAIL (`validation-fix-reference-code-A.md`); круг фиксов:
-закрыты B1 (`0d78024`), N1 и N3 (`2177f66`), N2 (`f03d5c9`), N4 и N7. Остаток: N5 (Argon2id в
-Handoff), N6 (`StopTimeout` ↔ env), N8. Дальше — перепроверка валидатором (всё после `77528f3`),
+закрыты B1 (`0d78024`), N1 и N3 (`2177f66`), N2 (`f03d5c9`), N4 и N7 (`82c1d51`), N5 и N6.
+Остаток: N8 (литерал исхода метрики). Дальше — перепроверка валидатором (всё после `77528f3`),
 затем S4; v1.3.0 — bump в S9.
