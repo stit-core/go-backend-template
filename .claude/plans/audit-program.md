@@ -123,6 +123,8 @@ blocked-by: —
 - Пока шаблон ждёт golibinfra v1.3.0 (`fix-reference-code` S9), `repair-harness` S1, S2 и S5
   идут досрочно: проза и обвязка, не зависящие от кода S9–S15; S3 (проход правды), S4 и
   «Жизненный цикл» — после закрытия `fix-reference-code`, чтобы проза описала итоговый код.
+- `fix-reference-code` S10–S12 идут до S9: от golibinfra v1.3.0 они не зависят (флаг доверия
+  прокси переехал в S9), а v1.3.0 — ещё весь `harden-authn-release`.
 - Базовый аудит golibinfra (S4) идёт двумя частями: киты вне httpkit и `testkit/handlertest` —
   сразу после PASS этапа S1–S9 `harden-kits` (их код до v1.2.0 уже не меняется), httpkit и
   handlertest — после тега v1.2.0 — партия 2 на критическом пути, так она стартует раньше.
@@ -130,9 +132,10 @@ blocked-by: —
 
 ## Где мы сейчас
 S1 и S2 закрыты: `harden-gate` удалён, golibinfra v1.2.0 в origin.
-- **S3** — `fix-reference-code`: «Фундамент» и «Эталон доменов» (S1–S8) приняты валидаторами;
-  S9 ждёт golibinfra v1.3.0. Пока — досрочно `repair-harness` S1, S2, S5 («Решения»).
-- **S4** — базовый аудит golibinfra готов (`kits-audit/summary.md`); партия 2: `harden-gate-defaults`
-  — «Гейт» (S1–S5) принят, этап B1–B3 (S6–S10) доделывается; затем S11 и `harden-authn-release`.
+- **S3** — `fix-reference-code`: S1–S8 приняты; дальше S10–S12 (до S9, «Решения»), затем S9 на
+  v1.3.0 и S13–S15. `repair-harness` S1, S2, S5 приняты досрочно (`validation-repair-harness-A.md`).
+- **S4** — партия 2 golibinfra: `harden-gate-defaults` S1–S10 приняты, итоговый S11 идёт; затем
+  `harden-authn-release` и релиз v1.3.0.
 - Предел контекста агента — 950 тыс. (владелец): наблюдатель `ctxwatch.py`, сворачивание и
-  продолжатель — `prompts.md`. Оперативные заметки — `orchestrator-todo.md` (каталог материалов).
+  продолжатель — `prompts.md`; агенты не запускают `/code-review` и вложенных агентов.
+  Оперативные заметки — `orchestrator-todo.md` (каталог материалов).
