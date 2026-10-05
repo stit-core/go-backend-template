@@ -252,7 +252,7 @@ blocked-by: —
 
 ## Где мы сейчас
 Общие машинные правила едут в форки версией golibinfra (v1.4.0), остальное — git-способом. S1, S2
-и S5 идут досрочно, пока `fix-reference-code` ждёт golibinfra v1.3.0; S3, S4 и «Жизненный цикл» —
-после закрытия `fix-reference-code`. S1, S2 и S5 закрыты: маршрут и «готово» — по разделу в
-CLAUDE.md, инварианты аудита — в правилах, handoff копится в `.claude/plans/handoff.md` до релиза.
-Следующий шаг — S3, после закрытия `fix-reference-code`.
+и S5 закрыты досрочно: маршрут и «готово» — по разделу в CLAUDE.md, инварианты аудита — в
+правилах, handoff копится в `.claude/plans/handoff.md` до релиза. S6 тоже идёт досрочно, пока
+`fix-reference-code` ждёт golibinfra v1.3.0; S3, S4, S7, S8 — после закрытия `fix-reference-code`.
+Следующий шаг — S6.
