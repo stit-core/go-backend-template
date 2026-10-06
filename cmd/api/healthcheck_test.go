@@ -5,7 +5,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -73,4 +76,32 @@ func TestHealthcheck(t *testing.T) {
 
 	t.Setenv("HTTP_ADDR", closedAddr(t))
 	require.Equal(t, 1, healthcheck(context.Background()), "nobody answers on HTTP_ADDR")
+}
+
+// Подкоманду разбирает main: тест запускает свой бинарь как `api healthcheck` (TestMain зовёт main) и
+// смотрит код выхода процесса — проверка не стартует сервис и отвечает за здоровье того, что на HTTP_ADDR.
+func TestMainHealthcheck(t *testing.T) {
+	t.Parallel()
+	live := healthServer(t, http.StatusOK)
+	tests := []struct {
+		name string
+		addr string
+		code int
+	}{
+		{"service answers", ":" + port(t, live), 0},
+		{"nobody listens", closedAddr(t), 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, os.Args[0])
+			cmd.Env = []string{mainArgsEnv + "=healthcheck", "HTTP_ADDR=" + tc.addr}
+
+			out, err := cmd.CombinedOutput()
+			require.NotNil(t, cmd.ProcessState, "api healthcheck did not run: %v", err)
+			require.Equal(t, tc.code, cmd.ProcessState.ExitCode(), "exit code of api healthcheck, output:\n%s", out)
+		})
+	}
 }

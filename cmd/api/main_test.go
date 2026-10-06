@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,19 @@ import (
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/allowlist"
 )
+
+// mainArgsEnv — аргументы процесса api: с ней тестовый бинарь вместо тестов запускает main — так тест
+// проверяет разбор подкоманд в main.
+const mainArgsEnv = "API_TEST_MAIN_ARGS"
+
+func TestMain(m *testing.M) {
+	if args, ok := os.LookupEnv(mainArgsEnv); ok {
+		os.Args = append([]string{"api"}, strings.Fields(args)...)
+		main()
+		return
+	}
+	os.Exit(m.Run())
+}
 
 // Граф fx должен быть разрешим (все зависимости предоставлены), включая per-domain
 // outbox (fx.Private в доменных модулях) и durable JetStream subscriber поверх
