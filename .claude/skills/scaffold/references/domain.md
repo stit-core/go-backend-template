@@ -86,9 +86,9 @@ git. Границы домена держит `internal/archtest` без пра�
 Срез — основа, а не образец продукта: дальше домен растёт по stable-артефакту strategy
 (`docs/reference/domain-mapping.md`), по правилам шага 0.
 
-- **Поля** — новая миграция (вариант `migration`, номер — следующий), запросы в
-  `infra/postgres/queries/` (создание — `Insert<Entity>`), поля сущности, `view.go`, `make gen`.
+- **Поля** — вариант `field` (миграция, запросы, сущность, DTO и `view.go`, `make gen`).
 - **Права** — `policy.go`: срез пускает только admin, остальное открывает правило продукта.
+- **Настройки** — вариант `env` (поле `App`, `Config` домена из модуля).
 - **Операции** — вариант `endpoint`; ошибка домена — sentinel в `errors.go` и правило в таблице
   `<домен>Errors`.
 - **События** — вариант `event` (`events.go`, `infra/outbox/outbox.go`, источник в `cmd/migrate`).

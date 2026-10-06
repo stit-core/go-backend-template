@@ -1,6 +1,6 @@
 ---
 name: scaffold
-description: Добавить новый строительный блок по конвенциям шаблона — domain (бизнес-домен в internal/domain/), endpoint (HTTP-метод существующего домена), event (outbox-событие + subscriber), migration (схема БД up/down + sqlc), port (cross-domain порт + адаптер). Используй, когда задача — завести такой блок: новый домен, ручку API, асинхронную реакцию на событие, изменение схемы БД, данные одного домена для другого. Правка уже существующего блока — прямая правка, не scaffold.
+description: Добавить новый строительный блок по конвенциям шаблона — domain (бизнес-домен в internal/domain/), endpoint (HTTP-метод существующего домена), event (outbox-событие + subscriber), migration (схема БД up/down + sqlc), field (поле сущности от колонки до ответа API), env (env-переменная конфига), port (cross-domain порт + адаптер). Используй, когда задача — завести такой блок: новый домен, ручку API, асинхронную реакцию на событие, изменение схемы БД, новое поле, настройку из окружения, данные одного домена для другого. Правка уже существующего блока — прямая правка, не scaffold.
 ---
 
 # Skill: scaffold (роутер)
@@ -16,7 +16,9 @@ description: Добавить новый строительный блок по 
 | Новый бизнес-домен (слои, миграция, sqlc, моки, fx-wiring) | `domain` | `references/domain.md` | «добавь домен `order`», «scaffold a domain» |
 | HTTP-метод в существующий домен | `endpoint` | `references/endpoint.md` | «добавь POST /api/...», «новый route/ручка» |
 | Outbox-эвент + subscriber | `event` | `references/event.md` | «после X асинхронно Y», «новый outbox-эвент/NATS subscriber» |
-| Миграция схемы БД | `migration` | `references/migration.md` | «измени схему», «добавь колонку/индекс/таблицу/FK» |
+| Миграция схемы БД | `migration` | `references/migration.md` | «измени схему», «добавь индекс/таблицу/FK» |
+| Поле сущности через слои: колонка → sqlc → сущность → API | `field` | `references/field.md` | «добавь колонку `phone` в users и поле в ответ» |
+| Env-переменная конфига | `env` | `references/env.md` | «вынеси TTL в env», «нужен ключ API провайдера» |
 | Cross-domain порт + адаптер | `port` | `references/port.md` | «домену A нужны данные из B», «сделай adapter» |
 
 Несколько вариантов в одной задаче (новый домен с событием) — веди по основному (`domain`),
@@ -62,6 +64,6 @@ Reference даёт variant-специфичные шаги; этот ритм о
 
 ## См. также
 
-- `references/{domain,endpoint,event,migration,port}.md` — процедуры вариантов.
+- `references/{domain,endpoint,event,migration,field,env,port}.md` — процедуры вариантов.
 - Правила `domain-architecture`, `sqlc-and-migrations`, `events-and-messaging`,
-  `tests-pipeline` — каждый reference читает свои шагом 0.
+  `tests-pipeline`, `infra-impact` — каждый reference читает свои шагом 0.
