@@ -55,6 +55,21 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*user.User, error)
 	return rowToEntity(row), nil
 }
 
+func (r *Repository) GetByIDForShare(ctx context.Context, id string) (*user.User, error) {
+	uid, err := pgkit.ParseUUID(id)
+	if err != nil {
+		return nil, user.ErrNotFound
+	}
+	row, err := r.q.GetUserByIDForShare(ctx, uid)
+	if pgkit.IsNoRows(err) {
+		return nil, user.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("user repo: select for share: %w", err)
+	}
+	return rowToEntity(row), nil
+}
+
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*user.User, error) {
 	row, err := r.q.GetUserByEmail(ctx, email)
 	if pgkit.IsNoRows(err) {

@@ -24,7 +24,7 @@ type Trusted struct {
 	d TrustedDeps
 }
 
-// TrustedErrors — ошибки, которые отдают методы Trusted (кроме сбоев инфраструктуры): Lookup*,
+// TrustedErrors — ошибки, которые отдают методы Trusted (кроме сбоев инфраструктуры): Lookup*, LockByID,
 // VerifyPassword, MarkEmailVerified — ErrNotFound (нет или удалён); UpdatePassword — ErrConcurrentUpdate
 // (версия устарела или удалён). Адаптер потребителя переводит каждую, тест и archtest держат список.
 var TrustedErrors = []error{ErrNotFound, ErrConcurrentUpdate}
@@ -33,6 +33,12 @@ func NewTrusted(d TrustedDeps) *Trusted { return &Trusted{d: d} }
 
 func (t *Trusted) LookupByID(ctx context.Context, id string) (*User, error) {
 	return t.d.Repo.GetByID(ctx, id)
+}
+
+// LockByID — LookupByID под блокировкой строки до конца транзакции из ctx: идущую смену пароля, роли или
+// статуса читатель дожидается, а начатая после ждёт его транзакцию.
+func (t *Trusted) LockByID(ctx context.Context, id string) (*User, error) {
+	return t.d.Repo.GetByIDForShare(ctx, id)
 }
 
 func (t *Trusted) LookupByEmail(ctx context.Context, email string) (*User, error) {

@@ -18,10 +18,12 @@ import (
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit/session"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/logtest"
 	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
+	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 	"git.stit.tech/stit-core/golibinfra/testkit/sessiontest"
 )
 
@@ -127,7 +129,8 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		PasswordSet:    o.setpw,
 		Hasher:         authntest.DeterministicHasher{},
 		Tokens:         accessTokens(t),
-		Sessions:       sessions,
+		Sessions:       issueInTx{Store: sessions, t: t},
+		Tx:             pgtest.Identity{},
 		Policy:         o.policy,
 		Guard:          o.guard,
 		Audit:          aud,
@@ -151,6 +154,33 @@ func (f ucFixture) issue(t *testing.T, userID string) session.Token {
 func audited(e auditkit.Entry) *auditkit.Entry {
 	e.At, e.IP, e.RequestID = fixedNow, identitytest.IP, identitytest.RequestID
 	return &e
+}
+
+// issueInTx — хранилище сессий, которое открывает сессию только в транзакции: под строкой пользователя,
+// которую она держит.
+type issueInTx struct {
+	session.Store
+	t *testing.T
+}
+
+func (s issueInTx) Issue(ctx context.Context, subject string) (session.Token, error) {
+	require.True(s.t, pgkit.InTx(ctx), "the session is opened outside the transaction that locks the user")
+	return s.Store.Issue(ctx, subject)
+}
+
+// signIn — учётная запись u, которую находит вход: поиск по адресу и чтение под блокировкой при открытии
+// сессии (в транзакции) отдают её же.
+func signIn(t *testing.T, u *auth.User) *mocks.MockUserReader {
+	t.Helper()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByEmail(mock.Anything, u.Email).Return(u, nil).Once()
+	users.EXPECT().LockByID(mock.MatchedBy(pgkit.InTx), u.ID).Return(u, nil).Once()
+	return users
+}
+
+// alice — учётная запись входа тестов: пароль pass1234, пускают.
+func alice() *auth.User {
+	return &auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}
 }
 
 var errStore = errors.New("authn_sessions: connection refused")
@@ -186,11 +216,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
-		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
-			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}, nil,
-		)
-		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)))
+		f := newUC(t, withUsers(signIn(t, alice())), withGuard(loginGuard(t, "a@b.com", true)))
 
 		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
@@ -205,11 +231,7 @@ func TestLogin(t *testing.T) {
 	// Сессия не открылась — входа нет: ни токенов, ни аудита входа.
 	t.Run("session not opened", func(t *testing.T) {
 		t.Parallel()
-		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(
-			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}, nil,
-		).Once()
-		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)),
+		f := newUC(t, withUsers(signIn(t, alice())), withGuard(loginGuard(t, "a@b.com", true)),
 			withSessions(func(s session.Store) session.Store { return failingSessions{s} }))
 
 		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
@@ -311,20 +333,71 @@ func TestLogin(t *testing.T) {
 
 	t.Run("success not recorded keeps the login", func(t *testing.T) {
 		t.Parallel()
-		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(
-			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}, nil,
-		).Once()
 		g := mocks.NewMockLoginGuard(t)
 		g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, nil).Once()
 		g.EXPECT().RecordSuccess(mock.Anything, "a@b.com", identitytest.IP).Return(errors.New("guard store down")).Once()
-		f := newUC(t, withUsers(users), withGuard(g))
+		f := newUC(t, withUsers(signIn(t, alice())), withGuard(g))
 
 		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
 		require.True(t, f.audit.Has("login"))
 	})
+}
+
+// Смена пароля, роли или статуса, которая успела между проверкой пароля и открытием сессии, отказывает во
+// входе: учётную запись при открытии сессии перечитывают под блокировкой, и сессии старых учётных данных нет.
+func TestLogin_CredentialsChangedDuringLogin(t *testing.T) {
+	t.Parallel()
+	changed := func(edit func(u *auth.User)) *auth.User {
+		u := alice()
+		edit(u)
+		return u
+	}
+	tests := []struct {
+		name    string
+		current *auth.User // учётная запись под блокировкой; nil — её нет
+		err     error
+	}{
+		{name: "password changed", current: changed(func(u *auth.User) { u.PasswordHash = "hash:new-password" })},
+		{name: "role changed", current: changed(func(u *auth.User) { u.Role = identity.RoleAdmin })},
+		{name: "blocked", current: changed(func(u *auth.User) { u.CanLogin = false })},
+		{name: "deleted", err: auth.ErrUserNotFound},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			users := mocks.NewMockUserReader(t)
+			users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(alice(), nil).Once()
+			users.EXPECT().LockByID(mock.MatchedBy(pgkit.InTx), "u1").Return(tc.current, tc.err).Once()
+			p := metrictest.NewProvider()
+			f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)), withMetrics(auth.NewMetrics(p.Meter("test"))))
+
+			out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+			require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+			require.Nil(t, out)
+			require.Zero(t, f.sessions.Active("u1"), "no session of the outdated credentials")
+			require.Equal(t, audited(auditkit.Entry{
+				Action: "login_failed", Resource: "user", ResourceID: "u1", Metadata: map[string]any{"reason": "invalid_credentials"},
+			}), f.audit.Last("login_failed"))
+			require.False(t, f.audit.Has("login"))
+			requireOutcome(t, p, "biz_auth_login_attempts_total", "invalid_credentials")
+		})
+	}
+}
+
+// Сбой чтения учётной записи под блокировкой — не «неверный пароль», а ошибка сервиса; сессии нет.
+func TestLogin_LockFailure(t *testing.T) {
+	t.Parallel()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(alice(), nil).Once()
+	users.EXPECT().LockByID(mock.Anything, "u1").Return(nil, errors.New("db down")).Once()
+	f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)))
+
+	_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+	require.ErrorContains(t, err, "db down")
+	require.NotErrorIs(t, err, auth.ErrInvalidCredentials)
+	require.Zero(t, f.sessions.Active("u1"))
 }
 
 // Обновление ротирует токен в той же сессии: прежний токен погашен, новый — следующий в цепочке.
@@ -610,7 +683,7 @@ func TestLogin_RecordsOutcome(t *testing.T) {
 		name, result, password string
 		opts                   []ucOption
 	}{
-		{"ok", "ok", "pass1234", []ucOption{found(true), withGuard(loginGuard(t, "a@b.com", true))}},
+		{"ok", "ok", "pass1234", []ucOption{withUsers(signIn(t, alice())), withGuard(loginGuard(t, "a@b.com", true))}},
 		{"wrong password", "invalid_credentials", "wrong", []ucOption{found(true), withGuard(loginGuard(t, "a@b.com", false))}},
 		{"attempt the guard cannot count", "invalid_credentials", "pass1234", []ucOption{withGuard(unkeyable)}},
 		{"blocked", "blocked", "pass1234", []ucOption{found(false), withGuard(loginGuard(t, "a@b.com", false))}},

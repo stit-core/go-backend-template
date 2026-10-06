@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -251,4 +253,85 @@ func TestSessions(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, status)
 		require.Zero(t, openSessions(t, db, daveID))
 	})
+}
+
+// loginCookie — вход из своей горутины (без require): статус и выданный refresh-cookie.
+func loginCookie(ctx context.Context, api sessionAPI, email, password string) (int, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, api.base+"/api/auth/login",
+		strings.NewReader(`{"email":"`+email+`","password":"`+password+`"}`))
+	if err != nil {
+		return 0, "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := api.client.Do(req)
+	if err != nil {
+		return 0, "", err
+	}
+	_, err = io.Copy(io.Discard, resp.Body)
+	if err := errors.Join(err, resp.Body.Close()); err != nil {
+		return 0, "", err
+	}
+	for _, c := range resp.Cookies() {
+		if c.Name == authgate.CookieRefresh {
+			return resp.StatusCode, c.Value, nil
+		}
+	}
+	return resp.StatusCode, "", nil
+}
+
+// Вход старым паролем, который идёт в момент смены пароля, сессии не получает: проверка пароля долгая
+// (Argon2id), и сессия, открытая после RevokeAll смены, пережила бы её. Входы крутятся до и после смены;
+// каждый, ответивший 200 после смены, обязан получить уже закрытую сессию.
+func TestSessions_LoginDuringPasswordChange(t *testing.T) {
+	serviceEnv(t)
+	// Все запросы теста — с одного IP: лимитер httpkit не должен глушить гонку.
+	t.Setenv("HTTP_RATE_LIMIT_RPS", "100000")
+	t.Setenv("HTTP_RATE_LIMIT_BURST", "100000")
+	var srv *httpkit.Server
+	app := fxtest.New(t, service, fx.Populate(&srv))
+	app.RequireStart()
+	defer app.RequireStop()
+	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: &http.Client{Timeout: 30 * time.Second}}
+
+	const email, newPassword = "race@example.com", "new-password123"
+	id := api.register(email)
+	victim := api.login(email, sessionPassword)
+
+	var (
+		stop, changed atomic.Bool
+		mu            sync.Mutex
+		late          []string // refresh-cookie входов старым паролем, ответивших 200 после смены
+		errs          []error
+		wg            sync.WaitGroup
+	)
+	for range 4 {
+		wg.Go(func() {
+			for !stop.Load() {
+				status, refresh, err := loginCookie(t.Context(), api, email, sessionPassword)
+				mu.Lock()
+				switch {
+				case err != nil:
+					errs = append(errs, err)
+				case status == http.StatusOK && changed.Load():
+					late = append(late, refresh)
+				}
+				mu.Unlock()
+			}
+		})
+	}
+	time.Sleep(500 * time.Millisecond)
+	status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
+		`{"user_id":"`+id+`","old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, victim)
+	changed.Store(true)
+	require.Equal(t, http.StatusNoContent, status, "change password: %s", body)
+	time.Sleep(1500 * time.Millisecond)
+	stop.Store(true)
+	wg.Wait()
+
+	require.NoError(t, errors.Join(errs...))
+	for _, refresh := range late {
+		code, err := refreshCode(t, api, refresh)
+		require.NoError(t, err)
+		require.NotEmpty(t, code, "an old-password login in flight during the change keeps a live session")
+	}
 }

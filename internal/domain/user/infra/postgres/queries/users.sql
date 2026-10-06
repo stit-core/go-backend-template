@@ -9,6 +9,13 @@ FROM users
 WHERE id = $1
   AND status != 'deleted';
 
+-- name: GetUserByIDForShare :one
+SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
+FROM users
+WHERE id = $1
+  AND status != 'deleted'
+FOR SHARE;
+
 -- name: GetUserByEmail :one
 SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
 FROM users

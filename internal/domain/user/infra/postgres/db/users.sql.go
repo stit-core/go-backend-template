@@ -91,6 +91,32 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	return i, err
 }
 
+const getUserByIDForShare = `-- name: GetUserByIDForShare :one
+SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
+FROM users
+WHERE id = $1
+  AND status != 'deleted'
+FOR SHARE
+`
+
+func (q *Queries) GetUserByIDForShare(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByIDForShare, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Status,
+		&i.Role,
+		&i.Version,
+		&i.EmailVerified,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertUser = `-- name: InsertUser :one
 INSERT INTO users (email, password_hash, name, status, role)
 VALUES ($1, $2, $3, $4, $5)

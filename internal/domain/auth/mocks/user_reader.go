@@ -173,3 +173,71 @@ func (_c *MockUserReader_GetByID_Call) RunAndReturn(run func(ctx context.Context
 	_c.Call.Return(run)
 	return _c
 }
+
+// LockByID provides a mock function for the type MockUserReader
+func (_mock *MockUserReader) LockByID(ctx context.Context, id string) (*auth.User, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for LockByID")
+	}
+
+	var r0 *auth.User
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*auth.User, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *auth.User); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*auth.User)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockUserReader_LockByID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LockByID'
+type MockUserReader_LockByID_Call struct {
+	*mock.Call
+}
+
+// LockByID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockUserReader_Expecter) LockByID(ctx interface{}, id interface{}) *MockUserReader_LockByID_Call {
+	return &MockUserReader_LockByID_Call{Call: _e.mock.On("LockByID", ctx, id)}
+}
+
+func (_c *MockUserReader_LockByID_Call) Run(run func(ctx context.Context, id string)) *MockUserReader_LockByID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUserReader_LockByID_Call) Return(user *auth.User, err error) *MockUserReader_LockByID_Call {
+	_c.Call.Return(user, err)
+	return _c
+}
+
+func (_c *MockUserReader_LockByID_Call) RunAndReturn(run func(ctx context.Context, id string) (*auth.User, error)) *MockUserReader_LockByID_Call {
+	_c.Call.Return(run)
+	return _c
+}

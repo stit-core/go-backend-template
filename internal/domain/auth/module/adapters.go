@@ -23,6 +23,14 @@ func (a *userAdapter) GetByID(ctx context.Context, id string) (*auth.User, error
 	return userToAuth(u), nil
 }
 
+func (a *userAdapter) LockByID(ctx context.Context, id string) (*auth.User, error) {
+	u, err := a.users.LockByID(ctx, id)
+	if err != nil {
+		return nil, mapUserErr(err)
+	}
+	return userToAuth(u), nil
+}
+
 func (a *userAdapter) GetByEmail(ctx context.Context, email string) (*auth.User, error) {
 	u, err := a.users.LookupByEmail(ctx, email)
 	if err != nil {

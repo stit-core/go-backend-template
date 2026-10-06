@@ -64,8 +64,9 @@ prod-дефолты, понятный контракт ошибок API, тес�
   integration на каждый случай → PASS
   - Подтверждено: usecase — `TestRefresh_UserCannotLogIn`, `TestRefresh_Reused`, `TestRefresh_Expired`
     (срок токена и абсолютный), `TestUpdate`, `TestDelete`, `TestTrusted_UpdatePassword` (смена и
-    сброс; `RevokeAll` в транзакции записи); integration — `TestSessions` (повтор, выход, смена и
-    сброс пароля, блокировка, удаление), `TestRun_PromotionClosesSessions` (seed-admin) — PASS
+    сброс; `RevokeAll` в транзакции записи), `TestLogin_CredentialsChangedDuringLogin`; integration —
+    `TestSessions` (повтор, выход, смена и сброс пароля, блокировка, удаление),
+    `TestSessions_LoginDuringPasswordChange` (вход в гонке со сменой), seed-admin — PASS
 - [x] **AC3** — Контракт user: клиент не меняет свой статус (403); name и status применяются вместе
   или 400; неизвестный статус → 422; несуществующий id → 404; устаревшая версия → 409; `version`
   есть в ответе. Проверка: handler- и integration-тесты → PASS
@@ -261,12 +262,12 @@ prod-дефолты, понятный контракт ошибок API, тес�
   `rootLibs`), тесты — фейк `sessiontest`; user — свой порт `Sessions` (`RevokeAll`), строгий мок с
   `pgkit.InTx`. Отзыв: смена и сброс пароля — `user.Trusted.UpdatePassword` (одно место обоим потокам),
   блокировка — `Update` по `!CanLogin()`, удаление — `Delete`, повышение — `seed-admin`; смены роли в
-  API нет. Refresh — `Rotate`, затем пользователь: удалённый или заблокированный — 401, выданный токен
-  закрыт. Выход без аудита (кит не отдаёт subject) — бэклог `logout-audit`. Гард вне dev —
-  `JWT_AUDIENCE`, бюджет остановки — `checkStopBudget`; `OUTBOX_MAX_ATTEMPTS`, `SESSION_*` проверяет кит.
-  IP в тестах — `identitytest` через `httpkit.ClientIP` (бэклог `clientip-test-setter`). Лесенка
-  `cmd/migrate` — `testkit.MigrationLadder` уже здесь (Handoff golibinfra); `repair-harness` S7 проверяет
-  на ней AC9.
+  API нет. Вход открывает сессию под `FOR SHARE` строки пользователя и сверяет пароль, роль и статус
+  (B1 валидатора E: иначе вход в гонке со сменой пароля переживал её). Refresh — `Rotate`, затем
+  пользователь: удалённый или заблокированный — 401, выданный токен закрыт. Выход без аудита (кит не
+  отдаёт subject) — бэклог `logout-audit`. Гард вне dev — `JWT_AUDIENCE`, бюджет остановки —
+  `checkStopBudget`; `OUTBOX_MAX_ATTEMPTS`, `SESSION_*` проверяет кит. IP в тестах — `identitytest` через
+  `httpkit.ClientIP` (бэклог `clientip-test-setter`). Лесенка — `testkit.MigrationLadder` (Handoff golibinfra).
 - S13: policy в тестах usecase — настоящая, мока `Authorizer` нет; порты — строгие моки (rule
   `tests-pipeline`). Контракт события — у потребителя: событие usecase поставщика в JSON → `Register`.
   `main()` — перезапуск тестового бинаря с пустой командной строкой (`go test` передаёт `-test.*`), гейт

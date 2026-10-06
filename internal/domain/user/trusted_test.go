@@ -30,12 +30,16 @@ func TestTrusted_Lookup(t *testing.T) {
 	want := stored()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetByID(mock.Anything, "u1").Return(want, nil).Once()
+	repo.EXPECT().GetByIDForShare(mock.Anything, "u1").Return(want, nil).Once()
 	repo.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(nil, user.ErrNotFound).Once()
 	tr := newTrusted(t, repo, nil)
 
 	got, err := tr.LookupByID(context.Background(), "u1")
 	require.NoError(t, err)
 	require.Same(t, want, got)
+	locked, err := tr.LockByID(context.Background(), "u1")
+	require.NoError(t, err)
+	require.Same(t, want, locked, "the locking read is the repository's FOR SHARE read")
 	_, err = tr.LookupByEmail(context.Background(), "a@b.com")
 	require.ErrorIs(t, err, user.ErrNotFound)
 }
@@ -126,6 +130,11 @@ func TestTrusted_ErrorsAreDeclared(t *testing.T) {
 		{"LookupByID", func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
 			repo.EXPECT().GetByID(mock.Anything, "u1").Return(found(repoErr), repoErr).Once()
 			_, err := tr.LookupByID(context.Background(), "u1")
+			return err
+		}},
+		{"LockByID", func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
+			repo.EXPECT().GetByIDForShare(mock.Anything, "u1").Return(found(repoErr), repoErr).Once()
+			_, err := tr.LockByID(context.Background(), "u1")
 			return err
 		}},
 		{"LookupByEmail", func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {

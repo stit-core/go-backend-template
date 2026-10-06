@@ -15,11 +15,15 @@ import (
 	"git.stit.tech/stit-core/golibinfra/authnkit/session"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 
 type UserReader interface {
 	GetByID(ctx context.Context, id string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	// LockByID — GetByID под блокировкой строки до конца транзакции из ctx: смена пароля, роли или статуса
+	// пишет эту строку до закрытия сессий и ждёт транзакцию читателя, а идущую он дожидается сам.
+	LockByID(ctx context.Context, id string) (*User, error)
 }
 
 type PasswordVerifier interface {
@@ -54,6 +58,7 @@ type UsecaseDeps struct {
 	Hasher         authnkit.Hasher
 	Tokens         Tokens
 	Sessions       session.Store
+	Tx             pgkit.Transactor
 	Policy         Authorizer
 	Guard          LoginGuard
 	Audit          auditkit.Logger
@@ -120,13 +125,40 @@ func (uc *Usecase) login(ctx context.Context, in *LoginInput) (*LoginOutput, out
 	if err != nil {
 		return nil, outcome.Error, fmt.Errorf("issue access token: %w", err)
 	}
-	refresh, err := uc.d.Sessions.Issue(ctx, u.ID)
-	if err != nil {
-		return nil, outcome.Error, fmt.Errorf("open session: %w", err)
+	refresh, err := uc.openSession(ctx, u)
+	switch {
+	case errors.Is(err, ErrInvalidCredentials):
+		uc.auditLoginFailed(ctx, u.ID, resultInvalidLogin)
+		return nil, resultInvalidLogin, err
+	case err != nil:
+		return nil, outcome.Error, err
 	}
 	uc.d.Log.Info(ctx, "user logged in", "user_id", u.ID)
 	uc.audit(ctx, auditkit.Entry{ActorID: u.ID, Action: "login", Resource: "user", ResourceID: u.ID})
 	return &LoginOutput{AccessToken: access, RefreshToken: refresh.Value, User: u}, outcome.OK, nil
+}
+
+// openSession открывает сессию под строкой пользователя, которую держит её транзакция: смена пароля, роли
+// или статуса, успевшая между проверкой пароля и открытием, отказывает во входе (ErrInvalidCredentials),
+// а начатая позже ждёт коммита и закрывает сессию своим RevokeAll.
+func (uc *Usecase) openSession(ctx context.Context, checked *User) (session.Token, error) {
+	var refresh session.Token
+	err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		current, err := uc.d.Users.LockByID(txCtx, checked.ID)
+		switch {
+		case errors.Is(err, ErrUserNotFound):
+			return ErrInvalidCredentials
+		case err != nil:
+			return fmt.Errorf("lock user: %w", err)
+		case !current.CanLogin || current.PasswordHash != checked.PasswordHash || current.Role != checked.Role:
+			return ErrInvalidCredentials
+		}
+		if refresh, err = uc.d.Sessions.Issue(txCtx, checked.ID); err != nil {
+			return fmt.Errorf("open session: %w", err)
+		}
+		return nil
+	})
+	return refresh, err
 }
 
 // auditLoginFailed — отказ найденной учётной записи: в аудите её ID, адреса нет.

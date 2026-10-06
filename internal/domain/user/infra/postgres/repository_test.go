@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
@@ -60,6 +61,42 @@ func TestGetByID(t *testing.T) {
 	// id приходит из пути запроса: чужой формат — тот же «нет такого», а не сбой БД.
 	for _, id := range []string{"00000000-0000-0000-0000-000000000000", "not-a-uuid"} {
 		_, err = repo.GetByID(ctx, id)
+		require.ErrorIs(t, err, user.ErrNotFound, id)
+	}
+}
+
+// Чтение под блокировкой видит того же пользователя, что GetByID, и до конца своей транзакции держит его
+// строку: чужая запись в неё ждёт (здесь — упирается в lock_timeout), после коммита — проходит.
+func TestGetByIDForShare(t *testing.T) {
+	t.Parallel()
+	pg := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
+	repo := userpg.NewRepository(pg.DB(t))
+	ctx := context.Background()
+	u := pgseed.InsertUser(t, repo)
+	deleted := pgseed.InsertUser(t, repo)
+	require.NoError(t, repo.Delete(ctx, deleted.ID))
+
+	require.NoError(t, pg.Transactor(t).WithTx(ctx, func(txCtx context.Context) error {
+		got, err := repo.GetByIDForShare(txCtx, u.ID)
+		require.NoError(t, err)
+		require.Equal(t, u, got)
+
+		writer, err := pg.Pool(t).Begin(ctx)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, writer.Rollback(ctx)) }()
+		_, err = writer.Exec(ctx, `SET LOCAL lock_timeout = '100ms'`)
+		require.NoError(t, err)
+		_, err = writer.Exec(ctx, `UPDATE users SET name = 'Other' WHERE id = $1`, u.ID)
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, "55P03", pgErr.Code, "a write into the locked row waits for the reading transaction")
+		return nil
+	}))
+	_, err := repo.UpdatePassword(ctx, u.ID, "hash:new", u.Version)
+	require.NoError(t, err, "the row is free once the reading transaction ends")
+
+	for _, id := range []string{deleted.ID, "00000000-0000-0000-0000-000000000000", "not-a-uuid"} {
+		_, err := repo.GetByIDForShare(ctx, id)
 		require.ErrorIs(t, err, user.ErrNotFound, id)
 	}
 }

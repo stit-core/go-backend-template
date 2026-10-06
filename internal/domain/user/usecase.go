@@ -20,6 +20,9 @@ import (
 type Repository interface {
 	Insert(ctx context.Context, u *User) error
 	GetByID(ctx context.Context, id string) (*User, error)
+	// GetByIDForShare — GetByID под блокировкой FOR SHARE: до конца транзакции из ctx строку не изменят,
+	// а читает он её после коммита изменения, которое уже идёт.
+	GetByIDForShare(ctx context.Context, id string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	// Update пишет имя и статус u при версии в БД u.Version; иначе, и для удалённого, — ErrConcurrentUpdate.
 	Update(ctx context.Context, u *User) (*User, error)

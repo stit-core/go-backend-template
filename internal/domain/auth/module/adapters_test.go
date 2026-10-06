@@ -42,12 +42,16 @@ func TestUserAdapter_User(t *testing.T) {
 			a, repo := newAdapter(t)
 			found := &user.User{ID: "u1", Email: "a@b.com", PasswordHash: "h", Name: "Alice", Status: tc.status, Role: identity.RoleAdmin, Version: 3}
 			repo.EXPECT().GetByID(mock.Anything, "u1").Return(found, nil).Once()
+			repo.EXPECT().GetByIDForShare(mock.Anything, "u1").Return(found, nil).Once()
 			repo.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(found, nil).Once()
 			want := &auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "h", Name: "Alice", CanLogin: tc.canLogin, Role: identity.RoleAdmin, Version: 3}
 
 			byID, err := a.GetByID(context.Background(), "u1")
 			require.NoError(t, err)
 			require.Equal(t, want, byID)
+			locked, err := a.LockByID(context.Background(), "u1")
+			require.NoError(t, err)
+			require.Equal(t, want, locked)
 			byEmail, err := a.GetByEmail(context.Background(), "a@b.com")
 			require.NoError(t, err)
 			require.Equal(t, want, byEmail)
@@ -71,6 +75,11 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 		{"GetByID", func(a *userAdapter, repo *usermocks.MockRepository, err error) error {
 			repo.EXPECT().GetByID(mock.Anything, "u1").Return(nil, err).Once()
 			_, got := a.GetByID(context.Background(), "u1")
+			return got
+		}},
+		{"LockByID", func(a *userAdapter, repo *usermocks.MockRepository, err error) error {
+			repo.EXPECT().GetByIDForShare(mock.Anything, "u1").Return(nil, err).Once()
+			_, got := a.LockByID(context.Background(), "u1")
 			return got
 		}},
 		{"GetByEmail", func(a *userAdapter, repo *usermocks.MockRepository, err error) error {
