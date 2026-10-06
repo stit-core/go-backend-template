@@ -16,6 +16,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
@@ -40,14 +41,28 @@ type ucFixture struct {
 	audit *audittest.Recorder
 }
 
+type ucOpts struct {
+	repo   *mocks.MockRepository
+	hasher authnkit.Hasher
+}
+
+type ucOption func(*ucOpts)
+
+func withRepo(r *mocks.MockRepository) ucOption { return func(o *ucOpts) { o.repo = r } }
+func withHasher(h authnkit.Hasher) ucOption     { return func(o *ucOpts) { o.hasher = h } }
+
 // newUC — usecase на строгом моке репозитория и настоящей policy: право решает identity кейса, вызов
-// репозитория, которого кейс не ждёт, — провал.
-func newUC(t *testing.T, repo *mocks.MockRepository) ucFixture {
+// репозитория, которого кейс не ждёт, — провал; порт с ожиданиями кейс передаёт опцией.
+func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
+	o := &ucOpts{repo: mocks.NewMockRepository(t), hasher: authntest.DeterministicHasher{}}
+	for _, fn := range opts {
+		fn(o)
+	}
 	bus, aud := &outboxtest.Recorder{}, &audittest.Recorder{}
 	uc := user.NewUsecase(user.UsecaseDeps{
-		Repo:   repo,
-		Hasher: authntest.DeterministicHasher{},
+		Repo:   o.repo,
+		Hasher: o.hasher,
 		Policy: user.NewPolicy(),
 		Tx:     pgtest.Identity{},
 		Events: bus,
@@ -62,6 +77,13 @@ func newUC(t *testing.T, repo *mocks.MockRepository) ucFixture {
 func audited(actor, action, id string) *auditkit.Entry {
 	return &auditkit.Entry{ActorID: actor, Action: action, Resource: "user", ResourceID: id, At: fixedNow}
 }
+
+var errHashing = errors.New("argon2: out of memory")
+
+// brokenHasher — хэшер, у которого сбоит хэширование: у authntest такого фейка нет.
+type brokenHasher struct{ authntest.DeterministicHasher }
+
+func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
 
 func requireForbidden(t *testing.T, err error) {
 	t.Helper()
@@ -83,7 +105,7 @@ func TestRegister(t *testing.T) {
 		u.ID = "id-1"
 		return nil
 	}).Once()
-	f := newUC(t, repo)
+	f := newUC(t, withRepo(repo))
 
 	got, err := f.uc.Register(context.Background(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
 	require.NoError(t, err)
@@ -100,10 +122,15 @@ func TestRegister_Rejected(t *testing.T) {
 	tests := []struct {
 		name   string
 		in     user.CreateInput
-		insert error // nil — до репозитория не доходит
+		hasher authnkit.Hasher // nil — исправный
+		insert error           // nil — до репозитория не доходит
 		want   error
 	}{
 		{name: "weak password", in: user.CreateInput{Email: "a@b.com", Password: "short", Name: "Alice"}, want: user.ErrWeakPassword},
+		{
+			name: "password not hashed", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
+			hasher: brokenHasher{}, want: errHashing,
+		},
 		{name: "invalid email", in: user.CreateInput{Email: "a.b.com", Password: "longenough", Name: "Alice"}, want: user.ErrInvalidEmail},
 		{
 			name: "email taken", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
@@ -117,7 +144,11 @@ func TestRegister_Rejected(t *testing.T) {
 			if tc.insert != nil {
 				repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(tc.insert).Once()
 			}
-			f := newUC(t, repo)
+			opts := []ucOption{withRepo(repo)}
+			if tc.hasher != nil {
+				opts = append(opts, withHasher(tc.hasher))
+			}
+			f := newUC(t, opts...)
 
 			_, err := f.uc.Register(context.Background(), &tc.in)
 			require.ErrorIs(t, err, tc.want)
@@ -149,13 +180,13 @@ func TestGetByID(t *testing.T) {
 				repo.EXPECT().GetByID(mock.Anything, "u1").Return(want, nil).Once()
 			}
 
-			got, err := newUC(t, repo).uc.GetByID(tc.ctx, "u1")
+			got, err := newUC(t, withRepo(repo)).uc.GetByID(tc.ctx, "u1")
 			if !tc.allowed {
 				requireForbidden(t, err)
 				return
 			}
 			require.NoError(t, err)
-			require.Same(t, want, got)
+			require.Equal(t, want, got)
 		})
 	}
 }
@@ -166,14 +197,14 @@ func TestMe(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetByID(mock.Anything, "u1").Return(want, nil).Once()
 
-	got, err := newUC(t, repo).uc.Me(identitytest.Client("u1"))
+	got, err := newUC(t, withRepo(repo)).uc.Me(identitytest.Client("u1"))
 	require.NoError(t, err)
-	require.Same(t, want, got)
+	require.Equal(t, want, got)
 }
 
 func TestMe_NoIdentity(t *testing.T) {
 	t.Parallel()
-	_, err := newUC(t, mocks.NewMockRepository(t)).uc.Me(identitytest.Anon())
+	_, err := newUC(t).uc.Me(identitytest.Anon())
 	requireForbidden(t, err)
 }
 
@@ -197,7 +228,7 @@ func TestList(t *testing.T) {
 			repo.EXPECT().Count(mock.Anything, tc.filter).Return(7, nil).Once()
 			repo.EXPECT().List(mock.Anything, tc.filter, tc.wantQuery).Return(want, nil).Once()
 
-			got, total, err := newUC(t, repo).uc.List(identitytest.Admin("a1"), tc.filter, tc.page)
+			got, total, err := newUC(t, withRepo(repo)).uc.List(identitytest.Admin("a1"), tc.filter, tc.page)
 			require.NoError(t, err)
 			require.Equal(t, want, got)
 			require.Equal(t, 7, total)
@@ -218,7 +249,7 @@ func TestList_Forbidden(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, _, err := newUC(t, mocks.NewMockRepository(t)).uc.List(tc.ctx, user.ListFilter{}, paging.Page{Number: 1, Size: 20})
+			_, _, err := newUC(t).uc.List(tc.ctx, user.ListFilter{}, paging.Page{Number: 1, Size: 20})
 			requireForbidden(t, err)
 		})
 	}
@@ -245,7 +276,7 @@ func TestList_RepositoryError(t *testing.T) {
 			repo := mocks.NewMockRepository(t)
 			tc.expect(repo)
 
-			_, _, err := newUC(t, repo).uc.List(identitytest.Admin("a1"), user.ListFilter{}, paging.Page{Number: 1, Size: 20})
+			_, _, err := newUC(t, withRepo(repo)).uc.List(identitytest.Admin("a1"), user.ListFilter{}, paging.Page{Number: 1, Size: 20})
 			require.ErrorIs(t, err, down)
 		})
 	}
@@ -279,11 +310,11 @@ func TestUpdate(t *testing.T) {
 			repo := mocks.NewMockRepository(t)
 			read := repo.EXPECT().GetByID(mock.MatchedBy(pgkit.InTx), "u1").Return(stored(), nil).Once()
 			repo.EXPECT().Update(mock.MatchedBy(pgkit.InTx), tc.write).Return(saved, nil).Once().NotBefore(read)
-			f := newUC(t, repo)
+			f := newUC(t, withRepo(repo))
 
 			got, err := f.uc.Update(tc.ctx, "u1", tc.in)
 			require.NoError(t, err)
-			require.Same(t, saved, got)
+			require.Equal(t, saved, got)
 			require.Equal(t, user.UserUpdated{ID: "u1", At: fixedNow}, f.bus.Last(subjectUpdated))
 			require.Equal(t, 1, f.bus.Count())
 			require.Equal(t, audited(tc.actor, "update", "u1"), f.audit.Last("update"))
@@ -345,7 +376,7 @@ func TestUpdate_Rejected(t *testing.T) {
 			if tc.expect != nil {
 				tc.expect(repo)
 			}
-			f := newUC(t, repo)
+			f := newUC(t, withRepo(repo))
 
 			_, err := f.uc.Update(tc.ctx, "u1", tc.in)
 			if tc.want == nil {
@@ -379,7 +410,7 @@ func TestDelete(t *testing.T) {
 			if tc.actor != "" {
 				repo.EXPECT().Delete(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
 			}
-			f := newUC(t, repo)
+			f := newUC(t, withRepo(repo))
 
 			err := f.uc.Delete(tc.ctx, "u1")
 			if tc.actor == "" {
@@ -400,7 +431,7 @@ func TestDelete_UnknownOrAlreadyDeleted(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().Delete(mock.Anything, "u1").Return(user.ErrNotFound).Once()
-	f := newUC(t, repo)
+	f := newUC(t, withRepo(repo))
 
 	require.ErrorIs(t, f.uc.Delete(identitytest.Client("u1"), "u1"), user.ErrNotFound)
 	require.Zero(t, f.bus.Count())

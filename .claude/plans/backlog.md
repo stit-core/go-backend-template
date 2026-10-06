@@ -30,3 +30,6 @@
 - **vuln-scan** — govulncheck и сканирование образов не входят в гейт: им нужна сеть (база
   уязвимостей), а `make check` от сети не зависит. Место — `release-preflight` перед тегом. Триггер:
   `repair-harness` S9 (гейт) или первый релиз форка (SEC-11).
+- **authntest-broken-hasher** — тесты сбоя хэширования (регистрация user, подтверждение сброса
+  verification) держат свой `brokenHasher` поверх `authntest.DeterministicHasher`: хэшера со сбоем в
+  authntest нет. Триггер: партия 3 golibinfra (v1.4.0) — фейк в authntest, локальные снять.
