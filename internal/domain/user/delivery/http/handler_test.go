@@ -1,10 +1,12 @@
 package http_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/ptrkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
 )
 
@@ -30,23 +33,68 @@ func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	})
 }
 
+// callerIs — ctx usecase несёт identity вызывающего: по ней решает policy.
+func callerIs(userID string) any {
+	return mock.MatchedBy(func(ctx context.Context) bool {
+		id, ok := identity.From(ctx)
+		return ok && id.UserID == userID
+	})
+}
+
+var createdAt = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
+func alice() *user.User {
+	return &user.User{
+		ID: "u1", Email: "a@b.com", PasswordHash: "hash:secret", Name: "Alice", Status: user.StatusActive,
+		Version: 3, CreatedAt: createdAt, UpdatedAt: createdAt.Add(time.Hour),
+	}
+}
+
+// view — пользователь в ответе глазами клиента: теги свои, а не из кода.
+type view struct {
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	Status    string    `json:"status"`
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+var aliceView = view{
+	ID: "u1", Email: "a@b.com", Name: "Alice", Status: "active", Version: 3, CreatedAt: createdAt, UpdatedAt: createdAt.Add(time.Hour),
+}
+
+// data разбирает поле data ответа; поле вне T — провал: ответ не отдаёт лишнего (хэш пароля).
+func data[T any](t *testing.T, resp *httptest.ResponseRecorder) T {
+	t.Helper()
+	var body struct {
+		Data json.RawMessage `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	dec := json.NewDecoder(bytes.NewReader(body.Data))
+	dec.DisallowUnknownFields()
+	var v T
+	require.NoError(t, dec.Decode(&v))
+	return v
+}
+
 func TestRegister_Created(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Register(mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, in *user.CreateInput) (*user.User, error) {
-			return &user.User{ID: "u1", Email: in.Email, Name: in.Name, Status: user.StatusActive}, nil
-		})
+	uc.EXPECT().Register(mock.Anything, &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"}).
+		Return(alice(), nil).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/register", strings.NewReader(`{"email":"a@b.com","password":"longenough","name":"Alice"}`))
 	handlertest.AssertStatus(t, resp, http.StatusCreated)
+	require.Equal(t, aliceView, data[view](t, resp))
 }
 
 func TestRegister_Conflict(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrAlreadyExists)
+	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrAlreadyExists).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/register", strings.NewReader(`{"email":"a@b.com","password":"longenough","name":"A"}`))
@@ -56,7 +104,7 @@ func TestRegister_Conflict(t *testing.T) {
 func TestRegister_WeakPassword(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrWeakPassword)
+	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrWeakPassword).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/register", strings.NewReader(registerBody(strings.Repeat("p", policy.MinPasswordLen))))
@@ -70,7 +118,7 @@ func TestRegister_WeakPassword(t *testing.T) {
 func TestRegister_InvalidEmail(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrInvalidEmail)
+	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrInvalidEmail).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/register", strings.NewReader(registerBody(strings.Repeat("p", policy.MinPasswordLen))))
@@ -96,10 +144,21 @@ func registerBody(password string) string {
 	return fmt.Sprintf(`{"email":"a@b.com","password":%q,"name":"A"}`, password)
 }
 
+func TestGetByID_OK(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().GetByID(callerIs("a1"), "u1").Return(alice(), nil).Once()
+	api := setup(t, uc)
+
+	resp := api.GetCtx(identitytest.Admin("a1"), "/api/users/u1")
+	handlertest.AssertStatus(t, resp, http.StatusOK)
+	require.Equal(t, aliceView, data[view](t, resp))
+}
+
 func TestGetByID_Forbidden(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().GetByID(mock.Anything, mock.Anything).Return(nil, &policy.ForbiddenError{Reason: "not self"})
+	uc.EXPECT().GetByID(mock.Anything, "u1").Return(nil, &policy.ForbiddenError{Reason: "not self"}).Once()
 	api := setup(t, uc)
 
 	resp := api.Get("/api/users/u1")
@@ -109,73 +168,63 @@ func TestGetByID_Forbidden(t *testing.T) {
 func TestGetByID_NotFound(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().GetByID(mock.Anything, mock.Anything).Return(nil, user.ErrNotFound)
+	uc.EXPECT().GetByID(mock.Anything, "u1").Return(nil, user.ErrNotFound).Once()
 	api := setup(t, uc)
 
 	resp := api.Get("/api/users/u1")
 	handlertest.AssertAPIError(t, resp, http.StatusNotFound, "USER_NOT_FOUND")
 }
 
-func TestDelete_Forbidden(t *testing.T) {
+func TestDelete_NoContent(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Delete(mock.Anything, mock.Anything).Return(&policy.ForbiddenError{Reason: "not admin"})
+	uc.EXPECT().Delete(callerIs("u1"), "u1").Return(nil).Once()
 	api := setup(t, uc)
 
-	resp := api.Delete("/api/users/u1")
-	handlertest.AssertStatus(t, resp, http.StatusForbidden)
+	resp := api.DeleteCtx(identitytest.Client("u1"), "/api/users/u1")
+	handlertest.AssertStatus(t, resp, http.StatusNoContent)
+	require.Empty(t, resp.Body.String())
 }
 
-func TestDelete_NotFound(t *testing.T) {
+func TestDelete_Errors(t *testing.T) {
 	t.Parallel()
-	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Delete(mock.Anything, mock.Anything).Return(user.ErrNotFound)
-	api := setup(t, uc)
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{"not self, not admin", &policy.ForbiddenError{Reason: "not admin"}, http.StatusForbidden, "FORBIDDEN"},
+		{"unknown or already deleted", user.ErrNotFound, http.StatusNotFound, "USER_NOT_FOUND"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			uc := mocks.NewMockUsecase(t)
+			uc.EXPECT().Delete(mock.Anything, "u1").Return(tc.err).Once()
+			api := setup(t, uc)
 
-	resp := api.Delete("/api/users/u1")
-	handlertest.AssertStatus(t, resp, http.StatusNotFound)
+			resp := api.Delete("/api/users/u1")
+			handlertest.AssertAPIError(t, resp, tc.status, tc.code)
+		})
+	}
 }
 
 func TestMe_OK(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Me(mock.MatchedBy(func(ctx context.Context) bool {
-		id, ok := identity.From(ctx)
-		return ok && id.UserID == "u1" && id.Role == identity.RoleClient
-	})).Return(&user.User{
-		ID:        "u1",
-		Email:     "a@b.com",
-		Name:      "Alice",
-		Status:    user.StatusActive,
-		CreatedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-		UpdatedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-	}, nil)
+	uc.EXPECT().Me(callerIs("u1")).Return(alice(), nil).Once()
 	api := setup(t, uc)
 
 	resp := api.GetCtx(identitytest.Client("u1"), "/api/users/me")
 	handlertest.AssertStatus(t, resp, http.StatusOK)
-
-	var body struct {
-		Data struct {
-			ID        string    `json:"id"`
-			Email     string    `json:"email"`
-			Name      string    `json:"name"`
-			Status    string    `json:"status"`
-			CreatedAt time.Time `json:"created_at"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
-	require.Equal(t, "u1", body.Data.ID)
-	require.Equal(t, "a@b.com", body.Data.Email)
-	require.Equal(t, "Alice", body.Data.Name)
-	require.Equal(t, "active", body.Data.Status)
-	require.Equal(t, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), body.Data.CreatedAt)
+	require.Equal(t, aliceView, data[view](t, resp))
 }
 
 func TestMe_ForbiddenWithoutIdentity(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Me(mock.Anything).Return(nil, &policy.ForbiddenError{Reason: "no identity"})
+	uc.EXPECT().Me(mock.Anything).Return(nil, &policy.ForbiddenError{Reason: "no identity"}).Once()
 	api := setup(t, uc)
 
 	resp := api.Get("/api/users/me")
@@ -184,76 +233,61 @@ func TestMe_ForbiddenWithoutIdentity(t *testing.T) {
 
 func TestList_OK(t *testing.T) {
 	t.Parallel()
+	bob := &user.User{ID: "u2", Email: "c@d.com", Name: "Bob", Status: user.StatusActive, Version: 1, CreatedAt: createdAt, UpdatedAt: createdAt}
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, filter user.ListFilter, page paging.Page) ([]*user.User, int, error) {
-			require.NotNil(t, filter.Status)
-			require.Equal(t, user.StatusActive, *filter.Status)
-			require.Equal(t, paging.Page{Number: 2, Size: 5}, page)
-			return []*user.User{
-				{ID: "u1", Email: "a@b.com", Name: "Alice", Status: user.StatusActive},
-				{ID: "u2", Email: "c@d.com", Name: "Bob", Status: user.StatusActive},
-			}, 7, nil
-		})
+	uc.EXPECT().List(callerIs("a1"), user.ListFilter{Status: ptrkit.Of(user.StatusActive)}, paging.Page{Number: 2, Size: 5}).
+		Return([]*user.User{alice(), bob}, 7, nil).Once()
 	api := setup(t, uc)
 
-	resp := api.GetCtx(identitytest.Admin("admin-1"), "/api/users?page=2&size=5&status=active")
+	resp := api.GetCtx(identitytest.Admin("a1"), "/api/users?page=2&size=5&status=active")
 	handlertest.AssertStatus(t, resp, http.StatusOK)
-
-	var body struct {
-		Data []struct {
-			ID     string `json:"id"`
-			Email  string `json:"email"`
-			Status string `json:"status"`
-		} `json:"data"`
+	require.Equal(t, []view{aliceView, {ID: "u2", Email: "c@d.com", Name: "Bob", Status: "active", Version: 1, CreatedAt: createdAt, UpdatedAt: createdAt}},
+		data[[]view](t, resp))
+	var page struct {
 		Total int `json:"total"`
 		Page  int `json:"page"`
 		Size  int `json:"size"`
 	}
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
-	require.Equal(t, 7, body.Total)
-	require.Equal(t, 2, body.Page)
-	require.Equal(t, 5, body.Size)
-	require.Len(t, body.Data, 2)
-	require.Equal(t, "u1", body.Data[0].ID)
-	require.Equal(t, "a@b.com", body.Data[0].Email)
-	require.Equal(t, "active", body.Data[0].Status)
-	require.Equal(t, "u2", body.Data[1].ID)
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &page))
+	require.Equal(t, 7, page.Total)
+	require.Equal(t, 2, page.Page)
+	require.Equal(t, 5, page.Size)
+}
+
+// Без query — первая страница по умолчанию и без фильтра статуса.
+func TestList_Defaults(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().List(mock.Anything, user.ListFilter{}, paging.Page{Number: 1, Size: paging.DefaultSize}).Return(nil, 0, nil).Once()
+	api := setup(t, uc)
+
+	resp := api.GetCtx(identitytest.Admin("a1"), "/api/users")
+	handlertest.AssertStatus(t, resp, http.StatusOK)
+	require.Empty(t, data[[]view](t, resp))
 }
 
 func TestList_InvalidStatus(t *testing.T) {
 	t.Parallel()
-	uc := mocks.NewMockUsecase(t)
-	api := setup(t, uc)
+	api := setup(t, mocks.NewMockUsecase(t))
 
-	resp := api.GetCtx(identitytest.Admin("admin-1"), "/api/users?status=deleted")
-	handlertest.AssertStatus(t, resp, http.StatusUnprocessableEntity)
+	resp := api.GetCtx(identitytest.Admin("a1"), "/api/users?status=deleted")
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 }
 
 func TestUpdate_OK(t *testing.T) {
 	t.Parallel()
-	name, status := "New", user.StatusBlocked
+	renamed := alice()
+	renamed.Name, renamed.Status, renamed.Version = "New", user.StatusBlocked, 4
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Update(mock.Anything, "u1", user.UpdateInput{Name: &name, Status: &status, Version: 3}).
-		Return(&user.User{ID: "u1", Email: "a@b.com", Name: name, Status: status, Version: 4}, nil).Once()
+	uc.EXPECT().Update(callerIs("a1"), "u1", user.UpdateInput{Name: ptrkit.Of("New"), Status: ptrkit.Of(user.StatusBlocked), Version: 3}).
+		Return(renamed, nil).Once()
 	api := setup(t, uc)
 
 	resp := api.PatchCtx(identitytest.Admin("a1"), "/api/users/u1", strings.NewReader(`{"name":"New","status":"blocked","version":3}`))
 	handlertest.AssertStatus(t, resp, http.StatusOK)
-
-	var body struct {
-		Data struct {
-			ID      string `json:"id"`
-			Name    string `json:"name"`
-			Status  string `json:"status"`
-			Version int    `json:"version"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
-	require.Equal(t, "u1", body.Data.ID)
-	require.Equal(t, "New", body.Data.Name)
-	require.Equal(t, "blocked", body.Data.Status)
-	require.Equal(t, 4, body.Data.Version, "the client sends the next PATCH with this version")
+	want := aliceView
+	want.Name, want.Status, want.Version = "New", "blocked", 4
+	require.Equal(t, want, data[view](t, resp), "the client sends the next PATCH with this version")
 }
 
 func TestUpdate_Errors(t *testing.T) {

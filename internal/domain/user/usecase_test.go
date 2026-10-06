@@ -2,6 +2,7 @@ package user_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -14,9 +15,11 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
+	"git.stit.tech/stit-core/golibinfra/ptrkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
@@ -25,218 +28,45 @@ import (
 
 var fixedNow = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
-	t.Helper()
-	p := mocks.NewMockAuthorizer(t)
-	dec := func() policy.Decision {
-		if allow {
-			return policy.Allow()
-		}
-		return policy.Deny("test deny")
-	}
-	p.EXPECT().CanGetByID(mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(context.Context, identity.Identity, string) policy.Decision { return dec() }).Maybe()
-	p.EXPECT().CanList(mock.Anything, mock.Anything).
-		RunAndReturn(func(context.Context, identity.Identity) policy.Decision { return dec() }).Maybe()
-	p.EXPECT().CanUpdate(mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(context.Context, identity.Identity, string) policy.Decision { return dec() }).Maybe()
-	p.EXPECT().CanChangeStatus(mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(context.Context, identity.Identity, string) policy.Decision { return dec() }).Maybe()
-	p.EXPECT().CanDelete(mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(context.Context, identity.Identity, string) policy.Decision { return dec() }).Maybe()
-	return p
-}
+const (
+	subjectRegistered = "user.events.registered.v2"
+	subjectUpdated    = "user.events.updated"
+	subjectDeleted    = "user.events.deleted"
+)
 
 type ucFixture struct {
 	uc    *user.Usecase
-	repo  *mocks.MockRepository
 	bus   *outboxtest.Recorder
 	audit *audittest.Recorder
 }
 
-type ucOpts struct {
-	repo *mocks.MockRepository
-	pol  user.Authorizer
-}
-
-type ucOption func(*ucOpts)
-
-func withRepo(r *mocks.MockRepository) ucOption { return func(o *ucOpts) { o.repo = r } }
-func withPolicy(p user.Authorizer) ucOption     { return func(o *ucOpts) { o.pol = p } }
-
-func newUC(t *testing.T, opts ...ucOption) ucFixture {
+// newUC — usecase на строгом моке репозитория и настоящей policy: право решает identity кейса, вызов
+// репозитория, которого кейс не ждёт, — провал.
+func newUC(t *testing.T, repo *mocks.MockRepository) ucFixture {
 	t.Helper()
-	o := &ucOpts{}
-	for _, fn := range opts {
-		fn(o)
-	}
-	if o.repo == nil {
-		o.repo = mocks.NewMockRepository(t)
-	}
-	if o.pol == nil {
-		o.pol = defaultPolicy(t, false)
-	}
-
-	bus := &outboxtest.Recorder{}
-	aud := &audittest.Recorder{}
-
+	bus, aud := &outboxtest.Recorder{}, &audittest.Recorder{}
 	uc := user.NewUsecase(user.UsecaseDeps{
-		Repo:   o.repo,
+		Repo:   repo,
 		Hasher: authntest.DeterministicHasher{},
-		Policy: o.pol,
+		Policy: user.NewPolicy(),
 		Tx:     pgtest.Identity{},
 		Events: bus,
 		Audit:  aud,
 		Log:    logkit.Nop(),
 		Clock:  clockkit.NewFixed(fixedNow),
 	})
-	return ucFixture{uc: uc, repo: o.repo, bus: bus, audit: aud}
+	return ucFixture{uc: uc, bus: bus, audit: aud}
 }
 
-func TestRegister(t *testing.T) {
-	t.Parallel()
-
-	t.Run("happy path", func(t *testing.T) {
-		t.Parallel()
-		var captured *user.User
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().Insert(mock.Anything, mock.Anything).
-			RunAndReturn(func(_ context.Context, u *user.User) error {
-				captured = u
-				u.ID = "id-1"
-				return nil
-			})
-		f := newUC(t, withRepo(repo))
-
-		got, err := f.uc.Register(context.Background(), &user.CreateInput{
-			Email: "a@b.com", Password: "longenough", Name: "Alice",
-		})
-		require.NoError(t, err)
-		require.Equal(t, "hash:longenough", got.PasswordHash)
-		require.NotNil(t, captured)
-		require.True(t, f.audit.Has("register"))
-		require.Equal(t, user.UserRegistered{ID: "id-1", At: fixedNow}, f.bus.Last("user.events.registered.v2"),
-			"the event carries the ID only: consumers read the address by ID")
-	})
-
-	t.Run("weak password", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t)
-		_, err := f.uc.Register(context.Background(), &user.CreateInput{
-			Email: "a@b.com", Password: "short", Name: "Alice",
-		})
-		require.ErrorIs(t, err, user.ErrWeakPassword)
-	})
-
-	t.Run("repo conflict", func(t *testing.T) {
-		t.Parallel()
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(user.ErrAlreadyExists)
-		f := newUC(t, withRepo(repo))
-		_, err := f.uc.Register(context.Background(), &user.CreateInput{
-			Email: "a@b.com", Password: "longenough", Name: "Alice",
-		})
-		require.ErrorIs(t, err, user.ErrAlreadyExists)
-	})
+// audited — запись аудита: actor сделал action над пользователем id.
+func audited(actor, action, id string) *auditkit.Entry {
+	return &auditkit.Entry{ActorID: actor, Action: action, Resource: "user", ResourceID: id, At: fixedNow}
 }
 
-func TestGetByID(t *testing.T) {
-	t.Parallel()
-
-	t.Run("forbidden", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withPolicy(defaultPolicy(t, false)))
-		_, err := f.uc.GetByID(identitytest.Client("u1"), "u2")
-		var fe *policy.ForbiddenError
-		require.ErrorAs(t, err, &fe)
-	})
-
-	t.Run("no identity", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withPolicy(defaultPolicy(t, true)))
-		_, err := f.uc.GetByID(identitytest.Anon(), "u1")
-		var fe *policy.ForbiddenError
-		require.ErrorAs(t, err, &fe)
-	})
-
-	t.Run("allowed", func(t *testing.T) {
-		t.Parallel()
-		want := &user.User{ID: "u1", Email: "a@b.com"}
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, mock.Anything).Return(want, nil)
-		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
-
-		got, err := f.uc.GetByID(identitytest.Client("u1"), "u1")
-		require.NoError(t, err)
-		require.Same(t, want, got)
-	})
-}
-
-func TestMe(t *testing.T) {
-	t.Parallel()
-
-	t.Run("no identity", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t)
-		_, err := f.uc.Me(identitytest.Anon())
-		var fe *policy.ForbiddenError
-		require.ErrorAs(t, err, &fe)
-	})
-
-	t.Run("happy path", func(t *testing.T) {
-		t.Parallel()
-		want := &user.User{ID: "u1", Email: "a@b.com"}
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, mock.Anything).Return(want, nil)
-		f := newUC(t, withRepo(repo))
-
-		got, err := f.uc.Me(identitytest.Client("u1"))
-		require.NoError(t, err)
-		require.Same(t, want, got)
-	})
-}
-
-func TestList(t *testing.T) {
-	t.Parallel()
-
-	t.Run("forbidden", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withPolicy(defaultPolicy(t, false)))
-		_, _, err := f.uc.List(identitytest.Client("u1"), user.ListFilter{}, paging.Page{Number: 1, Size: 20})
-		var fe *policy.ForbiddenError
-		require.ErrorAs(t, err, &fe)
-	})
-
-	t.Run("admin lists all", func(t *testing.T) {
-		t.Parallel()
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).
-			Return([]*user.User{{ID: "u1"}, {ID: "u2"}}, nil)
-		repo.EXPECT().Count(mock.Anything, mock.Anything).Return(2, nil)
-		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
-
-		got, total, err := f.uc.List(identitytest.Admin("admin"), user.ListFilter{}, paging.Page{Number: 1, Size: 20})
-		require.NoError(t, err)
-		require.Len(t, got, 2)
-		require.Equal(t, 2, total)
-	})
-
-	t.Run("pagination defaults", func(t *testing.T) {
-		t.Parallel()
-		var seen paging.Page
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).
-			RunAndReturn(func(_ context.Context, _ user.ListFilter, page paging.Page) ([]*user.User, error) {
-				seen = page
-				return nil, nil
-			})
-		repo.EXPECT().Count(mock.Anything, mock.Anything).Return(0, nil)
-		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
-
-		_, _, err := f.uc.List(identitytest.Admin("admin"), user.ListFilter{}, paging.Page{})
-		require.NoError(t, err)
-		require.Equal(t, paging.Page{Number: 1, Size: paging.DefaultSize}, seen)
-	})
+func requireForbidden(t *testing.T, err error) {
+	t.Helper()
+	var fe *policy.ForbiddenError
+	require.ErrorAs(t, err, &fe)
 }
 
 // stored — пользователь u1 в БД до правки.
@@ -244,145 +74,335 @@ func stored() *user.User {
 	return &user.User{ID: "u1", Email: "a@b.com", Name: "Old", Status: user.StatusActive, Version: 3}
 }
 
-func ptr[T any](v T) *T { return &v }
-
-// Авторизация — настоящая policy: статус меняет только админ, и свой тоже.
-func TestUpdate(t *testing.T) {
+func TestRegister(t *testing.T) {
 	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().Insert(mock.MatchedBy(pgkit.InTx), &user.User{
+		Email: "a@b.com", PasswordHash: "hash:longenough", Name: "Alice", Status: user.StatusActive, Role: identity.RoleClient, Version: 1,
+	}).RunAndReturn(func(_ context.Context, u *user.User) error {
+		u.ID = "id-1"
+		return nil
+	}).Once()
+	f := newUC(t, repo)
 
-	t.Run("admin applies name and status in one write", func(t *testing.T) {
-		t.Parallel()
-		saved := &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusBlocked, Version: 4, UpdatedAt: fixedNow}
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
-		repo.EXPECT().Update(mock.Anything, &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusBlocked, Version: 3}).
-			Return(saved, nil).Once()
-		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
-
-		got, err := f.uc.Update(identitytest.Admin("a1"), "u1",
-			user.UpdateInput{Name: ptr("New"), Status: ptr(user.StatusBlocked), Version: 3})
-		require.NoError(t, err)
-		require.Same(t, saved, got)
-		require.Equal(t, user.UserUpdated{ID: "u1", At: fixedNow}, f.bus.Last("user.events.updated"))
-		require.Equal(t, "a1", f.audit.Last("update").ActorID)
-	})
-
-	t.Run("client renames self", func(t *testing.T) {
-		t.Parallel()
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
-		repo.EXPECT().Update(mock.Anything, &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusActive, Version: 3}).
-			Return(&user.User{ID: "u1", Name: "New", Status: user.StatusActive, Version: 4}, nil).Once()
-		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
-
-		got, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Name: ptr("New"), Version: 3})
-		require.NoError(t, err)
-		require.Equal(t, 4, got.Version)
-	})
-
-	t.Run("client does not change own status", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withPolicy(user.NewPolicy()))
-
-		_, err := f.uc.Update(identitytest.Client("u1"), "u1",
-			user.UpdateInput{Name: ptr("New"), Status: ptr(user.StatusActive), Version: 3})
-		var fe *policy.ForbiddenError
-		require.ErrorAs(t, err, &fe)
-		require.Zero(t, f.bus.Count())
-	})
-
-	t.Run("client does not update another user", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withPolicy(user.NewPolicy()))
-
-		_, err := f.uc.Update(identitytest.Client("u1"), "u2", user.UpdateInput{Name: ptr("New"), Version: 3})
-		var fe *policy.ForbiddenError
-		require.ErrorAs(t, err, &fe)
-	})
-
-	t.Run("no fields", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withPolicy(user.NewPolicy()))
-		_, err := f.uc.Update(identitytest.Client("u1"), "u1", user.UpdateInput{Version: 3})
-		require.ErrorIs(t, err, user.ErrNoUpdateFields)
-	})
-
-	t.Run("unknown or deleted user", func(t *testing.T) {
-		t.Parallel()
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, "u1").Return(nil, user.ErrNotFound).Once()
-		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
-
-		_, err := f.uc.Update(identitytest.Admin("a1"), "u1", user.UpdateInput{Name: ptr("New"), Version: 3})
-		require.ErrorIs(t, err, user.ErrNotFound)
-		require.Zero(t, f.bus.Count())
-	})
-
-	t.Run("stale version is not written", func(t *testing.T) {
-		t.Parallel()
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
-		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
-
-		_, err := f.uc.Update(identitytest.Admin("a1"), "u1", user.UpdateInput{Name: ptr("New"), Version: 2})
-		require.ErrorIs(t, err, user.ErrConcurrentUpdate)
-	})
-
-	t.Run("concurrent write between read and update", func(t *testing.T) {
-		t.Parallel()
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
-		repo.EXPECT().Update(mock.Anything, mock.Anything).Return(nil, user.ErrConcurrentUpdate).Once()
-		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
-
-		_, err := f.uc.Update(identitytest.Admin("a1"), "u1", user.UpdateInput{Name: ptr("New"), Version: 3})
-		require.ErrorIs(t, err, user.ErrConcurrentUpdate)
-		require.Zero(t, f.bus.Count())
-	})
-
-	t.Run("status through Delete only", func(t *testing.T) {
-		t.Parallel()
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
-		f := newUC(t, withRepo(repo), withPolicy(user.NewPolicy()))
-
-		_, err := f.uc.Update(identitytest.Admin("a1"), "u1", user.UpdateInput{Status: ptr(user.StatusDeleted), Version: 3})
-		require.ErrorIs(t, err, user.ErrInvalidStatusTransition)
-	})
+	got, err := f.uc.Register(context.Background(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
+	require.NoError(t, err)
+	require.Equal(t, "id-1", got.ID)
+	require.Equal(t, user.UserRegistered{ID: "id-1", At: fixedNow}, f.bus.Last(subjectRegistered),
+		"the event carries the ID only: consumers read the address by ID")
+	require.Equal(t, 1, f.bus.Count())
+	require.Equal(t, audited("id-1", "register", "id-1"), f.audit.Last("register"))
 }
 
+// Отказ регистрации ничего не пишет: ни пользователя, ни события, ни аудита.
+func TestRegister_Rejected(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		in     user.CreateInput
+		insert error // nil — до репозитория не доходит
+		want   error
+	}{
+		{name: "weak password", in: user.CreateInput{Email: "a@b.com", Password: "short", Name: "Alice"}, want: user.ErrWeakPassword},
+		{name: "invalid email", in: user.CreateInput{Email: "a.b.com", Password: "longenough", Name: "Alice"}, want: user.ErrInvalidEmail},
+		{
+			name: "email taken", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
+			insert: user.ErrAlreadyExists, want: user.ErrAlreadyExists,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := mocks.NewMockRepository(t)
+			if tc.insert != nil {
+				repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(tc.insert).Once()
+			}
+			f := newUC(t, repo)
+
+			_, err := f.uc.Register(context.Background(), &tc.in)
+			require.ErrorIs(t, err, tc.want)
+			require.Zero(t, f.bus.Count())
+			require.Empty(t, f.audit.Entries())
+		})
+	}
+}
+
+// Читать пользователя вправе он сам и админ; policy спрашивают о цели запроса, а не о вызывающем.
+func TestGetByID(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		allowed bool
+	}{
+		{"self", identitytest.Client("u1"), true},
+		{"admin", identitytest.Admin("a1"), true},
+		{"another client", identitytest.Client("u2"), false},
+		{"no identity", identitytest.Anon(), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			want := stored()
+			repo := mocks.NewMockRepository(t)
+			if tc.allowed {
+				repo.EXPECT().GetByID(mock.Anything, "u1").Return(want, nil).Once()
+			}
+
+			got, err := newUC(t, repo).uc.GetByID(tc.ctx, "u1")
+			if !tc.allowed {
+				requireForbidden(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Same(t, want, got)
+		})
+	}
+}
+
+func TestMe(t *testing.T) {
+	t.Parallel()
+	want := stored()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetByID(mock.Anything, "u1").Return(want, nil).Once()
+
+	got, err := newUC(t, repo).uc.Me(identitytest.Client("u1"))
+	require.NoError(t, err)
+	require.Same(t, want, got)
+}
+
+func TestMe_NoIdentity(t *testing.T) {
+	t.Parallel()
+	_, err := newUC(t, mocks.NewMockRepository(t)).uc.Me(identitytest.Anon())
+	requireForbidden(t, err)
+}
+
+func TestList(t *testing.T) {
+	t.Parallel()
+	blocked := user.StatusBlocked
+	tests := []struct {
+		name      string
+		filter    user.ListFilter
+		page      paging.Page
+		wantQuery paging.Page
+	}{
+		{"filter and page as asked", user.ListFilter{Status: &blocked}, paging.Page{Number: 2, Size: 5}, paging.Page{Number: 2, Size: 5}},
+		{"page out of bounds is normalized", user.ListFilter{}, paging.Page{Size: paging.MaxSize + 1}, paging.Page{Number: 1, Size: paging.MaxSize}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			want := []*user.User{{ID: "u1"}, {ID: "u2"}}
+			repo := mocks.NewMockRepository(t)
+			repo.EXPECT().Count(mock.Anything, tc.filter).Return(7, nil).Once()
+			repo.EXPECT().List(mock.Anything, tc.filter, tc.wantQuery).Return(want, nil).Once()
+
+			got, total, err := newUC(t, repo).uc.List(identitytest.Admin("a1"), tc.filter, tc.page)
+			require.NoError(t, err)
+			require.Equal(t, want, got)
+			require.Equal(t, 7, total)
+		})
+	}
+}
+
+// Список — только админу: отказ до репозитория.
+func TestList_Forbidden(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		ctx  context.Context
+	}{
+		{"client", identitytest.Client("u1")},
+		{"no identity", identitytest.Anon()},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := newUC(t, mocks.NewMockRepository(t)).uc.List(tc.ctx, user.ListFilter{}, paging.Page{Number: 1, Size: 20})
+			requireForbidden(t, err)
+		})
+	}
+}
+
+func TestList_RepositoryError(t *testing.T) {
+	t.Parallel()
+	down := errors.New("db down")
+	tests := []struct {
+		name   string
+		expect func(repo *mocks.MockRepository)
+	}{
+		{"count", func(repo *mocks.MockRepository) {
+			repo.EXPECT().Count(mock.Anything, user.ListFilter{}).Return(0, down).Once()
+		}},
+		{"list", func(repo *mocks.MockRepository) {
+			repo.EXPECT().Count(mock.Anything, user.ListFilter{}).Return(1, nil).Once()
+			repo.EXPECT().List(mock.Anything, user.ListFilter{}, paging.Page{Number: 1, Size: 20}).Return(nil, down).Once()
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := mocks.NewMockRepository(t)
+			tc.expect(repo)
+
+			_, _, err := newUC(t, repo).uc.List(identitytest.Admin("a1"), user.ListFilter{}, paging.Page{Number: 1, Size: 20})
+			require.ErrorIs(t, err, down)
+		})
+	}
+}
+
+// Правка — чтение и запись одной транзакцией, событие — в ней же; статус меняет только админ, и свой тоже.
+func TestUpdate(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		ctx   context.Context
+		in    user.UpdateInput
+		write *user.User // что уходит в репозиторий
+		actor string
+	}{
+		{
+			name: "admin applies name and status in one write", ctx: identitytest.Admin("a1"),
+			in:    user.UpdateInput{Name: ptrkit.Of("New"), Status: ptrkit.Of(user.StatusBlocked), Version: 3},
+			write: &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusBlocked, Version: 3}, actor: "a1",
+		},
+		{
+			name: "client renames self", ctx: identitytest.Client("u1"),
+			in:    user.UpdateInput{Name: ptrkit.Of("New"), Version: 3},
+			write: &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusActive, Version: 3}, actor: "u1",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			saved := &user.User{ID: "u1", Name: tc.write.Name, Status: tc.write.Status, Version: 4}
+			repo := mocks.NewMockRepository(t)
+			read := repo.EXPECT().GetByID(mock.MatchedBy(pgkit.InTx), "u1").Return(stored(), nil).Once()
+			repo.EXPECT().Update(mock.MatchedBy(pgkit.InTx), tc.write).Return(saved, nil).Once().NotBefore(read)
+			f := newUC(t, repo)
+
+			got, err := f.uc.Update(tc.ctx, "u1", tc.in)
+			require.NoError(t, err)
+			require.Same(t, saved, got)
+			require.Equal(t, user.UserUpdated{ID: "u1", At: fixedNow}, f.bus.Last(subjectUpdated))
+			require.Equal(t, 1, f.bus.Count())
+			require.Equal(t, audited(tc.actor, "update", "u1"), f.audit.Last("update"))
+		})
+	}
+}
+
+// Отказ правки ничего не пишет: ни пользователя, ни события, ни аудита.
+func TestUpdate_Rejected(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		ctx    context.Context
+		in     user.UpdateInput
+		expect func(repo *mocks.MockRepository) // nil — до репозитория не доходит
+		want   error                            // nil — отказ policy
+	}{
+		{
+			name: "client does not change own status", ctx: identitytest.Client("u1"),
+			in: user.UpdateInput{Name: ptrkit.Of("New"), Status: ptrkit.Of(user.StatusActive), Version: 3},
+		},
+		{name: "client does not update another user", ctx: identitytest.Client("u2"), in: user.UpdateInput{Name: ptrkit.Of("New"), Version: 3}},
+		{name: "no identity", ctx: identitytest.Anon(), in: user.UpdateInput{Name: ptrkit.Of("New"), Version: 3}},
+		{name: "no fields", ctx: identitytest.Client("u1"), in: user.UpdateInput{Version: 3}, want: user.ErrNoUpdateFields},
+		{
+			name: "unknown or deleted user", ctx: identitytest.Admin("a1"), in: user.UpdateInput{Name: ptrkit.Of("New"), Version: 3},
+			expect: func(repo *mocks.MockRepository) {
+				repo.EXPECT().GetByID(mock.Anything, "u1").Return(nil, user.ErrNotFound).Once()
+			},
+			want: user.ErrNotFound,
+		},
+		{
+			name: "stale version", ctx: identitytest.Admin("a1"), in: user.UpdateInput{Name: ptrkit.Of("New"), Version: 2},
+			expect: func(repo *mocks.MockRepository) {
+				repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+			},
+			want: user.ErrConcurrentUpdate,
+		},
+		{
+			name: "concurrent write between read and update", ctx: identitytest.Admin("a1"), in: user.UpdateInput{Name: ptrkit.Of("New"), Version: 3},
+			expect: func(repo *mocks.MockRepository) {
+				repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+				repo.EXPECT().Update(mock.Anything, mock.Anything).Return(nil, user.ErrConcurrentUpdate).Once()
+			},
+			want: user.ErrConcurrentUpdate,
+		},
+		{
+			name: "status through Delete only", ctx: identitytest.Admin("a1"), in: user.UpdateInput{Status: ptrkit.Of(user.StatusDeleted), Version: 3},
+			expect: func(repo *mocks.MockRepository) {
+				repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+			},
+			want: user.ErrInvalidStatusTransition,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := mocks.NewMockRepository(t)
+			if tc.expect != nil {
+				tc.expect(repo)
+			}
+			f := newUC(t, repo)
+
+			_, err := f.uc.Update(tc.ctx, "u1", tc.in)
+			if tc.want == nil {
+				requireForbidden(t, err)
+			} else {
+				require.ErrorIs(t, err, tc.want)
+			}
+			require.Zero(t, f.bus.Count())
+			require.Empty(t, f.audit.Entries())
+		})
+	}
+}
+
+// Удалить пользователя вправе он сам и админ; удаление и событие — одной транзакцией.
 func TestDelete(t *testing.T) {
 	t.Parallel()
+	tests := []struct {
+		name  string
+		ctx   context.Context
+		actor string // "" — отказ policy
+	}{
+		{"self", identitytest.Client("u1"), "u1"},
+		{"admin", identitytest.Admin("a1"), "a1"},
+		{"another client", identitytest.Client("u2"), ""},
+		{"no identity", identitytest.Anon(), ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := mocks.NewMockRepository(t)
+			if tc.actor != "" {
+				repo.EXPECT().Delete(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
+			}
+			f := newUC(t, repo)
 
-	t.Run("happy path", func(t *testing.T) {
-		t.Parallel()
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().Delete(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
-		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
+			err := f.uc.Delete(tc.ctx, "u1")
+			if tc.actor == "" {
+				requireForbidden(t, err)
+				require.Zero(t, f.bus.Count())
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, user.UserDeleted{ID: "u1", At: fixedNow}, f.bus.Last(subjectDeleted))
+			require.Equal(t, 1, f.bus.Count())
+			require.Equal(t, audited(tc.actor, "delete", "u1"), f.audit.Last("delete"))
+		})
+	}
+}
 
-		require.NoError(t, f.uc.Delete(identitytest.Client("u1"), "u1"))
-		require.Equal(t, user.UserDeleted{ID: "u1", At: fixedNow}, f.bus.Last("user.events.deleted"))
-		require.True(t, f.audit.Has("delete"))
-	})
+// Удалённого нет: повтор и гонка двух удалений — 404, а не конфликт; события и аудита нет.
+func TestDelete_UnknownOrAlreadyDeleted(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().Delete(mock.Anything, "u1").Return(user.ErrNotFound).Once()
+	f := newUC(t, repo)
 
-	// Удалённого нет: повтор и гонка двух удалений — 404, а не конфликт; события и аудита нет.
-	t.Run("unknown or already deleted user", func(t *testing.T) {
-		t.Parallel()
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().Delete(mock.Anything, "u1").Return(user.ErrNotFound).Once()
-		f := newUC(t, withRepo(repo), withPolicy(defaultPolicy(t, true)))
-
-		err := f.uc.Delete(identitytest.Client("u1"), "u1")
-		require.ErrorIs(t, err, user.ErrNotFound)
-		require.Zero(t, f.bus.Count())
-		require.False(t, f.audit.Has("delete"))
-	})
-
-	t.Run("forbidden", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withPolicy(defaultPolicy(t, false)))
-		err := f.uc.Delete(identitytest.Client("u1"), "u2")
-		var fe *policy.ForbiddenError
-		require.ErrorAs(t, err, &fe)
-	})
+	require.ErrorIs(t, f.uc.Delete(identitytest.Client("u1"), "u1"), user.ErrNotFound)
+	require.Zero(t, f.bus.Count())
+	require.Empty(t, f.audit.Entries())
 }

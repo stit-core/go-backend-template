@@ -42,13 +42,13 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 |---|---|
 | `policy.go` | unit table-driven |
 | `entity.go` (конструкторы/методы) | unit; +fuzz (`entity_fuzz_test.go`) при строковых валидациях |
-| `usecase.go` | unit через моки портов, fixture `newUC(t, opts...)` |
-| `delivery/http` | handler-тест через `golibinfra/testkit/handlertest`; `errors_test.go` (white-box): таблица операции объявляет ошибки её usecase (список — по коду usecase); без 500 и без таблицы операции вне `Declare` — archtest `TestDomainErrorTables` |
+| `usecase.go` | unit через строгие моки портов и настоящую policy, fixture `newUC(t, …)` |
+| `delivery/http` | handler-тест через `golibinfra/testkit/handlertest`: happy path каждой операции — точный вход usecase и тело ответа; `errors_test.go` (white-box): таблица операции объявляет ошибки её usecase (список — по коду usecase); без 500 и без таблицы операции вне `Declare` — archtest `TestDomainErrorTables` |
 | `delivery/nats` | unit handler-функции (мок Usecase-порта) — включая дубль-доставку |
 | `module/adapters.go` | unit (white-box) поверх `Trusted` поставщика: маппинг полей и каждая ошибка `TrustedErrors` → sentinel потребителя |
 | `infra/<kit>/` | unit на настоящем ките или фейке из `testkit` |
 | `trusted.go` | unit через моки портов; методы отдают только ошибки `TrustedErrors` (`return` в `trusted.go` — archtest) |
-| `infra/postgres/repository.go` | integration per-домен (build-tag) |
+| `infra/postgres/repository.go` | integration (build-tag) на каждый метод: запись видна чтением, условия SQL (версия, удалённые, регистр, фильтр, страница) |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp`, корню графа `context.Context` не доступен; `fx.As` нет — archtest |
 | HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь; `openapi.json` совпадает с кодом |
 | запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, `api healthcheck` получает 200 от `/health` сервиса, 401 у каждой операции под `Security`, 429, 5xx без причины (она — в логе под тем же `request_id`), событие до подписчика, outbox verification — до стрима, `/openapi.json` = `openapi.json`, kit-таблицы графа = источники `cmd/migrate`, события fx — в лог сервиса, HTTP стартует последним и гасится первым; глобальный провайдер метрик — SDK telemetry, метрики доменов пишутся в провайдер telemetry; обе ссылки из писем гасятся; адрес, пароли, cookie сессии и токены писем — ни в логе сервиса, ни в `audit_log` и outbox |
@@ -65,9 +65,11 @@ RED→GREEN: падающий тест, воспроизводящий баг �
   `make gen`; `make gen-check` ловит дрейф и untracked-моки.
 - **Изоляция (archtest)**: пакет `mocks` любого домена импортируется только из `*_test.go`.
 - Template `testify` даёт `EXPECT()`-API; `t` в конструкторе — авто-`AssertExpectations`.
-- **Fixture usecase-теста — functional options**: `newUC(t, opts...)` + `withX(...)`;
-  дефолтные моки — именованные хелперы (`defaultPolicy(t, ...)`). Policy-дефолт —
-  **deny** (fail-closed); разрешение кейс включает явно.
+- **Fixture usecase-теста** — `newUC(t, …)`: порты — строгие моки без ожиданий (вызов, которого
+  кейс не ждёт, — провал), policy — настоящая (`NewPolicy()`): право решает identity кейса.
+  Ожидание побочного эффекта — с точными аргументами и `.Once()`, без `.Maybe()`; запись в
+  транзакции — `mock.MatchedBy(pgkit.InTx)`; событие — `Recorder.Last(subject)`, лишних нет —
+  `Count()`. Порт кейс передаёт параметром, несколько портов — functional options `withX(...)`.
 - Рукописный stateful-фейк допустим для протокольных портов (цепочки insert/markUsed);
   тогда интерфейс из `.mockery.yml` убирается — мок и фейк вместе не живут.
 - Identity-контексты — `internal/testkit/identitytest` (`Admin`/`Client`/`Anon`), не

@@ -131,7 +131,7 @@ var (
 ### 8. Тесты
 
 `handler_test.go`, минимум:
-- Happy path (201/200)
+- Happy path (201/200/204): мок usecase ждёт точный вход (`.Once()`), ответ сверяется целиком
 - Forbidden (мок usecase возвращает `&policy.ForbiddenError{…}` → 403)
 - Validation error (huma сам отдаёт 422)
 - Каждый код таблицы операции (`handlertest.AssertAPIError`)

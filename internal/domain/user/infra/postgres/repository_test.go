@@ -15,6 +15,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/pgseed"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
 	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
+	"git.stit.tech/stit-core/golibinfra/ptrkit"
 	"git.stit.tech/stit-core/golibinfra/testkit"
 )
 
@@ -24,18 +25,26 @@ func setup(t *testing.T) user.Repository {
 	return userpg.NewRepository(fx.DB(t))
 }
 
+// Адрес уникален без учёта регистра среди не удалённых: удалённый его освобождает.
 func TestInsert(t *testing.T) {
 	t.Parallel()
 	repo := setup(t)
 	ctx := context.Background()
 
-	u := pgseed.InsertUser(t, repo)
+	u := pgseed.InsertUser(t, repo, pgseed.WithEmail("Alice@Example.com"))
 	require.NotEmpty(t, u.ID)
-	require.Equal(t, identity.RoleClient, u.Role)
+	require.Equal(t, 1, u.Version)
+	require.False(t, u.CreatedAt.IsZero())
+	got, err := repo.GetByID(ctx, u.ID)
+	require.NoError(t, err)
+	require.Equal(t, u, got, "Insert fills the user as it is stored")
 
-	dup := pgseed.NewUser(pgseed.WithEmail(u.Email))
-	err := repo.Insert(ctx, dup)
-	require.ErrorIs(t, err, user.ErrAlreadyExists)
+	for _, email := range []string{"Alice@Example.com", "alice@example.com"} {
+		require.ErrorIs(t, repo.Insert(ctx, pgseed.NewUser(pgseed.WithEmail(email))), user.ErrAlreadyExists, email)
+	}
+	require.NoError(t, repo.Delete(ctx, u.ID))
+	again := pgseed.InsertUser(t, repo, pgseed.WithEmail("alice@example.com"))
+	require.NotEqual(t, u.ID, again.ID)
 }
 
 func TestGetByID(t *testing.T) {
@@ -44,33 +53,72 @@ func TestGetByID(t *testing.T) {
 	ctx := context.Background()
 
 	u := pgseed.InsertUser(t, repo, pgseed.WithRole(identity.RoleAdmin))
-
 	got, err := repo.GetByID(ctx, u.ID)
 	require.NoError(t, err)
-	require.Equal(t, u.Email, got.Email)
-	require.Equal(t, identity.RoleAdmin, got.Role)
+	require.Equal(t, u, got)
 
-	_, err = repo.GetByID(ctx, "00000000-0000-0000-0000-000000000000")
-	require.ErrorIs(t, err, user.ErrNotFound)
+	// id приходит из пути запроса: чужой формат — тот же «нет такого», а не сбой БД.
+	for _, id := range []string{"00000000-0000-0000-0000-000000000000", "not-a-uuid"} {
+		_, err = repo.GetByID(ctx, id)
+		require.ErrorIs(t, err, user.ErrNotFound, id)
+	}
 }
 
-func TestList_WithRole(t *testing.T) {
+// Адрес ищется без учёта регистра — как его держит уникальный индекс.
+func TestGetByEmail(t *testing.T) {
 	t.Parallel()
 	repo := setup(t)
 	ctx := context.Background()
 
-	u1 := pgseed.InsertUser(t, repo, pgseed.WithRole(identity.RoleClient))
-	u2 := pgseed.InsertUser(t, repo, pgseed.WithRole(identity.RoleAdmin))
-
-	list, err := repo.List(ctx, user.ListFilter{}, paging.Page{Number: 1, Size: 100})
-	require.NoError(t, err)
-
-	roleByEmail := make(map[string]identity.Role)
-	for _, u := range list {
-		roleByEmail[u.Email] = u.Role
+	u := pgseed.InsertUser(t, repo, pgseed.WithEmail("Alice@Example.com"))
+	for _, email := range []string{"Alice@Example.com", "alice@example.com", "ALICE@EXAMPLE.COM"} {
+		got, err := repo.GetByEmail(ctx, email)
+		require.NoError(t, err)
+		require.Equal(t, u, got, email)
 	}
-	require.Equal(t, identity.RoleClient, roleByEmail[u1.Email])
-	require.Equal(t, identity.RoleAdmin, roleByEmail[u2.Email])
+	_, err := repo.GetByEmail(ctx, "bob@example.com")
+	require.ErrorIs(t, err, user.ErrNotFound)
+}
+
+// Список и счётчик видят одних и тех же — не удалённых, с фильтром статуса; список — новые первыми.
+func TestList(t *testing.T) {
+	t.Parallel()
+	repo := setup(t)
+	ctx := context.Background()
+
+	client := pgseed.InsertUser(t, repo, pgseed.WithRole(identity.RoleClient))
+	admin := pgseed.InsertUser(t, repo, pgseed.WithRole(identity.RoleAdmin))
+	blocked := pgseed.InsertUser(t, repo, pgseed.WithStatus(user.StatusBlocked))
+	require.NoError(t, repo.Delete(ctx, pgseed.InsertUser(t, repo).ID))
+
+	tests := []struct {
+		name   string
+		filter user.ListFilter
+		want   []*user.User
+	}{
+		{"all but deleted", user.ListFilter{}, []*user.User{blocked, admin, client}},
+		{"active", user.ListFilter{Status: ptrkit.Of(user.StatusActive)}, []*user.User{admin, client}},
+		{"blocked", user.ListFilter{Status: ptrkit.Of(user.StatusBlocked)}, []*user.User{blocked}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			list, err := repo.List(ctx, tc.filter, paging.Page{Number: 1, Size: paging.MaxSize})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, list)
+			n, err := repo.Count(ctx, tc.filter)
+			require.NoError(t, err)
+			require.Equal(t, len(tc.want), n)
+		})
+	}
+
+	t.Run("pages", func(t *testing.T) {
+		first, err := repo.List(ctx, user.ListFilter{}, paging.Page{Number: 1, Size: 2})
+		require.NoError(t, err)
+		require.Equal(t, []*user.User{blocked, admin}, first)
+		second, err := repo.List(ctx, user.ListFilter{}, paging.Page{Number: 2, Size: 2})
+		require.NoError(t, err)
+		require.Equal(t, []*user.User{client}, second)
+	})
 }
 
 func TestUpdate(t *testing.T) {
@@ -121,6 +169,23 @@ func TestUpdate_StaleVersion(t *testing.T) {
 	}
 }
 
+func TestUpdatePassword(t *testing.T) {
+	t.Parallel()
+	repo := setup(t)
+	ctx := context.Background()
+
+	u := pgseed.InsertUser(t, repo)
+	got, err := repo.UpdatePassword(ctx, u.ID, "hash:new", u.Version)
+	require.NoError(t, err)
+	require.Equal(t, u.Version+1, got.Version)
+
+	stored, err := repo.GetByID(ctx, u.ID)
+	require.NoError(t, err)
+	require.Equal(t, "hash:new", stored.PasswordHash)
+	require.Equal(t, got.Version, stored.Version)
+	require.Equal(t, u.Name, stored.Name, "only the password changes")
+}
+
 // Удаление без версии: повтор — ErrNotFound, из одновременных удалений проходит ровно одно.
 func TestDelete(t *testing.T) {
 	t.Parallel()
@@ -132,7 +197,9 @@ func TestDelete(t *testing.T) {
 	_, err := repo.GetByID(ctx, u.ID)
 	require.ErrorIs(t, err, user.ErrNotFound)
 	require.ErrorIs(t, repo.Delete(ctx, u.ID), user.ErrNotFound)
-	require.ErrorIs(t, repo.Delete(ctx, "00000000-0000-0000-0000-000000000000"), user.ErrNotFound)
+	for _, id := range []string{"00000000-0000-0000-0000-000000000000", "not-a-uuid"} {
+		require.ErrorIs(t, repo.Delete(ctx, id), user.ErrNotFound, id)
+	}
 
 	raced := pgseed.InsertUser(t, repo)
 	const n = 8
