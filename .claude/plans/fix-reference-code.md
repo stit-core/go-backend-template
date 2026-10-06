@@ -82,8 +82,10 @@ prod-дефолты, понятный контракт ошибок API, тес�
   ≥ 95% или поштучное объяснение, почему нет. Проверка: `make cover-check` → OK
   - Подтверждено: `make cover-check` → 100% (740/740 statement'ов `internal/` и `pkg/` без сгенерированного и
     testkit, профиль test-int), порог 95, функций без тестов нет; три прогона подряд — 100%
-- [ ] **AC9** — Мутации аудита: из 34 гейт убивает не меньше 32, каждый выживший объяснён в
+- [x] **AC9** — Мутации аудита: из 34 гейт убивает не меньше 32, каждый выживший объяснён в
   «Решениях» (эквивалентный мутант); D02 убит. Проверка: повторить мутации → таблица
+  - Подтверждено: S15 — 34 из 34 и D02 убиты полным `make check` на `1edf06c`, неприменимых нет; 31 — тестами,
+    M15, M16, M18 первым ловит lint, тесты — тоже; таблица — «Где мы сейчас»
 - [x] **AC10** — `make new-domain NAME=probe` без правок проходит `make check`, включая покрытие.
   Проверка: в worktree → `make check` зелёный
   - Подтверждено: в worktree `make new-domain NAME=probe` (и `order_item`) → `make check` → `✓ check clean`
@@ -91,8 +93,8 @@ prod-дефолты, понятный контракт ошибок API, тес�
   нет (`beforeHTTP`, client-IP middleware, `pkg/tokens`, `publicOperations`); гейт зелёный.
   Проверка: `grep -rn "beforeHTTP\|WithIP\|pkg/tokens\|publicOperations" --include=*.go .` → пусто;
   `make check` → `✓ check clean`
-  - Подтверждено: grep пуст (S9), allowlist'ы `cmd/api` (S10) и archtest (S11) пусты, `make check` →
-    `✓ check clean`
+  - Подтверждено: S15 на `1edf06c` — grep пуст, `envAllowlist` (`cmd/api`) и `proseAllowlist` (archtest) пусты,
+    `make check` → `✓ check clean` в свежем worktree и в основном дереве
 - [x] **AC12** — Сборка DI единообразна: одна идиома привязки к интерфейсу, имя модуля — путь
   пакета, конфиги китов — через их `NewConfig`, `main`, тест графа и boot-тест собирают один
   `service`, зависимости usecase — одной структурой, события fx — в logkit, порядок старта и
@@ -235,45 +237,29 @@ prod-дефолты, понятный контракт ошибок API, тес�
   - Сделано: тесты `1007ee5` (13 поломок репозиториев, аудита и списка ловят, на базе тесты пропускали все)
     и гейт `da693dc`; строка 11 (`score.go`, 32 statement'а без тестов) → FAIL «функций без тестов: 1» при
     95,85%; AC10 (`probe`, `order_item`) — `✓ check clean`, 100% (`s13auth/` в материалах)
-- [ ] **S15** — Итог: повторить 34 мутации аудита и D02, таблица — в «Где мы сейчас»; allowlist'ы
+- [x] **S15** — Итог: повторить 34 мутации аудита и D02, таблица — в «Где мы сейчас»; allowlist'ы
   пусты, обходов нет, гейт зелёный
   - Проверка: AC9 → ≥ 32 из 34; `make check` → `✓ check clean` · Закрывает: AC9, AC11 · Зависит от: S14
+  - Сделано: AC9, AC11 подтверждены; 60 мутантов (основные формы и варианты) по одному через `make check` — 58
+    убиты, два варианта сверх сопоставления выжили («Решения»); протокол — `s15-fix-reference-code.md` в материалах
 
 ## Решения
-- Покрытие (S14): порог 95% (владелец: 90–95) по statement'ам всех блоков профиля одного прогона test-int
-  (`-coverpkg` `internal/`, `pkg/`; fx-провайдеры засчитывает boot-тест) без testkit и сгенерированного (его
-  заголовок — только в выводе генераторов, archtest); неисполненная функция — отказ при любом проценте
-  (строка 11 ENF в форме функции), ветка без тестов в покрытой — порог (запас ≈ 5%) и мутации; `make check`
-  берёт профиль своего test-int, `test-cover` снят; сбой БД в тестах — отменённый ctx.
-- Граница с golibinfra: общая механика — в китах, здесь — bump и снятие взятого китом; эквивалентов китов
-  в шаблоне нет, даже временно (auth-стек скопирован в `ai-gateway-template`, форки пишут его сами).
-- Bump'ы — v1.2.0 (S1), v1.3.0 (S9); сессии — `authnkit/session`, токены сброса и подтверждения — SQL домена
-  (S5); env — в Handoff.
-- S1–S8, S10–S12: решения — в rules, `docs/reference/` и телах коммитов шагов; здесь — опора S9, S13–S15:
-  - вход — fail-closed (неучитываемый ключ — 401); сброс — один ответ 204 при любом сбое после поиска
-    учётной записи (лог и метрика), лимит — bruteforcekit на (пользователь, IP) портом `ResetLimiter`,
-    confirm гасит прочие ссылки, тайминг — бэклог `reset-timing`;
-  - метрики — `telemetry.Module`, `Meter` доменов — из `*telemetry.Providers`, в тестах —
-    `metrictest.NewProvider`; события `.v2` — только ID, старый
-    `user.events.registered` дочитывает прежний durable (бэклог `events-v1-reader`);
-  - здоровье — `api healthcheck` = `httpkit.Healthcheck` (в distroless нет shell); `HEALTHCHECK` в
-    Dockerfile нет — интервалы задаёт деплой.
-- S9 (подробно — тела коммитов): auth берёт `session.Store` кита напрямую (`rootLibs`), тесты — фейк
-  `sessiontest`; user — свой порт `Sessions` (`RevokeAll`, строгий мок с `pgkit.InTx`). Отзыв — смена и сброс
-  пароля (`user.Trusted.UpdatePassword`), блокировка (`Update`), удаление, `seed-admin`; вход открывает сессию
-  под `FOR SHARE` строки пользователя и сверяет пароль, роль и статус (B1 валидатора E); refresh — `Rotate`,
-  затем пользователь (удалённый или заблокированный — 401, токен закрыт). Выход без аудита — бэклог
-  `logout-audit`; гард вне dev — `JWT_AUDIENCE`, бюджет остановки — `checkStopBudget`; IP в тестах — `identitytest`.
-- S13: policy в тестах usecase — настоящая (мока `Authorizer` нет), порты — строгие моки, выпуск access-токена
-  — фейк чистого порта (токен в результате, а не факт вызова); контракт события — у потребителя (событие
-  поставщика в JSON → `Register`); `main()` — перезапуск тест-бинаря с пустой командной строкой, гейт не идёт
-  с `API_TEST_MAIN_ARGS`; путь писем держит `TestBoot` (TST-08); сессии кита через `user.Sessions` — откат смены.
-- S15 — мутации аудита на текущем коде: M04, M05 — `pkg/policy.PasswordStrong`; M09 — `Guard.Attempt`; M10 —
-  refresh ищет пользователя по `next.Subject` (владельца отдаёт хранилище кита); M11 — `Logout` без `Revoke`;
-  M15 — `mapUserErr`; M18 — `%w` в usecase auth (`rotate session`, `open session`, `load user`); M20 — 403
-  `authgate.ForbiddenRule`; M27 — `ParseAccess`; M28 — `tokenFromRequest`; M29 — XFF разбирает httpkit, в
-  шаблоне — граф с `TrustProxyHops` 1–3; M30 — `CanLogin` адаптера; M31 — блокировка адаптера guard; M32 —
-  `SameSite` в `authCookie`, `expiredCookie`.
+- Покрытие (S14): порог 95% (владелец: 90–95) по statement'ам профиля одного прогона test-int без testkit и
+  сгенерированного (заголовок — только в выводе генераторов, archtest); неисполненная функция — отказ при любом
+  проценте (строка 11 ENF), ветка без тестов в покрытой функции — порог и мутации; сбой БД в тестах — отменённый ctx.
+- Граница с golibinfra: механика — в китах, здесь — bump (v1.2.0 — S1, v1.3.0 — S9) и снятие взятого китом, без
+  эквивалентов китов даже временно; сессии — `authnkit/session`, токены сброса и подтверждения — SQL домена (S5).
+- S1–S8, S10–S12: решения — в rules, `docs/reference/` и телах коммитов шагов. Опора S9, S13: вход — fail-closed
+  (неучитываемый ключ — 401); сброс — один ответ 204 при сбое после поиска учётной записи, лимит — bruteforcekit
+  на (пользователь, IP), confirm гасит прочие ссылки (тайминг — бэклог `reset-timing`); события `.v2` — только ID
+  (бэклог `events-v1-reader`); сессии закрывают смена и сброс пароля, блокировка, удаление, `seed-admin`, вход
+  открывает сессию под `FOR SHARE` строки пользователя (выход без аудита — бэклог `logout-audit`); здоровье —
+  `api healthcheck` = `httpkit.Healthcheck`; policy в тестах usecase — настоящая, порты — строгие моки, выпуск
+  access-токена — фейк чистого порта, контракт события — у потребителя; `main()` — перезапуск тест-бинаря.
+- S15: основная форма мутации — по сопоставлению отчётов D и F, прогон — полный `make check`; SQL — правкой
+  `queries/` и `sqlc generate`, HTTP — с регенерацией `openapi.json` (дрейф сгенерированного — не убийство). Сверх
+  сопоставления гейт пропускает явную `httpkit.Public` вместо `authgate.Secured` (`listUsers` отвечает 403 всем;
+  публичность — решение, видимое в диффе и `openapi.json`) и `TrustProxyHops` ≥ 4 (в цепочке теста три записи).
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в OpenAPI) —
@@ -296,5 +282,19 @@ prod-дефолты, понятный контракт ошибок API, тес�
   (`HTTP_SHUTDOWN_*`, `stop_grace_period` ≥ 35s), стримы публикаторов, дефолты китов, образы, `.v2`, OTel.
 
 ## Где мы сейчас
-S1–S14 приняты (отчёты A–F); остатки валидатора F закрыты (`30b00ab`…). Дальше — S15 (повтор 34 мутаций и D02)
-отдельным агентом; AC9 закрывает S15.
+S1–S14 приняты (отчёты A–F), S15 выполнен отдельным агентом. План выполнен, следующее — закрытие (дирижёр).
+Мутации аудита на `1edf06c` — основная форма, полный `make check` (протокол `s15-fix-reference-code.md` в материалах):
+
+| Мутация | Чем убита | Мутация | Чем убита | Мутация | Чем убита |
+|---|---|---|---|---|---|
+| M01 | `TestPolicy_Can*` | M02 | `TestUserCanLogin` | M03 | `TestNewUser` |
+| M04, M05 | `TestPasswordStrong` | M06 | `TestRegister`, контракт | M07, M08 | `TestUpdate_Rejected` |
+| M09 | `TestLogin_*`, `TestBoot` | M10 | `TestRefresh_*`, `TestSessions` | M11 | `TestLogout`, `TestSessions` |
+| M12 | `TestConfirmPasswordReset_*` | M13 | `TestConfirmPasswordReset_Rejected` | M14 | `TestIssueEmailVerification_*` |
+| M15 | `TestUserAdapter_MapsUserErrors` | M16 | lint, `TestRequestPasswordReset_LookupFailure` | M17, M23 | `TestUpdate_StaleVersion` |
+| M18 | lint, `TestRefresh_Failure` | M19 | `TestGetByID_NotFound` | M20 | `TestChangePassword_Errors` |
+| M21 | `TestUpdate_OK`, `TestSessions` | M22 | `TestHTTPOperations` | M24 | `TestGetByEmail` |
+| M25 | `TestDeletedUserIsUntouched` | M26 | `TestUpsertEmailVerification_Redelivery` | M27, M28 | `TestExtract` |
+| M29 | `TestBoot` (hops 1–3) | M30 | `TestUserAdapter_User` | M31 | `TestLoginGuard_Attempt` |
+| M32 | `TestBuildAuthCookies` | M33 | `TestOnUserRegistered` | M34 | `TestRequestPasswordReset_*` |
+| D02 | `TestRegister` (outbox вне tx) | | | | |
