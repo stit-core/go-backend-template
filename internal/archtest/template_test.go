@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -53,13 +54,22 @@ var conflictMarker = regexp.MustCompile(`(?m)^(<{7}|>{7})( |$)`)
 func TestNoConflictMarkers(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	for _, f := range trackedFiles(t, root) {
-		data, err := os.ReadFile(filepath.Join(root, f))
-		require.NoError(t, err)
-		if loc := conflictMarker.FindIndex(data); loc != nil {
-			t.Errorf("%s:%d: merge conflict marker", f, bytes.Count(data[:loc[0]], []byte("\n"))+1)
-		}
+	for _, at := range conflictMarkers(t, root, trackedFiles(t, root)) {
+		t.Errorf("%s: merge conflict marker", at)
 	}
+}
+
+func TestConflictMarkers(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"conflict.md": "a\n<<<<<<< ours\nb\n=======\nc\n>>>>>>> theirs\n",
+		"heading.md":  "Заголовок\n=======\n",
+		"sub/file.md": "s\n",
+	})
+	require.NoError(t, os.Symlink("sub", filepath.Join(root, "link")))
+	// sub — как submodule в git ls-files, link — tracked symlink на каталог.
+	require.Equal(t, []string{"conflict.md:2"}, conflictMarkers(t, root, []string{"conflict.md", "heading.md", "sub", "link"}))
 }
 
 // TestTemplateUpdate: make template-update переносит в форк с другим module path и своей историей
@@ -254,4 +264,25 @@ func readFiles(t *testing.T, dir string, names ...string) map[string]string {
 		files[name] = string(data)
 	}
 	return files
+}
+
+// conflictMarkers — файл:строка первого маркера конфликта в каждом обычном файле: submodule и symlink
+// в git ls-files — пути, а не текст репо.
+func conflictMarkers(t *testing.T, root string, files []string) []string {
+	t.Helper()
+	var found []string
+	for _, f := range files {
+		path := filepath.Join(root, f)
+		info, err := os.Lstat(path)
+		require.NoError(t, err)
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		if loc := conflictMarker.FindIndex(data); loc != nil {
+			found = append(found, f+":"+strconv.Itoa(bytes.Count(data[:loc[0]], []byte("\n"))+1))
+		}
+	}
+	return found
 }

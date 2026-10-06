@@ -143,7 +143,8 @@ func inRepo(repo map[string]bool, ref string) bool {
 // trackedFiles — файлы индекса git, которые есть в рабочем дереве: удалённый файл — уже не ссылка.
 func trackedFiles(t *testing.T, root string) []string {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", "ls-files", "-z")
+	// --deduplicate: неразрешённый конфликт иначе идёт строкой на каждую стадию индекса.
+	cmd := exec.CommandContext(t.Context(), "git", "ls-files", "-z", "--deduplicate")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	require.NoError(t, err, "git ls-files")
