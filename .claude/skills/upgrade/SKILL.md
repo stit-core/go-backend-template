@@ -58,7 +58,9 @@ git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-templat
    последнего тега; дерево не меняется. Формат аннотации — `docs/contributing.md § Версия обвязки`.
    golibinfra форка ниже, чем у тега, — сначала раздел golibinfra.
 2. `make template-update TO=template/vX.Y.Z` на чистом дереве — трёхстороннее слияние путей шаблона
-   от версии форка до тега; итог — в индексе (`git diff --cached`), `.template/version` уже сдвинут:
+   до тега: первый перенос — от коммита шаблона, из которого создан форк (по дереву первого коммита
+   форка), следующие — от `.template/version`; итог — в индексе (`git diff --cached`),
+   `.template/version` уже сдвинут:
    - **конфликты** (`git status` — `UU`, `AA`): шаблон и форк правили одно место — сведи обе правки
      по смыслу и `git add`; забытый маркер конфликта роняет `make check` (archtest
      `TestNoConflictMarkers`);
@@ -71,20 +73,18 @@ git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-templat
 
 ## Форк без версии обвязки
 
-Форк, созданный до `.template/`, начинает с базы — коммита шаблона, из которого создан: перенос до
-тега делает скрипт этого тега, `.template/` приходит тем же переносом; итог разбирай как в шаге 2
-обвязки (конфликты, пропущенные файлы), дальше — шаги 3–5:
+Форк, созданный до `.template/`, переносит обвязку скриптом нужного тега: базу — коммит шаблона с
+деревом первого коммита форка — скрипт находит сам, `.template/` приходит тем же переносом; итог
+разбирай как в шаге 2 обвязки (конфликты, пропущенные файлы), дальше — шаги 3–5:
 
 ```bash
 git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-template.git
-git fetch template
 git fetch --no-tags template 'refs/tags/template/*:refs/tags/template/*'
-# база — коммит шаблона с деревом первого коммита форка (Use this template копирует дерево шаблона)
-root=$(git rev-parse "$(git rev-list --max-parents=0 HEAD | tail -1)^{tree}")
-base=$(git log --format='%H %T' template/main | awk -v t="$root" '$2 == t { print $1; exit }')
-# нет такого — форк правили до первого коммита: шаблон на дату первого коммита форка
-base=${base:-$(git rev-list -1 --before="$(git log --reverse --format=%cI | head -1)" template/main)}
-bash <(git show template/vX.Y.Z:scripts/tools/template-update.sh) template/vX.Y.Z "$base"
+bash <(git show template/vX.Y.Z:scripts/tools/template-update.sh) template/vX.Y.Z
+# «базы нет» — форк правили до первого коммита: база — шаблон на дату первого коммита форка
+git fetch template
+bash <(git show template/vX.Y.Z:scripts/tools/template-update.sh) template/vX.Y.Z \
+    "$(git rev-list -1 --before="$(git log --reverse --format=%cI | head -1)" template/main)"
 ```
 
 ## Anti-patterns

@@ -56,7 +56,8 @@ Push в `main` разрешён (прямой или через PR); gate — `p
   называет в разделе `Платформа`.
 - `.template/version` — версия обвязки, имя тега `template/vX.Y.Z`: коммит выпуска несёт этот тег,
   следующие коммиты — ту же версию до нового выпуска. Форк получает её при создании,
-  `make template-update` сдвигает её вместе с обвязкой.
+  `make template-update` сдвигает её вместе с обвязкой. Первый перенос форка идёт от коммита
+  шаблона, из которого форк создан (по дереву его первого коммита): кончик `main` обычно новее тега.
 - Тег обвязки — аннотированный `template/vX.Y.Z` на коммите `main`, где `.template/version` — имя
   этого тега (иначе archtest `TestTemplatePaths` не пустит push тега). Релизы образа — теги
   `vX.Y.Z`; теги обвязки `make release` не видит.
@@ -64,7 +65,9 @@ Push в `main` разрешён (прямой или через PR); gate — `p
   исправления без новых требований к форку.
 - Выпуск — с OK владельца (тег и push — CLAUDE.md § Границы): новая `.template/version` коммитом
   `meta(template): template/vX.Y.Z` → `git tag -a template/vX.Y.Z -F <аннотация>` →
-  `git push origin main template/vX.Y.Z` (pre-push гонит `make check` на HEAD с тегом).
+  `git push origin main template/vX.Y.Z` (pre-push гонит `make check` на HEAD с тегом). `main`,
+  где `.template/version` называет ещё не выпущенный тег, уходит в origin только с этим тегом на
+  HEAD: иначе форк с `main` оказался бы раньше тега своей версии и перенос потерял бы правки.
 
 Аннотация — как у golibinfra, по разделам; пустой раздел не пишется:
 

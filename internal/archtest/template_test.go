@@ -66,8 +66,7 @@ func TestNoConflictMarkers(t *testing.T) {
 // правки путей шаблона от версии форка до тега и называет то, что форку решать самому.
 func TestTemplateUpdate(t *testing.T) {
 	t.Parallel()
-	script := filepath.Join(repoRoot(t), "scripts", "tools", "template-update.sh")
-	require.FileExists(t, script) // скрипт читает bash: без этого кеш go test не видит его правок
+	script := templateScript(t)
 	tmpl, fork := t.TempDir(), t.TempDir()
 
 	v1 := map[string]string{
@@ -85,8 +84,7 @@ func TestTemplateUpdate(t *testing.T) {
 	}
 	writeFiles(t, tmpl, v1)
 	git(t, tmpl, "init", "-q")
-	git(t, tmpl, "add", "-A")
-	git(t, tmpl, "commit", "-qm", "v1")
+	commitAll(t, tmpl)
 	git(t, tmpl, "tag", "-a", "template/v1.0.0", "-m", "template/v1.0.0\n\nОбвязка: первая версия")
 	writeFiles(t, tmpl, map[string]string{
 		".template/version": "template/v1.1.0\n",
@@ -99,8 +97,7 @@ func TestTemplateUpdate(t *testing.T) {
 		"h/new.md":          "n1\n",
 	})
 	git(t, tmpl, "rm", "-q", "h/removed.md", "h/edited.md")
-	git(t, tmpl, "add", "-A")
-	git(t, tmpl, "commit", "-qm", "v2")
+	commitAll(t, tmpl)
 	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0\n\nBreaking:\n- h/rule.md → правка форка")
 
 	fork1 := maps.Clone(v1)
@@ -114,8 +111,7 @@ func TestTemplateUpdate(t *testing.T) {
 	delete(fork1, "h/dropped.md")
 	writeFiles(t, fork, fork1)
 	git(t, fork, "init", "-q")
-	git(t, fork, "add", "-A")
-	git(t, fork, "commit", "-qm", "fork")
+	commitAll(t, fork)
 	git(t, fork, "remote", "add", "--no-tags", "template", tmpl)
 
 	status := func() string { return bash(t, fork, script, "--status") }
@@ -145,6 +141,55 @@ func TestTemplateUpdate(t *testing.T) {
 	require.Contains(t, status(), "template/v1.1.0 · новее тегов шаблона нет")
 }
 
+// TestTemplateUpdateFirstBase: первый перенос идёт от коммита шаблона, из которого создан форк (дерево
+// первого коммита), — форк с кончика main между тегами не получает ложных конфликтов, а форк,
+// созданный до .template/, получает её тем же переносом.
+func TestTemplateUpdateFirstBase(t *testing.T) {
+	t.Parallel()
+	script := templateScript(t)
+	tmpl := t.TempDir()
+	legacy := map[string]string{"go.mod": "module example.com/tmpl\n", "h/l.md": "l0\n"}
+	v1 := map[string]string{".template/paths": ".template\nh\n", ".template/version": "template/v1.0.0\n"}
+	between := map[string]string{"h/l.md": "l1\n", "h/n.md": "n1\n"}
+	git(t, tmpl, "init", "-q")
+	for _, files := range []map[string]string{legacy, v1, between} {
+		writeFiles(t, tmpl, files)
+		commitAll(t, tmpl)
+		if files[".template/version"] != "" {
+			git(t, tmpl, "tag", "-a", "template/v1.0.0", "-m", "template/v1.0.0")
+		}
+	}
+	writeFiles(t, tmpl, map[string]string{".template/version": "template/v1.1.0\n", "h/l.md": "l2\n", "h/n.md": "n2\n"})
+	commitAll(t, tmpl)
+	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0")
+
+	for name, root := range map[string]map[string]string{
+		"between tags":     union(legacy, v1, between),
+		"before .template": legacy,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fork := t.TempDir()
+			writeFiles(t, fork, root)
+			git(t, fork, "init", "-q")
+			commitAll(t, fork)
+			writeFiles(t, fork, map[string]string{"go.mod": "module example.com/fork\n"})
+			commitAll(t, fork)
+			git(t, fork, "remote", "add", "--no-tags", "template", tmpl)
+			bash(t, fork, script, "template/v1.1.0")
+			require.Equal(t, map[string]string{".template/version": "template/v1.1.0\n", "h/l.md": "l2\n", "h/n.md": "n2\n"},
+				readFiles(t, fork, ".template/version", "h/l.md", "h/n.md"))
+		})
+	}
+}
+
+func templateScript(t *testing.T) string {
+	t.Helper()
+	script := filepath.Join(repoRoot(t), "scripts", "tools", "template-update.sh")
+	require.FileExists(t, script) // скрипт читает bash: без этого кеш go test не видит его правок
+	return script
+}
+
 // runIn — команда в dir без GIT_* окружения вызывающего (хук git задаёт GIT_DIR своего репо) и без
 // глобального конфига git: подпись коммитов и хуки пользователя тест не видят.
 func runIn(t *testing.T, dir, name string, args ...string) (string, error) {
@@ -170,6 +215,12 @@ func git(t *testing.T, dir string, args ...string) string {
 	return out
 }
 
+func commitAll(t *testing.T, dir string) {
+	t.Helper()
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "commit")
+}
+
 func bash(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	out, err := runIn(t, dir, "bash", args...)
@@ -184,6 +235,14 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	}
+}
+
+func union(sets ...map[string]string) map[string]string {
+	all := map[string]string{}
+	for _, set := range sets {
+		maps.Copy(all, set)
+	}
+	return all
 }
 
 func readFiles(t *testing.T, dir string, names ...string) map[string]string {

@@ -4,10 +4,12 @@
 #
 #   make template-update                      версия форка, новые теги шаблона и их аннотации
 #   make template-update TO=template/vX.Y.Z   перенести изменения до тега TO
-#   make template-update TO=… FROM=<коммит>   база — коммит шаблона (форк без .template/version)
+#   make template-update TO=… FROM=<коммит>   база переноса — этот коммит шаблона
 #   template-update.sh --status               строка версии для make status (без сети)
 #
-# Теги шаблона — из remote `template` (git remote add --no-tags template <url шаблона>). Module path
+# Первый перенос форка идёт от коммита шаблона, из которого он создан (дерево первого коммита форка),
+# следующие — от .template/version. Теги шаблона — из remote `template` (git remote add --no-tags
+# template <url шаблона>). Module path
 # шаблона в Go-файлах сравнивается как module path форка. Конфликты остаются в индексе (git status —
 # UU, AA); файл, которого в форке нет, и удалённый шаблоном файл, который форк менял, не трогаются
 # и называются.
@@ -38,18 +40,28 @@ if [ "${1:-}" = "--status" ]; then
     exit 0
 fi
 
-TO=${1:-} FROM=${2:-$(version)}
+TO=${1:-} FROM=${2:-} v=$(version)
 git remote get-url template >/dev/null 2>&1 ||
     fail "нет remote template — git remote add --no-tags template <url шаблона> (skill /upgrade)"
 git fetch -q --no-tags template 'refs/tags/template/*:refs/tags/template/*'
-[ -n "$FROM" ] || fail "нет .template/version — база: FROM=<коммит шаблона> (skill /upgrade)"
+[ -z "$TO" ] || { [[ $TO == template/v* ]] && git rev-parse -q --verify "refs/tags/$TO" >/dev/null; } ||
+    fail "TO=$TO — не тег шаблона template/vX.Y.Z (список — make template-update)"
+
+# До первого переноса (версия та же, что в первом коммите форка) база — коммит шаблона с деревом
+# первого коммита: «Use this template» копирует кончик main, а он обычно новее тега версии.
+root=$(git rev-list --max-parents=0 HEAD | tail -1) tag=${TO:-$(latest)}
+if [ -z "$FROM" ] && [ -n "$tag" ] && [ "$(git show "$root:.template/version" 2>/dev/null || true)" = "$v" ]; then
+    FROM=$(git log --format='%H %T' "$tag" | awk -v t="$(git rev-parse "$root^{tree}")" '$2 == t { print $1; exit }')
+fi
+FROM=${FROM:-$v}
+[ -n "$FROM" ] || fail "базы нет: ни .template/version, ни коммита шаблона с деревом первого коммита форка — FROM=<коммит шаблона> (skill /upgrade)"
 git rev-parse -q --verify "$FROM^{commit}" >/dev/null || fail "FROM=$FROM: такой ревизии нет"
 
 if [ -z "$TO" ]; then
-    echo "обвязка форка: $FROM"
+    echo "обвязка форка: ${v:-—}"
+    [ "$FROM" = "$v" ] || echo "база переноса: $FROM — коммит шаблона, из которого создан форк"
     last=""
-    for t in $(git tag -l 'template/v*' --sort=v:refname); do
-        [[ $FROM != template/v* ]] || newer "$FROM" "$t" || continue
+    for t in $(git tag -l 'template/v*' --sort=v:refname --no-merged "$FROM"); do
         echo
         git tag -l --format='%(contents)' "$t" | sed 's/^/  /'
         last=$t
@@ -60,9 +72,7 @@ if [ -z "$TO" ]; then
     exit 0
 fi
 
-[[ $TO == template/v* ]] && git rev-parse -q --verify "refs/tags/$TO" >/dev/null ||
-    fail "TO=$TO — не тег шаблона template/vX.Y.Z (список — make template-update)"
-[[ $FROM != template/v* ]] || newer "$FROM" "$TO" || fail "TO=$TO не новее версии форка $FROM"
+! git merge-base --is-ancestor "$TO" "$FROM" || fail "обвязка форка уже содержит $TO (база $FROM)"
 [ -z "$(git status --porcelain)" ] || fail "дерево не чистое — закоммить или спрячь (git stash -u)"
 
 mapfile -t paths < <({ git show "$FROM:.template/paths" 2>/dev/null || true; git show "$TO:.template/paths"; } |
