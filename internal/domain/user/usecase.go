@@ -167,7 +167,9 @@ func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (*User
 			return ErrConcurrentUpdate
 		}
 		if in.Name != nil {
-			u.Name = *in.Name
+			if err := u.Rename(*in.Name); err != nil {
+				return err
+			}
 		}
 		if in.Status != nil {
 			if err := u.ChangeStatus(*in.Status); err != nil {

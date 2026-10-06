@@ -183,6 +183,7 @@ func TestRegister_Rejected(t *testing.T) {
 			hasher: brokenHasher{}, want: errHashing,
 		},
 		{name: "invalid email", in: user.CreateInput{Email: "a.b.com", Password: "longenough", Name: "Alice"}, want: user.ErrInvalidEmail},
+		{name: "name with NUL", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "A\x00B"}, want: user.ErrInvalidName},
 		{
 			name: "email taken", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
 			insert: user.ErrAlreadyExists, want: user.ErrAlreadyExists,
@@ -425,6 +426,13 @@ func TestUpdate_Rejected(t *testing.T) {
 				repo.EXPECT().Update(mock.Anything, mock.Anything).Return(nil, user.ErrConcurrentUpdate).Once()
 			},
 			want: user.ErrConcurrentUpdate,
+		},
+		{
+			name: "name with NUL", ctx: identitytest.Admin("a1"), in: user.UpdateInput{Name: ptrkit.Of("A\x00B"), Version: 3},
+			expect: func(repo *mocks.MockRepository) {
+				repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+			},
+			want: user.ErrInvalidName,
 		},
 		{
 			name: "status through Delete only", ctx: identitytest.Admin("a1"), in: user.UpdateInput{Status: ptrkit.Of(user.StatusDeleted), Version: 3},

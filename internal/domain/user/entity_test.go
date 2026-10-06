@@ -27,6 +27,7 @@ func TestNewUser(t *testing.T) {
 		{"email of 254 bytes", strings.Repeat("a", 64) + "@" + strings.Repeat("b", 185) + ".com", "h", "A", identity.RoleClient, nil},
 		{"email of 255 bytes in 131 characters", strings.Repeat("я", 124) + "a@b.com", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"bad role", "a@b.com", "h", "A", identity.Role("hacker"), user.ErrInvalidRole},
+		{"name with NUL", "a@b.com", "h", "A\x00B", identity.RoleClient, user.ErrInvalidName},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -69,6 +70,17 @@ func TestUser_ChangeStatus(t *testing.T) {
 			require.Equal(t, tc.want, u.Status)
 		})
 	}
+}
+
+// Имя пишется в TEXT: NUL Postgres не хранит — отказ поля, а не ошибка драйвера на записи.
+func TestUser_Rename(t *testing.T) {
+	t.Parallel()
+	u := &user.User{Name: "Alice"}
+	require.NoError(t, u.Rename("Алиса"))
+	require.Equal(t, "Алиса", u.Name)
+
+	require.ErrorIs(t, u.Rename("A\x00B"), user.ErrInvalidName)
+	require.Equal(t, "Алиса", u.Name, "a rejected name leaves the user as is")
 }
 
 func TestUserCanLogin(t *testing.T) {

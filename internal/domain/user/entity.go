@@ -33,6 +33,9 @@ func NewUser(email, passwordHash, name string, role identity.Role) (*User, error
 	if _, err := mail.ParseAddress(email); err != nil || len(email) > maxEmailLen {
 		return nil, ErrInvalidEmail
 	}
+	if !validName(name) {
+		return nil, ErrInvalidName
+	}
 	if role == identity.RoleUnknown {
 		role = identity.RoleClient
 	}
@@ -50,6 +53,14 @@ func NewUser(email, passwordHash, name string, role identity.Role) (*User, error
 }
 
 func (u *User) CanLogin() bool { return u.Status == StatusActive }
+
+func (u *User) Rename(name string) error {
+	if !validName(name) {
+		return ErrInvalidName
+	}
+	u.Name = name
+	return nil
+}
 
 // ChangeStatus — переход active ⇄ blocked; тот же статус — без перехода. В deleted переводит только
 // удаление (usecase Delete): у него своё событие и аудит.

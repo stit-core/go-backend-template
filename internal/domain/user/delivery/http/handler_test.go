@@ -128,6 +128,20 @@ func TestRegister_InvalidEmail(t *testing.T) {
 	require.Equal(t, "body.email", errs[0].Location)
 }
 
+// Имя с NUL отвергает домен: та же форма ошибки поля, что у валидации схемы.
+func TestRegister_InvalidName(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, user.ErrInvalidName).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/register", strings.NewReader(registerBody(strings.Repeat("p", policy.MinPasswordLen))))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "USER_INVALID_NAME")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.name", errs[0].Location)
+}
+
 // Правило длины пароля — policy.MinPasswordLen; схема register отклоняет короче его до usecase.
 func TestRegister_ShortPassword(t *testing.T) {
 	t.Parallel()
@@ -313,6 +327,7 @@ func TestUpdate_Errors(t *testing.T) {
 	}{
 		{"client changes status", &policy.ForbiddenError{Reason: "admin only"}, http.StatusForbidden, "FORBIDDEN"},
 		{"no fields", user.ErrNoUpdateFields, http.StatusBadRequest, "USER_NO_UPDATE_FIELDS"},
+		{"name with NUL", user.ErrInvalidName, http.StatusUnprocessableEntity, "USER_INVALID_NAME"},
 		{"unknown id", user.ErrNotFound, http.StatusNotFound, "USER_NOT_FOUND"},
 		{"stale version", user.ErrConcurrentUpdate, http.StatusConflict, "USER_CONCURRENT_UPDATE"},
 		{"transition not allowed", user.ErrInvalidStatusTransition, http.StatusConflict, "USER_INVALID_STATUS_TRANSITION"},

@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"strings"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
@@ -9,6 +10,9 @@ import (
 
 // maxEmailLen — предел адреса по RFC 5321 в байтах: длиннее не учтёт guard входа, и вход не состоится.
 const maxEmailLen = 254
+
+// validName: NUL Postgres в TEXT не хранит — имя с ним упало бы на записи ошибкой драйвера (500).
+func validName(name string) bool { return !strings.ContainsRune(name, 0) }
 
 type Policy struct{}
 

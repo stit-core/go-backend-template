@@ -967,7 +967,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity: USER_WEAK_PASSWORD, USER_INVALID_EMAIL"
+            "description": "Unprocessable Entity: USER_WEAK_PASSWORD, USER_INVALID_EMAIL, USER_INVALID_NAME"
           },
           "500": {
             "content": {
@@ -1409,7 +1409,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "Unprocessable Entity: USER_INVALID_NAME"
           },
           "500": {
             "content": {

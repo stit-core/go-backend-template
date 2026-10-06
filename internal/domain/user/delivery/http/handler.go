@@ -163,19 +163,20 @@ var (
 	notFoundRule         = httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"}
 	alreadyExistsRule    = httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"}
 	invalidEmailRule     = httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_EMAIL", Detail: "invalid email", Field: "body.email"}
+	invalidNameRule      = httpkit.ErrorRule{Err: user.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_NAME", Detail: "name must not contain NUL", Field: "body.name"}
 	invalidRoleRule      = httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_ROLE", Detail: "invalid role"}
 	weakPasswordRule     = httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"}
 	concurrentUpdateRule = httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"}
 	noUpdateFieldsRule   = httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"}
 	statusTransitionRule = httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "status transition is not allowed"}
 
-	userErrors = httpkit.NewErrorMap(notFoundRule, alreadyExistsRule, invalidEmailRule, invalidRoleRule, weakPasswordRule,
-		concurrentUpdateRule, noUpdateFieldsRule, statusTransitionRule, authgate.ForbiddenRule)
+	userErrors = httpkit.NewErrorMap(notFoundRule, alreadyExistsRule, invalidEmailRule, invalidNameRule, invalidRoleRule,
+		weakPasswordRule, concurrentUpdateRule, noUpdateFieldsRule, statusTransitionRule, authgate.ForbiddenRule)
 
-	registerErrors = httpkit.NewErrorMap(weakPasswordRule, invalidEmailRule, alreadyExistsRule)
+	registerErrors = httpkit.NewErrorMap(weakPasswordRule, invalidEmailRule, invalidNameRule, alreadyExistsRule)
 	meErrors       = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
 	listErrors     = httpkit.NewErrorMap(authgate.ForbiddenRule)
 	getErrors      = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
-	updateErrors   = httpkit.NewErrorMap(notFoundRule, noUpdateFieldsRule, concurrentUpdateRule, statusTransitionRule, authgate.ForbiddenRule)
+	updateErrors   = httpkit.NewErrorMap(notFoundRule, noUpdateFieldsRule, invalidNameRule, concurrentUpdateRule, statusTransitionRule, authgate.ForbiddenRule)
 	deleteErrors   = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
 )

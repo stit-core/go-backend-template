@@ -6,6 +6,7 @@ var (
 	ErrNotFound                = errors.New("user: not found")
 	ErrAlreadyExists           = errors.New("user: already exists")
 	ErrInvalidEmail            = errors.New("user: invalid email")
+	ErrInvalidName             = errors.New("user: invalid name")
 	ErrInvalidRole             = errors.New("user: invalid role")
 	ErrWeakPassword            = errors.New("user: password too weak")
 	ErrConcurrentUpdate        = errors.New("user: concurrent update")
