@@ -1,7 +1,7 @@
 # Домены идентичности — вход и сессии, учётные записи, подтверждение адреса и сброс пароля — и то, что
 # живёт только ради них. Проект с внешней идентичностью (identity: external в docs/stack/auth.md) удаляет
 # эти пути (skill init-service, references/prune.md); образцы, на которые здесь ссылается проза, у него —
-# в версии шаблона (.template/version).
+# в теге шаблона (.template/version или последний).
 internal/domain/auth
 internal/domain/user
 internal/domain/verification

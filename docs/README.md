@@ -3,7 +3,7 @@
 Роутер по docs. Три аудитории + design source-of-truth.
 
 ## Потребителю шаблона
-- `README.md` § Как начать — форк и `make setup`; дальше онбординг ведёт `/init-service`: стек → `/de-template` → свои домены → домены идентичности.
+- Онбординг форка — `/init-service`: стек → `/de-template` → свои домены → домены идентичности.
 
 ## Контрибьютору шаблона
 - [contributing.md](contributing.md) — как устроена `.claude`-система (rules/skills/settings), что enforce'ится, версия обвязки и теги шаблона, как вмешаться, troubleshooting. **[META]**.

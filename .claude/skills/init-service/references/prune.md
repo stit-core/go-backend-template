@@ -26,7 +26,8 @@
    ждёт нумерацию с 0001, прод-БД у проекта ещё нет). Расширение `pgcrypto` и функция `set_updated_at()`
    из `0001_users` уходят с ней: своя миграция, которой они нужны, заводит их сама.
 5. **Окружение** — `.env.example`: в `NATS_JS_STREAM_NAMES` — стримы своих доменов-публикаторов (без
-   `user` и `verification`), комментарий над ним — про них; строки `SESSION_*` удали.
+   `user` и `verification`; публикаторов нет — `NATS_JS_STREAM_NAMES=`), комментарий над ним — про них;
+   у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*` удали.
 6. `make gen` → `make check` → `✓ check clean`.
 
 ## Что остаётся
@@ -36,5 +37,6 @@
 - e2e: smoke `test/smoke/test_boot.py`; фикстуры идентичности в `test/conftest.py` и её модели в
   `test/client/models.py` — до своих сценариев.
 - Проза обвязки ссылается на образцы в доменах идентичности (события, порты, integration-тесты): у
-  проекта они — в версии шаблона, `git show <версия>:<путь>` (версия — `.template/version`, теги приносит
-  `make template-update`, skill `/upgrade`).
+  проекта они — в шаблоне, `git show <тег>:<путь>`: тег — `.template/version`, а пути нет в нём (форк
+  создан с main новее тега) — последний тег шаблона; теги приносит `make template-update` (skill
+  `/upgrade`).

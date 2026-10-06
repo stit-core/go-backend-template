@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
 
 POSTGRES_CONTAINER="local-deps-postgres"
 NATS_CONTAINER="local-deps-nats"
@@ -46,8 +47,7 @@ up() {
   echo ""
   echo "  PG_DSN=postgres://app:app@localhost:5432/app?sslmode=disable"
   echo "  NATS_URL=nats://localhost:4222"
-  echo "  NATS_JETSTREAM_ENABLED=true"
-  echo "  NATS_JS_STREAM_NAMES=user,verification"
+  grep -E '^NATS_(JETSTREAM_ENABLED|JS_STREAM_NAMES)=' .env.example | sed 's/^/  /'
   echo ""
 }
 

@@ -34,6 +34,8 @@ description: Оркестратор онбординга форка go-backend-t
 - Не канонический шаблон: `git config --get remote.origin.url` — не `stit-core/go-backend-template` (иначе СТОП:
   онбординг разрушит шаблон; гейт держит то же — archtest `TestCanonicalTemplate`).
 - `make setup` прогнан (pinned dev-tools + git-хуки), `make check` зелёный.
+- Планы шаблона — не форка: до плана `onboarding` убери их (de-template A.4), иначе `/smartdev`
+  предложит продолжить работу шаблона.
 - Strategy-репо: `../strategy` (форк `business-strategy-template`) — откуда домены сервиса
   (`docs/projects/<slug>/services/<svc>/domains/`, нужные — `stable`). Нет его — режим без strategy:
   домены этапа 3 — по описанию юзера, в «Решения» плана — строка об этом.

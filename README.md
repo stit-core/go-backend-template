@@ -86,7 +86,7 @@ make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /r
 ## Документация
 
 Карта — [`docs/README.md`](docs/README.md):
-- Потребителю — раздел «Как начать» и `/init-service`; контрибьютору —
+- Онбординг форка — `/init-service`; контрибьютору —
   [`contributing.md`](docs/contributing.md).
 - Reference — [architecture](docs/reference/architecture.md) ·
   [release](docs/reference/release.md) · [ecosystem](docs/reference/ecosystem.md).

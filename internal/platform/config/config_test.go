@@ -126,3 +126,16 @@ func TestModule_EmptyEnvIsNotDev(t *testing.T) {
 
 	require.ErrorIs(t, app.Err(), appconfig.ErrUnsafe)
 }
+
+// Модуль отдаёт Env окружения — его берут платформа и модули доменов.
+func TestModule_ProvidesEnv(t *testing.T) {
+	setenv(t, "APP_ENV", "dev")
+	setenv(t, "COOKIE_SECURE", "")
+	var env appconfig.Env
+
+	app := fx.New(fx.NopLogger, appconfig.Module,
+		fx.Supply(logkit.RedactConfig{}, httpkit.Config{}, authnkit.JWTConfig{}), fx.Populate(&env))
+
+	require.NoError(t, app.Err())
+	require.Equal(t, appconfig.Dev, env)
+}

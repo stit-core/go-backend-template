@@ -139,7 +139,7 @@ validate_file() {
                 ERRORS+=("$file: нет H2-секции '$s' (kind=$kind)"); continue
             fi
             if [ "$status" = "stable" ] && ! section_body_nonempty "$file" "$s"; then
-                ERRORS+=("$file: секция '$s' пуста (status=stable требует контент)")
+                ERRORS+=("$file: секция '$s' пуста (status=stable требует контент; строка с «<» в начале — плейсхолдер шаблона)")
             fi
         done
     fi

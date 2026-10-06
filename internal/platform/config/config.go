@@ -33,7 +33,6 @@ var Module = fx.Module(
 	"internal/platform/config",
 	fx.Provide(
 		Load,
-		func(a *App) authgate.CookieConfig { return a.Cookie },
 		func(a *App) Env { return a.Env },
 	),
 	fx.Invoke(Guard),
