@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/release.sh — релиз одной командой: confirm → чистое дерево + make check + e2e-smoke →
-# annotated tag → release-preflight (ветка/clean/semver/buildx + doctor + govulncheck) → buildx
+# govulncheck → annotated tag → release-preflight (ветка/clean/semver/buildx + doctor) → buildx
 # api+migrate push lockstep → агрегированный INFRA-HANDOFF → STOP.
 #
 #   make release VERSION=vX.Y.Z
@@ -67,11 +67,15 @@ else
     esac
 fi
 
-# --- гейт до тега: тег и образы — только у чистого HEAD, прошедшего make check и smoke ---
+# --- гейт до тега: тег и образы — только у чистого HEAD, прошедшего make check, smoke и govulncheck ---
 [ -z "$(git status --porcelain)" ] || { echo "release: working tree dirty — закоммить или stash" >&2; exit 2; }
 make --no-print-directory check
 # Собранный бинарь со стеком в docker (HTTP, Postgres, NATS): то, что юнит и integration не видят.
 make --no-print-directory e2e-smoke
+# Уязвимость, которую вызывает код, не уезжает в образ; базе уязвимостей нужна сеть — поэтому здесь, а не
+# в make check, и до тега: отказ не оставляет тега.
+command -v govulncheck >/dev/null 2>&1 || { echo "release: govulncheck не найден — make setup" >&2; exit 2; }
+govulncheck ./... || { echo "release: govulncheck — код вызывает уязвимость (вывод выше): обнови зависимость или Go" >&2; exit 2; }
 
 # --- annotated tag, если на HEAD ещё нет ---
 # Теги обвязки template/vX.Y.Z — не версии образа (docs/contributing.md).
@@ -84,7 +88,7 @@ elif [ "$existing" != "$VERSION" ]; then
     exit 2
 fi
 
-# --- preflight (ветка=main / clean / annotated semver / buildx / doctor / govulncheck) ---
+# --- preflight (ветка=main / clean / annotated semver / buildx / doctor) ---
 bash scripts/release-preflight.sh "$VERSION"
 
 # --- build + push lockstep (api + migrate одним тегом) ---
