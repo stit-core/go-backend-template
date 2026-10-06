@@ -2,10 +2,13 @@
 # .claude/hooks/guard-bash.sh — PreToolUse(Bash): не пускает из сессии Claude обходы git-хуков.
 # exit 2 блокирует вызов, stderr уходит Claude.
 #
-# Блокирует: git commit с -n; git с --no-veri… (любая подкоманда); SKIP_PREPUSH= и core.hooksPath
-# в команде с git (прочитать — git config --list). Команда проверяется построчно; тела heredoc —
-# данные (сообщение коммита может упоминать флаги); флаги в строках в кавычках не ищутся.
-# Это страховка от «удобного» обхода, а не от обфускации. Ослабить сам гейт не даёт make check.
+# Блокирует: git commit с -n; git с --no-veri… (любая подкоманда); флаг одним словом в кавычках —
+# как без них; SKIP_PREPUSH=, core.hooksPath и алиасы (alias.…) в команде с git (прочитать —
+# git config --list); по пути scripts/git-hooks и хуков (pre-push, pre-commit, commit-msg) — всё,
+# кроме чтения, и запись в хук перенаправлением. Команда проверяется построчно; тела heredoc —
+# данные (сообщение коммита может упоминать флаги); строки в кавычках с пробелом — аргументы, флаги в
+# них не ищутся. Это страховка от «удобного» обхода, а не от обфускации. Ослабить сам гейт не даёт
+# make check.
 set -uo pipefail
 
 block() {
@@ -25,16 +28,76 @@ text=$(printf '%s\n' "$cmd" | awk '
         body = substr($0, RSTART, RLENGTH); sub(/^[^<]*<<-?[ \t]*["'\'']?/, "", body)
     }')
 
-# Переменная и ключ конфига опасны только рядом с git: grep по ним не блокируется.
+# Переменная, ключ конфига и алиас опасны только рядом с git: grep по ним не блокируется.
 re_git='(^|[^[:alnum:]_.-])git([[:space:]]|$)'
-[[ $text == *SKIP_PREPUSH=* && $text =~ $re_git ]] && block "SKIP_PREPUSH"
-[[ $(printf '%s' "$text" | tr '[:upper:]' '[:lower:]') == *core.hookspath* && $text =~ $re_git ]] &&
-    block "core.hooksPath"
+lower=$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')
+if [[ $text =~ $re_git ]]; then
+    [[ $text == *SKIP_PREPUSH=* ]] && block "SKIP_PREPUSH"
+    [[ $lower == *core.hookspath* ]] && block "core.hooksPath"
+    # Алиас прячет флаг от проверки ниже: git -c alias.c='commit -n' c.
+    [[ $lower == *alias.* ]] && block "алиас git"
+fi
+
+# Разделители команд внутри кавычек — часть аргумента (`-m "fix(gate): …"`), а не граница.
+quoted_seps() {
+    awk '{
+        out = ""; q = ""
+        for (i = 1; i <= length($0); i++) {
+            c = substr($0, i, 1)
+            if (q == "" && (c == "\"" || c == "\047")) q = c
+            else if (c == q) q = ""
+            else if (q == "\"" && c == "\\") { out = out c; i++; c = substr($0, i, 1) }
+            else if (q != "" && index(";&|()`", c)) c = " "
+            out = out c
+        }
+        print out
+    }'
+}
+
+# Изменённый, неисполняемый или удалённый хук git молча пропускает. Сегмент с путём git-hooks или
+# именем хука проходит, только если это чтение: readers, git без правки дерева, sed без -i, bash -n,
+# запуск самого хука (и bash <хук>) — и без записи в хук перенаправлением; cd туда — нет, дальше путь
+# в команде не виден. Слова — с кавычками: путь в кавычках команду не прячет.
+hook='(^|[[:space:]/"'\''=])(git-hooks|pre-push|pre-commit|commit-msg)([[:space:]/"'\'']|$)'
+run_hook='^([.[:alnum:]_~-]*/)*(pre-push|pre-commit|commit-msg)$'
+readers='cat|head|tail|less|more|grep|egrep|fgrep|rg|ls|stat|file|wc|diff|cmp|md5sum|sha256sum|shellcheck|test|\[|echo|printf'
+git_readers='add|blame|cat-file|commit|diff|grep|log|ls-files|ls-tree|push|rev-parse|show|status|tag'
+while IFS= read -r seg; do
+    [[ $seg =~ $hook ]] || continue
+    while IFS= read -r target; do
+        [[ $target =~ $hook ]] && block "запись в scripts/git-hooks"
+    done <<<"$(printf '%s' "$seg" | grep -oE '>[>|]?[[:space:]]*[^[:space:]>]+' | sed -E 's/^>[>|]?[[:space:]]*//')"
+    read -r -a words <<<"$seg"
+    i=0
+    while ((i < ${#words[@]})) && [[ ${words[i]} == *=* || ${words[i]} =~ ^(sudo|env|command)$ ]]; do
+        i=$((i + 1))
+    done
+    name=${words[i]-}
+    base=${name##*/}
+    case "$base" in
+        git)
+            sub="" skip=0
+            for w in "${words[@]:i+1}"; do # подкоманда — первое слово не-флаг, кроме значений -C/-c…
+                case "$w" in
+                    -C | -c | --git-dir | --work-tree | --namespace) skip=1 ;;
+                    -*) ;;
+                    *) if [ "$skip" = 1 ]; then skip=0; else sub=$w && break; fi ;;
+                esac
+            done
+            [[ $sub =~ ^($git_readers)$ ]] && continue ;;
+        sed) [[ " ${words[*]:i+1} " =~ [[:space:]](-[a-zA-Z]*i|--in-place) ]] || continue ;;
+        bash | sh) [[ ${words[i + 1]-} == -n || ${words[i + 1]-} =~ $run_hook ]] && continue ;;
+        *) [[ $base =~ ^($readers)$ || $name =~ $run_hook ]] && continue ;;
+    esac
+    block "${base:-команда} по scripts/git-hooks"
+done <<<"$(printf '%s' "$text" | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | quoted_seps | sed 's/>|/>/g' |
+    tr ';&|()`' '\n\n\n\n\n\n')"
 
 # Флаги git ищем вне кавычек, по сегментам: строки (с учётом `\` в конце) и части между
-# ; & | ( ) и обратными кавычками.
+# ; & | ( ) и обратными кавычками. Флаг одним словом в кавычках ("-n", '--no-veri…') — как без них.
 segments=$(printf '%s' "$text" | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | tr '\n' ';' |
-    sed -E -e 's/"([^"\\]|\\.)*"//g' -e "s/'[^']*'//g" | tr ';&|()`' '\n\n\n\n\n\n')
+    sed -E -e "s/\"(-[[:alnum:]-]+)\"/\\1/g" -e "s/'(-[[:alnum:]-]+)'/\\1/g" \
+        -e 's/"([^"\\]|\\.)*"//g' -e "s/'[^']*'//g" | tr ';&|()`' '\n\n\n\n\n\n')
 while read -r -a words; do
     git=0 sub="" skip=0
     for w in ${words[@]+"${words[@]}"}; do

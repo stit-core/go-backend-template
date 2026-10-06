@@ -103,8 +103,9 @@ integration, нужен Docker) + build + gen-check + cover-check (покрыт�
 - **Conventional Commits** (`scripts/git-hooks/commit-msg`): типы `feat|fix|refactor|docs|test|chore|meta`,
   формат `<type>(<scope>)?: <subject>`, subject ≤72; сообщения самого git (`Revert "…"`,
   `fixup!`/`squash!`) тоже проходят.
-- **Push в `main` разрешён** (прямой или через PR); линейная история; pre-push пускает только
-  чистый HEAD, обходы хуков из сессии блокирует `.claude/hooks/guard-bash.sh`.
+- **Push в `main` разрешён** (прямой или через PR); линейная история; pre-push гонит `make check`
+  каждого пушимого коммита в свежем worktree, обходы хуков из сессии блокирует
+  `.claude/hooks/guard-bash.sh`.
 - git-хуки подключает `make setup` (`core.hooksPath=scripts/git-hooks`). Релиз — `/release`.
 
 ## Границы
@@ -128,8 +129,9 @@ integration, нужен Docker) + build + gen-check + cover-check (покрыт�
   плане хаба, не делай — вопрос в отчёт хабу и в «Открытые вопросы» плана, остальное продолжай.
 
 ### Не делать никогда
-- Обходить хуки и гейт: `--no-verify`, `git commit -n`, `SKIP_PREPUSH`, `core.hooksPath` (блокируют
-  `permissions.deny` и хук `guard-bash`; `make check` не запускается с `-i` и `GOFLAGS`).
+- Обходить хуки и гейт: `--no-verify`, `git commit -n`, `SKIP_PREPUSH`, `core.hooksPath`, алиасы,
+  правка хуков (блокируют `permissions.deny` и хук `guard-bash`; `make check` не запускается с `-i`,
+  `--eval`, вторым makefile и `GOFLAGS`).
   Коммитить/цитировать `.env`, `.env.local`, `*.pem`, `*.key` (в репо живут только `*.example`-шаблоны).
 - Править сгенерированное руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
 - Image-теги `:latest`/`:edge`/lightweight. Deploy-команды (`make bump`, `make ship`, `ssh`,

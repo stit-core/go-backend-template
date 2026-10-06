@@ -155,7 +155,7 @@ func TestIdentity(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, call(t, anon, http.MethodPost, base+"/api/auth/password-reset/request",
 		`{"email":"`+email+`"}`), "password reset request")
 	// Ключ антибрутфорса — адрес соединения: без HTTP_TRUST_PROXY_HOPS X-Forwarded-For его не меняет, и
-	// клиент, подставляющий в каждый запрос свою цепочку адресов (как за одним, двумя или тремя прокси),
+	// клиент, подставляющий в каждый запрос свою цепочку адресов (длиннее любого разумного числа прокси),
 	// получает блокировку, как все.
 	status := 0
 	for i := range 6 {
@@ -163,7 +163,7 @@ func TestIdentity(t *testing.T) {
 			strings.NewReader(`{"email":"`+email+`","password":"`+wrongPassword+`"}`))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d, 203.0.113.%d, 192.0.2.%d", i+1, i+1, i+1))
+		req.Header.Set("X-Forwarded-For", forwardedChain(i, 32))
 		resp, err := anon.Do(req)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
@@ -232,6 +232,17 @@ func TestIdentity(t *testing.T) {
 		"the auth domain writes its metrics to the meter provider of telemetry")
 	require.InDelta(t, 1, snap.Get(t, "biz_verification_password_reset_requested_total", "result", "ok").Value, 0,
 		"the verification domain writes its metrics to the meter provider of telemetry")
+}
+
+// forwardedChain — цепочка X-Forwarded-For запроса n из hops своих записей IPv4 (IPv6 одной /64 guard
+// считает одним адресом): при доверии к любому числу прокси до hops ключ антибрутфорса менялся бы от
+// запроса к запросу.
+func forwardedChain(n, hops int) string {
+	entries := make([]string, hops)
+	for i := range entries {
+		entries[i] = fmt.Sprintf("198.18.%d.%d", n+1, i+1)
+	}
+	return strings.Join(entries, ", ")
 }
 
 // Стрим домена-публикатора — условие старта: без него строки его outbox копились бы, не получая PubAck.

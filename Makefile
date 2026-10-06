@@ -1,4 +1,4 @@
-.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench cover-check tidy
+.PHONY: help test lint build fmt fmt-check check gate-makefiles gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench cover-check tidy
 
 # Release-вычисления (image-path host/org, lockstep tag) self-contained в
 # scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
@@ -53,17 +53,25 @@ fmt-check: ## Проверка форматирования без мутаци�
 GATE = $(MAKE) --no-print-directory PKG= VERBOSE= FORMAT=
 
 # make check не запускается там, где сказал бы «clean», не проверив всё: -i глушит ошибки шагов,
-# -n/-q/-t их не выполняют, подмена переменных гейта меняет шаги, GOFLAGS (из env или
-# go env -w) — go test и vet, API_TEST_MAIN_ARGS — перезапуск тестов cmd/api в main.
-# override — чтобы guard не выключался своей же переменной.
+# -n/-q/-t их не выполняют, подмена переменных гейта (и --eval до чтения Makefile) меняет шаги,
+# GOFLAGS (из env или go env -w) — go test и vet, API_TEST_MAIN_ARGS — перезапуск тестов cmd/api в
+# main. override — чтобы guard не выключался своей же переменной.
 ifneq (,$(filter check,$(MAKECMDGOALS)))
 override gate_bad := $(foreach f,i n q t,$(if $(findstring $f,$(firstword -$(MAKEFLAGS))),-$f)) \
-	$(foreach v,MAKE SHELL .SHELLFLAGS GATE DETAIL API_TEST_MAIN_ARGS,$(if $(filter command% environment%,$(origin $v)),$v=…)) \
+	$(if $(filter --eval=%,$(MAKEFLAGS)),--eval) \
+	$(foreach v,MAKE SHELL .SHELLFLAGS MAKEFILES GATE DETAIL API_TEST_MAIN_ARGS,$(if $(filter command% environment% override,$(origin $v)),$v=…)) \
 	$(if $(shell go env GOFLAGS),GOFLAGS=$(shell go env GOFLAGS))
 ifneq (,$(strip $(gate_bad)))
 $(error make check не запускается с $(strip $(gate_bad)) — запусти просто make check)
 endif
 endif
+
+# Makefile, прочитанный рядом с этим (make -f Makefile -f extra.mk, MAKEFILES), подменил бы рецепт check:
+# пререквизиты правил одной цели складываются, и список makefile'ов сверяет пререквизит — по полному
+# пути. Makefile, который переопределяет и этот рецепт, — уже правка гейта.
+check: gate-makefiles
+gate-makefiles:
+	$(if $(filter-out $(abspath Makefile),$(abspath $(MAKEFILE_LIST))),$(error make check не запускается с makefile'ами $(strip $(MAKEFILE_LIST)) — только Makefile этого каталога))
 
 check: ## Канонический gate (pre-push) по всему дереву; состав — CLAUDE.md § Команды
 	@echo "→ make fmt-check"

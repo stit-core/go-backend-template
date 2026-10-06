@@ -6,6 +6,8 @@
 #   - tag (если передан как $1) совпадает с тем, что на HEAD
 #   - docker buildx доступен
 #   - make doctor (docker-auth/sqlc-drift/непарные миграции) — fail-fast
+#   - govulncheck: уязвимость, которую вызывает код, не уезжает в образ (базе уязвимостей нужна сеть —
+#     поэтому здесь, а не в make check)
 # Output: внятное сообщение на каждый fail, exit 2 (отличаем от "сбоя shell"=1).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -36,5 +38,9 @@ docker buildx version >/dev/null 2>&1 || fail "docker buildx не доступе
 
 echo "release-preflight: → doctor"
 bash "$(dirname "$0")/tools/doctor.sh" || fail "doctor preflight не прошёл (см. вывод выше)"
+
+echo "release-preflight: → govulncheck"
+command -v govulncheck >/dev/null 2>&1 || fail "govulncheck не найден — make setup"
+govulncheck ./... || fail "govulncheck: код вызывает уязвимость (вывод выше) — обнови зависимость или Go"
 
 echo "release-preflight: OK (tag=$tag)"

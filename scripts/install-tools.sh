@@ -7,6 +7,7 @@ GOFUMPT_VERSION="${GOFUMPT_VERSION:-v0.10.0}"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.12.2}"
 SQLC_VERSION="${SQLC_VERSION:-v1.31.1}"
 MOCKERY_VERSION="${MOCKERY_VERSION:-v3.7.0}"
+GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.8.0}"
 
 GOBIN="$(go env GOPATH)/bin"
 mkdir -p "$GOBIN"
@@ -59,6 +60,7 @@ go_install() {
 go_install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
 go_install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
 go_install "github.com/vektra/mockery/v3@${MOCKERY_VERSION}" "mockery"
+go_install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
 
 # golangci-lint ставится через свой installer (статическая сборка,
 # не через `go install`), взятый с тега той же версии, а не с HEAD.

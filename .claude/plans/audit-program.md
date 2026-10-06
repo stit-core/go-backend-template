@@ -148,8 +148,8 @@ S1–S4 закрыты: `harden-gate` и `fix-reference-code` удалены, ш
 origin; golibinfra v1.2.0 и v1.3.0 в origin.
 - **S5** — партия 3 golibinfra (v1.4.0): `harden-kits-contracts` (этап 2 из 3 идёт) →
   `harden-tests-archkit-release` (`archkit`, релиз).
-- **S6** — `repair-harness`: S1 – S6 приняты; S8 сделан, S9 — следом (до S7), затем валидатор
-  S8 – S9; S7 — после v1.4.0; затем S10, S11.
+- **S6** — `repair-harness`: S1 – S6 приняты; S8 и S9 сделаны (до S7), ждут валидатора; S7 — после
+  v1.4.0; затем S10, S11.
 - Предел контекста агента — 950 тыс. (владелец): наблюдатель `ctxwatch.py`, сворачивание и
   продолжатель — `prompts.md`; агенты не запускают `/code-review` и вложенных агентов. Оперативные
   заметки — `orchestrator-todo.md` (каталог материалов).

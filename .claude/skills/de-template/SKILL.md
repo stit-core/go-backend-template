@@ -40,7 +40,8 @@ description: Развернуть платформу форка go-backend-templ
    make validate-stack-docs A=--stable
    ```
 3. **State stack-deep-dive чист** по `**blocker**`-вопросам: артефакт мог попасть в `stable` только без
-   них (§5/§6 `references/draft-stable.md` того скилла), но защёлка — state коммитится вместе с репо.
+   них (§5/§6 `.claude/skills/stack-deep-dive/references/draft-stable.md`), но защёлка — state коммитится
+   вместе с репо.
    ```bash
    grep -RlE '\*\*blocker\*\*' .claude/skills/stack-deep-dive/state/ 2>/dev/null \
      && echo "STOP: есть открытые blocker'ы в state stack-deep-dive — добей их сначала" \
@@ -116,4 +117,4 @@ make check      # готово — по CLAUDE.md § Готово
 - `references/wiring.md` — doc-driven wiring 6 `Generates`-kinds.
 - `docs/stack/README.md` — контракт 8 артефактов и их `Generates`.
 - `.claude/skills/init-service/SKILL.md` — оркестратор онбординга; prune доменов идентичности —
-  его `references/prune.md`.
+  `.claude/skills/init-service/references/prune.md`.

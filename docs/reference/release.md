@@ -14,7 +14,7 @@ make release VERSION=vX.Y.Z
 `scripts/release.sh` одним проходом: confirm-промпт → чистое дерево, `make check` и
 `make e2e-smoke` → annotated
 tag (rich changelog — `git tag -a` заранее) → `release-preflight` (ветка/clean/semver/buildx +
-`make doctor`) →
+`make doctor` + `govulncheck`: уязвимость, которую вызывает код, — стоп) →
 `docker buildx --push` двух образов lockstep:
 - `<host>/<org>/backend:vX.Y.Z` — `cmd/api` (runtime)
 - `<host>/<org>/backend-migrate:vX.Y.Z` — `cmd/migrate` + вшитые SQL (init-контейнер)

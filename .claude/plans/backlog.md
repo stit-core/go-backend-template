@@ -18,9 +18,6 @@
   (не компилируется), инициализмы (`api_key` — замечания линтера), существующая таблица
   (`password_reset` — `make gen` падает, дерево в полусостоянии). Триггер: повторный аудит
   (`repair-harness` S10) или первая жалоба.
-- **vuln-scan** — govulncheck и сканирование образов не входят в гейт: им нужна сеть (база
-  уязвимостей), а `make check` от сети не зависит. Место — `release-preflight` перед тегом. Триггер:
-  `repair-harness` S9 (гейт) или первый релиз форка (SEC-11).
 - **testkit-failing-fakes** — тесты держат свои фейки поверх `authntest.DeterministicHasher`: `brokenHasher`
   (сбой хэширования — auth, user, verification) и `countingHasher` (счёт проверок пароля, холостых тоже —
   auth), и свой `failingAudit` (сбой записи аудита): таких нет в authntest и audittest. Триггер: партия 3

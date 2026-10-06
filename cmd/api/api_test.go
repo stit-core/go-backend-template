@@ -75,9 +75,17 @@ func unsetHTTPEnv(t *testing.T) {
 // httpkitPaths — пробы, которые регистрирует сам httpkit; пути операций доменов — под /api/.
 var httpkitPaths = []string{"/health", "/ready"}
 
+// publicOperations — операции доменов без Security (httpkit.Public): открыть операцию — правка этого
+// списка, а не одной пометки в хендлере. Здесь — вход, сессия, регистрация и ссылки из писем доменов
+// идентичности.
+var publicOperations = []string{
+	"registerUser", "loginUser", "logoutUser", "refreshToken", "requestPasswordReset", "confirmPasswordReset", "confirmEmail",
+}
+
 // TestHTTPOperations: API сервиса проходит проверку старта httpkit (Server.CheckRoutes) — у каждой
 // операции Security или пометка httpkit.Public, METHOD+path не повторяются, — пути операций доменов
-// живут под /api/, а операция под Security объявляет коды 401 сессии: её регистрирует authgate.Secured.
+// живут под /api/, открыты ровно publicOperations, а операция под Security объявляет коды 401 сессии:
+// её регистрирует authgate.Secured.
 func TestHTTPOperations(t *testing.T) {
 	t.Parallel()
 	var (
@@ -91,11 +99,15 @@ func TestHTTPOperations(t *testing.T) {
 	require.NoError(t, srv.CheckRoutes())
 
 	secured := 0
+	var public []string
 	for _, op := range ops {
 		if !strings.HasPrefix(op.Path, "/api/") && !slices.Contains(httpkitPaths, op.Path) {
 			t.Errorf("operation %s at %s: domain operations live under /api/", op.OperationID, op.Path)
 		}
 		if len(op.Security) == 0 {
+			if !slices.Contains(httpkitPaths, op.Path) {
+				public = append(public, op.OperationID)
+			}
 			continue
 		}
 		secured++
@@ -104,6 +116,7 @@ func TestHTTPOperations(t *testing.T) {
 		}
 	}
 	require.NotZero(t, secured, "the API has operations under Security")
+	require.ElementsMatch(t, publicOperations, public, "operations without Security (httpkit.Public) differ from publicOperations: opening an operation is a reviewed edit of that list")
 }
 
 // Операция без Security и без пометки httpkit.Public — ошибка старта сервиса: открытой операцию делает

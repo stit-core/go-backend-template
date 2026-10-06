@@ -78,6 +78,9 @@ var hubTargets = []string{"bump", "ps", "ship"}
 // соседнего <org>/strategy, куда проза отправляет проектировать домены.
 var notRepoSkills = []string{"clear", "code-review", "security-review", "domain-deep-dive"}
 
+// fsRoots — корни файловой системы: `/tmp`, `/app` в прозе — пути, а не скиллы.
+var fsRoots = []string{"app", "bin", "dev", "etc", "home", "migrations", "mnt", "opt", "proc", "root", "run", "srv", "sys", "tmp", "usr", "var"}
+
 // domainLayout — файлы раскладки домена (docs/reference/architecture.md): в прозе это термины, а не ссылки —
 // файл есть в домене, когда есть его содержимое.
 var domainLayout = []string{
@@ -95,15 +98,21 @@ var (
 	kebabName   = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	// fileName — файл без пути (`Makefile`, `.env.example`, `errors.go`): есть в репо под этим именем.
 	fileName = regexp.MustCompile(`^(Makefile|LICENSE|Dockerfile(\.\w+)?|\.?\w[\w.-]*\.(md|go|sql|ya?ml|json|sh|py|toml|txt|mod|sum|example))$`)
-	// namedBy — слово перед `имя`: rule или правило — .claude/rules/<имя>.md, skill или скилл — скилл.
-	namedBy = regexp.MustCompile(`(?i)(^|\P{L})(rule|правил\p{L}*|skill|скилл\p{L}*)\s+$`)
+	// namedBy — слово перед `имя`: rule или правило — .claude/rules/<имя>.md, skill или скилл — скилл;
+	// «nolintlint-правило» — не оно.
+	namedBy = regexp.MustCompile(`(?i)(^|[\s(«"])(rules?|правил\p{L}*|skills?|скилл\p{L}*)\s+$`)
+	// listSep — между именами перечня после rule/skill: «правила `a`, `b` и `c`».
+	listSep = regexp.MustCompile(`^(\s*,\s*((и|или)\s+)?|\s+(и|или)\s+|\s*/\s*)$`)
 )
 
 // TestProseReferencesExist: в коде прозы (CLAUDE.md, README, docs/, .claude/rules и skills) есть в репо
-// make-цели, пути и файлы без пути, скиллы (`/имя`, skill `имя`) и правила (rule `имя`) — иначе агент
-// идёт по мёртвой ссылке. Репо — то, что отслеживает git: локальное (test/.venv, неотслеживаемый файл)
-// есть не в каждом клоне. Плейсхолдеры (<d>, NNNN, *) — не ссылки; артефакт docs/stack/<kind>.md — по
-// его шаблону; /имя, которое не скилл, — путь контракта openapi.json или встроенная команда.
+// make-цели, пути (от корня репо или, если первый сегмент лежит рядом с документом, — от его каталога) и
+// файлы без пути, скиллы (`/имя`, skill `имя`) и правила (rule `имя`, и каждое имя перечня после) — иначе
+// агент идёт по мёртвой ссылке. Репо — то, что отслеживает git: локальное (test/.venv, неотслеживаемый
+// файл) есть не в каждом клоне. Плейсхолдеры (<d>, NNNN, *) — не ссылки; артефакт docs/stack/<kind>.md —
+// по его шаблону; /имя, которое не скилл, — путь контракта openapi.json, встроенная команда или корень
+// файловой системы; правило с именем включённого линтера — его правило. Опечатку в первом сегменте пути и
+// ссылку простым текстом вне кода проверка не видит.
 func TestProseReferencesExist(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -142,11 +151,13 @@ func TestProseReferencesExist(t *testing.T) {
 		return slices.ContainsFunc(pruned, func(p string) bool { return under(strings.TrimSuffix(ref, "/"), p) })
 	}
 
+	linters := golangciEnabled(t)
 	var dead []string
 	for _, doc := range proseFiles(files) {
 		data, err := os.ReadFile(filepath.Join(root, doc))
 		require.NoError(t, err)
 		text := string(data)
+		listKind, prevEnd := "", 0 // имя перечня после rule/skill: «правила `a`, `b`»
 		for _, loc := range codeSpan.FindAllStringIndex(text, -1) {
 			span := strings.Trim(text[loc[0]:loc[1]], "`")
 			for _, m := range makeCall.FindAllStringSubmatch(span, -1) {
@@ -154,25 +165,37 @@ func TestProseReferencesExist(t *testing.T) {
 					dead = append(dead, doc+": make "+m[1])
 				}
 			}
-			if m := namedBy.FindStringSubmatch(text[max(0, loc[0]-64):loc[0]]); m != nil && kebabName.MatchString(span) {
-				rule := strings.EqualFold(m[2], "rule") || strings.HasPrefix(strings.ToLower(m[2]), "правил")
-				if rule && !repo[".claude/rules/"+span+".md"] || !rule && !skill(span) {
-					dead = append(dead, doc+": "+strings.ToLower(m[2])+" "+span)
+			kind := ""
+			if m := namedBy.FindStringSubmatch(text[max(0, loc[0]-64):loc[0]]); m != nil {
+				kind = "skill"
+				if word := strings.ToLower(m[2]); strings.HasPrefix(word, "rule") || strings.HasPrefix(word, "правил") {
+					kind = "rule"
+				}
+			} else if listKind != "" && listSep.MatchString(text[prevEnd:loc[0]]) {
+				kind = listKind
+			}
+			listKind, prevEnd = "", loc[1]
+			if kind != "" && kebabName.MatchString(span) {
+				listKind = kind
+				if kind == "rule" && !repo[".claude/rules/"+span+".md"] && !linters[span] || kind == "skill" && !skill(span) {
+					dead = append(dead, doc+": "+kind+" "+span)
 				}
 			}
 			for _, word := range strings.Fields(span) {
 				ref := strings.TrimRight(strings.TrimLeft(word, `"'(`), `"'.,;:()`) // точка в начале — .claude
 				ref, _, _ = strings.Cut(ref, ":")
+				ref = strings.TrimPrefix(ref, "./")
 				if placeholder.MatchString(ref) {
 					continue
 				}
 				if m := slashName.FindStringSubmatch(ref); m != nil {
-					if !skill(m[1]) && !api[ref] {
+					if !skill(m[1]) && !api[ref] && !slices.Contains(fsRoots, m[1]) {
 						dead = append(dead, doc+": "+ref)
 					}
 					continue
 				}
 				top, _, isPath := strings.Cut(ref, "/")
+				near := path.Join(path.Dir(doc), top) // первый сегмент рядом с документом: references/…, stack/…
 				switch {
 				case !isPath && fileName.MatchString(ref):
 					if !names[ref] && !slices.Contains(domainLayout, ref) && !gitIgnored(t, root, ref) {
@@ -180,6 +203,10 @@ func TestProseReferencesExist(t *testing.T) {
 					}
 				case isPath && repo[top+"/"]:
 					if clean := goSymbol.ReplaceAllString(ref, ""); !inRepo(repo, clean) && !inPruned(clean) && !gitIgnored(t, root, ref) {
+						dead = append(dead, doc+": "+ref)
+					}
+				case isPath && top != "" && top != ".." && repo[near+"/"]:
+					if clean := path.Join(path.Dir(doc), goSymbol.ReplaceAllString(ref, "")); !inRepo(repo, clean) && !inPruned(clean) && !gitIgnored(t, root, clean) {
 						dead = append(dead, doc+": "+ref)
 					}
 				}

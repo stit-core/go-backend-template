@@ -35,11 +35,11 @@ prompt → /smartdev (cockpit: make status, читает активные пла
 
 | Механизм | Где | Сила |
 |---|---|---|
-| git-хуки | `scripts/git-hooks/` (подключает `make setup` через `core.hooksPath`): commit-msg (Conventional Commits), pre-commit (fmt-check+vet+lint+validate-stack/plan), pre-push (`make check` на чистом дереве, только HEAD) | **детерминированно** |
-| permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-verify`, force-push, reset --hard, правка `*.pem`/`*.key`/generated); чтение `.env`/`.env.local` — только для инструмента Read: `cat` и другие команды Bash deny не видит, их держит правило (CLAUDE.md, rule `env-local`) |
-| Хук Claude Code | `.claude/hooks/guard-bash.sh` (PreToolUse, Bash) | **детерминированно** (блок `git commit -n`, `--no-veri…`, `SKIP_PREPUSH`, `core.hooksPath`; команда проверяется построчно) |
-| Самопроверка обвязки | `internal/archtest/harness_test.go`, `internal/archtest/template_test.go`, `internal/archtest/onboarding_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели, пути и файлы, скиллы и правила в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`; пути `.template/paths` есть, тег обвязки на HEAD = `.template/version`, `make template-update` переносит обвязку в форк, маркеров конфликта в репо нет; пути `.template/identity` есть, prune называет каждый файл, который знает их пакеты; канонический репо шаблона (origin) — с module path шаблона; валидатор stack отвергает шаблоны как есть) |
-| Самозащита гейта | `Makefile` (`make check`), pre-push | **детерминированно** (`make check` не запускается с `-i`/`-n`, подменой своих переменных, `GOFLAGS` и `API_TEST_MAIN_ARGS`; pre-push не передаёт гейту флаги make) |
+| git-хуки | `scripts/git-hooks/` (подключает `make setup` через `core.hooksPath`): commit-msg (Conventional Commits), pre-commit (fmt-check+vet+lint+validate-stack/plan), pre-push (`make check` каждого пушимого коммита в свежем worktree: незакоммиченное и игнорируемое на вердикт не влияет) | **детерминированно** |
+| permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-veri…` где угодно в команде — и сокращение, и в кавычках, force-push, reset --hard, правка `*.pem`/`*.key`/generated); чтение `.env`/`.env.local` — только для инструмента Read: `cat` и другие команды Bash deny не видит, их держит правило (CLAUDE.md, rule `env-local`) |
+| Хук Claude Code | `.claude/hooks/guard-bash.sh` (PreToolUse, Bash) | **детерминированно** (блок `git commit -n`, `--no-veri…` — и одним словом в кавычках, `SKIP_PREPUSH`, `core.hooksPath`, алиасы git, любая команда, кроме чтения, по `scripts/git-hooks`; команда проверяется построчно; `TestGuardBash`) |
+| Самопроверка обвязки | `internal/archtest/harness_test.go`, `internal/archtest/template_test.go`, `internal/archtest/onboarding_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели, пути — от корня репо или каталога документа — и файлы, скиллы и правила (каждое имя перечня) в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`; пути `.template/paths` есть, тег обвязки на HEAD = `.template/version`, `make template-update` переносит обвязку в форк, маркеров конфликта в репо нет; пути `.template/identity` есть, prune называет каждый файл, который знает их пакеты; канонический репо шаблона (origin) — с module path шаблона; валидатор stack отвергает шаблоны как есть) |
+| Самозащита гейта | `Makefile` (`make check`), pre-push | **детерминированно** (`make check` не запускается с `-i`/`-n`, `--eval`, подменой своих переменных (и `override`), вторым makefile (`-f`, `MAKEFILES`), `GOFLAGS` и `API_TEST_MAIN_ARGS`; pre-push не передаёт гейту флаги make; makefile, который переопределяет и проверку makefile'ов, — уже правка гейта) |
 | Path-scoped rules | `.claude/rules/*.md` | контекстная подсказка |
 | CLAUDE.md | repo root | always-on advisory |
 
@@ -65,7 +65,7 @@ Push в `main` разрешён (прямой или через PR); gate — `p
   исправления без новых требований к форку.
 - Выпуск — с OK владельца (тег и push — CLAUDE.md § Границы): новая `.template/version` коммитом
   `meta(template): template/vX.Y.Z` → `git tag -a template/vX.Y.Z -F <аннотация>` →
-  `git push origin main template/vX.Y.Z` (pre-push гонит `make check` на HEAD с тегом). `main`,
+  `git push origin main template/vX.Y.Z` (pre-push гонит `make check` на пушимом коммите с тегом). `main`,
   где `.template/version` называет ещё не выпущенный тег, уходит в origin только с этим тегом на
   HEAD: иначе форк с такого `main` создан раньше тега своей версии, и правки до тега придут к нему
   только переносом до следующего тега.

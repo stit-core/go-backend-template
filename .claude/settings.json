@@ -55,7 +55,7 @@
       "Grep(*)"
     ],
     "deny": [
-      "Bash(*--no-verify*)",
+      "Bash(*--no-veri*)",
       "Bash(*--no-gpg-sign*)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",

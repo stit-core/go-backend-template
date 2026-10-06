@@ -19,7 +19,8 @@
      `bruteforcekit.NewConfig` (`kitConfigs`), `sessionpg.Module`, `bruteforcepg.Module`;
    - `cmd/api/http.go` — `userhttp`, `authhttp`, `verifhttp` (импорты, поля `httpHandlers`, вызовы в
      `registerHTTP`);
-   - `cmd/migrate/sources/sources.go` — `useroutbox`, `verifoutbox`, `sessionpg`, `bruteforcepg`.
+   - `cmd/migrate/sources/sources.go` — `useroutbox`, `verifoutbox`, `sessionpg`, `bruteforcepg`;
+   - `cmd/api/api_test.go` — их открытые операции из `publicOperations`.
 3. **Генерация** — блоки удалённых доменов в `sqlc.yaml` и `.mockery.yml`.
 4. **Миграции** — свои — номерами подряд с `0001` (`git mv` с сохранением порядка: migrations-check
    ждёт нумерацию с 0001, прод-БД у проекта ещё нет). Расширение `pgcrypto` и функция `set_updated_at()`

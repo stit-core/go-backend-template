@@ -58,8 +58,9 @@ paths:
   внутри модуля домена (`fx.Private`). `context.Context` из графа не берут.
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
-  Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)`:
-  без того и другого сервис не стартует (httpkit); регистрация — в `registerHTTP`
+  Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)` и
+  строкой в `publicOperations` (`cmd/api/api_test.go`): без того и другого сервис не стартует (httpkit),
+  без строки — красный `TestHTTPOperations`; регистрация — в `registerHTTP`
   (`cmd/api/http.go`). Ошибки — таблица домена `<домен>Errors`: правило на каждую ошибку `errors.go`,
   хендлер отдаёт `<домен>Errors.Map(err)`, таблица операции из тех же правил — `Declare` при
   регистрации (оба — archtest `TestDomainErrorTables`); ошибка поля — 422 с `Field`.

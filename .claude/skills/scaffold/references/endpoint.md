@@ -100,8 +100,9 @@ huma.Register(api, newMethodErrors.Declare(authgate.Secured(huma.Operation{
 ```
 
 `authgate.Secured` — операция под cookie: `Security` и коды 401 сессии в OpenAPI. Публичная
-операция — `httpkit.Public(huma.Operation{…})`: операция без `Security` и без пометки — ошибка старта
-сервиса (httpkit).
+операция — `httpkit.Public(huma.Operation{…})` и её `OperationID` в `publicOperations`
+(`cmd/api/api_test.go`): операция без `Security` и без пометки — ошибка старта сервиса (httpkit), открытая
+мимо списка — красный `TestHTTPOperations`.
 
 ### 7. Ошибки: правило домена и таблица операции
 

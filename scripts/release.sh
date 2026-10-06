@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/release.sh — релиз одной командой: confirm → чистое дерево + make check + e2e-smoke →
-# annotated tag → release-preflight (ветка/clean/semver/buildx + doctor) → buildx
+# annotated tag → release-preflight (ветка/clean/semver/buildx + doctor + govulncheck) → buildx
 # api+migrate push lockstep → агрегированный INFRA-HANDOFF → STOP.
 #
 #   make release VERSION=vX.Y.Z
@@ -84,7 +84,7 @@ elif [ "$existing" != "$VERSION" ]; then
     exit 2
 fi
 
-# --- preflight (ветка=main / clean / annotated semver / buildx / doctor) ---
+# --- preflight (ветка=main / clean / annotated semver / buildx / doctor / govulncheck) ---
 bash scripts/release-preflight.sh "$VERSION"
 
 # --- build + push lockstep (api + migrate одним тегом) ---
