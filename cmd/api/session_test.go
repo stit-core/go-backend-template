@@ -4,10 +4,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -80,6 +82,31 @@ func (a sessionAPI) refresh(cookies map[string]string) (int, map[string]string) 
 	return status, got
 }
 
+// refreshCode — refresh одним cookie из своей горутины (без require): "" — 204, иначе code ответа-ошибки.
+func refreshCode(t *testing.T, api sessionAPI, refresh string) (string, error) {
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, api.base+"/api/auth/refresh", http.NoBody)
+	if err != nil {
+		return "", err
+	}
+	req.AddCookie(&http.Cookie{Name: authgate.CookieRefresh, Value: refresh})
+	resp, err := api.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err := errors.Join(err, resp.Body.Close()); err != nil {
+		return "", err
+	}
+	if resp.StatusCode == http.StatusNoContent {
+		return "", nil
+	}
+	var apiErr httpkit.APIError
+	if err := json.Unmarshal(body, &apiErr); err != nil {
+		return "", err
+	}
+	return apiErr.Code, nil
+}
+
 const sessionPassword = "password123"
 
 // openSessions — незакрытые сессии пользователя в хранилище кита.
@@ -133,6 +160,36 @@ func TestSessions(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, status)
 		status, _ = api.refresh(other)
 		require.Equal(t, http.StatusNoContent, status, "the other session lives on")
+	})
+
+	// Погашение токена атомарно: из параллельных обновлений одним cookie успешно одно, остальные — повтор, и
+	// сессия закрыта (поэтому клиент обновляет сессию последовательно).
+	t.Run("parallel refreshes with one token: one wins, the rest are reuse", func(t *testing.T) {
+		c := api.login(alice, sessionPassword)
+		const n = 8
+		codes, errs := make([]string, n), make([]error, n)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for i := range n {
+			wg.Go(func() {
+				<-start
+				codes[i], errs[i] = refreshCode(t, api, c[authgate.CookieRefresh])
+			})
+		}
+		close(start)
+		wg.Wait()
+		require.NoError(t, errors.Join(errs...))
+		won, reused := 0, 0
+		for _, code := range codes {
+			switch code {
+			case "":
+				won++
+			case "AUTH_REFRESH_REUSED":
+				reused++
+			}
+		}
+		require.Equal(t, 1, won, "codes: %v", codes)
+		require.Equal(t, n-1, reused, "codes: %v", codes)
 	})
 
 	const newPassword = "new-password123"

@@ -16,9 +16,11 @@ x-app-env: &app-env
   JWT_SECRET: smoke-only-secret-do-not-use-in-prod-min-32chars
   JWT_ACCESS_TTL: 15m
 
-  # dev: лог-mailer (канала доставки писем у стека нет) и cookie без Secure — клиент ходит по http.
+  # dev: лог-mailer (канала доставки писем у стека нет), cookie без Secure — клиент ходит по http, и
+  # спецификация API (/openapi.*), которую сервис отдаёт только с HTTP_DOCS_ENABLED.
   APP_ENV: dev
   COOKIE_SECURE: "false"
+  HTTP_DOCS_ENABLED: "true"
   OTEL_SDK_DISABLED: "true"
 
   LOG_LEVEL: debug
