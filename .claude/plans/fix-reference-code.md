@@ -291,10 +291,10 @@ prod-дефолты, понятный контракт ошибок API, тес�
   Argon2id — разом не больше `max(1, GOMAXPROCS/ARGON2_THREADS)` хэшей: при `ARGON2_THREADS=4` и < 8 CPU
   пароли хэшируются по одному — CPU пода и реплики под пик.
 - Блоки S9–S11 — в накопителе `.claude/plans/handoff.md`: гард (`APP_ENV`, вне dev `JWT_AUDIENCE`), сессии
-  (миграция 0005, `SESSION_*`, вход заново), прокси и остановка (`HTTP_TRUST_PROXY_HOPS`,
-  `HTTP_SHUTDOWN_*`, `stop_grace_period` ≥ 35s), стримы публикаторов, дефолты китов, образы, `.v2`, OTel.
+  (0005 — окно и откат, `SESSION_*`, вход заново), прокси (hops ровно, api — только за ним) и остановка
+  (`HTTP_SHUTDOWN_*`, `stop_grace_period` ≥ 35s), стримы публикаторов, дефолты китов, образы, `.v2`, OTel.
 
 ## Где мы сейчас
-S1–S8, S10–S12 и часть 1 S13 (user, verification) приняты (отчёты A–D); S9 сделан (golibinfra v1.3.0,
-сессии на ките, обходы сняты) — ждёт валидатора. Дальше: валидатор S9, затем часть 2 S13 — auth:
-`.Maybe()`, мок `Authorizer`, happy-path change-password, адаптеры (M15, M30, M31); потом S14, S15.
+S1–S8, S10–S12 и часть 1 S13 (user, verification) приняты (отчёты A–D). S9 — валидатор E: FAIL (B1, вход
+в гонке со сменой пароля); B1 и неблокирующие 1–5, 8 исправлены — ждут перепроверки. Дальше: часть 2 S13 —
+auth (`.Maybe()`, мок `Authorizer`, happy-path change-password, адаптеры M15, M30, M31); потом S14, S15.

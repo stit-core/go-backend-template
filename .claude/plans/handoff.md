@@ -67,13 +67,17 @@ WHAT   сессии refresh — authnkit/session (golibinfra v1.3.0): табли
        читается — optional SESSION_IDLE_TTL (default 168h), SESSION_ABSOLUTE_TTL (720h),
        SESSION_CLEANUP_INTERVAL (1h)
 WHY    fix-reference-code S9 — управляемые сессии: ротация, повтор токена закрывает сессию, абсолютный срок
-ACTION выкатка обычным порядком — образ migrate (`migrate up`) до api; JWT_REFRESH_TTL убрать из compose,
-       сроки при нужде — SESSION_*; после выкатки все пользователи входят заново один раз
+ACTION образ migrate (`migrate up`) и сразу замена api — между ними прежний api отвечает 500 на вход и
+       refresh (refresh_sessions уже нет), окно держать коротким; откат на прежний тег — сначала
+       `migrate down` образом migrate этого релиза (вернёт пустую refresh_sessions; прежний образ версию
+       0005 не знает), затем `make bump`; JWT_REFRESH_TTL убрать из compose, сроки при нужде — SESSION_*;
+       после выкатки (и после отката) все пользователи входят заново один раз
 WHO    проект (compose env) + клиенты API
 DECIDE сроки сессий: дефолты 168h и 720h ок?
-RISK   api без миграций кита не стартует; прежние refresh-cookie недействительны — refresh отвечает 401,
-       вход заново; клиент, который обновляет сессию параллельными запросами, её теряет (повтор токена
-       закрывает сессию) — обновлять последовательно (описание refreshToken в openapi.json)
+RISK   api без миграций кита не стартует; между `migrate up` и заменой api вход и refresh прежнего api —
+       500; откат без `migrate down` — прежний api не входит и не обновляет сессии (500); прежние
+       refresh-cookie недействительны — refresh отвечает 401, вход заново; клиент, который обновляет
+       сессию параллельными запросами, её теряет — обновлять последовательно (описание refreshToken)
 ===
 
 === INFRA HANDOFF · передай инфра-админу ===
@@ -86,10 +90,12 @@ WHY    fix-reference-code S9 — IP клиента из цепочки httpkit (
 ACTION compose api за Traefik: HTTP_TRUST_PROXY_HOPS=1, HTTP_SHUTDOWN_DRAIN_DELAY=5s, убрать
        HTTP_RATE_LIMIT_TRUST_PROXY; stop_grace_period не меньше 35s
 WHO    проект (compose env)
-DECIDE число прокси перед сервисом, которые дописывают X-Forwarded-For (Traefik — 1, CDN → nginx — 2)
+DECIDE число прокси перед сервисом, которые дописывают X-Forwarded-For (Traefik — 1, CDN → nginx — 2),
+       ровно: порт api — только за ними
 RISK   без HTTP_TRUST_PROXY_HOPS за прокси у всех клиентов один IP: общий bucket лимитера (429 всем) и
-       блокировки входа по чужим ошибкам; без паузы балансировщик шлёт запросы в гаснущий инстанс;
-       остановка из env сверх бюджета (30s) — сервис не стартует
+       блокировки входа по чужим ошибкам; hops больше числа прокси или порт api доступен мимо прокси —
+       IP задаёт сам клиент (X-Forwarded-For): обход антибрутфорса и лимитера, чужой IP в аудите; без
+       паузы балансировщик шлёт запросы в гаснущий инстанс; остановка сверх бюджета (30s) — нет старта
 ===
 
 === INFRA HANDOFF · передай инфра-админу ===

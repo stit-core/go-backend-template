@@ -47,7 +47,9 @@ fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвер�
 ## Откат
 
 Image уже в registry — пересборка не нужна. Полностью в infra-репо:
-`make bump SVC=backend TAG=<предыдущий>`.
+`make bump SVC=backend TAG=<предыдущий>`. Релиз с миграцией с эффектом (маркер `-- infra-handoff:`,
+блок INFRA-HANDOFF) откатывается в обратном порядке: сначала `migrate down` образом migrate
+откатываемого релиза — прежний образ его версий не знает, — затем `make bump`.
 
 ## Versioning
 
