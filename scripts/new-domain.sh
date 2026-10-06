@@ -624,6 +624,7 @@ cat >"$DOMAIN_DIR/delivery/http/handler_test.go" <<EOF
 package http_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -682,13 +683,14 @@ func TestCreate_Errors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
+		ctx    context.Context
 		err    error
 		status int
 		code   string
 		field  string // "" — ошибка не поля
 	}{
-		{"invalid name", $NAME.ErrInvalidName, http.StatusUnprocessableEntity, "${UPPER}_INVALID_NAME", "body.name"},
-		{"forbidden", &policy.ForbiddenError{Reason: "admin only"}, http.StatusForbidden, "FORBIDDEN", ""},
+		{"invalid name", identitytest.Admin("a1"), $NAME.ErrInvalidName, http.StatusUnprocessableEntity, "${UPPER}_INVALID_NAME", "body.name"},
+		{"forbidden", identitytest.Client("u1"), &policy.ForbiddenError{Reason: "admin only"}, http.StatusForbidden, "FORBIDDEN", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -696,7 +698,7 @@ func TestCreate_Errors(t *testing.T) {
 			uc := mocks.NewMockUsecase(t)
 			uc.EXPECT().Create(mock.Anything, $NAME.CreateInput{Name: "first"}).Return(nil, tc.err).Once()
 
-			resp := setup(t, uc).Post("/api/${ROUTE}", strings.NewReader(\`{"name":"first"}\`))
+			resp := setup(t, uc).PostCtx(tc.ctx, "/api/${ROUTE}", strings.NewReader(\`{"name":"first"}\`))
 
 			handlertest.AssertAPIError(t, resp, tc.status, tc.code)
 			if tc.field != "" {
@@ -724,7 +726,7 @@ func TestGet_NotFound(t *testing.T) {
 	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Get(mock.Anything, "id-2").Return(nil, $NAME.ErrNotFound).Once()
 
-	resp := setup(t, uc).Get("/api/${ROUTE}/id-2")
+	resp := setup(t, uc).GetCtx(identitytest.Admin("a1"), "/api/${ROUTE}/id-2")
 
 	handlertest.AssertAPIError(t, resp, http.StatusNotFound, "${UPPER}_NOT_FOUND")
 }
