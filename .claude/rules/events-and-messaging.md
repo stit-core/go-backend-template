@@ -61,7 +61,8 @@ paths:
   в модуле-владельце (fx-группа `timerkit.Group`); гоняет `timerkit.Module` в `cmd/api`,
   отдельного worker-бинаря нет. Спан `timerkit.job <name>`, метрики `timer_job_*`.
 - Обслуживание kit-таблиц пишут сами киты: cleanup `bruteforce_attempts` — `bruteforcepg.Module`,
-  drain/партиции/retention outbox — `outboxkit.Instance`. Свой job поверх kit-таблицы не заводить.
+  истёкших сессий — `sessionpg.Module`, drain/партиции/retention outbox — `outboxkit.Instance`. Свой
+  job поверх kit-таблицы не заводить.
 - `time.Now()` → инжектить `clockkit.Clock`. Ошибка `Run` → лог кита, цикл не прерывается;
   процесс не ронять.
 

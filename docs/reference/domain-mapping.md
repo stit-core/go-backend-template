@@ -141,7 +141,7 @@
 | Property `Constraints` | `CHECK`-constraint или валидируется только в коде (если бизнес-уровень) |
 | Lifecycle enum | `CHECK (status IN ('active', 'blocked', 'deleted'))` или отдельная enum-таблица |
 | Identity ID type | `id UUID PRIMARY KEY` или `TEXT` для composite |
-| Outbox-эмит | таблица `outbox_<domain>` — **не в `migrations/` этого репо**; схему даёт `golibinfra/outboxkit/pgstore.TableMigrations(Table)` (`infra/outbox/outbox.go: Migrations`), `cmd/migrate` накатывает её рядом с миграциями приложения (kit-источники — `cmd/migrate/sources`, таблица версий на источник). То же про `audit_log` (`auditkit/pgstore.Migrations`) и `bruteforce_attempts` (`bruteforcekit/pgstore.Migrations`). |
+| Outbox-эмит | таблица `outbox_<domain>` — **не в `migrations/` этого репо**; схему даёт `golibinfra/outboxkit/pgstore.TableMigrations(Table)` (`infra/outbox/outbox.go: Migrations`), `cmd/migrate` накатывает её рядом с миграциями приложения (kit-источники — `cmd/migrate/sources`, таблица версий на источник). То же про `audit_log` (`auditkit/pgstore.Migrations`), `bruteforce_attempts` (`bruteforcekit/pgstore.Migrations`) и `authn_sessions` (`authnkit/session/pgstore.Migrations`). |
 
 ## Что НЕ маппится 1:1
 

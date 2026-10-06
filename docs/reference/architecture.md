@@ -282,8 +282,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - **Jobs.** Периодические задачи без события-триггера — `timerkit.Job`, регистрируются
   `timerkit.Provide` в модуле-владельце и гоняются `timerkit.Module` той же fx.Lifecycle.
-  Обслуживание kit-таблиц приходит с модулями китов (`bruteforcepg.Module` — cleanup,
-  `outboxkit.Instance` — drain/партиции/retention); свой job поверх kit-таблицы не пишется.
+  Обслуживание kit-таблиц приходит с модулями китов (`bruteforcepg.Module` и `sessionpg.Module` —
+  cleanup, `outboxkit.Instance` — drain/партиции/retention); свой job поверх kit-таблицы не пишется.
 - **JetStream-стримы.** drain и subscriber'ы требуют включённого JetStream
   (`NATS_JETSTREAM_ENABLED=true`) и стримов, покрывающих subject-префиксы доменов
   (`NATS_JS_STREAM_NAMES`, напр. `user,verification` → `user.>`/`verification.>`). Без стрима

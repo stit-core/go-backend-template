@@ -148,7 +148,7 @@ Integration-тесты поднимают Postgres через `golibinfra/testki
 feat(<domain>): add NNNN_name migration
 ```
 
-Kit-таблицы (`audit_log`, `bruteforce_attempts`, `outbox_<domain>`) мигрирует golibinfra
+Kit-таблицы (`audit_log`, `bruteforce_attempts`, `authn_sessions`, `outbox_<domain>`) мигрирует golibinfra
 (источники в `cmd/migrate`) — файлов в `migrations/` для них не бывает; общая для нескольких
 доменов миграция приложения:
 ```
