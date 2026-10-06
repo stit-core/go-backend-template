@@ -87,10 +87,13 @@ blocked-by: —
 - [ ] **S3** — `fix-reference-code` по этапам плана (S1 — bump v1.2.0, S9 — bump v1.3.0), каждый
   этап — исполнитель → валидатор; push шаблона после закрытия
   - Проверка: критерии плана подтверждены, план удалён · Закрывает: AC3 · Зависит от: S1, S2
-- [ ] **S4** — Базовый аудит объёма golibinfra (8 углов, эксперименты — `replan-golibinfra.md` §2)
+- [x] **S4** — Базовый аудит объёма golibinfra (8 углов, эксперименты — `replan-golibinfra.md` §2)
   после v1.2.0, параллельно с `fix-reference-code` S1–S8; по находкам — план партии 2 (состав —
   §6 и находки critical/high) → исполнитель → валидатор → тег v1.3.0 → push
   - Проверка: отчёт аудита в материалах; тег v1.3.0 на remote · Закрывает: AC2 · Зависит от: S2
+  - Сделано: базовый аудит — `kits-audit/summary.md` (углы 4.5–7); партия 2 — `harden-gate-defaults` и
+    `harden-authn-release` приняты валидаторами (отчёты `validation-harden-gate-defaults-*`,
+    `validation-harden-authn-release-*`, `validation-release-v1.3.0.md`); тег v1.3.0 и `main` в origin
 
 ### Шаблон: обвязка и итог
 - [ ] **S5** — Партия 3 golibinfra (v1.4.0: `archkit`, хелпер лесенки миграций, находки
@@ -136,15 +139,11 @@ blocked-by: —
   Отчёты углов — `kits-audit/` в материалах, ID находок `K<угол>-NN`.
 
 ## Где мы сейчас
-Контрольная точка сессии 3: фоновых агентов нет, всё закоммичено. S1 и S2 закрыты (`harden-gate`,
-golibinfra v1.2.0 в origin).
-- **S3** — `fix-reference-code`: S1–S8 и S10–S12 приняты (отчёты A, B, C); дальше S9 — ждёт golibinfra
-  v1.3.0, затем S13–S15. `repair-harness` S1, S2, S5 приняты досрочно; остальное — после
-  `fix-reference-code`.
-- **S4** — партия 2 golibinfra: `harden-gate-defaults` закрыт (аннотация первой половины v1.3.0 —
-  `annotation-v1.3.0.md` в материалах); `harden-authn-release` — этап S1–S7 сделан, валидатор FAIL
-  (`validation-harden-authn-release-A.md`, `testkit/metrictest`): первым — круг фиксов, перепроверка,
-  затем S8–S12 и релиз S13.
+S1, S2, S4 закрыты: `harden-gate` удалён, golibinfra v1.2.0 и v1.3.0 в origin.
+- **S3** — `fix-reference-code`: S1–S8, S10–S12 и часть 1 S13 (user, verification) приняты; дальше S9
+  (bump v1.3.0, сессии на ките; Handoff — `handoff-golibinfra-v1.3.0.md` в материалах), часть 2 S13
+  (auth), S14, S15. `repair-harness` S1, S2, S5, S6 приняты досрочно.
+- **S5** — партия 3 golibinfra (v1.4.0): `harden-kits-contracts` (идёт) → `harden-tests-archkit-release`.
 - Предел контекста агента — 950 тыс. (владелец): наблюдатель `ctxwatch.py`, сворачивание и
   продолжатель — `prompts.md`; агенты не запускают `/code-review` и вложенных агентов. Оперативные
-  заметки и «Как продолжить» — `orchestrator-todo.md` (каталог материалов).
+  заметки — `orchestrator-todo.md` (каталог материалов).
