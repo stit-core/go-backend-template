@@ -167,7 +167,9 @@ func TestSessions(t *testing.T) {
 	// Погашение токена атомарно: из параллельных обновлений одним cookie успешно одно, остальные — повтор, и
 	// сессия закрыта (поэтому клиент обновляет сессию последовательно).
 	t.Run("parallel refreshes with one token: one wins, the rest are reuse", func(t *testing.T) {
-		c := api.login(alice, sessionPassword)
+		const erin = "erin@example.com"
+		erinID := api.register(erin)
+		c := api.login(erin, sessionPassword)
 		const n = 8
 		codes, errs := make([]string, n), make([]error, n)
 		start := make(chan struct{})
@@ -192,6 +194,7 @@ func TestSessions(t *testing.T) {
 		}
 		require.Equal(t, 1, won, "codes: %v", codes)
 		require.Equal(t, n-1, reused, "codes: %v", codes)
+		require.Zero(t, openSessions(t, db, erinID), "the reuse closed the session, the winner's token included")
 	})
 
 	const newPassword = "new-password123"

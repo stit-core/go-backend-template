@@ -51,6 +51,26 @@ func TestRun_PromotionClosesSessions(t *testing.T) {
 	require.ErrorIs(t, err, session.ErrInvalid, "the session opened before the promotion is closed")
 }
 
+// Повышение и закрытие сессий — одна транзакция: сбой закрытия откатывает и роль, и пароль.
+func TestRun_RevokeFailureRollsBackPromotion(t *testing.T) {
+	pg := seedEnv(t, "admin@example.com")
+	db := pg.DB(t)
+	var id string
+	require.NoError(t, db.QueryRow(
+		t.Context(),
+		`INSERT INTO users (email, password_hash, name, status, role) VALUES ('admin@example.com', 'x', 'Early', 'active', 'client') RETURNING id`,
+	).Scan(&id))
+	_, err := db.Exec(t.Context(), `ALTER TABLE authn_sessions RENAME TO authn_sessions_offline`)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, run(t.Context(), logkit.Nop()))
+
+	var role, hash string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT role, password_hash FROM users WHERE id = $1`, id).Scan(&role, &hash))
+	require.Equal(t, "client", role, "the promotion rolls back with the failed revocation")
+	require.Equal(t, "x", hash)
+}
+
 // Повторный запуск идемпотентен: admin с этим адресом один.
 func TestRun_CreatesAdminOnce(t *testing.T) {
 	pg := seedEnv(t, "admin@example.com")

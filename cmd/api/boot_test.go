@@ -359,6 +359,15 @@ func TestBoot_PublisherStreamRequired(t *testing.T) {
 	require.ErrorContains(t, err, "instance verification")
 }
 
+// Остановка из env, которая не помещается в бюджет fx.StopTimeout, — ошибка старта: checkStopBudget стоит в
+// графе service, а не только объявлен.
+func TestBoot_StopBudgetRequired(t *testing.T) {
+	serviceEnv(t)
+	t.Setenv("HTTP_SHUTDOWN_DRAIN_DELAY", "15s")
+
+	require.ErrorIs(t, fx.New(service).Err(), errStopBudget)
+}
+
 // storedLeaks — секреты, которые встречаются в строках таблицы table (строка целиком, как текст).
 func storedLeaks(t *testing.T, db *pgxpool.Pool, table string, secrets []string) []string {
 	t.Helper()

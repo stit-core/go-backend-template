@@ -66,7 +66,7 @@ prod-дефолты, понятный контракт ошибок API, тес�
     (срок токена и абсолютный), `TestUpdate`, `TestDelete`, `TestTrusted_UpdatePassword` (смена и
     сброс; `RevokeAll` в транзакции записи), `TestLogin_CredentialsChangedDuringLogin`; integration —
     `TestSessions` (повтор, выход, смена и сброс пароля, блокировка, удаление),
-    `TestSessions_LoginDuringPasswordChange` (вход в гонке со сменой), seed-admin — PASS
+    `TestSessions_LoginDuringPasswordChange` (вход в гонке со сменой), seed-admin (и откат) — PASS
 - [x] **AC3** — Контракт user: клиент не меняет свой статус (403); name и status применяются вместе
   или 400; неизвестный статус → 422; несуществующий id → 404; устаревшая версия → 409; `version`
   есть в ответе. Проверка: handler- и integration-тесты → PASS
