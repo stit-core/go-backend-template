@@ -175,8 +175,9 @@ blocked-by: —
     подтверждена; `make check` → `✓ check clean`
 - [ ] **S7** — Машинные правила — версией golibinfra: bump до v1.4.0; `internal/archtest` вызывает
   `archkit` с allowlist шаблона и оставляет у себя правила обвязки (проза, подключение доменов,
-  env, операции); лесенка `cmd/migrate` — хелпер testkit; корень домена не дотягивается до I/O
-  через `internal/platform/*` (напрямую и обёрткой в `pkg/`) (LIF-01)
+  env, операции); лесенка `cmd/migrate` на `testkit.MigrationLadder` (с S9 `fix-reference-code`) —
+  проверить на ней AC9; корень домена не дотягивается до I/O через `internal/platform/*` (напрямую и
+  обёрткой в `pkg/`); комментарий `scripts/tools/test.sh` про пропуск без Docker — по факту (LIF-01)
   - Проверка: AC9 → выполнен; AC5 → bump-часть выполнена · Закрывает: AC5, AC9 · Зависит от: S6, тег golibinfra v1.4.0
 - [ ] **S8** — Prune и онбординг: процедура оставляет гейт зелёным, «канон»-ссылки ведут на то,
   что переживает prune, решение по auth и user (Q2), защита канонического репо по remote, фазы
