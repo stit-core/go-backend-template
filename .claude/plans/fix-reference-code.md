@@ -294,7 +294,7 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Блоки S10 и S11 — в накопителе `.claude/plans/handoff.md`; прочее — `/infra-handoff`, когда ляжет.
 
 ## Где мы сейчас
-S1–S8 и S10–S12 приняты (отчёты A, B, C). S13, часть 1 (user, verification): валидатор D — FAIL, B1, флак `TestCheckHealth`, ветки сбоев хэшера и поиска закрыты, круг фиксов идёт; строгие моки, настоящая
+S1–S8 и S10–S12 приняты (отчёты A, B, C). S13, часть 1 (user, verification): валидатор D — FAIL, B1, флак, ветки сбоев, оговорка `Authorizer` в rules закрыты, круг фиксов идёт; строгие моки, настоящая
 policy, `Last(subject)`, happy-path ручек, integration на все методы, адаптер, контракт user → verification, `healthcheck` в
 `main()`, исход метрики сброса, срок ссылок; 110 своих мутантов убиты (`s13a/` в материалах). Часть 2 — auth после S9: `.Maybe()`
 (guard, policy, парсер refresh), happy-path change-password, адаптеры (M15, M30, M31), сессии кита. Дальше S9, S13 auth, S14, S15.

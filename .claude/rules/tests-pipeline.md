@@ -61,7 +61,8 @@ RED→GREEN: падающий тест, воспроизводящий баг �
 
 ## Моки и фикстуры (mockery v3)
 
-- Конфиг — `.mockery.yml`: интерфейсы из `usecase.go` **и** `delivery/*` (Usecase-порты).
+- Конфиг — `.mockery.yml`: интерфейсы из `usecase.go` **и** `delivery/*` (Usecase-порты), кроме
+  policy-порта `Authorizer` — у него мока нет, тесты берут настоящую policy.
   Файлы: `mocks/<interface_snake>.go` (пакет `mocks`, тип `Mock<Interface>`). Регенерация —
   `make gen`; `make gen-check` ловит дрейф и untracked-моки.
 - **Изоляция (archtest)**: пакет `mocks` любого домена импортируется только из `*_test.go`.
