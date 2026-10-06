@@ -194,7 +194,9 @@ blocked-by: —
   тесты (предел 25000 байт срезает их за большим диффом `openapi.json` или логом fx); гейт не
   обходится тем, что нашёл валидатор гейта golibinfra: pre-push проверяет пушимый коммит в свежем
   worktree (игнорируемые файлы не прячут поломку), guard ловит `chmod -x` хуков, флаг в кавычках
-  и алиасы, `make --eval`/`-f` не подделывают `✓ check clean`
+  и алиасы, `make --eval`/`-f` не подделывают `✓ check clean`; набор публичных операций закреплён
+  тестом (S15 `fix-reference-code`: `httpkit.Public` вместо `authgate.Secured` гейт не видит),
+  `TestBoot` — цепочка XFF длиннее любого разумного `HTTP_TRUST_PROXY_HOPS` (сейчас ловит 1–3)
   - Проверка: `make check` → `✓ check clean` · Закрывает: AC8 · Зависит от: S1 – S8
 - [ ] **S10** — Совместный повторный аудит: шаблон — 8 свежих агентов, та же рубрика и
   эксперименты; golibinfra — рубрика и эксперименты базового аудита китов на теге из `go.mod`;
@@ -290,7 +292,6 @@ blocked-by: —
 S5 и S6 закрыты досрочно: маршрут и «готово» — по разделу в CLAUDE.md, инварианты аудита — в
 правилах, handoff копится в `.claude/plans/handoff.md` до релиза, обвязка едет в форк тегом
 `template/vX.Y.Z` (`make template-update`, skill `/upgrade`). Валидатор S6 — PASS, его
-неблокирующие закрыты `fix`-коммитами (M4 — de-template A.1 и module path в прозе — в S8). При
-первом push `main` с `.template/` (закрытие `fix-reference-code`) — `git tag -a template/v1.0.0`
-на HEAD и push вместе с `main`. Дальше — S3 после закрытия `fix-reference-code`; S4, S7, S8 — после
-него.
+неблокирующие закрыты `fix`-коммитами (M4 — de-template A.1 и module path в прозе — в S8). Тег
+`template/v1.0.0` выпущен вместе с `main` при закрытии `fix-reference-code`. Следующий шаг — S3,
+затем S4; S7, S8 — после golibinfra v1.4.0.

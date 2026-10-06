@@ -84,9 +84,12 @@ blocked-by: —
     тег в origin
 
 ### Шаблон: эталон и аудит китов
-- [ ] **S3** — `fix-reference-code` по этапам плана (S1 — bump v1.2.0, S9 — bump v1.3.0), каждый
+- [x] **S3** — `fix-reference-code` по этапам плана (S1 — bump v1.2.0, S9 — bump v1.3.0), каждый
   этап — исполнитель → валидатор; push шаблона после закрытия
   - Проверка: критерии плана подтверждены, план удалён · Закрывает: AC3 · Зависит от: S1, S2
+  - Сделано: 15 шагов приняты валидаторами (отчёты `validation-fix-reference-code-{A..F}.md`, S15 —
+    `s15-fix-reference-code.md`: 34 из 34 мутаций аудита и D02 убиты, покрытие 100%, allowlist'ы и
+    обходы пусты); план удалён; `main` и тег обвязки `template/v1.0.0` в origin
 - [x] **S4** — Базовый аудит объёма golibinfra (8 углов, эксперименты — `replan-golibinfra.md` §2)
   после v1.2.0, параллельно с `fix-reference-code` S1–S8; по находкам — план партии 2 (состав —
   §6 и находки critical/high) → исполнитель → валидатор → тег v1.3.0 → push
@@ -139,11 +142,12 @@ blocked-by: —
   Отчёты углов — `kits-audit/` в материалах, ID находок `K<угол>-NN`.
 
 ## Где мы сейчас
-S1, S2, S4 закрыты: `harden-gate` удалён, golibinfra v1.2.0 и v1.3.0 в origin.
-- **S3** — `fix-reference-code`: S1–S8, S10–S12 и часть 1 S13 (user, verification) приняты; дальше S9
-  (bump v1.3.0, сессии на ките; Handoff — `handoff-golibinfra-v1.3.0.md` в материалах), часть 2 S13
-  (auth), S14, S15. `repair-harness` S1, S2, S5, S6 приняты досрочно.
-- **S5** — партия 3 golibinfra (v1.4.0): `harden-kits-contracts` (идёт) → `harden-tests-archkit-release`.
+S1–S4 закрыты: `harden-gate` и `fix-reference-code` удалены, шаблон и тег обвязки `template/v1.0.0` в
+origin; golibinfra v1.2.0 и v1.3.0 в origin.
+- **S5** — партия 3 golibinfra (v1.4.0): `harden-kits-contracts` (этап 2 из 3 идёт) →
+  `harden-tests-archkit-release` (`archkit`, релиз).
+- **S6** — `repair-harness`: S1, S2, S5, S6 приняты; S3, S4 — можно начинать (код эталона закрыт);
+  S7, S8 — после v1.4.0; затем S9–S11.
 - Предел контекста агента — 950 тыс. (владелец): наблюдатель `ctxwatch.py`, сворачивание и
   продолжатель — `prompts.md`; агенты не запускают `/code-review` и вложенных агентов. Оперативные
   заметки — `orchestrator-todo.md` (каталог материалов).
