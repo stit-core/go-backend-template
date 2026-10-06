@@ -297,4 +297,4 @@ prod-дефолты, понятный контракт ошибок API, тес�
 - Блоки S10 и S11 — в накопителе `.claude/plans/handoff.md`; прочее — `/infra-handoff`, когда ляжет.
 
 ## Где мы сейчас
-S1–S8, S10–S12 приняты (A, B, C). S13 часть 1: user готов; дальше verification, контракт событий, `healthcheck`. Затем S9, S13 auth, S14, S15.
+S1–S8, S10–S12 приняты (A, B, C). S13 часть 1: user и verification готовы; дальше контракт событий, `healthcheck`. Затем S9, S13 auth, S14, S15.

@@ -125,6 +125,10 @@ func TestUpsertEmailVerification_Redelivery(t *testing.T) {
 
 	require.NoError(t, repo.MarkEmailVerificationUsed(ctx, id))
 	require.ErrorIs(t, repo.MarkEmailVerificationUsed(ctx, id), verification.ErrTokenUsed)
+	used, err := repo.GetEmailVerification(ctx, "hash:ev-2")
+	require.NoError(t, err)
+	require.Equal(t, userID, used.UserID)
+	require.NotNil(t, used.UsedAt)
 	next, issued, err := repo.UpsertEmailVerification(ctx, userID, "hash:ev-4", tokenExpiry)
 	require.NoError(t, err)
 	require.True(t, issued, "a used verification no longer blocks a new one")

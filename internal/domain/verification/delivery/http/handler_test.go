@@ -27,18 +27,40 @@ func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 func TestPasswordResetRequest_NoContent(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().RequestPasswordReset(mock.Anything, mock.Anything).Return(nil)
+	uc.EXPECT().RequestPasswordReset(mock.Anything, "a@b.com").Return(nil).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/password-reset/request", strings.NewReader(`{"email":"a@b.com"}`))
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
+	require.Empty(t, resp.Body.String())
+}
+
+func TestPasswordResetConfirm_NoContent(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().ConfirmPasswordReset(mock.Anything, "tok", "newpass123").Return(nil).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/password-reset/confirm", strings.NewReader(`{"token":"tok","password":"newpass123"}`))
+	handlertest.AssertStatus(t, resp, http.StatusNoContent)
+	require.Empty(t, resp.Body.String())
+}
+
+func TestEmailVerify_NoContent(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().ConfirmEmail(mock.Anything, "tok").Return(nil).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/email-verify", strings.NewReader(`{"token":"tok"}`))
+	handlertest.AssertStatus(t, resp, http.StatusNoContent)
+	require.Empty(t, resp.Body.String())
 }
 
 func TestPasswordResetConfirm_InvalidToken(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().ConfirmPasswordReset(mock.Anything, mock.Anything, mock.Anything).
-		Return(verification.ErrInvalidResetToken)
+	uc.EXPECT().ConfirmPasswordReset(mock.Anything, "x", "newpass123").Return(verification.ErrInvalidResetToken).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/password-reset/confirm", strings.NewReader(`{"token":"x","password":"newpass123"}`))
@@ -78,7 +100,7 @@ func TestEmailVerify_TokenUsed(t *testing.T) {
 func TestEmailVerify_InvalidToken(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().ConfirmEmail(mock.Anything, mock.Anything).Return(verification.ErrInvalidVerificationToken)
+	uc.EXPECT().ConfirmEmail(mock.Anything, "x").Return(verification.ErrInvalidVerificationToken).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/email-verify", strings.NewReader(`{"token":"x"}`))
@@ -88,7 +110,7 @@ func TestEmailVerify_InvalidToken(t *testing.T) {
 func TestPasswordResetConfirm_WeakPassword(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().ConfirmPasswordReset(mock.Anything, "x", mock.Anything).Return(verification.ErrWeakPassword)
+	uc.EXPECT().ConfirmPasswordReset(mock.Anything, "x", strings.Repeat("p", policy.MinPasswordLen)).Return(verification.ErrWeakPassword).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/password-reset/confirm", strings.NewReader(resetConfirmBody(strings.Repeat("p", policy.MinPasswordLen))))

@@ -13,6 +13,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	usermocks "git.stit.tech/stit-core/go-backend-template/internal/domain/user/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 )
 
@@ -49,6 +50,18 @@ func TestUserAdapter_User(t *testing.T) {
 			require.Equal(t, want, byEmail)
 		})
 	}
+}
+
+// Запись пароля и отметка email остаются в транзакции verification: адаптер передаёт её ctx в user.Trusted.
+func TestUserAdapter_WritesInCallerTx(t *testing.T) {
+	t.Parallel()
+	a, repo := newAdapter(t)
+	repo.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash", 3).Return(&user.User{ID: "u1", Version: 4}, nil).Once()
+	repo.EXPECT().SetEmailVerified(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
+	ctx := pgkit.WithTestTx(context.Background())
+
+	require.NoError(t, a.UpdatePassword(ctx, "u1", "hash", 3))
+	require.NoError(t, a.MarkEmailVerified(ctx, "u1"))
 }
 
 // Каждая ошибка из user.TrustedErrors доходит до verification своим sentinel'ом, а не чужим: новая
