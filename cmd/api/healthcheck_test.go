@@ -23,13 +23,9 @@ func healthServer(t *testing.T, status int) string {
 	return srv.Listener.Addr().String()
 }
 
-// closedAddr — адрес, который никто не слушает.
-func closedAddr(t *testing.T) string {
-	t.Helper()
-	srv := httptest.NewServer(http.NotFoundHandler())
-	srv.Close()
-	return srv.Listener.Addr().String()
-}
+// unreachable — адрес, который никто не слушает: привилегированный порт не займёт чужой непривилегированный
+// слушатель, как освобождённый порт тестового сервера.
+const unreachable = "127.0.0.1:1"
 
 func port(t *testing.T, addr string) string {
 	t.Helper()
@@ -50,7 +46,7 @@ func TestCheckHealth(t *testing.T) {
 		{"address without host is loopback", ":" + port(t, live), ""},
 		{"unspecified host is loopback", "0.0.0.0:" + port(t, live), ""},
 		{"health is not ok", healthServer(t, http.StatusServiceUnavailable), "503"},
-		{"nobody listens", closedAddr(t), "connection refused"},
+		{"health is missing", healthServer(t, http.StatusNotFound), "404"},
 		{"address without port", "8080", "HTTP_ADDR"},
 	}
 	for _, tc := range tests {
@@ -66,6 +62,13 @@ func TestCheckHealth(t *testing.T) {
 	}
 }
 
+// Никто не слушает — отказ сети, каким бы он ни был: текст ошибки зависит от ОС и гонки за порт.
+func TestCheckHealth_NobodyListens(t *testing.T) {
+	t.Parallel()
+	var netErr *net.OpError
+	require.ErrorAs(t, checkHealth(context.Background(), unreachable), &netErr)
+}
+
 // Код выхода — по /health адреса из HTTP_ADDR, того же, что слушает сервис. Без t.Parallel: t.Setenv.
 func TestHealthcheck(t *testing.T) {
 	live := healthServer(t, http.StatusOK)
@@ -74,7 +77,7 @@ func TestHealthcheck(t *testing.T) {
 	t.Setenv("HTTP_ADDR", ":"+port(t, live))
 	require.Equal(t, 0, healthcheck(context.Background()), "the service answers on HTTP_ADDR")
 
-	t.Setenv("HTTP_ADDR", closedAddr(t))
+	t.Setenv("HTTP_ADDR", unreachable)
 	require.Equal(t, 1, healthcheck(context.Background()), "nobody answers on HTTP_ADDR")
 }
 
@@ -89,7 +92,7 @@ func TestMainHealthcheck(t *testing.T) {
 		code int
 	}{
 		{"service answers", ":" + port(t, live), 0},
-		{"nobody listens", closedAddr(t), 1},
+		{"nobody listens", unreachable, 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
