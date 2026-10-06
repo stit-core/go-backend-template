@@ -28,7 +28,8 @@ if [ "${1:-}" = "--status" ]; then
     v=$(version) l=$(latest)
     if [ -z "$v" ]; then
         echo "версии обвязки нет (.template/version) — skill /upgrade"
-    elif git rev-parse -q --verify "refs/tags/$v" >/dev/null && git merge-base --is-ancestor "$v" HEAD; then
+    elif git rev-parse -q --verify "refs/tags/$v" >/dev/null && git merge-base --is-ancestor "$v" HEAD &&
+        [ "$(git show "$v:go.mod" | module)" = "$(module <go.mod)" ]; then
         echo "$v +$(git rev-list --count "$v..HEAD") — канон шаблона"
     elif [ -n "$l" ] && newer "$v" "$l"; then
         echo "$v · в шаблоне новее: $l → skill /upgrade"

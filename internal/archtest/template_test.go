@@ -149,6 +149,15 @@ func TestTemplateUpdate(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(fork, "h", "removed.md"))
 	require.Contains(t, git(t, fork, "status", "--porcelain"), "UU h/conflict.md")
 	require.Contains(t, status(), "template/v1.1.0 · новее известных тегов шаблона нет")
+
+	// Канон — тег версии в истории и module path шаблона: клон со своим module path — форк, его дрейф виден.
+	require.Contains(t, bash(t, tmpl, script, "--status"), "template/v1.1.0 +0 — канон шаблона")
+	clone := t.TempDir()
+	git(t, clone, "clone", "-q", tmpl, ".")
+	git(t, clone, "checkout", "-q", "template/v1.0.0")
+	writeFiles(t, clone, map[string]string{"go.mod": "module example.com/clone\n"})
+	commitAll(t, clone)
+	require.Contains(t, bash(t, clone, script, "--status"), "template/v1.0.0 · в шаблоне новее: template/v1.1.0")
 }
 
 // TestTemplateUpdateFirstBase: первый перенос идёт от коммита шаблона, из которого создан форк (дерево

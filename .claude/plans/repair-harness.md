@@ -271,6 +271,8 @@ blocked-by: —
 - S6: golibinfra и обвязка — один скилл `/upgrade`: обвязка тега рассчитана на golibinfra его
   `go.mod`, порядок «сначала golibinfra» держит одна процедура. Забытый маркер конфликта в прозе,
   YAML или скрипте гейт иначе не видит — archtest `TestNoConflictMarkers`.
+- S6: «канон шаблона» в `make status` — тег версии в истории и module path тега (валидатор, N4):
+  форк через `git clone` со своим module path видит дрейф, до смены module path он неотличим от шаблона.
 - S6: бэклог `infra-touch-migrations` не взят — его предмет релизы образа форка, а не версия
   обвязки; тег `template/v1.0.0` (Q1) — на HEAD первого push `main` с `.template/`, файл его уже
   называет.
