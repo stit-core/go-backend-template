@@ -51,8 +51,9 @@ DDD-артефакты доменов — в **соседнем strategy-реп�
 Единый интерфейс `make <verb>` (`make help`; реализация — `scripts/tools/*`, напрямую не зови).
 Конциз-by-default: `FORMAT=detailed`/`VERBOSE=1` — полно, `PKG=./x/...` — подмножество; `make check`
 их не читает. `make check` = fmt-check + vet + lint + migrations-check + test-int (юнит +
-integration, нужен Docker) + build + gen-check + cover-check ≥75%. `make gen` — sqlc, mockery и
-`openapi.json` (контракт API из регистраций huma, без запуска сервиса).
+integration, нужен Docker) + build + gen-check + cover-check (покрытие профиля test-int ≥95%, функций
+без тестов нет). `make gen` — sqlc, mockery и `openapi.json` (контракт API из регистраций huma, без
+запуска сервиса).
 
 ## Карта: где что
 

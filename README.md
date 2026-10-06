@@ -73,7 +73,8 @@ Module path, README, фундамент и удаление reference-домен
   [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
 - **Тесты** — unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
 - **Gate** — `make check` = fmt-check + vet + lint + migrations-check + test-int (юнит +
-  integration, нужен Docker) + build + gen-check + cover-check ≥75% (pre-push хук).
+  integration, нужен Docker) + build + gen-check + cover-check (покрытие юнит + integration ≥95%,
+  функций без тестов нет) (pre-push хук).
 
 ## Команды
 

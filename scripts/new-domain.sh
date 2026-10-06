@@ -452,10 +452,22 @@ func TestGet(t *testing.T) {
 
 func TestGet_Forbidden(t *testing.T) {
 	t.Parallel()
-	_, err := newUC(t, mocks.NewMockRepository(t)).Get(identitytest.Client("u1"), "id-1")
+	tests := []struct {
+		name string
+		ctx  context.Context
+	}{
+		{"client", identitytest.Client("u1")},
+		{"no identity", identitytest.Anon()},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := newUC(t, mocks.NewMockRepository(t)).Get(tc.ctx, "id-1")
 
-	var forbidden *policy.ForbiddenError
-	require.ErrorAs(t, err, &forbidden)
+			var forbidden *policy.ForbiddenError
+			require.ErrorAs(t, err, &forbidden)
+		})
+	}
 }
 EOF
 
@@ -825,6 +837,14 @@ func TestInsertAndGetByID(t *testing.T) {
 		_, err := repo.GetByID(ctx, id)
 		require.ErrorIs(t, err, $NAME.ErrNotFound, "id %q", id)
 	}
+
+	// Сбой БД — ошибка с причиной, а не ErrNotFound: недоступная база не выглядит как «нет такого».
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	require.ErrorIs(t, repo.Insert(canceled, &$NAME.$TITLE{Name: "second"}), context.Canceled)
+	_, err = repo.GetByID(canceled, e.ID)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, $NAME.ErrNotFound)
 }
 EOF
 

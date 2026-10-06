@@ -40,7 +40,7 @@
 ## Перед PR
 
 ```bash
-make check    # канонический gate: fmt-check + vet + lint + test + build + gen-check + migrations-check + cover-check
+make check    # канонический gate: fmt-check + vet + lint + migrations-check + test-int + build + gen-check + cover-check
 ```
 
 Зелёный `make check` — gate пройден (его же гоняет git-хук `pre-push`).

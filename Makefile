@@ -1,4 +1,4 @@
-.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench test-cover cover-check tidy
+.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench cover-check tidy
 
 # Release-вычисления (image-path host/org, lockstep tag) self-contained в
 # scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
@@ -24,7 +24,7 @@ DETAIL = $(if $(or $(VERBOSE),$(filter detailed,$(FORMAT))),--format=detailed)
 test: ## Юнит-тесты без Docker (PKG=./x/... FORMAT=detailed)
 	@bash scripts/tools/test.sh $(DETAIL) $(PKG)
 
-test-int: ## Юнит + integration (testcontainers, нужен Docker) — шаг make check (PKG= FORMAT=)
+test-int: ## Юнит + integration (testcontainers, нужен Docker) — шаг make check; по всему дереву — и профиль покрытия (PKG= FORMAT=)
 	@bash scripts/tools/test.sh --integration $(DETAIL) $(PKG)
 
 lint: ## golangci-lint concise (PKG=./x/... FORMAT=detailed)
@@ -74,14 +74,14 @@ check: ## Канонический gate: fmt-check+vet+lint+migrations+test-int+
 	@$(GATE) lint
 	@echo "→ migrations-check"
 	@bash scripts/tools/migrations-check.sh
-	@echo "→ make test-int (юнит + integration)"
+	@echo "→ make test-int (юнит + integration, профиль покрытия)"
 	@$(GATE) test-int
 	@echo "→ make build"
 	@$(GATE) build
 	@echo "→ make gen-check"
 	@$(GATE) gen-check
-	@echo "→ make cover-check"
-	@$(GATE) cover-check
+	@echo "→ make cover-check (профиль test-int)"
+	@bash scripts/tools/cover.sh coverage.out $(COVER_FLOOR)
 	@echo "✓ check clean"
 
 ##@ GEN
@@ -179,22 +179,14 @@ test-fuzz: ## Короткие fuzz-прогоны (10s на цель; go test -
 test-bench: ## Бенчмарки
 	go test -run=^$$ -bench=. -benchmem ./internal/domain/...
 
-test-cover: ## Coverage по доменным пакетам (полный отчёт, без gate)
-	go test -coverprofile=coverage.out ./internal/domain/... ./internal/platform/...
-	go tool cover -func=coverage.out | tail -1
-
-# Gate меряет юнит-тестируемое: domain-core + delivery + platform-примитивы.
-# Вне scope: сгенерированное (mocks, sqlc db), integration-канон (infra/postgres),
-# fx-обвязка (module/, infra/outbox, platform/events) — их держат integration/e2e/ValidateApp.
-# Порог — константа гейта: ни окружение, ни командная строка его не меняют.
-override COVER_FLOOR := 75
-cover-check: ## Coverage-gate: юнит-профиль ≥ $(COVER_FLOOR)% (шаг make check)
-	@go test -coverprofile=coverage.out ./internal/domain/... ./internal/platform/... >/dev/null
-	@grep -v -e '/mocks/' -e '/infra/' -e '/module/' -e '/platform/events/' coverage.out > coverage.gate.out
-	@total=$$(go tool cover -func=coverage.gate.out | tail -1 | awk '{gsub("%","",$$NF); print $$NF}'); \
-	LC_ALL=C awk -v t="$$total" -v f="$(COVER_FLOOR)" 'BEGIN { \
-		if (t+0 < f+0) { printf "FAIL: coverage %.1f%% < floor %s%% (scope: domain+delivery+platform без generated/infra/fx-wiring)\n", t, f; exit 1 } \
-		printf "OK: coverage %.1f%% >= %s%%\n", t, f }'
+# Покрытие — профиль одного прогона юнит + integration (make test-int) по internal/ и pkg/ без
+# сгенерированного и internal/testkit: доля statement'ов ≥ порога и ни одной функции без исполненного
+# statement'а (scripts/tools/cover.sh); make check проверяет профиль своего test-int, не гоняя тесты
+# второй раз. Порог — константа гейта: ни окружение, ни командная строка его не меняют.
+override COVER_FLOOR := 95
+cover-check: ## Покрытие юнит + integration ≥ $(COVER_FLOOR)%, функций без тестов нет: make test-int и его профиль (FORMAT=detailed — блоки)
+	@$(GATE) test-int
+	@bash scripts/tools/cover.sh $(DETAIL) coverage.out $(COVER_FLOOR)
 
 tidy: ## go mod tidy
 	go mod tidy

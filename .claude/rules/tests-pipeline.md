@@ -49,7 +49,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `module/adapters.go` | unit (white-box) поверх `Trusted` поставщика: маппинг полей, ctx вызывающего до `Trusted` (запись и чтение под блокировкой — в его транзакции) и каждая ошибка `TrustedErrors` → sentinel потребителя |
 | `infra/<kit>/` | unit на настоящем ките или фейке из `testkit` |
 | `trusted.go` | unit через моки портов; методы отдают только ошибки `TrustedErrors` (`return` в `trusted.go` — archtest) |
-| `infra/postgres/repository.go` | integration (build-tag) на каждый метод: запись видна чтением, условия SQL (версия, удалённые, регистр, фильтр, страница) |
+| `infra/postgres/repository.go` | integration (build-tag) на каждый метод: запись видна чтением, условия SQL (версия, удалённые, регистр, фильтр, страница); битый id — sentinel «нет такого» (id не от клиента — ошибка), сбой БД (отменённый ctx) — ошибка с причиной, не sentinel домена |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp`, корню графа `context.Context` не доступен; `fx.As` нет — archtest |
 | HTTP API | `cmd/api/api_test.go`: API проходит проверку старта httpkit (`Security` или `httpkit.Public`, уникальный метод+путь), операция без пометки — ошибка старта, под `Security` — коды 401 сессии; `openapi.json` совпадает с кодом |
 | подкоманды `main` | `cmd/api/healthcheck_test.go`: тестовый бинарь, перезапущенный как `api healthcheck` (`TestMain` зовёт `main`), — код выхода по `/health` на `HTTP_ADDR`, сервис не стартует |
@@ -94,9 +94,13 @@ RED→GREEN: падающий тест, воспроизводящий баг �
 
 ## Coverage
 
-`make cover-check` — юнит-профиль по `internal/{domain,platform}/...` без `/mocks/`, `infra/`,
-`module/` и `platform/events`; **floor 75%**, ниже — красный. Входит в `make check` (pre-push).
-Полный отчёт — `make test-cover`.
+`make cover-check` (шаг `make check`, pre-push) — профиль одного прогона `make test-int` (юнит +
+integration, `-coverpkg`) по `internal/` и `pkg/`: сгенерированное (заголовок `Code generated … DO NOT
+EDIT.` — sqlc, моки) и тестовая обвязка `internal/testkit/` вне scope, fx-провайдеры засчитывает
+boot-тест `cmd/api`. Красный — если доля statement'ов всех блоков ниже **floor 95%** или у функции тесты
+не исполнили ни одного statement'а (новая функция без тестов не проходит при любом проценте); отказ
+называет файлы и функции, блоки — `make cover-check FORMAT=detailed`. Покрытие — осмысленными тестами:
+силу держат мутации, а не процент.
 
 ## Anti-patterns
 
