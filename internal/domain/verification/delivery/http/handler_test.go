@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -33,6 +34,17 @@ func TestPasswordResetRequest_NoContent(t *testing.T) {
 	resp := api.Post("/api/auth/password-reset/request", strings.NewReader(`{"email":"a@b.com"}`))
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
 	require.Empty(t, resp.Body.String())
+}
+
+// Сбой поиска учётной записи от адреса не зависит и уходит ответом 500, а не тихим 204.
+func TestPasswordResetRequest_Failure(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().RequestPasswordReset(mock.Anything, "a@b.com").Return(errors.New("lookup user: db down")).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/password-reset/request", strings.NewReader(`{"email":"a@b.com"}`))
+	handlertest.AssertAPIError(t, resp, http.StatusInternalServerError, "INTERNAL")
 }
 
 func TestPasswordResetConfirm_NoContent(t *testing.T) {

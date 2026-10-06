@@ -16,6 +16,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification/mocks"
 	"git.stit.tech/stit-core/go-backend-template/pkg/tokens"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
@@ -47,6 +48,7 @@ type ucOpts struct {
 	emailSet *mocks.MockEmailVerificationSetter
 	mailer   *mocks.MockMailer
 	limiter  *mocks.MockResetLimiter
+	hasher   authnkit.Hasher
 	metrics  *verification.Metrics
 }
 
@@ -65,6 +67,8 @@ func withMailer(m *mocks.MockMailer) ucOption { return func(o *ucOpts) { o.maile
 
 func withLimiter(l *mocks.MockResetLimiter) ucOption { return func(o *ucOpts) { o.limiter = l } }
 
+func withHasher(h authnkit.Hasher) ucOption { return func(o *ucOpts) { o.hasher = h } }
+
 func withMetrics(m *verification.Metrics) ucOption { return func(o *ucOpts) { o.metrics = m } }
 
 // newUC — usecase на строгих моках портов без ожиданий: вызов, которого кейс не ждёт, — провал; порт с
@@ -78,6 +82,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		emailSet: mocks.NewMockEmailVerificationSetter(t),
 		mailer:   mocks.NewMockMailer(t),
 		limiter:  mocks.NewMockResetLimiter(t),
+		hasher:   authntest.DeterministicHasher{},
 	}
 	for _, fn := range opts {
 		fn(o)
@@ -92,7 +97,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Users:         o.users,
 		PasswordSet:   o.pwSet,
 		EmailVerifier: o.emailSet,
-		Hasher:        authntest.DeterministicHasher{},
+		Hasher:        o.hasher,
 		Tx:            tx,
 		Events:        bus,
 		Mailer:        o.mailer,
@@ -104,6 +109,16 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	})
 	return ucFixture{uc: uc, bus: bus, audit: aud, tx: tx, log: log}
 }
+
+var (
+	errHashing = errors.New("argon2: out of memory")
+	errDown    = errors.New("db down")
+)
+
+// brokenHasher — хэшер, у которого сбоит хэширование: у authntest такого фейка нет.
+type brokenHasher struct{ authntest.DeterministicHasher }
+
+func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
 
 // audited — запись аудита: пользователь u1 сделал action над своей учётной записью.
 func audited(action string) *auditkit.Entry {
@@ -212,7 +227,6 @@ func TestIssueEmailVerification_UserGone(t *testing.T) {
 // Сбой до отметки «письмо ушло» — ошибка обработчика: брокер повторит доставку, а не потеряет письмо.
 func TestIssueEmailVerification_Failure(t *testing.T) {
 	t.Parallel()
-	down := errors.New("db down")
 	tests := []struct {
 		name   string
 		opts   func(t *testing.T) []ucOption
@@ -220,18 +234,18 @@ func TestIssueEmailVerification_Failure(t *testing.T) {
 	}{
 		{"user lookup", func(t *testing.T) []ucOption {
 			users := mocks.NewMockUserReader(t)
-			users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, down).Once()
+			users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, errDown).Once()
 			return []ucOption{withUsers(users)}
 		}, 0},
 		{"token not stored", func(t *testing.T) []ucOption {
 			repo := mocks.NewMockRepository(t)
-			repo.EXPECT().UpsertEmailVerification(mock.Anything, "u1", mock.Anything, mock.Anything).Return("", false, down).Once()
+			repo.EXPECT().UpsertEmailVerification(mock.Anything, "u1", mock.Anything, mock.Anything).Return("", false, errDown).Once()
 			return []ucOption{withUsers(userByID(t, 1)), withRepo(repo)}
 		}, 0},
 		{"sent mark not stored", func(t *testing.T) []ucOption {
 			repo := mocks.NewMockRepository(t)
 			repo.EXPECT().UpsertEmailVerification(mock.Anything, "u1", mock.Anything, mock.Anything).Return("vid", true, nil).Once()
-			repo.EXPECT().MarkEmailVerificationSent(mock.Anything, "vid").Return(down).Once()
+			repo.EXPECT().MarkEmailVerificationSent(mock.Anything, "vid").Return(errDown).Once()
 			mailer := mocks.NewMockMailer(t)
 			mailer.EXPECT().SendEmailVerification(mock.Anything, "a@b.com", mock.Anything).Return(nil).Once()
 			return []ucOption{withUsers(userByID(t, 1)), withRepo(repo), withMailer(mailer)}
@@ -242,7 +256,7 @@ func TestIssueEmailVerification_Failure(t *testing.T) {
 			t.Parallel()
 			f := newUC(t, tc.opts(t)...)
 
-			require.ErrorIs(t, f.uc.IssueEmailVerification(context.Background(), "u1"), down)
+			require.ErrorIs(t, f.uc.IssueEmailVerification(context.Background(), "u1"), errDown)
 			require.Equal(t, tc.events, f.bus.Count())
 		})
 	}
@@ -314,7 +328,7 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, errors.New("guard store down")))}
 		}},
 		{name: "reset not stored", result: "error", failed: "db down", opts: func(t *testing.T) []ucOption {
-			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", true, nil)), withRepo(issued(t, errors.New("db down")))}
+			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", true, nil)), withRepo(issued(t, errDown))}
 		}},
 		{name: "mail not delivered", result: "error", events: 1, failed: "smtp unavailable", opts: func(t *testing.T) []ucOption {
 			return []ucOption{
@@ -348,12 +362,11 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 // в метрику.
 func TestRequestPasswordReset_LookupFailure(t *testing.T) {
 	t.Parallel()
-	down := errors.New("db down")
 	reader := sdkmetric.NewManualReader()
 	m := verification.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
-	f := newUC(t, withUsers(userByEmail(t, nil, down)), withMetrics(m))
+	f := newUC(t, withUsers(userByEmail(t, nil, errDown)), withMetrics(m))
 
-	require.ErrorIs(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"), down)
+	require.ErrorIs(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"), errDown)
 	require.Zero(t, f.bus.Count())
 	require.Equal(t, map[string]int64{"error": 1}, counted(t, reader, "biz_verification_password_reset_requested_total"))
 }
@@ -392,15 +405,15 @@ func pendingReset(expiresAt time.Time) *verification.PasswordResetToken {
 	return &verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: expiresAt}
 }
 
-// Погашение, отзыв прочих ссылок сброса и запись пароля — одной транзакцией и в этом порядке. Ссылка
-// годна до своего срока включительно: здесь — в последний его миг.
+// Погашение, отзыв прочих ссылок сброса и запись пароля — одной транзакцией, погашение — первым: параллельный
+// confirm ждёт его блокировку. Ссылка годна до своего срока включительно: здесь — в последний его миг.
 func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
 	repo := resetToken(t, pendingReset(fixedNow), nil)
 	claim := repo.EXPECT().MarkPasswordResetUsed(mock.MatchedBy(pgkit.InTx), "rid").Return(nil).Once()
-	revoke := repo.EXPECT().RevokePasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(claim)
+	repo.EXPECT().RevokePasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(claim)
 	pwSet := mocks.NewMockPasswordSetter(t)
-	pwSet.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(revoke)
+	pwSet.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(claim)
 	f := newUC(t, withRepo(repo), withUsers(userByID(t, 1)), withPwSet(pwSet))
 
 	require.NoError(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"))
@@ -430,11 +443,19 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 		{"expired", "newpassword123", func(t *testing.T) []ucOption {
 			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(-time.Nanosecond)), nil))}
 		}, verification.ErrInvalidResetToken},
+		{"new password not hashed", "newpassword123", func(t *testing.T) []ucOption {
+			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withHasher(brokenHasher{})}
+		}, errHashing},
 		{"user deleted after the request", "newpassword123", func(t *testing.T) []ucOption {
 			users := mocks.NewMockUserReader(t)
 			users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, verification.ErrUserNotFound).Once()
 			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withUsers(users)}
 		}, verification.ErrInvalidResetToken},
+		{"user lookup fails", "newpassword123", func(t *testing.T) []ucOption {
+			users := mocks.NewMockUserReader(t)
+			users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, errDown).Once()
+			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withUsers(users)}
+		}, errDown},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -451,7 +472,6 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 // Сбой в транзакции откатывает её целиком: погашение не переживает несменённый пароль, аудита нет.
 func TestConfirmPasswordReset_RolledBack(t *testing.T) {
 	t.Parallel()
-	down := errors.New("db down")
 	tests := []struct {
 		name   string
 		expect func(repo *mocks.MockRepository, pwSet *mocks.MockPasswordSetter)
@@ -462,8 +482,8 @@ func TestConfirmPasswordReset_RolledBack(t *testing.T) {
 		}, verification.ErrTokenUsed},
 		{"other links not revoked", func(repo *mocks.MockRepository, _ *mocks.MockPasswordSetter) {
 			repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(nil).Once()
-			repo.EXPECT().RevokePasswordResets(mock.Anything, "u1").Return(down).Once()
-		}, down},
+			repo.EXPECT().RevokePasswordResets(mock.Anything, "u1").Return(errDown).Once()
+		}, errDown},
 		{"password changed concurrently", func(repo *mocks.MockRepository, pwSet *mocks.MockPasswordSetter) {
 			repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(nil).Once()
 			repo.EXPECT().RevokePasswordResets(mock.Anything, "u1").Return(nil).Once()
