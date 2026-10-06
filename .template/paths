@@ -1,0 +1,20 @@
+# Пути, которыми владеет шаблон: make template-update переносит в форк их изменения между тегами
+# шаблона (skill /upgrade). Строка — путь (файл или каталог) или :(exclude)<путь>; остальное в
+# репо — код и доки форка.
+.template
+CLAUDE.md
+.claude
+:(exclude).claude/plans
+:(exclude).claude/skills/stack-deep-dive/state
+Makefile
+scripts
+.golangci.yml
+.gitignore
+docs/README.md
+docs/contributing.md
+docs/reference
+docs/stack/README.md
+docs/stack/_templates
+internal/archtest
+internal/testkit/allowlist
+test/stack

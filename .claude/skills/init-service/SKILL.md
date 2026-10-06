@@ -96,8 +96,8 @@ description: Оркестратор онбординга форка go-backend-t
 ### 6. Финал
 
 `make check` зелёный → проект больше не помнит про шаблон. Сообщи юзеру: онбординг закрыт,
-дальше обычный флоу через `/smartdev`; релиз образов — `/release`. `docs/getting-started.md`
-(META) можно удалить.
+дальше обычный флоу через `/smartdev`; релиз образов — `/release`; обновления golibinfra и обвязки
+шаблона (`.template/`) — `/upgrade`. `docs/getting-started.md` (META) можно удалить.
 
 ## Что init-service НЕ делает
 

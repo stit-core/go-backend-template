@@ -61,6 +61,7 @@ integration, нужен Docker) + build + gen-check + cover-check ≥75%. `make 
 | Архитектура, слои, ports/adapters, события, non-goals | `docs/reference/architecture.md` + rule `domain-architecture` |
 | Логирование (структурные логи в stdout, `logkit.Logger`) | CLAUDE.md § Стиль кода + артефакт `docs/stack/observability.md` (форма — `docs/stack/_templates/observability.md`) |
 | Release (образы, handoff, откат) | `docs/reference/release.md` + skill `/release` |
+| Обновления: golibinfra, обвязка шаблона (`.template/`) | skill `/upgrade` + `docs/contributing.md § Версия обвязки` |
 | Экосистема, контракт с `<org>/infra` | `docs/reference/ecosystem.md` |
 | Тесты, моки, TDD, e2e | rule `tests-pipeline` + `test/README.md` |
 | Миграции, sqlc | rule `sqlc-and-migrations` + skill `/scaffold` (вариант migration) |

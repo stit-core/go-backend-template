@@ -18,7 +18,7 @@ branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || fail "не git-репо
 [ -z "$(git status --porcelain)" ] || fail "working tree dirty — закоммить или stash"
 
 tag_arg="${1:-}"
-detected=$(git describe --tags --exact-match HEAD 2>/dev/null || true)
+detected=$(git describe --tags --exact-match --exclude 'template/*' HEAD 2>/dev/null || true)
 [ -n "$detected" ] || fail "на HEAD нет тега — поставь annotated tag: git tag -a vX.Y.Z -m '<changelog>'"
 
 if [ -n "$tag_arg" ] && [ "$tag_arg" != "$detected" ]; then

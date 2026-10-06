@@ -1,0 +1,198 @@
+package archtest
+
+import (
+	"bytes"
+	"maps"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+// TestTemplatePaths: строку .template/paths без файлов перенос обвязки молча пропустит; тег обвязки
+// на HEAD совпадает с .template/version — форк с коммита тега начнёт перенос с этой версии.
+func TestTemplatePaths(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	files := trackedFiles(t, root)
+	paths, err := os.ReadFile(filepath.Join(root, ".template", "paths"))
+	require.NoError(t, err)
+	for line := range strings.Lines(string(paths)) {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		p := strings.TrimPrefix(line, ":(exclude)")
+		if !slices.ContainsFunc(files, func(f string) bool { return under(f, p) }) {
+			t.Errorf(".template/paths: %q is not a tracked file or directory", line)
+		}
+	}
+
+	version, err := os.ReadFile(filepath.Join(root, ".template", "version"))
+	require.NoError(t, err)
+	v := strings.TrimSpace(string(version))
+	require.Regexp(t, `^template/v\d+\.\d+\.\d+$`, v, ".template/version")
+	cmd := exec.CommandContext(t.Context(), "git", "tag", "--points-at", "HEAD", "--list", "template/v*")
+	cmd.Dir = root
+	tags, err := cmd.Output()
+	require.NoError(t, err, "git tag --points-at HEAD")
+	for _, tag := range strings.Fields(string(tags)) {
+		require.Equal(t, tag, v, "HEAD is tagged %s, .template/version says %s", tag, v)
+	}
+}
+
+var conflictMarker = regexp.MustCompile(`(?m)^(<{7}|>{7})( |$)`)
+
+// TestNoConflictMarkers: маркер конфликта переноса обвязки в прозе или скрипте не ломает сборку —
+// без проверки он прошёл бы гейт.
+func TestNoConflictMarkers(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	for _, f := range trackedFiles(t, root) {
+		data, err := os.ReadFile(filepath.Join(root, f))
+		require.NoError(t, err)
+		if loc := conflictMarker.FindIndex(data); loc != nil {
+			t.Errorf("%s:%d: merge conflict marker", f, bytes.Count(data[:loc[0]], []byte("\n"))+1)
+		}
+	}
+}
+
+// TestTemplateUpdate: make template-update переносит в форк с другим module path и своей историей
+// правки путей шаблона от версии форка до тега и называет то, что форку решать самому.
+func TestTemplateUpdate(t *testing.T) {
+	t.Parallel()
+	script := filepath.Join(repoRoot(t), "scripts", "tools", "template-update.sh")
+	require.FileExists(t, script) // скрипт читает bash: без этого кеш go test не видит его правок
+	tmpl, fork := t.TempDir(), t.TempDir()
+
+	v1 := map[string]string{
+		".template/paths":   "# пути шаблона\n.template\nh\n:(exclude)h/own\n",
+		".template/version": "template/v1.0.0\n",
+		"go.mod":            "module example.com/tmpl\n",
+		"h/rule.md":         "r1\nr2\nr3\n",
+		"h/check.go":        "package h\n\nimport (\n\t\"example.com/tmpl/x\"\n)\n\nvar A = x.A\n",
+		"h/merged.md":       "m1\nm2\nm3\nm4\nm5\nm6\nm7\nm8\n",
+		"h/conflict.md":     "c1\nc2\nc3\n",
+		"h/dropped.md":      "d1\n",
+		"h/removed.md":      "x1\n",
+		"h/edited.md":       "e1\n",
+		"h/own/local.md":    "o1\n",
+	}
+	writeFiles(t, tmpl, v1)
+	git(t, tmpl, "init", "-q")
+	git(t, tmpl, "add", "-A")
+	git(t, tmpl, "commit", "-qm", "v1")
+	git(t, tmpl, "tag", "-a", "template/v1.0.0", "-m", "template/v1.0.0\n\nОбвязка: первая версия")
+	writeFiles(t, tmpl, map[string]string{
+		".template/version": "template/v1.1.0\n",
+		"h/rule.md":         "r1\nr2 v2\nr3\n",
+		"h/check.go":        "package h\n\nimport (\n\t\"example.com/tmpl/x\"\n\t\"example.com/tmpl/y\"\n)\n\nvar A = x.A + y.B\n",
+		"h/merged.md":       "m1\nm2 v2\nm3\nm4\nm5\nm6\nm7\nm8\n",
+		"h/conflict.md":     "c1\nc2 template\nc3\n",
+		"h/dropped.md":      "d1 v2\n",
+		"h/own/local.md":    "o1 v2\n",
+		"h/new.md":          "n1\n",
+	})
+	git(t, tmpl, "rm", "-q", "h/removed.md", "h/edited.md")
+	git(t, tmpl, "add", "-A")
+	git(t, tmpl, "commit", "-qm", "v2")
+	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0\n\nBreaking:\n- h/rule.md → правка форка")
+
+	fork1 := maps.Clone(v1)
+	maps.Copy(fork1, map[string]string{
+		"go.mod":        "module example.com/fork\n",
+		"h/check.go":    "package h\n\nimport (\n\t\"example.com/fork/x\"\n)\n\nvar A = x.A\n",
+		"h/merged.md":   "m1\nm2\nm3\nm4\nm5\nm6\nm7 fork\nm8\n",
+		"h/conflict.md": "c1\nc2 fork\nc3\n",
+		"h/edited.md":   "e1 fork\n",
+	})
+	delete(fork1, "h/dropped.md")
+	writeFiles(t, fork, fork1)
+	git(t, fork, "init", "-q")
+	git(t, fork, "add", "-A")
+	git(t, fork, "commit", "-qm", "fork")
+	git(t, fork, "remote", "add", "--no-tags", "template", tmpl)
+
+	status := func() string { return bash(t, fork, script, "--status") }
+	require.Contains(t, status(), "template/v1.0.0 · тегов шаблона в репо нет")
+	preview := bash(t, fork, script)
+	require.Contains(t, preview, "- h/rule.md → правка форка")
+	require.NotContains(t, preview, "первая версия")
+	require.Contains(t, status(), "template/v1.0.0 · в шаблоне новее: template/v1.1.0")
+
+	out, err := runIn(t, fork, "bash", script, "template/v1.1.0")
+	require.Error(t, err, out)
+	require.Contains(t, out, "конфликты — разреши и git add:\n  h/conflict.md\n")
+	require.Contains(t, out, "нет в форке — не тронуты:\n  h/dropped.md\n")
+	require.Contains(t, out, "шаблон удалил, форк менял — реши сам:\n  h/edited.md\n")
+	require.Equal(t, map[string]string{
+		".template/version": "template/v1.1.0\n",
+		"h/rule.md":         "r1\nr2 v2\nr3\n",
+		"h/check.go":        "package h\n\nimport (\n\t\"example.com/fork/x\"\n\t\"example.com/fork/y\"\n)\n\nvar A = x.A + y.B\n",
+		"h/merged.md":       "m1\nm2 v2\nm3\nm4\nm5\nm6\nm7 fork\nm8\n",
+		"h/edited.md":       "e1 fork\n",
+		"h/own/local.md":    "o1\n",
+		"h/new.md":          "n1\n",
+	}, readFiles(t, fork, ".template/version", "h/rule.md", "h/check.go", "h/merged.md", "h/edited.md", "h/own/local.md", "h/new.md"))
+	require.NoFileExists(t, filepath.Join(fork, "h", "dropped.md"))
+	require.NoFileExists(t, filepath.Join(fork, "h", "removed.md"))
+	require.Contains(t, git(t, fork, "status", "--porcelain"), "UU h/conflict.md")
+	require.Contains(t, status(), "template/v1.1.0 · новее тегов шаблона нет")
+}
+
+// runIn — команда в dir без GIT_* окружения вызывающего (хук git задаёт GIT_DIR своего репо) и без
+// глобального конфига git: подпись коммитов и хуки пользователя тест не видят.
+func runIn(t *testing.T, dir, name string, args ...string) (string, error) {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), name, args...)
+	cmd.Dir = dir
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "GIT_") {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
+	cmd.Env = append(cmd.Env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_AUTHOR_NAME=archtest", "GIT_AUTHOR_EMAIL=archtest@example.com",
+		"GIT_COMMITTER_NAME=archtest", "GIT_COMMITTER_EMAIL=archtest@example.com")
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := runIn(t, dir, "git", args...)
+	require.NoError(t, err, "git %v: %s", args, out)
+	return out
+}
+
+func bash(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := runIn(t, dir, "bash", args...)
+	require.NoError(t, err, "bash %v: %s", args, out)
+	return out
+}
+
+func writeFiles(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+}
+
+func readFiles(t *testing.T, dir string, names ...string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	for _, name := range names {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		require.NoError(t, err)
+		files[name] = string(data)
+	}
+	return files
+}

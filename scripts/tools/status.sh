@@ -144,6 +144,11 @@ echo "== Plan =="
 bash scripts/tools/validate-plan.sh --summary
 echo
 
+# === Template === (версия обвязки и новее известный тег шаблона; теги приносит make template-update)
+echo "== Template =="
+bash scripts/tools/template-update.sh --status
+echo
+
 # === Domains ===
 echo "== Domains =="
 if [ -d internal/domain ]; then

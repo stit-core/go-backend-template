@@ -1,4 +1,4 @@
-.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench test-cover cover-check tidy
+.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench test-cover cover-check tidy
 
 # Release-вычисления (image-path host/org, lockstep tag) self-contained в
 # scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
@@ -7,7 +7,7 @@
 # Один словарь для агента: `make <verb>`. Concise-by-default; FORMAT=detailed
 # или VERBOSE=1 → полный вывод (test/lint/build — см. A3). Passthrough-аргументы
 # идут через A= (status/plan-check) / Q=,P= (search) / NAME= (new-domain) /
-# VERSION= (release).
+# VERSION= (release) / TO=,FROM= (template-update).
 
 help: ## сгруппированный список команд
 	@awk 'BEGIN {FS = ":.*## "} \
@@ -148,6 +148,9 @@ setup: ## Поставить pinned dev-tools и подключить git-хук
 
 doctor: ## Fail-fast preflight: auth/env/drift
 	@bash scripts/tools/doctor.sh $(A)
+
+template-update: ## Обвязка шаблона в форк: новые теги шаблона; TO=template/vX.Y.Z — перенос (FROM= — база)
+	@bash scripts/tools/template-update.sh "$(TO)" "$(FROM)"
 
 ##@ META
 plan-check: ## Формат планов .claude/plans/ (A=--summary — сводка активных планов)

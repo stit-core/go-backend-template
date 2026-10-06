@@ -38,7 +38,7 @@ prompt → /smartdev (cockpit: make status, читает активные пла
 | git-хуки | `scripts/git-hooks/` (подключает `make setup` через `core.hooksPath`): commit-msg (Conventional Commits), pre-commit (fmt-check+vet+lint+validate-stack/plan), pre-push (`make check` на чистом дереве, только HEAD) | **детерминированно** |
 | permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-verify`, force-push, reset --hard, правка `*.pem`/`*.key`/generated); чтение `.env`/`.env.local` — только для инструмента Read: `cat` и другие команды Bash deny не видит, их держит правило (CLAUDE.md, rule `env-local`) |
 | Хук Claude Code | `.claude/hooks/guard-bash.sh` (PreToolUse, Bash) | **детерминированно** (блок `git commit -n`, `--no-veri…`, `SKIP_PREPUSH`, `core.hooksPath`; команда проверяется построчно) |
-| Самопроверка обвязки | `internal/archtest/harness_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели и пути репо в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`) |
+| Самопроверка обвязки | `internal/archtest/harness_test.go`, `internal/archtest/template_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели и пути репо в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`; пути `.template/paths` есть, тег обвязки на HEAD = `.template/version`, `make template-update` переносит обвязку в форк, маркеров конфликта в репо нет) |
 | Самозащита гейта | `Makefile` (`make check`), pre-push | **детерминированно** (`make check` не запускается с `-i`/`-n`, подменой своих переменных и `GOFLAGS`; pre-push не передаёт гейту флаги make) |
 | Path-scoped rules | `.claude/rules/*.md` | контекстная подсказка |
 | CLAUDE.md | repo root | always-on advisory |
@@ -46,6 +46,43 @@ prompt → /smartdev (cockpit: make status, читает активные пла
 Хук Claude Code в шаблоне один — `guard-bash` против обходов git-хуков и гейта; остальные
 критичные инварианты держат git-хуки + `permissions.deny`; soft-guidance — CLAUDE.md и rules.
 Push в `main` разрешён (прямой или через PR); gate — `pre-push → make check`.
+
+## Версия обвязки
+
+Форк получает обвязку шаблона git-способом: `make template-update`, процедура — skill `/upgrade`.
+
+- `.template/paths` — пути шаблона, строка — путь или `:(exclude)<путь>`: обвязка агента,
+  инструменты и гейт, самопроверки, доки шаблона. Остальное — код форка: правки шаблона там тег
+  называет в разделе `Платформа`.
+- `.template/version` — версия обвязки, имя тега `template/vX.Y.Z`: коммит выпуска несёт этот тег,
+  следующие коммиты — ту же версию до нового выпуска. Форк получает её при создании,
+  `make template-update` сдвигает её вместе с обвязкой.
+- Тег обвязки — аннотированный `template/vX.Y.Z` на коммите `main`, где `.template/version` — имя
+  этого тега (иначе archtest `TestTemplatePaths` не пустит push тега). Релизы образа — теги
+  `vX.Y.Z`; теги обвязки `make release` не видит.
+- Версия: minor — новое и breaking для форка, каждое breaking — со шагом в аннотации; patch —
+  исправления без новых требований к форку.
+- Выпуск — с OK владельца (тег и push — CLAUDE.md § Границы): новая `.template/version` коммитом
+  `meta(template): template/vX.Y.Z` → `git tag -a template/vX.Y.Z -F <аннотация>` →
+  `git push origin main template/vX.Y.Z` (pre-push гонит `make check` на HEAD с тегом).
+
+Аннотация — как у golibinfra, по разделам; пустой раздел не пишется:
+
+```
+template/vX.Y.Z
+
+Breaking:
+- <что изменилось> → <что форк делает руками>
+
+Гейт:
+- <новая или более строгая проверка> → <как привести к ней код форка>
+
+Обвязка:
+- <правила, скиллы, доки, скрипты — приходят переносом>
+
+Платформа:
+- <правка вне путей шаблона: internal/platform, cmd, pkg, конфиги> → <перенести руками, если нужна>
+```
 
 ## Course correction
 

@@ -74,7 +74,8 @@ make --no-print-directory check
 make --no-print-directory e2e-smoke
 
 # --- annotated tag, если на HEAD ещё нет ---
-existing=$(git describe --tags --exact-match HEAD 2>/dev/null || true)
+# Теги обвязки template/vX.Y.Z — не версии образа (docs/contributing.md).
+existing=$(git describe --tags --exact-match --exclude 'template/*' HEAD 2>/dev/null || true)
 if [ -z "$existing" ]; then
     git tag -a "$VERSION" -m "release $VERSION"
     echo "release: создан annotated tag $VERSION (push: git push origin $VERSION)"

@@ -54,4 +54,5 @@ Image уже в registry — пересборка не нужна. Полнос�
 Версия и commit зашиваются в бинарь через `-ldflags` (`-X main.version=$TAG -X
 main.commit=$GIT_SHA`). На старте бинарь логирует `"starting" component=<api|migrate>
 version=vX.Y.Z commit=<short-sha>` — на проде сразу виден крутящийся коммит без map'а
-tag↔SHA. Схема версий и бинари — артефакт `docs/stack/service.md`.
+tag↔SHA. Схема версий и бинари — артефакт `docs/stack/service.md`. Теги `template/vX.Y.Z` — версии
+обвязки шаблона (`docs/contributing.md § Версия обвязки`), не релизы образа: `make release` их не видит.
