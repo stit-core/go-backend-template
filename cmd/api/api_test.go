@@ -1,11 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
+	"net/http"
 	"os"
-	"regexp"
-	"slices"
 	"strings"
 	"testing"
 
@@ -21,9 +21,8 @@ import (
 
 // buildAPI собирает HTTP API так же, как сервис — сервер httpkit с /health и /ready, схема
 // Cookie, registerHTTP, — но без БД, брокера и listen: хендлеры пустые.
-func buildAPI(t *testing.T, opts ...fx.Option) huma.API {
+func buildAPI(t *testing.T, opts ...fx.Option) *fx.App {
 	t.Helper()
-	var api huma.API
 	app := fx.New(
 		fx.NopLogger,
 		fx.RecoverFromPanics(),
@@ -32,10 +31,9 @@ func buildAPI(t *testing.T, opts ...fx.Option) huma.API {
 		authgate.SecurityScheme,
 		fx.Invoke(func(api huma.API) { registerHTTP(api, httpHandlers{}) }),
 		fx.Options(opts...),
-		fx.Populate(&api),
 	)
 	require.NoError(t, app.Err())
-	return api
+	return app
 }
 
 var update = flag.Bool("update", false, "rewrite openapi.json from the registered operations (make gen)")
@@ -47,7 +45,9 @@ const openAPIFile = "../../openapi.json"
 // при конфиге по умолчанию; без флага тест ловит расхождение файла с кодом.
 func TestOpenAPISpec(t *testing.T) {
 	unsetHTTPEnv(t)
-	spec, err := json.MarshalIndent(buildAPI(t).OpenAPI(), "", "  ")
+	var api huma.API
+	buildAPI(t, fx.Populate(&api))
+	spec, err := json.MarshalIndent(api.OpenAPI(), "", "  ")
 	require.NoError(t, err)
 	spec = append(spec, '\n')
 	if *update {
@@ -71,49 +71,44 @@ func unsetHTTPEnv(t *testing.T) {
 	}
 }
 
-// publicOperations — операции без Security: пробы kit'а, вход и восстановление доступа.
-var publicOperations = []string{
-	"get-health", "get-ready",
-	"registerUser", "loginUser", "refreshToken", "logoutUser",
-	"requestPasswordReset", "confirmPasswordReset", "confirmEmail",
-}
-
-var pathParam = regexp.MustCompile(`\{[^}]*\}`)
-
-// TestHTTPOperations: операция без Security публична в рантайме, поэтому она либо
-// под Security, либо в publicOperations. Метод и путь уникальны: huma и chi молча
-// перезаписывают маршрут, а дубль OperationID huma роняет паникой — она здесь и видна.
+// TestHTTPOperations: API сервиса проходит проверку старта httpkit (Server.CheckRoutes) — у каждой
+// операции Security или пометка httpkit.Public, METHOD+path не повторяются, — а операция под Security
+// объявляет коды 401 сессии: её регистрирует authgate.Secured.
 func TestHTTPOperations(t *testing.T) {
 	t.Parallel()
-	var ops []*huma.Operation
+	var (
+		ops []*huma.Operation
+		srv *httpkit.Server
+	)
 	record := func(c *huma.Config) {
 		c.OnAddOperation = append(c.OnAddOperation, func(_ *huma.OpenAPI, op *huma.Operation) { ops = append(ops, op) })
 	}
-	buildAPI(t, fx.Supply(httpkit.HumaConfigs{record}))
-	require.NotEmpty(t, ops)
+	buildAPI(t, fx.Supply(httpkit.HumaConfigs{record}), fx.Populate(&srv))
+	require.NoError(t, srv.CheckRoutes())
 
-	routes := map[string]string{}
-	var public []string
+	secured := 0
 	for _, op := range ops {
-		route := op.Method + " " + pathParam.ReplaceAllString(op.Path, "{}")
-		if prev, dup := routes[route]; dup {
-			t.Errorf("operations %s and %s share the route %s", prev, op.OperationID, route)
+		if len(op.Security) == 0 {
+			continue
 		}
-		routes[route] = op.OperationID
-		switch {
-		case len(op.Security) > 0:
-			if resp := op.Responses["401"]; resp == nil || !strings.Contains(resp.Description, "AUTH_ACCESS_EXPIRED") {
-				t.Errorf("operation %s is under Security without the session 401 codes in OpenAPI: register it through authgate.Secured", op.OperationID)
-			}
-		case slices.Contains(publicOperations, op.OperationID):
-			public = append(public, op.OperationID)
-		default:
-			t.Errorf("operation %s has no Security and is not in publicOperations", op.OperationID)
+		secured++
+		if resp := op.Responses["401"]; resp == nil || !strings.Contains(resp.Description, "AUTH_ACCESS_EXPIRED") {
+			t.Errorf("operation %s is under Security without the session 401 codes in OpenAPI: register it through authgate.Secured", op.OperationID)
 		}
 	}
-	for _, id := range publicOperations {
-		if !slices.Contains(public, id) {
-			t.Errorf("publicOperations lists %s, but no public operation has this ID", id)
-		}
-	}
+	require.NotZero(t, secured, "the API has operations under Security")
+}
+
+// Операция без Security и без пометки httpkit.Public — ошибка старта сервиса: открытой операцию делает
+// только явная пометка.
+func TestHTTPOperations_UnmarkedFailsStart(t *testing.T) {
+	t.Parallel()
+	app := buildAPI(t, fx.Invoke(func(api huma.API) {
+		huma.Register(api, huma.Operation{OperationID: "getUnmarked", Method: http.MethodGet, Path: "/api/unmarked"},
+			func(context.Context, *struct{}) (*struct{}, error) { return nil, nil })
+	}))
+
+	err := app.Start(t.Context())
+	require.ErrorIs(t, err, httpkit.ErrRoutes)
+	require.ErrorContains(t, err, "getUnmarked has no Security and is not httpkit.Public")
 }

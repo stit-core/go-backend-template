@@ -67,7 +67,8 @@ paths:
 
 ## Kit-owned таблицы
 
-`audit_log` / `bruteforce_attempts` / `outbox_<d>` — схему держит golibinfra-kit
-(`auditpg.Migrations`, `bruteforcepg.Migrations`, `outboxpg.TableMigrations(table)`), не
+`audit_log` / `bruteforce_attempts` / `outbox_<d>` / `authn_sessions` — схему держит golibinfra-kit
+(`auditpg.Migrations`, `bruteforcepg.Migrations`, `outboxpg.TableMigrations(table)`,
+`sessionpg.Migrations`), не
 `migrations/` этого репо: не дублируй `CREATE TABLE`. Источники перечислены в `cmd/migrate`,
 у каждого своя таблица версий `schema_migrations_<source>` (приложение — `schema_migrations_app`).

@@ -9,6 +9,7 @@ import (
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 )
@@ -22,7 +23,7 @@ type App struct {
 // Env — окружение сервиса (APP_ENV): вне Dev старт не пускает небезопасную конфигурацию (Guard).
 type Env string
 
-// Dev — локальная разработка: cookie без Secure, лог-mailer, docs и логи без маскирования.
+// Dev — локальная разработка: cookie без Secure, лог-mailer, docs, логи без маскирования и токены без aud.
 const Dev Env = "dev"
 
 // ErrUnsafe — настройка, допустимая только в dev, вне dev.
@@ -48,8 +49,8 @@ func Load() (*App, error) {
 }
 
 // Guard не даёт стартовать вне dev с настройками, которые в проде отдают сессию по HTTP, секреты —
-// в лог, а устройство API — анонимам.
-func Guard(app *App, redact logkit.RedactConfig, httpCfg httpkit.Config) error {
+// в лог, устройство API — анонимам, а access-токены — любому сервису на том же JWT_SECRET.
+func Guard(app *App, redact logkit.RedactConfig, httpCfg httpkit.Config, jwt authnkit.JWTConfig) error {
 	if app.Env == Dev {
 		return nil
 	}
@@ -62,6 +63,9 @@ func Guard(app *App, redact logkit.RedactConfig, httpCfg httpkit.Config) error {
 	}
 	if httpCfg.DocsEnabled {
 		unsafe = append(unsafe, "HTTP_DOCS_ENABLED=true")
+	}
+	if len(jwt.Audience) == 0 {
+		unsafe = append(unsafe, "JWT_AUDIENCE empty")
 	}
 	if len(unsafe) > 0 {
 		return fmt.Errorf("%w: APP_ENV=%q with %s", ErrUnsafe, app.Env, strings.Join(unsafe, ", "))

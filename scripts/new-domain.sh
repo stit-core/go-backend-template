@@ -646,7 +646,7 @@ func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
 		${FLAT}http.Register(api, ${FLAT}http.NewHandler(uc))
-	})
+	}, handlertest.WithAuth(identitytest.Extract))
 }
 
 var created = &$NAME.$TITLE{ID: "id-1", Name: "first", CreatedAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}

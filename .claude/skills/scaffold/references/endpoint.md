@@ -100,7 +100,8 @@ huma.Register(api, newMethodErrors.Declare(authgate.Secured(huma.Operation{
 ```
 
 `authgate.Secured` — операция под cookie: `Security` и коды 401 сессии в OpenAPI. Публичная
-операция — без него и в `publicOperations` (`cmd/api/api_test.go`).
+операция — `httpkit.Public(huma.Operation{…})`: операция без `Security` и без пометки — ошибка старта
+сервиса (httpkit).
 
 ### 7. Ошибки: правило домена и таблица операции
 
@@ -161,5 +162,5 @@ make build
 - ❌ Бизнес-логика в handler-методе. Handler только: парсит вход, вызывает usecase, мапит ошибки.
 - ❌ Прямое использование `pgx`/`sqlc` из handler. Только через usecase.
 - ❌ Свой формат ошибок мимо `httpkit.ErrorMap` — нарушит единый контракт ошибок (problem+json с `code`).
-- ❌ Забыть `Security:` для авторизованного endpoint — он публичен в рантайме; `TestHTTPOperations` (`cmd/api`) не пропустит операцию без `Security` вне `publicOperations`.
+- ❌ Открыть авторизованный endpoint пометкой `httpkit.Public` вместо `authgate.Secured` — он публичен в рантайме; операцию без того и другого не пропустит старт сервиса (`TestHTTPOperations` в `cmd/api`).
 - ❌ `_, _ = ctx, in` в handler без вызова usecase — компилятор пропустит, но это dead-handler.

@@ -4,6 +4,7 @@ package sources
 
 import (
 	auditpg "git.stit.tech/stit-core/golibinfra/auditkit/pgstore"
+	sessionpg "git.stit.tech/stit-core/golibinfra/authnkit/session/pgstore"
 	bruteforcepg "git.stit.tech/stit-core/golibinfra/bruteforcekit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 
@@ -15,6 +16,7 @@ import (
 // версий schema_migrations_<source>. Накатываются раньше каталога приложения: его миграции
 // могут опираться на их таблицы.
 var Kits = []pgkit.Source{
+	sessionpg.Migrations,
 	bruteforcepg.Migrations,
 	auditpg.Migrations,
 	useroutbox.Migrations,

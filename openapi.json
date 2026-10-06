@@ -4,15 +4,6 @@
       "APIError": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/APIError.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "code": {
             "description": "Stable machine-readable error code. Operation codes are listed in the response description; generic ones include VALIDATION_FAILED, BAD_REQUEST, UNAUTHORIZED, NOT_FOUND, METHOD_NOT_ALLOWED, BODY_TOO_LARGE, RATE_LIMITED, INTERNAL, UNAVAILABLE",
             "type": "string"
@@ -55,15 +46,6 @@
       "AuthChangePasswordInputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/AuthChangePasswordInputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "new_password": {
             "minLength": 8,
             "type": "string"
@@ -85,15 +67,6 @@
       "AuthLoginInputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/AuthLoginInputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "email": {
             "type": "string"
           },
@@ -110,15 +83,6 @@
       "AuthLoginOutputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/AuthLoginOutputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "data": {
             "$ref": "#/components/schemas/AuthUserView"
           }
@@ -251,15 +215,6 @@
       "HealthBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/HealthBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "status": {
             "type": "string"
           }
@@ -288,15 +243,6 @@
       "ReadyBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/ReadyBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "probes": {
             "items": {
               "$ref": "#/components/schemas/ProbeStatus"
@@ -318,15 +264,6 @@
       "UserGetOutputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/UserGetOutputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "data": {
             "$ref": "#/components/schemas/UserView"
           }
@@ -339,15 +276,6 @@
       "UserListOutputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/UserListOutputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "data": {
             "items": {
               "$ref": "#/components/schemas/UserView"
@@ -381,15 +309,6 @@
       "UserMeOutputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/UserMeOutputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "data": {
             "$ref": "#/components/schemas/UserView"
           }
@@ -402,15 +321,6 @@
       "UserRegisterInputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/UserRegisterInputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "email": {
             "format": "email",
             "type": "string"
@@ -434,15 +344,6 @@
       "UserRegisterOutputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/UserRegisterOutputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "data": {
             "$ref": "#/components/schemas/UserView"
           }
@@ -455,15 +356,6 @@
       "UserUpdateInputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/UserUpdateInputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "name": {
             "minLength": 1,
             "type": "string"
@@ -488,15 +380,6 @@
       "UserUpdateOutputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/UserUpdateOutputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "data": {
             "$ref": "#/components/schemas/UserView"
           }
@@ -548,15 +431,6 @@
       "VerificationEmailVerifyInputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/VerificationEmailVerifyInputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "token": {
             "type": "string"
           }
@@ -569,15 +443,6 @@
       "VerificationPasswordResetConfirmInputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/VerificationPasswordResetConfirmInputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "password": {
             "minLength": 8,
             "type": "string"
@@ -595,15 +460,6 @@
       "VerificationPasswordResetRequestInputBody": {
         "additionalProperties": false,
         "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/VerificationPasswordResetRequestInputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
           "email": {
             "type": "string"
           }
@@ -1010,6 +866,7 @@
     },
     "/api/auth/refresh": {
       "post": {
+        "description": "Refresh-токен одноразовый: обновление гасит его и выдаёт следующий. Повтор погашенного токена — в том числе параллельный запрос с тем же cookie — закрывает сессию целиком (AUTH_REFRESH_REUSED, вход заново), поэтому клиент обновляет сессию последовательно.",
         "operationId": "refreshToken",
         "parameters": [
           {
@@ -1601,7 +1458,6 @@
             "description": "Error"
           }
         },
-        "security": [],
         "summary": "Health check"
       }
     },
@@ -1630,7 +1486,6 @@
             "description": "Error"
           }
         },
-        "security": [],
         "summary": "Readiness check"
       }
     }

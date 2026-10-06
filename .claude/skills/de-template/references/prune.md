@@ -10,10 +10,10 @@ domain) — иначе теряешь живой образец. Удаляй в
 1. **Доменные пакеты** — `internal/domain/{auth,user,verification}/` целиком (`git rm -r`).
 2. **`.mockery.yml`** — блоки `packages` удаляемых доменов (`internal/domain/{user,auth,verification}`
    и их `delivery/http`, `delivery/nats`); иначе `make gen` падает на несуществующих пакетах.
-3. **sqlc.yaml** — три блока `engine` с `queries/out` на `internal/domain/{user,verification,auth}/...`.
+3. **sqlc.yaml** — блоки `engine` с `queries/out` на `internal/domain/{user,verification}/...`.
 4. **Миграции** — `migrations/*` этих доменов: `0001_users.*` (таблицы `users`,
-   `password_resets`, `email_verifications` — user+verification), `0002_auth.*`
-   (`refresh_sessions`), `0003_email_verifications_idempotency.*` и
+   `password_resets`, `email_verifications` — user+verification), `0002_auth.*` и
+   `0005_drop_refresh_sessions.*` (`refresh_sessions`), `0003_email_verifications_idempotency.*` и
    `0004_email_verifications_sent_at.*`. Удаляй и `.up.sql`, и
    `.down.sql`. Свои миграции перенумеруй подряд с `0001` — `migrations-check` (шаг `make check`)
    требует непрерывной нумерации; прод-БД у форка на этом шаге ещё нет. Если свои миграции
@@ -21,7 +21,9 @@ domain) — иначе теряешь живой образец. Удаляй в
    `set_updated_at()`), перенеси их в первую свою миграцию.
 5. **fx-wiring** — `cmd/api/main.go`: убери `usermod`/`authmod`/`verifmod` из `domainModules`
    (импорты + строки в `fx.Options`); `cmd/api/http.go` — их хендлеры из `httpHandlers` и
-   `registerHTTP`; `cmd/api/api_test.go` — их операции из `publicOperations`.
+   `registerHTTP`. Сессии refresh кита (`sessionpg.Module`, `session.NewConfig` в `cmd/api/main.go`,
+   `sessionpg.Migrations` в `cmd/migrate/sources`) остаются, только если свои домены берут
+   `session.Store`: кит без потребителя в граф не подключается.
 6. **e2e** — их сценарии/фикстуры в `test/` (auth-flow, user CRUD, verification, admin-fixtures).
 7. **`cmd/seed-admin/`** — bootstrap админа завязан на `user`/`auth`; удали каталог + его
    сборку в `test/stack/` (`up.sh`, `Dockerfile.local`, сервис в `compose.yml`) + e2e-использование.

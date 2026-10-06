@@ -1,16 +1,18 @@
 # Handoff
 
 === INFRA HANDOFF · передай инфра-админу ===
-WHAT   env APP_ENV — required, без default (dev | staging | prod …); вне dev обязательны
-       HTTP_DOCS_ENABLED=false (golibinfra v1.2.0 включает docs по умолчанию), COOKIE_SECURE
-       не false (по умолчанию true), LOG_REDACT_DISABLED не true
-WHY    fix-reference-code S10 — безопасные дефолты: prod-гард конфигурации (config.Guard)
-ACTION compose `environment:` каждого окружения: APP_ENV, HTTP_DOCS_ENABLED=false; проверить, что
-       COOKIE_SECURE=false и LOG_REDACT_DISABLED=true нигде вне dev не выставлены
+WHAT   env APP_ENV — required, без default (dev | staging | prod …); вне dev обязательны JWT_AUDIENCE
+       (aud access-токенов — имя сервиса, через запятую — несколько), COOKIE_SECURE не false (по
+       умолчанию true), LOG_REDACT_DISABLED и HTTP_DOCS_ENABLED не true (по умолчанию false);
+       optional JWT_ISSUER (iss) и JWT_PREVIOUS_SECRET (прежний ключ на время ротации JWT_SECRET)
+WHY    fix-reference-code S10, S9 — безопасные дефолты: prod-гард конфигурации (config.Guard)
+ACTION compose `environment:` каждого окружения: APP_ENV, вне dev — JWT_AUDIENCE (у каждого сервиса на
+       общем JWT_SECRET свой); проверить, что COOKIE_SECURE=false, LOG_REDACT_DISABLED=true и
+       HTTP_DOCS_ENABLED=true нигде вне dev не выставлены
 WHO    проект (compose env)
-DECIDE —
-RISK   без APP_ENV или с небезопасной настройкой вне dev сервис не стартует; вне dev он не стартует
-       и с dev-заглушкой писем (verification/infra/logmail) — нужен настоящий Mailer форка
+DECIDE значение JWT_AUDIENCE
+RISK   без APP_ENV, вне dev без JWT_AUDIENCE или с небезопасной настройкой сервис не стартует; вне dev он
+       не стартует и с dev-заглушкой писем (verification/infra/logmail) — нужен настоящий Mailer форка
 ===
 
 === INFRA HANDOFF · передай инфра-админу ===
@@ -56,4 +58,49 @@ ACTION compose `environment:` каждого окружения: OTEL_SDK_DISABL
 WHO    проект (compose env)
 DECIDE когда в infra появится коллектор — включить экспорт
 RISK   без переменной (и без OTEL_SERVICE_NAME) сервис не стартует
+===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   сессии refresh — authnkit/session (golibinfra v1.3.0): таблицы authn_sessions и
+       authn_session_tokens (источник authnkit_session в cmd/migrate, таблица версий
+       schema_migrations_authnkit_session); миграция 0005 удаляет refresh_sessions; JWT_REFRESH_TTL не
+       читается — optional SESSION_IDLE_TTL (default 168h), SESSION_ABSOLUTE_TTL (720h),
+       SESSION_CLEANUP_INTERVAL (1h)
+WHY    fix-reference-code S9 — управляемые сессии: ротация, повтор токена закрывает сессию, абсолютный срок
+ACTION выкатка обычным порядком — образ migrate (`migrate up`) до api; JWT_REFRESH_TTL убрать из compose,
+       сроки при нужде — SESSION_*; после выкатки все пользователи входят заново один раз
+WHO    проект (compose env) + клиенты API
+DECIDE сроки сессий: дефолты 168h и 720h ок?
+RISK   api без миграций кита не стартует; прежние refresh-cookie недействительны — refresh отвечает 401,
+       вход заново; клиент, который обновляет сессию параллельными запросами, её теряет (повтор токена
+       закрывает сессию) — обновлять последовательно (описание refreshToken в openapi.json)
+===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   env golibinfra v1.3.0 для деплоя за прокси: HTTP_RATE_LIMIT_TRUST_PROXY не читается —
+       HTTP_TRUST_PROXY_HOPS (default 0; за Traefik — 1), X-Real-IP не читается; HTTP_SHUTDOWN_TIMEOUT
+       default 10s, новый HTTP_SHUTDOWN_DRAIN_DELAY (default 0s, за балансировщиком — 5s): всю паузу
+       /ready отвечает 503; их сумма — не больше 20s, NATS_DRAIN_TIMEOUT — не больше 10s
+WHY    fix-reference-code S9 — IP клиента из цепочки httpkit (лимитер, антибрутфорс, аудит), остановка
+       без потерянных запросов
+ACTION compose api за Traefik: HTTP_TRUST_PROXY_HOPS=1, HTTP_SHUTDOWN_DRAIN_DELAY=5s, убрать
+       HTTP_RATE_LIMIT_TRUST_PROXY; stop_grace_period не меньше 35s
+WHO    проект (compose env)
+DECIDE число прокси перед сервисом, которые дописывают X-Forwarded-For (Traefik — 1, CDN → nginx — 2)
+RISK   без HTTP_TRUST_PROXY_HOPS за прокси у всех клиентов один IP: общий bucket лимитера (429 всем) и
+       блокировки входа по чужим ошибкам; без паузы балансировщик шлёт запросы в гаснущий инстанс;
+       остановка из env сверх бюджета (30s) — сервис не стартует
+===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   поведение golibinfra v1.3.0 без новых обязательных env: OUTBOX_MAX_ATTEMPTS default 25 (0 —
+       ошибка старта, -1 — без предела), событие после 25 неудачных публикаций — dead (ERROR
+       `outboxkit: event dead`); ретраи консьюмеров JetStream — NAK от NATS_JS_NAK_BACKOFF вдвое до
+       NATS_JS_NAK_MAX_BACKOFF (default 1m), NATS_JS_MAX_DELIVER default 21: ≈15 минут, затем DLQ
+WHY    fix-reference-code S9 — bump golibinfra v1.3.0
+ACTION убрать OUTBOX_MAX_ATTEMPTS=0 из compose, если задан; алерты на ERROR `outboxkit: event dead` и
+       `jetstream message dead`
+WHO    проект (compose env, алерты)
+DECIDE предел попыток outbox: 25 ок?
+RISK   с OUTBOX_MAX_ATTEMPTS=0 сервис не стартует; без алерта выпавшее из доставки событие не заметят
 ===

@@ -30,7 +30,7 @@ func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
 		userhttp.Register(api, userhttp.NewHandler(uc))
-	})
+	}, handlertest.WithAuth(identitytest.Extract))
 }
 
 // callerIs — ctx usecase несёт identity вызывающего: по ней решает policy.
@@ -158,20 +158,20 @@ func TestGetByID_OK(t *testing.T) {
 func TestGetByID_Forbidden(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().GetByID(mock.Anything, "u1").Return(nil, &policy.ForbiddenError{Reason: "not self"}).Once()
+	uc.EXPECT().GetByID(callerIs("u2"), "u1").Return(nil, &policy.ForbiddenError{Reason: "not self"}).Once()
 	api := setup(t, uc)
 
-	resp := api.Get("/api/users/u1")
+	resp := api.GetCtx(identitytest.Client("u2"), "/api/users/u1")
 	handlertest.AssertAPIError(t, resp, http.StatusForbidden, "FORBIDDEN")
 }
 
 func TestGetByID_NotFound(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().GetByID(mock.Anything, "u1").Return(nil, user.ErrNotFound).Once()
+	uc.EXPECT().GetByID(callerIs("a1"), "u1").Return(nil, user.ErrNotFound).Once()
 	api := setup(t, uc)
 
-	resp := api.Get("/api/users/u1")
+	resp := api.GetCtx(identitytest.Admin("a1"), "/api/users/u1")
 	handlertest.AssertAPIError(t, resp, http.StatusNotFound, "USER_NOT_FOUND")
 }
 
@@ -190,21 +190,23 @@ func TestDelete_Errors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
+		caller string
+		ctx    context.Context
 		err    error
 		status int
 		code   string
 	}{
-		{"not self, not admin", &policy.ForbiddenError{Reason: "not admin"}, http.StatusForbidden, "FORBIDDEN"},
-		{"unknown or already deleted", user.ErrNotFound, http.StatusNotFound, "USER_NOT_FOUND"},
+		{"not self, not admin", "u2", identitytest.Client("u2"), &policy.ForbiddenError{Reason: "not admin"}, http.StatusForbidden, "FORBIDDEN"},
+		{"unknown or already deleted", "a1", identitytest.Admin("a1"), user.ErrNotFound, http.StatusNotFound, "USER_NOT_FOUND"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			uc := mocks.NewMockUsecase(t)
-			uc.EXPECT().Delete(mock.Anything, "u1").Return(tc.err).Once()
+			uc.EXPECT().Delete(callerIs(tc.caller), "u1").Return(tc.err).Once()
 			api := setup(t, uc)
 
-			resp := api.Delete("/api/users/u1")
+			resp := api.DeleteCtx(tc.ctx, "/api/users/u1")
 			handlertest.AssertAPIError(t, resp, tc.status, tc.code)
 		})
 	}
@@ -221,14 +223,13 @@ func TestMe_OK(t *testing.T) {
 	require.Equal(t, aliceView, data[view](t, resp))
 }
 
-func TestMe_ForbiddenWithoutIdentity(t *testing.T) {
+// Операция под Security: запрос без сессии отвечает 401 до usecase — строгий мок без ожиданий.
+func TestMe_Unauthenticated(t *testing.T) {
 	t.Parallel()
-	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Me(mock.Anything).Return(nil, &policy.ForbiddenError{Reason: "no identity"}).Once()
-	api := setup(t, uc)
+	api := setup(t, mocks.NewMockUsecase(t))
 
 	resp := api.Get("/api/users/me")
-	handlertest.AssertAPIError(t, resp, http.StatusForbidden, "FORBIDDEN")
+	handlertest.AssertAPIError(t, resp, http.StatusUnauthorized, "UNAUTHORIZED")
 }
 
 func TestList_OK(t *testing.T) {
@@ -308,10 +309,10 @@ func TestUpdate_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			uc := mocks.NewMockUsecase(t)
-			uc.EXPECT().Update(mock.Anything, "u1", mock.Anything).Return(nil, tc.err).Once()
+			uc.EXPECT().Update(callerIs("a1"), "u1", mock.Anything).Return(nil, tc.err).Once()
 			api := setup(t, uc)
 
-			resp := api.Patch("/api/users/u1", strings.NewReader(`{"status":"active","version":1}`))
+			resp := api.PatchCtx(identitytest.Admin("a1"), "/api/users/u1", strings.NewReader(`{"status":"active","version":1}`))
 			handlertest.AssertAPIError(t, resp, tc.status, tc.code)
 		})
 	}
@@ -333,7 +334,7 @@ func TestUpdate_InvalidBody(t *testing.T) {
 			t.Parallel()
 			api := setup(t, mocks.NewMockUsecase(t))
 
-			resp := api.Patch("/api/users/u1", strings.NewReader(tc.body))
+			resp := api.PatchCtx(identitytest.Admin("a1"), "/api/users/u1", strings.NewReader(tc.body))
 			handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 			errs := handlertest.DecodeAPIError(t, resp).Errors
 			require.Len(t, errs, 1)

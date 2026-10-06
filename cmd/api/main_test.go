@@ -8,9 +8,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/golibinfra/httpkit"
+	"git.stit.tech/stit-core/golibinfra/natskit"
 
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/allowlist"
@@ -89,4 +93,31 @@ func requiredEnv(typ reflect.Type) []string {
 		}
 	}
 	return keys
+}
+
+// Остановка из env укладывается в бюджет fx.StopTimeout: HTTP — в ⅔, дренаж NATS — в треть.
+func TestCheckStopBudget(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name              string
+		drain, http, nats time.Duration
+		wantErr           string // "" — помещается
+	}{
+		{name: "kit defaults", http: 10 * time.Second, nats: 10 * time.Second},
+		{name: "behind a load balancer", drain: 5 * time.Second, http: 10 * time.Second, nats: 10 * time.Second},
+		{name: "http over two thirds", drain: 15 * time.Second, http: 10 * time.Second, nats: 10 * time.Second, wantErr: "HTTP_SHUTDOWN_DRAIN_DELAY + HTTP_SHUTDOWN_TIMEOUT = 25s"},
+		{name: "nats drain over a third", http: 10 * time.Second, nats: 11 * time.Second, wantErr: "NATS_DRAIN_TIMEOUT = 11s"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := checkStopBudget(httpkit.Config{ShutdownDrainDelay: tc.drain, ShutdownTimeout: tc.http}, natskit.Config{DrainTimeout: tc.nats})
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errStopBudget)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
 }

@@ -12,6 +12,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -153,8 +154,9 @@ func TestBoot(t *testing.T) {
 		"PG_DSN": pg.DSN, "NATS_URL": nats.URL,
 		"NATS_JETSTREAM_ENABLED": "true", "NATS_JS_STREAM_NAMES": "user,verification",
 		"JWT_SECRET": strings.Repeat("s", 32), "HTTP_ADDR": "127.0.0.1:0", "LOG_SILENT": "true",
-		// dev: лог-mailer и cookie без Secure — клиент теста ходит по http.
-		"APP_ENV": "dev", "COOKIE_SECURE": "false", "OTEL_SDK_DISABLED": "true",
+		// dev: лог-mailer и cookie без Secure — клиент теста ходит по http; спецификацию сервис отдаёт
+		// только с HTTP_DOCS_ENABLED.
+		"APP_ENV": "dev", "COOKIE_SECURE": "false", "OTEL_SDK_DISABLED": "true", "HTTP_DOCS_ENABLED": "true",
 	} {
 		t.Setenv(k, v)
 	}
@@ -334,6 +336,8 @@ func TestBoot(t *testing.T) {
 	require.Equal(t, httpServe, logs.start[len(logs.start)-1], "HTTP must start last (OnStart: %v)", logs.start)
 	require.Equal(t, httpServe, logs.stop[0], "HTTP must stop first (OnStop: %v)", logs.stop)
 }
+
+var pathParam = regexp.MustCompile(`\{[^}]*\}`)
 
 // storedLeaks — секреты, которые встречаются в строках таблицы table (строка целиком, как текст).
 func storedLeaks(t *testing.T, db *pgxpool.Pool, table string, secrets []string) []string {

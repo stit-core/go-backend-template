@@ -6,17 +6,11 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class Wire(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class Body(Wire):
-    """Тело ответа: huma добавляет ссылку на схему тела — `$schema`."""
-
-    schema_: str | None = Field(default=None, alias="$schema")
 
 
 class RegisterRequest(Wire):
@@ -59,21 +53,21 @@ class AuthUserView(Wire):
     role: str
 
 
-class UserRegisterResponse(Body):
+class UserRegisterResponse(Wire):
     data: UserView
 
 
-class UserMeResponse(Body):
+class UserMeResponse(Wire):
     data: UserView
 
 
-class UserGetResponse(Body):
+class UserGetResponse(Wire):
     data: UserView
 
 
-class UserUpdateResponse(Body):
+class UserUpdateResponse(Wire):
     data: UserView
 
 
-class AuthLoginResponse(Body):
+class AuthLoginResponse(Wire):
     data: AuthUserView

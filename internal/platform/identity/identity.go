@@ -30,19 +30,12 @@ func From(ctx context.Context) (Identity, bool) {
 	return id, ok
 }
 
-type ipCtxKey struct{}
-
-func WithIP(ctx context.Context, ip string) context.Context {
-	return context.WithValue(ctx, ipCtxKey{}, ip)
-}
-
+// IPFrom и RequestIDFrom держат домены вне транспорта: значения запроса в ctx кладёт цепочка httpkit,
+// а usecase читает их только здесь (rule domain-architecture).
 func IPFrom(ctx context.Context) string {
-	ip, _ := ctx.Value(ipCtxKey{}).(string)
-	return ip
+	return httpkit.ClientIPFrom(ctx)
 }
 
-// RequestIDFrom keeps domains transport-agnostic: usecases read request meta
-// through platform/identity only, never httpkit directly (rule domain-architecture).
 func RequestIDFrom(ctx context.Context) string {
 	return httpkit.RequestIDFrom(ctx)
 }

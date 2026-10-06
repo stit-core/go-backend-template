@@ -2,7 +2,6 @@ package authgate
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/danielgtaylor/huma/v2"
 	"go.uber.org/fx"
@@ -15,14 +14,9 @@ import (
 const SecuritySchemeName = "Cookie"
 
 // userIDAttr — экстрактор поля user_id для logkit.RegisterAttr.
-//
-//nolint:forbidigo // slog.Value — тип контракта logkit.Attr, не прямое логирование
-func userIDAttr(ctx context.Context) (slog.Value, bool) {
+func userIDAttr(ctx context.Context) (any, bool) {
 	id, ok := identity.From(ctx)
-	if !ok {
-		return slog.Value{}, false
-	}
-	return slog.StringValue(id.UserID), true
+	return id.UserID, ok
 }
 
 func registerIdentityLogAttr() {

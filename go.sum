@@ -1,7 +1,7 @@
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
-git.stit.tech/stit-core/golibinfra v1.2.0 h1:iLMQsAiKo+B3Gh4bMLX9WgmS3yvbUlU2AYiZ+HRIMt8=
-git.stit.tech/stit-core/golibinfra v1.2.0/go.mod h1:b1fuO9i9OHiYuxw8HfQg5UCaJMIRaYzm0U2p3V26JiA=
+git.stit.tech/stit-core/golibinfra v1.3.0 h1:fA2GPfAPzjhrKp30ee854gGT4iQy6XA2ocpcQJgMdvM=
+git.stit.tech/stit-core/golibinfra v1.3.0/go.mod h1:b1fuO9i9OHiYuxw8HfQg5UCaJMIRaYzm0U2p3V26JiA=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 h1:He8afgbRMd7mFxO99hRNu+6tazq8nFF9lIwo9JFroBk=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6/go.mod h1:8o94RPi1/7XTJvwPpRSzSUedZrtlirdB3r9Z20bi2f8=
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEKWjV8V+WSxDXJ4NFATAsZjh8iIbsQIg=

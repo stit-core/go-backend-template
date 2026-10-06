@@ -83,12 +83,13 @@ var (
 )
 
 // rootLibs — внешние пакеты, которые видит корень домена: порты и значения китов (аудит,
-// хеширование, метрики, часы, лог, outbox, pgkit.Transactor), чистые киты без I/O (ID,
+// хеширование, сессии, метрики, часы, лог, outbox, pgkit.Transactor), чистые киты без I/O (ID,
 // указатели), DI. Это перечень разрешённого: драйвер, транспорт или кит с I/O в корне падает без
 // правки списка.
 var rootLibs = []string{
 	"git.stit.tech/stit-core/golibinfra/auditkit",
 	"git.stit.tech/stit-core/golibinfra/authnkit",
+	"git.stit.tech/stit-core/golibinfra/authnkit/session",
 	"git.stit.tech/stit-core/golibinfra/bizmetric",
 	"git.stit.tech/stit-core/golibinfra/clockkit",
 	"git.stit.tech/stit-core/golibinfra/idkit",

@@ -3,8 +3,7 @@ package auth_test
 import (
 	"context"
 	"errors"
-	"fmt"
-	"sync"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -18,104 +17,24 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/auditkit"
+	"git.stit.tech/stit-core/golibinfra/authnkit/session"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
-	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
-	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
+	"git.stit.tech/stit-core/golibinfra/testkit/logtest"
+	"git.stit.tech/stit-core/golibinfra/testkit/sessiontest"
 )
 
-// memSessions — stateful in-memory SessionRepository для проверки сайд-эффектов.
-type memSessions struct {
-	mu       sync.Mutex
-	sessions map[string]*auth.RefreshSession
-}
-
-func newMemSessions() *memSessions {
-	return &memSessions{sessions: map[string]*auth.RefreshSession{}}
-}
-
-func (s *memSessions) Insert(_ context.Context, jti, userID string, expiresAt time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sessions[jti] = &auth.RefreshSession{JTI: jti, UserID: userID, IssuedAt: fixedNow, ExpiresAt: expiresAt}
-	return nil
-}
-
-func (s *memSessions) GetByJTI(_ context.Context, jti string) (*auth.RefreshSession, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	got, ok := s.sessions[jti]
-	if !ok {
-		return nil, auth.ErrSessionNotFound
-	}
-	clone := *got
-	return &clone, nil
-}
-
-func (s *memSessions) MarkUsed(_ context.Context, jti, replacedByJTI string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	got, ok := s.sessions[jti]
-	if !ok {
-		return auth.ErrSessionNotFound
-	}
-	now := fixedNow
-	got.UsedAt = &now
-	got.ReplacedByJTI = replacedByJTI
-	return nil
-}
-
-func (s *memSessions) get(jti string) *auth.RefreshSession {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if v, ok := s.sessions[jti]; ok {
-		clone := *v
-		return &clone
-	}
-	return nil
-}
-
-// defaultTokens выпускает детерминированные access/refresh токены со счётчиком на userID,
-// чтобы refresh-rotation давал свежие JTI.
-func defaultTokens(t *testing.T) *mocks.MockTokens {
+// accessTokens выпускает access-токен "access.<id>.<role>": выпуск без побочных эффектов.
+func accessTokens(t *testing.T) *mocks.MockTokens {
 	t.Helper()
 	tk := mocks.NewMockTokens(t)
 	tk.EXPECT().IssueAccess(mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, u *auth.User) (string, error) {
 			return "access." + u.ID + "." + string(u.Role), nil
 		}).Maybe()
-	var (
-		mu    sync.Mutex
-		count = map[string]int{}
-	)
-	tk.EXPECT().IssueRefresh(mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, userID string) (string, string, time.Time, error) {
-			mu.Lock()
-			count[userID]++
-			n := count[userID]
-			mu.Unlock()
-			jti := "jti-" + userID
-			if n > 1 {
-				jti = fmt.Sprintf("jti-%s-%d", userID, n)
-			}
-			return "refresh." + userID + "." + jti, jti, fixedNow.Add(time.Hour), nil
-		}).Maybe()
 	return tk
-}
-
-func defaultParser(t *testing.T) *mocks.MockTokenParser {
-	t.Helper()
-	p := mocks.NewMockTokenParser(t)
-	p.EXPECT().ParseRefresh(mock.Anything, mock.Anything).Return("u1", "jti-u1", nil).Maybe()
-	return p
-}
-
-func parserReturning(t *testing.T, userID, jti string, err error) *mocks.MockTokenParser {
-	t.Helper()
-	p := mocks.NewMockTokenParser(t)
-	p.EXPECT().ParseRefresh(mock.Anything, mock.Anything).Return(userID, jti, err).Maybe()
-	return p
 }
 
 var fixedNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -144,27 +63,24 @@ func loginGuard(t *testing.T, subject string, succeeded bool) *mocks.MockLoginGu
 	return g
 }
 
+// sessionConfig — сроки сессий тестов: токен живёт час, сессия — три.
+var sessionConfig = session.Config{IdleTTL: time.Hour, AbsoluteTTL: 3 * time.Hour, CleanupInterval: time.Hour}
+
 type ucFixture struct {
 	uc       *auth.Usecase
-	users    *mocks.MockUserReader
-	verify   *mocks.MockPasswordVerifier
-	setpw    *mocks.MockPasswordSetter
-	tokens   *mocks.MockTokens
-	parser   *mocks.MockTokenParser
-	sessions *memSessions
-	guard    *mocks.MockLoginGuard
+	sessions *sessiontest.Store
+	clock    *clockkit.Tickable
 	audit    *audittest.Recorder
+	log      *logtest.Recorder
 }
 
 type ucOpts struct {
 	users    *mocks.MockUserReader
 	verify   *mocks.MockPasswordVerifier
 	setpw    *mocks.MockPasswordSetter
-	tokens   *mocks.MockTokens
-	parser   *mocks.MockTokenParser
-	sessions *memSessions
 	policy   *mocks.MockAuthorizer
 	guard    *mocks.MockLoginGuard
+	sessions func(session.Store) session.Store
 	metrics  *auth.Metrics
 }
 
@@ -173,66 +89,89 @@ type ucOption func(*ucOpts)
 func withUsers(u *mocks.MockUserReader) ucOption          { return func(o *ucOpts) { o.users = u } }
 func withVerifier(v *mocks.MockPasswordVerifier) ucOption { return func(o *ucOpts) { o.verify = v } }
 func withSetter(s *mocks.MockPasswordSetter) ucOption     { return func(o *ucOpts) { o.setpw = s } }
-func withParser(p *mocks.MockTokenParser) ucOption        { return func(o *ucOpts) { o.parser = p } }
+func withPolicy(p *mocks.MockAuthorizer) ucOption         { return func(o *ucOpts) { o.policy = p } }
+func withGuard(g *mocks.MockLoginGuard) ucOption          { return func(o *ucOpts) { o.guard = g } }
+func withMetrics(m *auth.Metrics) ucOption                { return func(o *ucOpts) { o.metrics = m } }
 
-func withSessions(s *memSessions) ucOption { return func(o *ucOpts) { o.sessions = s } }
+// withSessions оборачивает хранилище сессий фикстуры: сбой одного метода поверх фейка кита.
+func withSessions(wrap func(session.Store) session.Store) ucOption {
+	return func(o *ucOpts) { o.sessions = wrap }
+}
 
-func withPolicy(p *mocks.MockAuthorizer) ucOption { return func(o *ucOpts) { o.policy = p } }
-func withGuard(g *mocks.MockLoginGuard) ucOption  { return func(o *ucOpts) { o.guard = g } }
-func withMetrics(m *auth.Metrics) ucOption        { return func(o *ucOpts) { o.metrics = m } }
-
+// newUC — usecase на строгих моках портов и фейке хранилища сессий кита (sessiontest) с часами
+// фикстуры: время сессий двигает кейс (f.clock.Advance).
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
-	o := &ucOpts{}
+	o := &ucOpts{
+		users:  mocks.NewMockUserReader(t),
+		verify: mocks.NewMockPasswordVerifier(t),
+		setpw:  mocks.NewMockPasswordSetter(t),
+		policy: defaultPolicy(t, false),
+		guard:  mocks.NewMockLoginGuard(t),
+	}
 	for _, fn := range opts {
 		fn(o)
 	}
-	if o.users == nil {
-		o.users = mocks.NewMockUserReader(t)
+	clock := clockkit.NewTickable(fixedNow)
+	fake, err := sessiontest.New(sessionConfig, clock)
+	require.NoError(t, err)
+	var sessions session.Store = fake
+	if o.sessions != nil {
+		sessions = o.sessions(fake)
 	}
-	if o.verify == nil {
-		o.verify = mocks.NewMockPasswordVerifier(t)
-	}
-	if o.setpw == nil {
-		o.setpw = mocks.NewMockPasswordSetter(t)
-	}
-	if o.tokens == nil {
-		o.tokens = defaultTokens(t)
-	}
-	if o.parser == nil {
-		o.parser = defaultParser(t)
-	}
-	if o.sessions == nil {
-		o.sessions = newMemSessions()
-	}
-	if o.policy == nil {
-		o.policy = defaultPolicy(t, false)
-	}
-	if o.guard == nil {
-		o.guard = mocks.NewMockLoginGuard(t)
-	}
-	aud := &audittest.Recorder{}
+	aud, log := &audittest.Recorder{}, logtest.Capture()
 
 	uc := auth.NewUsecase(auth.UsecaseDeps{
 		Users:          o.users,
 		PasswordVerify: o.verify,
 		PasswordSet:    o.setpw,
 		Hasher:         authntest.DeterministicHasher{},
-		Tokens:         o.tokens,
-		TokenParser:    o.parser,
-		Sessions:       o.sessions,
-		Tx:             pgtest.Identity{},
+		Tokens:         accessTokens(t),
+		Sessions:       sessions,
 		Policy:         o.policy,
 		Guard:          o.guard,
 		Audit:          aud,
-		Log:            logkit.Nop(),
-		Clock:          clockkit.NewFixed(fixedNow),
+		Log:            log,
+		Clock:          clock,
 		Metrics:        o.metrics,
 	})
-	return ucFixture{
-		uc: uc, users: o.users, verify: o.verify, setpw: o.setpw,
-		tokens: o.tokens, parser: o.parser, sessions: o.sessions, guard: o.guard, audit: aud,
-	}
+	return ucFixture{uc: uc, sessions: fake, clock: clock, audit: aud, log: log}
+}
+
+// issue открывает сессию userID в хранилище фикстуры — как вход.
+func (f ucFixture) issue(t *testing.T, userID string) session.Token {
+	t.Helper()
+	tok, err := f.sessions.Issue(context.Background(), userID)
+	require.NoError(t, err)
+	return tok
+}
+
+var errStore = errors.New("authn_sessions: connection refused")
+
+// failingSessions — хранилище сессий, у которого сбоит каждый вызов.
+type failingSessions struct{ session.Store }
+
+func (failingSessions) Issue(context.Context, string) (session.Token, error) {
+	return session.Token{}, errStore
+}
+
+func (failingSessions) Rotate(context.Context, string) (session.Token, error) {
+	return session.Token{}, errStore
+}
+
+func (failingSessions) Revoke(context.Context, string) error { return errStore }
+
+// revokeFails — хранилище сессий, у которого сбоит только закрытие сессии.
+type revokeFails struct{ session.Store }
+
+func (revokeFails) Revoke(context.Context, string) error { return errStore }
+
+// canLogin — пользователь u1, которого пускают: его отдаёт поиск по ID ровно один раз.
+func canLogin(t *testing.T) *mocks.MockUserReader {
+	t.Helper()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", Email: "a@b.com", CanLogin: true, Role: identity.RoleClient}, nil).Once()
+	return users
 }
 
 func TestLogin(t *testing.T) {
@@ -249,8 +188,27 @@ func TestLogin(t *testing.T) {
 		out, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
-		require.NotNil(t, f.sessions.get("jti-u1"))
-		require.True(t, f.audit.Has("login"))
+		require.Equal(t, 1, f.sessions.Active("u1"), "the login opens a session of the user")
+		next, err := f.sessions.Rotate(context.Background(), out.RefreshToken)
+		require.NoError(t, err, "the refresh token is the token of that session")
+		require.Equal(t, "u1", next.Subject)
+		require.Equal(t, &auditkit.Entry{ActorID: "u1", Action: "login", Resource: "user", ResourceID: "u1", At: fixedNow}, f.audit.Last("login"))
+	})
+
+	// Сессия не открылась — входа нет: ни токенов, ни аудита входа.
+	t.Run("session not opened", func(t *testing.T) {
+		t.Parallel()
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(
+			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}, nil,
+		).Once()
+		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)),
+			withSessions(func(s session.Store) session.Store { return failingSessions{s} }))
+
+		out, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		require.ErrorIs(t, err, errStore)
+		require.Nil(t, out)
+		require.False(t, f.audit.Has("login"))
 	})
 
 	t.Run("wrong password", func(t *testing.T) {
@@ -360,103 +318,160 @@ func TestLogin(t *testing.T) {
 	})
 }
 
+// Обновление ротирует токен в той же сессии: прежний токен погашен, новый — следующий в цепочке.
 func TestRefresh(t *testing.T) {
 	t.Parallel()
+	f := newUC(t, withUsers(canLogin(t)))
+	first := f.issue(t, "u1")
 
-	t.Run("happy path rotates jti", func(t *testing.T) {
+	out, err := f.uc.Refresh(context.Background(), first.Value)
+	require.NoError(t, err)
+	require.Equal(t, "access.u1.client", out.AccessToken)
+	require.NotEqual(t, first.Value, out.RefreshToken)
+	next, err := f.sessions.Rotate(context.Background(), out.RefreshToken)
+	require.NoError(t, err, "the new refresh token continues the session")
+	require.Equal(t, first.SessionID, next.SessionID)
+	require.Empty(t, f.audit.Entries())
+}
+
+// Повтор погашенного токена — его предъявил клиент или укравший: сессия закрыта целиком, вместе со
+// следующим токеном цепочки, повтор — в аудите учётной записи.
+func TestRefresh_Reused(t *testing.T) {
+	t.Parallel()
+	f := newUC(t, withUsers(canLogin(t)))
+	first := f.issue(t, "u1")
+	out, err := f.uc.Refresh(context.Background(), first.Value)
+	require.NoError(t, err)
+
+	_, err = f.uc.Refresh(context.Background(), first.Value)
+	require.ErrorIs(t, err, auth.ErrRefreshReused)
+	require.Equal(t, &auditkit.Entry{ActorID: "u1", Action: "refresh_reused", Resource: "session", ResourceID: first.SessionID, At: fixedNow},
+		f.audit.Last("refresh_reused"))
+	_, err = f.uc.Refresh(context.Background(), out.RefreshToken)
+	require.ErrorIs(t, err, auth.ErrRefreshInvalid, "the reuse closed the session with its next token")
+	require.Zero(t, f.sessions.Active("u1"))
+}
+
+// Срок токена и абсолютный срок сессии: ротация продлевает токен, но не сессию.
+func TestRefresh_Expired(t *testing.T) {
+	t.Parallel()
+	t.Run("token idle past its lifetime", func(t *testing.T) {
 		t.Parallel()
-		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByID(mock.Anything, mock.Anything).
-			Return(&auth.User{ID: "u1", Email: "a@b.com", Role: identity.RoleClient}, nil)
-		sessions := newMemSessions()
-		require.NoError(t, sessions.Insert(context.Background(), "jti-old", "u1", fixedNow.Add(time.Hour)))
-		f := newUC(
-			t,
-			withUsers(users),
-			withSessions(sessions),
-			withParser(parserReturning(t, "u1", "jti-old", nil)),
-		)
+		f := newUC(t)
+		tok := f.issue(t, "u1")
+		f.clock.Advance(sessionConfig.IdleTTL)
 
-		out, err := f.uc.Refresh(context.Background(), "tok")
-		require.NoError(t, err)
-		require.NotEmpty(t, out.AccessToken)
-		require.NotEmpty(t, out.RefreshToken)
-
-		old := sessions.get("jti-old")
-		require.NotNil(t, old)
-		require.NotNil(t, old.UsedAt)
-		require.NotEmpty(t, old.ReplacedByJTI)
-		require.NotEqual(t, "jti-old", old.ReplacedByJTI)
-		require.NotNil(t, sessions.get(old.ReplacedByJTI))
-	})
-
-	t.Run("access token rejected", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withParser(parserReturning(t, "", "", errors.New("not a refresh token"))))
-		_, err := f.uc.Refresh(context.Background(), "tok")
-		require.ErrorIs(t, err, auth.ErrRefreshInvalid)
-	})
-
-	t.Run("expired at token level", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withParser(parserReturning(t, "", "", auth.ErrTokenExpired)))
-		_, err := f.uc.Refresh(context.Background(), "tok")
+		_, err := f.uc.Refresh(context.Background(), tok.Value)
 		require.ErrorIs(t, err, auth.ErrRefreshExpired)
 	})
-
-	t.Run("expired at session level", func(t *testing.T) {
+	t.Run("session past its absolute lifetime", func(t *testing.T) {
 		t.Parallel()
-		sessions := newMemSessions()
-		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", fixedNow.Add(-time.Minute)))
 		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByID(mock.Anything, mock.Anything).Return(&auth.User{ID: "u1"}, nil).Maybe()
-		f := newUC(t, withUsers(users), withSessions(sessions))
+		users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", CanLogin: true}, nil).Times(3)
+		f := newUC(t, withUsers(users))
+		refresh := f.issue(t, "u1").Value
+		for range 3 {
+			f.clock.Advance(50 * time.Minute)
+			out, err := f.uc.Refresh(context.Background(), refresh)
+			require.NoError(t, err)
+			refresh = out.RefreshToken
+		}
+		f.clock.Advance(31 * time.Minute)
 
-		_, err := f.uc.Refresh(context.Background(), "tok")
-		require.ErrorIs(t, err, auth.ErrRefreshExpired)
-	})
-
-	t.Run("reused jti", func(t *testing.T) {
-		t.Parallel()
-		sessions := newMemSessions()
-		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", fixedNow.Add(time.Hour)))
-		require.NoError(t, sessions.MarkUsed(context.Background(), "jti-u1", "jti-other"))
-		f := newUC(t, withSessions(sessions))
-
-		_, err := f.uc.Refresh(context.Background(), "tok")
-		require.ErrorIs(t, err, auth.ErrRefreshReused)
-		require.True(t, f.audit.Has("refresh_reused"))
-	})
-
-	t.Run("session not found", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withParser(parserReturning(t, "u1", "missing", nil)))
-		_, err := f.uc.Refresh(context.Background(), "tok")
-		require.ErrorIs(t, err, auth.ErrRefreshInvalid)
+		_, err := f.uc.Refresh(context.Background(), refresh)
+		require.ErrorIs(t, err, auth.ErrRefreshExpired, "three hours after the login the session is over")
 	})
 }
 
+func TestRefresh_UnknownToken(t *testing.T) {
+	t.Parallel()
+	_, err := newUC(t).uc.Refresh(context.Background(), "not-a-session-token")
+	require.ErrorIs(t, err, auth.ErrRefreshInvalid)
+}
+
+// Удалённый и заблокированный сессию не продлевают: токен ротации клиенту не уходит, сессия закрыта.
+func TestRefresh_UserCannotLogIn(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		user *auth.User
+		err  error
+	}{
+		{name: "blocked", user: &auth.User{ID: "u1", CanLogin: false}},
+		{name: "deleted", err: auth.ErrUserNotFound},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			users := mocks.NewMockUserReader(t)
+			users.EXPECT().GetByID(mock.Anything, "u1").Return(tc.user, tc.err).Once()
+			f := newUC(t, withUsers(users))
+			tok := f.issue(t, "u1")
+
+			out, err := f.uc.Refresh(context.Background(), tok.Value)
+			require.ErrorIs(t, err, auth.ErrRefreshInvalid)
+			require.Nil(t, out)
+			require.Zero(t, f.sessions.Active("u1"), "the session is closed")
+		})
+	}
+}
+
+// Сбой закрытия сессии ответа не меняет: токен ротации клиенту не ушёл, причина — в логе.
+func TestRefresh_BlockedSessionNotClosed(t *testing.T) {
+	t.Parallel()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", CanLogin: false}, nil).Once()
+	f := newUC(t, withUsers(users), withSessions(func(s session.Store) session.Store { return revokeFails{s} }))
+	tok := f.issue(t, "u1")
+
+	_, err := f.uc.Refresh(context.Background(), tok.Value)
+	require.ErrorIs(t, err, auth.ErrRefreshInvalid)
+	e, logged := f.log.Find(slog.LevelError, "revoke session")
+	require.True(t, logged)
+	require.Equal(t, "u1", e.Str("user_id"))
+	require.Contains(t, e.Str("err"), errStore.Error())
+}
+
+// Сбой хранилища или поиска пользователя — не «войти заново», а ошибка сервиса.
+func TestRefresh_Failure(t *testing.T) {
+	t.Parallel()
+	t.Run("session store", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withSessions(func(s session.Store) session.Store { return failingSessions{s} }))
+		_, err := f.uc.Refresh(context.Background(), "tok")
+		require.ErrorIs(t, err, errStore)
+	})
+	t.Run("user lookup", func(t *testing.T) {
+		t.Parallel()
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, errors.New("db down")).Once()
+		f := newUC(t, withUsers(users))
+		tok := f.issue(t, "u1")
+
+		_, err := f.uc.Refresh(context.Background(), tok.Value)
+		require.ErrorContains(t, err, "db down")
+		require.NotErrorIs(t, err, auth.ErrRefreshInvalid)
+	})
+}
+
+// Выход закрывает сессию токена; неизвестный токен — тоже выход.
 func TestLogout(t *testing.T) {
 	t.Parallel()
+	f := newUC(t)
+	tok := f.issue(t, "u1")
 
-	t.Run("marks session used", func(t *testing.T) {
-		t.Parallel()
-		sessions := newMemSessions()
-		require.NoError(t, sessions.Insert(context.Background(), "jti-u1", "u1", fixedNow.Add(time.Hour)))
-		f := newUC(t, withSessions(sessions))
+	require.NoError(t, f.uc.Logout(context.Background(), tok.Value))
+	require.Zero(t, f.sessions.Active("u1"))
+	_, err := f.sessions.Rotate(context.Background(), tok.Value)
+	require.ErrorIs(t, err, session.ErrInvalid, "the token of a closed session does not refresh")
+	require.NoError(t, f.uc.Logout(context.Background(), "unknown"))
+	require.Empty(t, f.audit.Entries(), "the store does not say whose session it closed")
+}
 
-		require.NoError(t, f.uc.Logout(context.Background(), "tok"))
-		got := sessions.get("jti-u1")
-		require.NotNil(t, got)
-		require.NotNil(t, got.UsedAt)
-		require.True(t, f.audit.Has("logout"))
-	})
-
-	t.Run("unknown session is no-op", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withParser(parserReturning(t, "u1", "missing", nil)))
-		require.NoError(t, f.uc.Logout(context.Background(), "tok"))
-	})
+func TestLogout_StoreFailure(t *testing.T) {
+	t.Parallel()
+	f := newUC(t, withSessions(func(s session.Store) session.Store { return failingSessions{s} }))
+	require.ErrorIs(t, f.uc.Logout(context.Background(), "tok"), errStore)
 }
 
 // pwUser отдаёт учётную запись u1 для смены пароля ровно один раз.
@@ -608,30 +623,43 @@ func TestLogin_RecordsOutcome(t *testing.T) {
 
 func TestRefresh_RecordsOutcome(t *testing.T) {
 	t.Parallel()
-	fresh := newMemSessions()
-	require.NoError(t, fresh.Insert(context.Background(), "jti-old", "u1", fixedNow.Add(time.Hour)))
-	owner := mocks.NewMockUserReader(t)
-	owner.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", Role: identity.RoleClient}, nil).Once()
-	reused := newMemSessions()
-	require.NoError(t, reused.Insert(context.Background(), "jti-u1", "u1", fixedNow.Add(time.Hour)))
-	require.NoError(t, reused.MarkUsed(context.Background(), "jti-u1", "jti-next"))
+	none := func(*testing.T) []ucOption { return nil }
+	issued := func(t *testing.T, f ucFixture) string { return f.issue(t, "u1").Value }
 	tests := []struct {
-		result string
-		opts   []ucOption
+		name, result string
+		opts         func(t *testing.T) []ucOption
+		token        func(t *testing.T, f ucFixture) string
 	}{
-		{"ok", []ucOption{withSessions(fresh), withUsers(owner), withParser(parserReturning(t, "u1", "jti-old", nil))}},
-		{"reused", []ucOption{withSessions(reused)}},
-		{"invalid", []ucOption{withParser(parserReturning(t, "", "", errors.New("not a refresh token")))}},
-		{"expired", []ucOption{withParser(parserReturning(t, "", "", auth.ErrTokenExpired))}},
+		{"rotated", "ok", func(t *testing.T) []ucOption { return []ucOption{withUsers(canLogin(t))} }, issued},
+		{"reused", "reused", none, func(t *testing.T, f ucFixture) string {
+			first := f.issue(t, "u1")
+			_, err := f.sessions.Rotate(context.Background(), first.Value)
+			require.NoError(t, err)
+			return first.Value
+		}},
+		{"unknown token", "invalid", none, func(*testing.T, ucFixture) string { return "tok" }},
+		{"blocked user", "invalid", func(t *testing.T) []ucOption {
+			users := mocks.NewMockUserReader(t)
+			users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1"}, nil).Once()
+			return []ucOption{withUsers(users)}
+		}, issued},
+		{"expired", "expired", none, func(t *testing.T, f ucFixture) string {
+			tok := f.issue(t, "u1")
+			f.clock.Advance(sessionConfig.IdleTTL)
+			return tok.Value
+		}},
+		{"store failure", "error", func(*testing.T) []ucOption {
+			return []ucOption{withSessions(func(s session.Store) session.Store { return failingSessions{s} })}
+		}, func(*testing.T, ucFixture) string { return "tok" }},
 	}
 	for _, tc := range tests {
-		t.Run(tc.result, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			reader := sdkmetric.NewManualReader()
 			m := auth.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
-			f := newUC(t, append(tc.opts, withMetrics(m))...)
+			f := newUC(t, append(tc.opts(t), withMetrics(m))...)
 
-			_, err := f.uc.Refresh(context.Background(), "tok")
+			_, err := f.uc.Refresh(context.Background(), tc.token(t, f))
 			require.Equal(t, tc.result == "ok", err == nil, "refresh error: %v", err)
 			require.Equal(t, map[string]int64{tc.result: 1}, counted(t, reader, "biz_auth_refresh_total"))
 		})

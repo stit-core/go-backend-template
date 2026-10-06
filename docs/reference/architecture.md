@@ -125,9 +125,10 @@ Generic-примитив, нужный не только этому сервис
 - Named returns не используются (линтер `nonamedreturns`).
 - Метод с метрикой пишет исход ровно раз на любом пути: исход возвращает внутренняя функция
   (`Login` → `login`), запись — одна, в публичном методе.
-- Security-значимые операции (login/logout/смена+сброс пароля/verification) пишут `audit`
+- Security-значимые операции (вход, повтор refresh, смена и сброс пароля, verification) пишут `audit`
   из usecase одним хелпером домена (`uc.audit`: время, IP, запрос) — в записи ID учётной записи, не
-  адрес; попытка входа на неизвестный адрес и блокировка guard'а — только исход в метрике.
+  адрес; попытка входа на неизвестный адрес и блокировка guard'а — только исход в метрике; выход
+  аудита не пишет — чью сессию он закрыл, хранилище сессий не отдаёт.
   След таких отказов по клиенту (IP, частота) — access-лог прокси перед сервисом.
   Техническая запись канала (факт доставки письма) — в его адаптере.
 - Транспортные значения из ctx (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`.
@@ -184,22 +185,23 @@ DTO в порте — локальные (не re-export из B).
   (archtest), `fx.Annotate` — только для тегов `name:` и `group:`.
 - **Конфиги** — конфиг кита читает его `<kit>.NewConfig` (`kitConfigs` в `cmd/api`), конфиги
   самого приложения — структура `App` (`internal/platform/config`). Вне `APP_ENV=dev` старт не
-  пускает небезопасное: cookie без Secure, логи без маскирования и docs — `config.Guard`, лог-mailer —
-  его конструктор (`verification/infra/logmail`). `context.Context` граф не
-  провайдит: свой ctx компонент получает от хука или запроса. ctx, доступный корню графа, ловит
-  `TestFxGraphHasNoContext`; именованный и `fx.Private` он не видит.
+  пускает небезопасное: cookie без Secure, логи без маскирования, docs и access-токены без
+  `JWT_AUDIENCE` — `config.Guard`, лог-mailer — его конструктор (`verification/infra/logmail`).
+  `context.Context` граф не провайдит: свой ctx компонент получает от хука или запроса. ctx,
+  доступный корню графа, ловит `TestFxGraphHasNoContext`; именованный и `fx.Private` он не видит.
 - **Порядок хуков** держит httpkit: сервер слушает после OnStart всех модулей и гасится первым.
   Условие — `httpkit.Module` на верхнем уровне `fx.New`, `registerHTTP` — внутри `fx.Module`
   (`httpModule`): Invoke модулей fx выполняет раньше корневых. Порядок проверяет `TestBoot`.
-- **Таймауты** — явные `fx.StartTimeout`/`fx.StopTimeout`. `StopTimeout` (30s) — общий бюджет
-  хуков остановки: хуки китов укладываются в его остаток, `HTTP_SHUTDOWN_TIMEOUT` и
-  `NATS_DRAIN_TIMEOUT` действуют не дольше него. Бюджет покрывает их дефолты (15s и 10s); подняли
-  их — поднимите и `StopTimeout`, иначе остановка режется раньше.
+- **Таймауты** — явные `fx.StartTimeout`/`fx.StopTimeout`. `StopTimeout` (`stopTimeout`, 30s) —
+  общий бюджет хуков остановки: HTTP — пауза `HTTP_SHUTDOWN_DRAIN_DELAY` (`/ready` уже 503) и
+  дообработка запросов `HTTP_SHUTDOWN_TIMEOUT` — берёт не больше ⅔ (httpkit), хуки после него — остаток,
+  в нём `NATS_DRAIN_TIMEOUT`. Env, который в бюджет не помещается (HTTP больше 20s, дренаж NATS
+  больше 10s), — ошибка старта (`checkStopBudget`); поднимаете их — поднимите и `stopTimeout`.
 - **События fx** — в лог через `logkit.FxLogger` (порядок хуков `TestBoot` читает из лога
   сервиса); паника конструктора или Invoke — ошибка старта (`fx.RecoverFromPanics`).
 - **Группы** — `httpkit.security_scheme`, `healthkit.probes`, `timerkit.jobs` (через
-  `timerkit.Provide`), `pgkit.migrations`; middleware и правки huma — одним значением
-  `httpkit.Middlewares` и `httpkit.HumaConfigs` из `cmd/api`. Per-domain outbox
+  `timerkit.Provide`), `pgkit.migrations`; свои middleware и правки huma — одним значением
+  `httpkit.Middlewares` и `httpkit.HumaConfigs` (порядок задаёт приложение). Per-domain outbox
   (`events.OutboxFor`) включается внутрь доменного `fx.Module`: `fx.Private` скоупит publisher.
 - Кит без потребителя в граф не подключается: его конструкторы не выполняются, конфиг не
   проверяется, а env молча ничего не меняет.
@@ -213,11 +215,11 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 гарантирует уникальность Body. Префикс домена, уникальность и envelope `data` экспортируемых
 типов `delivery/http` (кроме `Handler` и `Usecase`) держит archtest `TestHTTPTypes`.
 
-Операции всех доменов регистрирует одна функция — `registerHTTP` в `cmd/api/http.go`; по ней
-же `cmd/api/api_test.go` собирает API без БД и брокера и проверяет: у каждой операции
-`Security` (с кодами 401 сессии) или место в `publicOperations` (операция без `Security` публична
-в рантайме), пара метод+путь уникальна (huma и chi молча перезаписывают маршрут), дубль
-`OperationID` — паника.
+Операции всех доменов регистрирует одна функция — `registerHTTP` в `cmd/api/http.go`. Открытая
+операция помечена `httpkit.Public(op)`: операция без `Security` и без пометки, дубль метода и пути
+(huma и chi молча перезаписали бы маршрут) — ошибка старта (httpkit, `Server.CheckRoutes`), дубль
+`OperationID` — паника huma. По `registerHTTP` же `cmd/api/api_test.go` собирает API без БД и брокера:
+он проходит проверку старта, операции под `Security` объявляют коды 401 сессии.
 
 ## Контракт ошибок API
 
@@ -281,8 +283,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   (`NATS_JS_STREAM_NAMES`, напр. `user,verification` → `user.>`/`verification.>`). Без стрима
   подписки старт падает; без стрима публикатора сервис стартует, а строки его outbox не получают
   PubAck и копятся.
-- **Таблицы.** `audit_log`/`bruteforce_attempts`/`outbox_<domain>` — схему держит
-  golibinfra-kit (`auditpg.Migrations`, `bruteforcepg.Migrations`,
+- **Таблицы.** `audit_log`/`bruteforce_attempts`/`outbox_<domain>`/`authn_sessions` — схему держит
+  golibinfra-kit (`auditpg.Migrations`, `bruteforcepg.Migrations`, `sessionpg.Migrations`,
   `outboxpg.TableMigrations(Table)` из `infra/outbox/outbox.go`); источники перечислены в
   `cmd/migrate` (`sources.Kits`: отдельный бинарь графа сервиса не собирает — `TestBoot`
   сверяет список с kit-таблицами графа, группой `pgkit.migrations`), таблица версий у каждого

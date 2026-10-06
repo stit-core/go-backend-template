@@ -43,14 +43,14 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `policy.go` | unit table-driven |
 | `entity.go` (конструкторы/методы) | unit; +fuzz (`entity_fuzz_test.go`) при строковых валидациях |
 | `usecase.go` | unit через строгие моки портов и настоящую policy, fixture `newUC(t, …)` |
-| `delivery/http` | handler-тест через `golibinfra/testkit/handlertest`: happy path каждой операции — точный вход usecase и тело ответа; `errors_test.go` (white-box): таблица операции объявляет ошибки её usecase (список — по коду usecase); без 500 и без таблицы операции вне `Declare` — archtest `TestDomainErrorTables` |
+| `delivery/http` | handler-тест через `golibinfra/testkit/handlertest` (операции под `Security` — `handlertest.WithAuth(identitytest.Extract)`, личность — ctx запроса): happy path каждой операции — точный вход usecase и тело ответа; `errors_test.go` (white-box): таблица операции объявляет ошибки её usecase (список — по коду usecase); без 500 и без таблицы операции вне `Declare` — archtest `TestDomainErrorTables` |
 | `delivery/nats` | unit handler-функции (мок Usecase-порта) — включая дубль-доставку; контракт с поставщиком — `contract_test.go` (rule `events-and-messaging`) |
 | `module/adapters.go` | unit (white-box) поверх `Trusted` поставщика: маппинг полей, ctx вызывающего до `Trusted` (запись — в его транзакции) и каждая ошибка `TrustedErrors` → sentinel потребителя |
 | `infra/<kit>/` | unit на настоящем ките или фейке из `testkit` |
 | `trusted.go` | unit через моки портов; методы отдают только ошибки `TrustedErrors` (`return` в `trusted.go` — archtest) |
 | `infra/postgres/repository.go` | integration (build-tag) на каждый метод: запись видна чтением, условия SQL (версия, удалённые, регистр, фильтр, страница) |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp`, корню графа `context.Context` не доступен; `fx.As` нет — archtest |
-| HTTP API | `cmd/api/api_test.go`: `Security` или `publicOperations`, уникальный метод+путь; `openapi.json` совпадает с кодом |
+| HTTP API | `cmd/api/api_test.go`: API проходит проверку старта httpkit (`Security` или `httpkit.Public`, уникальный метод+путь), операция без пометки — ошибка старта, под `Security` — коды 401 сессии; `openapi.json` совпадает с кодом |
 | подкоманды `main` | `cmd/api/healthcheck_test.go`: тестовый бинарь, перезапущенный как `api healthcheck` (`TestMain` зовёт `main`), — код выхода по `/health` на `HTTP_ADDR`, сервис не стартует |
 | запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, проверка здоровья (`checkHealth`) получает 200 от `/health` сервиса, 401 у каждой операции под `Security`, 429, 5xx без причины (она — в логе под тем же `request_id`), событие до подписчика, outbox verification — до стрима, `/openapi.json` = `openapi.json`, kit-таблицы графа = источники `cmd/migrate`, события fx — в лог сервиса, HTTP стартует последним и гасится первым; глобальный провайдер метрик — SDK telemetry, метрики доменов пишутся в провайдер telemetry; обе ссылки из писем гасятся; адрес, пароли, cookie сессии и токены писем — ни в логе сервиса, ни в `audit_log` и outbox |
 

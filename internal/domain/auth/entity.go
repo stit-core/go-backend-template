@@ -1,10 +1,6 @@
 package auth
 
-import (
-	"time"
-
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
-)
+import "git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 
 // CanLogin is computed by the user domain (port carries decisions, not raw status enums).
 type User struct {
@@ -15,13 +11,4 @@ type User struct {
 	CanLogin     bool
 	Role         identity.Role
 	Version      int
-}
-
-type RefreshSession struct {
-	JTI           string
-	UserID        string
-	IssuedAt      time.Time
-	ExpiresAt     time.Time
-	UsedAt        *time.Time
-	ReplacedByJTI string
 }

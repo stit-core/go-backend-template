@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -10,6 +12,8 @@ import (
 
 	auditpg "git.stit.tech/stit-core/golibinfra/auditkit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/authnkit/session"
+	sessionpg "git.stit.tech/stit-core/golibinfra/authnkit/session/pgstore"
 	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
 	bruteforcepg "git.stit.tech/stit-core/golibinfra/bruteforcekit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
@@ -43,6 +47,7 @@ var kitConfigs = []any{
 	natskit.NewConfig,
 	authnkit.NewArgon2idParams,
 	authnkit.NewJWTConfig,
+	session.NewConfig,
 	bruteforcekit.NewConfig,
 	outboxkit.NewConfig,
 	outboxpg.NewConfig,
@@ -66,6 +71,7 @@ var (
 	platformModules = fx.Options(
 		appconfig.Module,
 		authgate.Module,
+		sessionpg.Module,
 		bruteforcepg.Module,
 		auditpg.Module,
 		clockkit.Module,
@@ -87,19 +93,37 @@ var (
 	commit  = "unknown"
 )
 
+// stopTimeout — бюджет хуков остановки: HTTP берёт из него не больше ⅔ (больше httpkit не даст), остаток —
+// хукам после него.
+const stopTimeout = 30 * time.Second
+
 // service — граф сервиса целиком: его запускает main, его же собирают тест графа и boot-тест.
 var service = fx.Options(
 	logkit.FxLogger,
 	fx.RecoverFromPanics(),
 	fx.StartTimeout(15*time.Second),
-	// Бюджет остановки: дефолты HTTP_SHUTDOWN_TIMEOUT (15s) + NATS_DRAIN_TIMEOUT (10s) + запас; env выше он режет.
-	fx.StopTimeout(30*time.Second),
+	fx.StopTimeout(stopTimeout),
 	infraModules,
 	platformModules,
 	domainModules,
 	httpModule,
-	fx.Invoke(logStart),
+	fx.Invoke(checkStopBudget, logStart),
 )
+
+// errStopBudget — остановка, заданная env, не помещается в stopTimeout.
+var errStopBudget = errors.New("shutdown env exceeds the stop budget")
+
+// checkStopBudget: пауза и дообработка запросов HTTP — в ⅔ бюджета остановки, дренаж подписок NATS — в
+// оставшуюся треть; иначе остановка молча срезала бы то, что задал env.
+func checkStopBudget(httpCfg httpkit.Config, natsCfg natskit.Config) error {
+	if d := httpCfg.ShutdownDrainDelay + httpCfg.ShutdownTimeout; d > stopTimeout*2/3 {
+		return fmt.Errorf("%w: HTTP_SHUTDOWN_DRAIN_DELAY + HTTP_SHUTDOWN_TIMEOUT = %s, at most %s", errStopBudget, d, stopTimeout*2/3)
+	}
+	if natsCfg.DrainTimeout > stopTimeout/3 {
+		return fmt.Errorf("%w: NATS_DRAIN_TIMEOUT = %s, at most %s", errStopBudget, natsCfg.DrainTimeout, stopTimeout/3)
+	}
+	return nil
+}
 
 // logStart: контекста запроса при сборке графа нет — корень процесса.
 func logStart(log logkit.Logger) {

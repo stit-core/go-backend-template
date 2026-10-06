@@ -2,11 +2,15 @@ package identity_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/golibinfra/httpkit"
+	"git.stit.tech/stit-core/golibinfra/logkit"
 )
 
 func TestWithFrom(t *testing.T) {
@@ -42,25 +46,19 @@ func TestFrom_EmptyContext(t *testing.T) {
 	require.False(t, ok, "bare context must not carry identity")
 }
 
+// IP клиента кладёт в ctx middleware ClientIP цепочки httpkit: identity читает его, а не свой ключ.
 func TestIPFrom(t *testing.T) {
 	t.Parallel()
+	var got string
+	h := httpkit.ClientIP(logkit.Nop(), 0)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		got = identity.IPFrom(r.Context())
+	}))
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	r.RemoteAddr = "203.0.113.7:51234"
+	h.ServeHTTP(httptest.NewRecorder(), r)
 
-	cases := []struct {
-		name string
-		ctx  context.Context
-		want string
-	}{
-		{name: "returns stored ip", ctx: identity.WithIP(context.Background(), "10.0.0.1"), want: "10.0.0.1"},
-		{name: "empty on bare context", ctx: context.Background(), want: ""},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			require.Equal(t, tc.want, identity.IPFrom(tc.ctx))
-		})
-	}
+	require.Equal(t, "203.0.113.7", got)
+	require.Empty(t, identity.IPFrom(context.Background()), "a context outside a request carries no IP")
 }
 
 func TestRequestIDFrom_EmptyContext(t *testing.T) {

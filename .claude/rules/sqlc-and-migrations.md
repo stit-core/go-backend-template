@@ -64,9 +64,9 @@ paths:
   id = $1 AND used_at IS NULL` (`:execrows`, 0 строк → sentinel «уже использован») первым в
   транзакции эффекта: чтение `used_at` и безусловный `UPDATE` пропускают параллельный повтор.
   Канон — `MarkPasswordResetUsed` домена `verification`.
-- **Kit-таблицы** (`outbox_<domain>`/`audit_log`/`bruteforce_attempts`) схему держат
-  `golibinfra/{outboxkit,auditkit,bruteforcekit}/pgstore` (`Migrations`,
+- **Kit-таблицы** (`outbox_<domain>`/`audit_log`/`bruteforce_attempts`/`authn_sessions`) схему держат
+  `golibinfra/{outboxkit,auditkit,bruteforcekit,authnkit/session}/pgstore` (`Migrations`,
   `TableMigrations(table)`), `cmd/migrate` накатывает рядом — таблица версий у каждого
   источника своя (`schema_migrations_<source>`, приложение — `schema_migrations_app`).
   **Не дублируй их `CREATE TABLE`** в `migrations/`.
-- Имена: таблицы — множественное snake_case (`users`, `refresh_sessions`); колонки — snake_case.
+- Имена: таблицы — множественное snake_case (`users`, `email_verifications`); колонки — snake_case.

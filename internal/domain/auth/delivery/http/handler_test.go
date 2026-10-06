@@ -27,7 +27,7 @@ func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
 		authhttp.Register(api, authhttp.NewHandler(uc, authgate.CookieConfig{Secure: false}))
-	})
+	}, handlertest.WithAuth(identitytest.Extract))
 }
 
 func setCookieNames(resp http.Header) []string {

@@ -26,10 +26,6 @@ func (s stubParser) ParseAccess(context.Context, string) (map[string]any, error)
 	return s.claims, s.err
 }
 
-func (s stubParser) ParseRefresh(context.Context, string) (map[string]any, error) {
-	return s.claims, s.err
-}
-
 func TestExtract(t *testing.T) {
 	t.Parallel()
 

@@ -52,13 +52,13 @@ paths:
   внутри модуля домена (`fx.Private`). `context.Context` из графа не берут.
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
-  Операция без `Security` публична в рантайме: она либо под `Security` (`authgate.Secured(op)`),
-  либо в `publicOperations` (`cmd/api/api_test.go`); регистрация — в `registerHTTP`
+  Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)`:
+  без того и другого сервис не стартует (httpkit); регистрация — в `registerHTTP`
   (`cmd/api/http.go`). Ошибки — таблица домена `<домен>Errors`: правило на каждую ошибку `errors.go`,
   хендлер отдаёт `<домен>Errors.Map(err)`, таблица операции из тех же правил — `Declare` при
   регистрации (оба — archtest `TestDomainErrorTables`); ошибка поля — 422 с `Field`.
   Каждая ручка — операция huma в контракте `openapi.json`: сырой маршрут chi (`Router()`) и
-  `Hidden: true` обходят проверку `Security`, `TestBoot` их не пускает. Envelope — `data`;
+  `Hidden: true` в контракт не попадают, `TestBoot` их не пускает. Envelope — `data`;
   префикс, уникальность имён и envelope держит archtest `TestHTTPTypes`.
   OperationID — lowerCamel `<verb><Noun>`, глобально уникален.
 - **I/O — это use-case, не метод агрегата.** Нужен repo/сеть/время → метод `*Usecase`.

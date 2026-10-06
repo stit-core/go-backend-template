@@ -8,6 +8,7 @@ import (
 	"go.uber.org/fx"
 
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 )
@@ -61,24 +62,28 @@ func TestGuard(t *testing.T) {
 		return a
 	}
 
+	aud := authnkit.JWTConfig{Audience: []string{"backend"}}
+
 	cases := []struct {
 		name    string
 		app     *appconfig.App
 		redact  logkit.RedactConfig
 		http    httpkit.Config
+		jwt     authnkit.JWTConfig
 		wantErr string // "" — старт разрешён
 	}{
-		{name: "prod with safe settings", app: app("prod", true)},
+		{name: "prod with safe settings", app: app("prod", true), jwt: aud},
 		{name: "dev allows everything unsafe", app: app(appconfig.Dev, false), redact: logkit.RedactConfig{Disabled: true}, http: httpkit.Config{DocsEnabled: true}},
-		{name: "insecure cookie outside dev", app: app("prod", false), wantErr: "COOKIE_SECURE=false"},
-		{name: "log masking off outside dev", app: app("staging", true), redact: logkit.RedactConfig{Disabled: true}, wantErr: "LOG_REDACT_DISABLED=true"},
-		{name: "docs outside dev", app: app("prod", true), http: httpkit.Config{DocsEnabled: true}, wantErr: "HTTP_DOCS_ENABLED=true"},
-		{name: "any env but dev is strict", app: app("Dev", false), wantErr: `APP_ENV="Dev"`},
+		{name: "insecure cookie outside dev", app: app("prod", false), jwt: aud, wantErr: "COOKIE_SECURE=false"},
+		{name: "log masking off outside dev", app: app("staging", true), redact: logkit.RedactConfig{Disabled: true}, jwt: aud, wantErr: "LOG_REDACT_DISABLED=true"},
+		{name: "docs outside dev", app: app("prod", true), http: httpkit.Config{DocsEnabled: true}, jwt: aud, wantErr: "HTTP_DOCS_ENABLED=true"},
+		{name: "tokens without audience outside dev", app: app("prod", true), wantErr: "JWT_AUDIENCE empty"},
+		{name: "any env but dev is strict", app: app("Dev", false), jwt: aud, wantErr: `APP_ENV="Dev"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := appconfig.Guard(tc.app, tc.redact, tc.http)
+			err := appconfig.Guard(tc.app, tc.redact, tc.http, tc.jwt)
 			if tc.wantErr == "" {
 				require.NoError(t, err)
 				return
@@ -104,7 +109,7 @@ func TestModule(t *testing.T) {
 			setenv(t, "COOKIE_SECURE", "")
 
 			app := fx.New(fx.NopLogger, appconfig.Module,
-				fx.Supply(logkit.RedactConfig{}, httpkit.Config{DocsEnabled: true}))
+				fx.Supply(logkit.RedactConfig{}, httpkit.Config{DocsEnabled: true}, authnkit.JWTConfig{Audience: []string{"backend"}}))
 
 			require.ErrorIs(t, app.Err(), tc.wantErr)
 		})
@@ -116,7 +121,8 @@ func TestModule_EmptyEnvIsNotDev(t *testing.T) {
 	t.Setenv("APP_ENV", "")
 	setenv(t, "COOKIE_SECURE", "")
 
-	app := fx.New(fx.NopLogger, appconfig.Module, fx.Supply(logkit.RedactConfig{}, httpkit.Config{DocsEnabled: true}))
+	app := fx.New(fx.NopLogger, appconfig.Module,
+		fx.Supply(logkit.RedactConfig{}, httpkit.Config{DocsEnabled: true}, authnkit.JWTConfig{Audience: []string{"backend"}}))
 
 	require.ErrorIs(t, app.Err(), appconfig.ErrUnsafe)
 }

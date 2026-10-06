@@ -23,32 +23,32 @@ type Handler struct {
 func NewHandler(uc Usecase) *Handler { return &Handler{uc: uc} }
 
 func Register(api huma.API, h *Handler) {
-	huma.Register(api, huma.Operation{
+	huma.Register(api, httpkit.Public(huma.Operation{
 		OperationID:   "requestPasswordReset",
 		Method:        http.MethodPost,
 		Path:          "/api/auth/password-reset/request",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Запрос сброса пароля",
-	}, h.requestPasswordReset)
+	}), h.requestPasswordReset)
 
-	huma.Register(api, confirmPasswordResetErrors.Declare(huma.Operation{
+	huma.Register(api, confirmPasswordResetErrors.Declare(httpkit.Public(huma.Operation{
 		OperationID:   "confirmPasswordReset",
 		Method:        http.MethodPost,
 		Path:          "/api/auth/password-reset/confirm",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Подтверждение сброса пароля",
-	}), h.confirmPasswordReset)
+	})), h.confirmPasswordReset)
 
-	huma.Register(api, confirmEmailErrors.Declare(huma.Operation{
+	huma.Register(api, confirmEmailErrors.Declare(httpkit.Public(huma.Operation{
 		OperationID:   "confirmEmail",
 		Method:        http.MethodPost,
 		Path:          "/api/auth/email-verify",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Подтверждение email",
-	}), h.confirmEmail)
+	})), h.confirmEmail)
 }
 
 // requestPasswordReset: доменных ошибок usecase не отдаёт — отсутствие учётной записи неотличимо от

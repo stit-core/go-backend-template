@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"go.uber.org/fx"
 
@@ -13,9 +12,9 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/authnkit/session"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
-	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 
 type UserReader interface {
@@ -33,17 +32,6 @@ type PasswordSetter interface {
 
 type Tokens interface {
 	IssueAccess(ctx context.Context, u *User) (string, error)
-	IssueRefresh(ctx context.Context, userID string) (token, jti string, expiresAt time.Time, err error)
-}
-
-type TokenParser interface {
-	ParseRefresh(ctx context.Context, token string) (userID, jti string, err error)
-}
-
-type SessionRepository interface {
-	Insert(ctx context.Context, jti, userID string, expiresAt time.Time) error
-	GetByJTI(ctx context.Context, jti string) (*RefreshSession, error)
-	MarkUsed(ctx context.Context, jti, replacedByJTI string) error
 }
 
 type Authorizer interface {
@@ -65,9 +53,7 @@ type UsecaseDeps struct {
 	PasswordSet    PasswordSetter
 	Hasher         authnkit.Hasher
 	Tokens         Tokens
-	TokenParser    TokenParser
-	Sessions       SessionRepository
-	Tx             pgkit.Transactor
+	Sessions       session.Store
 	Policy         Authorizer
 	Guard          LoginGuard
 	Audit          auditkit.Logger
@@ -130,16 +116,17 @@ func (uc *Usecase) login(ctx context.Context, in *LoginInput) (*LoginOutput, out
 		uc.d.Log.Error(ctx, "guard record success", "err", err)
 	}
 
-	t, err := uc.issueTokens(ctx, u)
+	access, err := uc.d.Tokens.IssueAccess(ctx, u)
 	if err != nil {
-		return nil, outcome.Error, err
+		return nil, outcome.Error, fmt.Errorf("issue access token: %w", err)
 	}
-	if err := uc.d.Sessions.Insert(ctx, t.jti, u.ID, t.expiresAt); err != nil {
-		return nil, outcome.Error, fmt.Errorf("insert refresh session: %w", err)
+	refresh, err := uc.d.Sessions.Issue(ctx, u.ID)
+	if err != nil {
+		return nil, outcome.Error, fmt.Errorf("open session: %w", err)
 	}
 	uc.d.Log.Info(ctx, "user logged in", "user_id", u.ID)
 	uc.audit(ctx, auditkit.Entry{ActorID: u.ID, Action: "login", Resource: "user", ResourceID: u.ID})
-	return &t.out, outcome.OK, nil
+	return &LoginOutput{AccessToken: access, RefreshToken: refresh.Value, User: u}, outcome.OK, nil
 }
 
 // auditLoginFailed — отказ найденной учётной записи: в аудите её ID, адреса нет.
@@ -149,99 +136,51 @@ func (uc *Usecase) auditLoginFailed(ctx context.Context, userID string, reason o
 	})
 }
 
-// issued — токены сессии и строка refresh, которую пишет вызывающий: вход — сразу, Refresh — в
-// транзакции ротации.
-type issued struct {
-	out       LoginOutput
-	jti       string
-	expiresAt time.Time
-}
-
-func (uc *Usecase) issueTokens(ctx context.Context, u *User) (issued, error) {
-	access, err := uc.d.Tokens.IssueAccess(ctx, u)
-	if err != nil {
-		return issued{}, fmt.Errorf("issue access token: %w", err)
-	}
-	refresh, jti, expiresAt, err := uc.d.Tokens.IssueRefresh(ctx, u.ID)
-	if err != nil {
-		return issued{}, fmt.Errorf("issue refresh token: %w", err)
-	}
-	return issued{out: LoginOutput{AccessToken: access, RefreshToken: refresh, User: u}, jti: jti, expiresAt: expiresAt}, nil
-}
-
 func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*LoginOutput, error) {
 	out, result, err := uc.refresh(ctx, refreshToken)
 	uc.d.Metrics.RecordRefresh(ctx, result)
 	return out, err
 }
 
+// refresh: чья сессия, известно только после Rotate — пускают ли пользователя, проверяется после него.
 func (uc *Usecase) refresh(ctx context.Context, refreshToken string) (*LoginOutput, outcome.Result, error) {
-	userID, oldJTI, err := uc.d.TokenParser.ParseRefresh(ctx, refreshToken)
+	next, err := uc.d.Sessions.Rotate(ctx, refreshToken)
+	var reused *session.ReusedError
 	switch {
-	case errors.Is(err, ErrTokenExpired):
-		return nil, outcome.Expired, ErrRefreshExpired
-	case err != nil:
-		return nil, outcome.Invalid, ErrRefreshInvalid
-	}
-
-	stored, err := uc.d.Sessions.GetByJTI(ctx, oldJTI)
-	switch {
-	case errors.Is(err, ErrSessionNotFound):
-		return nil, outcome.Invalid, ErrRefreshInvalid
-	case err != nil:
-		return nil, outcome.Error, fmt.Errorf("get refresh session: %w", err)
-	case stored.UserID != userID:
-		return nil, outcome.Invalid, ErrRefreshInvalid
-	case stored.UsedAt != nil:
-		uc.audit(ctx, auditkit.Entry{ActorID: userID, Action: "refresh_reused", Resource: "refresh_session", ResourceID: oldJTI})
+	case errors.As(err, &reused):
+		uc.audit(ctx, auditkit.Entry{ActorID: reused.Subject, Action: "refresh_reused", Resource: "session", ResourceID: reused.SessionID})
 		return nil, resultReused, ErrRefreshReused
-	case uc.d.Clock.Now().After(stored.ExpiresAt):
+	case errors.Is(err, session.ErrExpired):
 		return nil, outcome.Expired, ErrRefreshExpired
-	}
-
-	u, err := uc.d.Users.GetByID(ctx, userID)
-	switch {
-	case errors.Is(err, ErrUserNotFound):
+	case errors.Is(err, session.ErrInvalid):
 		return nil, outcome.Invalid, ErrRefreshInvalid
 	case err != nil:
-		return nil, outcome.Error, fmt.Errorf("lookup user: %w", err)
+		return nil, outcome.Error, fmt.Errorf("rotate session: %w", err)
 	}
 
-	t, err := uc.issueTokens(ctx, u)
-	if err != nil {
-		return nil, outcome.Error, err
-	}
-	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
-		if err := uc.d.Sessions.MarkUsed(txCtx, oldJTI, t.jti); err != nil {
-			return err
+	u, err := uc.d.Users.GetByID(ctx, next.Subject)
+	switch {
+	case err != nil && !errors.Is(err, ErrUserNotFound):
+		return nil, outcome.Error, fmt.Errorf("lookup user: %w", err)
+	case err != nil || !u.CanLogin:
+		// Удалённый или заблокированный сессию не продлевает: токен Rotate клиенту не уходит, сессия закрыта.
+		if err := uc.d.Sessions.Revoke(ctx, next.Value); err != nil {
+			uc.d.Log.Error(ctx, "revoke session", "user_id", next.Subject, "err", err)
 		}
-		return uc.d.Sessions.Insert(txCtx, t.jti, u.ID, t.expiresAt)
-	}); err != nil {
-		return nil, outcome.Error, fmt.Errorf("rotate refresh session: %w", err)
+		return nil, outcome.Invalid, ErrRefreshInvalid
 	}
-	return &t.out, outcome.OK, nil
+	access, err := uc.d.Tokens.IssueAccess(ctx, u)
+	if err != nil {
+		return nil, outcome.Error, fmt.Errorf("issue access token: %w", err)
+	}
+	return &LoginOutput{AccessToken: access, RefreshToken: next.Value, User: u}, outcome.OK, nil
 }
 
+// Logout: неизвестный токен и закрытая сессия — тоже выход; аудита нет — чья сессия, хранилище не отдаёт.
 func (uc *Usecase) Logout(ctx context.Context, refreshToken string) error {
-	userID, jti, parseErr := uc.d.TokenParser.ParseRefresh(ctx, refreshToken)
-	if parseErr != nil {
-		return nil //nolint:nilerr // logout is idempotent: a broken/expired token is already logged out
+	if err := uc.d.Sessions.Revoke(ctx, refreshToken); err != nil {
+		return fmt.Errorf("revoke session: %w", err)
 	}
-
-	stored, err := uc.d.Sessions.GetByJTI(ctx, jti)
-	switch {
-	case errors.Is(err, ErrSessionNotFound):
-		return nil
-	case err != nil:
-		return fmt.Errorf("get refresh session: %w", err)
-	case stored.UserID != userID || stored.UsedAt != nil:
-		return nil
-	}
-
-	if err := uc.d.Sessions.MarkUsed(ctx, jti, ""); err != nil {
-		return fmt.Errorf("mark refresh session used: %w", err)
-	}
-	uc.audit(ctx, auditkit.Entry{ActorID: userID, Action: "logout", Resource: "user", ResourceID: userID})
 	return nil
 }
 

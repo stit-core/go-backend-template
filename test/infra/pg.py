@@ -1,7 +1,8 @@
 """Типизированная интроспекция Postgres стека (порт проброшен на 127.0.0.1:5432).
 
-Только чтение для ассертов side-effects. Схема — migrations/0001_users.up.sql,
-0002_auth.up.sql; таблицы outbox_<domain> — golibinfra/outboxkit/pgstore (TableMigrations).
+Только чтение для ассертов side-effects. Схема — migrations/; таблицы китов golibinfra: сессии
+refresh — authnkit/session/pgstore (authn_sessions, authn_session_tokens), outbox_<domain> —
+outboxkit/pgstore (TableMigrations), bruteforce_attempts — bruteforcekit/pgstore.
 """
 
 from __future__ import annotations
@@ -64,11 +65,15 @@ class Pg:
             "SELECT * FROM users WHERE LOWER(email) = LOWER(%s)", [email]
         )
 
-    def refresh_sessions_for(self, user_id: str) -> list[dict[str, Any]]:
+    def sessions_for(self, user_id: str) -> list[dict[str, Any]]:
+        """Сессии refresh пользователя: revoked_at, число токенов цепочки и живых (непогашенных)."""
         return self.rows(
-            "SELECT * FROM refresh_sessions WHERE user_id = %s "
-            "ORDER BY issued_at",
-            [user_id],
+            "SELECT s.id, s.revoked_at, count(t.token_hash) AS tokens, "
+            "count(t.token_hash) FILTER (WHERE t.used_at IS NULL) AS live_tokens "
+            "FROM authn_sessions s "
+            "LEFT JOIN authn_session_tokens t ON t.session_id = s.id "
+            "WHERE s.subject = %s GROUP BY s.id ORDER BY s.created_at",
+            [str(user_id)],
         )
 
     def bruteforce_for(self, subject: str) -> list[dict[str, Any]]:

@@ -28,14 +28,14 @@ type Handler struct {
 func NewHandler(uc Usecase) *Handler { return &Handler{uc: uc} }
 
 func Register(api huma.API, h *Handler) {
-	huma.Register(api, registerErrors.Declare(huma.Operation{
+	huma.Register(api, registerErrors.Declare(httpkit.Public(huma.Operation{
 		OperationID:   "registerUser",
 		Method:        http.MethodPost,
 		Path:          "/api/auth/register",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusCreated,
 		Summary:       "Регистрация нового пользователя",
-	}), h.register)
+	})), h.register)
 
 	huma.Register(api, meErrors.Declare(authgate.Secured(huma.Operation{
 		OperationID: "getMe",

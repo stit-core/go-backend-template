@@ -15,7 +15,6 @@ x-app-env: &app-env
 
   JWT_SECRET: smoke-only-secret-do-not-use-in-prod-min-32chars
   JWT_ACCESS_TTL: 15m
-  JWT_REFRESH_TTL: 720h
 
   # dev: лог-mailer (канала доставки писем у стека нет) и cookie без Secure — клиент ходит по http.
   APP_ENV: dev
