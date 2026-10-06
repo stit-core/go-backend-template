@@ -89,7 +89,7 @@ extension point форка.
 
 ```
 make e2e          # весь набор (поднимает стек, гоняет, сносит)
-make e2e-smoke    # только -m smoke (быстрый gate)
+make e2e-smoke    # только -m smoke (шаг make release)
 ```
 
 Под капотом: `test/.venv` (из `test/requirements.txt`) + pytest. Конкретно —

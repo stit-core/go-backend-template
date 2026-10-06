@@ -116,7 +116,7 @@ migrate-down: ## Откатить последнюю миграцию (треб�
 e2e: ## Типизированный e2e-харнес (test/): up → pytest → down. Нужен Docker; ./.env.local опционален
 	@bash scripts/tools/e2e.sh --format=detailed
 
-e2e-smoke: ## Только smoke-набор (-m smoke) — быстрый gate
+e2e-smoke: ## Только smoke-набор (-m smoke) — шаг make release
 	@bash scripts/tools/e2e.sh --smoke --format=detailed
 
 ##@ SCAFFOLD

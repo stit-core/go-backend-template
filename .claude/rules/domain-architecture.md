@@ -66,8 +66,8 @@ paths:
   Каждая ручка — операция huma в контракте `openapi.json`: сырой маршрут chi (`Router()`) и
   `Hidden: true` в контракт не попадают, `TestBoot` их не пускает. Envelope — `data`;
   префикс, уникальность имён и envelope держит archtest `TestHTTPTypes`.
-  OperationID — lowerCamel `<verb><Noun>`, глобально уникален. Путь — `/api/<ресурс>` в kebab-case
-  (`TestHTTPOperations`; `/health` и `/ready` — пробы httpkit).
+  OperationID — lowerCamel `<verb><Noun>`, глобально уникален. Путь — `/api/<ресурс>`, ресурс в
+  kebab-case (префикс держит `TestHTTPOperations`; `/health` и `/ready` — пробы httpkit).
 - **I/O — это use-case, не метод агрегата.** Нужен repo/сеть/время → метод `*Usecase`.
   Чистое правило/константа правила → `policy.go` домена, общее для доменов (правило пароля,
   `ForbiddenError`) — `pkg/policy`; не inline в usecase. Исход метрики — `outcome.Result`, ID,

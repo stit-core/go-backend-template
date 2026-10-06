@@ -8,7 +8,7 @@ status: draft
 # Dependencies — зависимости и ёмкость
 
 ## golibinfra kits
-<Какие kit'ы golibinfra подключены и зачем (таблица `| Kit | Зачем |`). В графе `cmd/api` шаблона: telemetry, logkit, pgkit, natskit, httpkit, timerkit, authnkit (с session), bruteforcekit, auditkit, clockkit, outboxkit, healthkit; в коде доменов — ещё bizmetric, idkit, ptrkit; полный набор — README golibinfra § Пакеты нужной версии (storagekit, httpclient, …). Версия golibinfra.>
+<Какие kit'ы golibinfra подключены и зачем (таблица `| Kit | Зачем |`). В графе `cmd/api` шаблона: telemetry, logkit, pgkit, natskit, httpkit, timerkit, authnkit (с session), bruteforcekit, auditkit, clockkit, outboxkit, healthkit; в коде доменов — ещё bizmetric; полный набор — README golibinfra § Пакеты нужной версии (storagekit, httpclient, …). Версия golibinfra.>
 
 ## Что НЕ подключено
 <Kit'ы, доступные в golibinfra, но НЕ wired в `cmd/api/main.go` — их env'ы runtime игнорирует, de-template их prune'ит. Перечисли (напр. cachekit/flagkit/storagekit/httpclient), чтобы не было ложных ожиданий «эта env читается».>

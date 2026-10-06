@@ -217,8 +217,8 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 
 1. `Authn`:
    - `type`: enum `JWT` / `session` / `none` / `mixed`;
-   - алгоритм (если JWT): HS256 — authnkit другого не подписывает; иной алгоритм — PR в
-     golibinfra, не локально (CLAUDE.md § Стиль кода);
+   - алгоритм (если JWT): HS256 — authnkit другого не подписывает; иной алгоритм — план в
+     golibinfra → тег → bump, не локально (`docs/reference/architecture.md § Граница с golibinfra`);
    - где верифицируется: enum `authgate middleware` / `per-domain`.
 2. `Authgate`: что middleware кладёт в context (Other — в шаблоне
    `identity.Identity{UserID, Role}`), публичные vs защищённые роуты (Other).
@@ -290,7 +290,7 @@ golibinfra-first принцип (generic util → golibinfra, не локаль�
 1. `golibinfra kits` (таблица): множественный выбор kit'ов golibinfra —
    в графе `cmd/api` шаблона: telemetry, logkit, pgkit, natskit, httpkit,
    timerkit, authnkit (с session), bruteforcekit, auditkit, clockkit,
-   outboxkit, healthkit; в коде доменов — ещё bizmetric, idkit, ptrkit;
+   outboxkit, healthkit; в коде доменов — ещё bizmetric;
    полный набор — README golibinfra § Пакеты нужной версии (storagekit,
    httpclient, … — Other для редких). Версия golibinfra (Other).
 2. `Что НЕ подключено`: автоматически = (полный набор) − (выбранные

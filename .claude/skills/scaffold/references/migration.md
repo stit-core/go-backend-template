@@ -97,10 +97,12 @@ ALTER TABLE users DROP COLUMN sensitive_data;
 
 Если миграция меняет схему таблицы которой пользуется sqlc — обнови запросы в `internal/domain/<name>/infra/postgres/queries/`.
 
-Пример: добавили `last_login_at` → возможно нужно обновить `GetUserByID` чтобы возвращал колонку:
+Пример: добавили `last_login_at` → запрос, который отдаёт строку целиком (`GetUserByID`), берёт колонку
+тем же порядком, что в таблице, — последней (иначе у запроса свой тип строки; поле до ответа API —
+вариант `field`):
 ```sql
 -- name: GetUserByID :one
-SELECT id, email, ..., last_login_at, version, created_at, updated_at
+SELECT id, email, ..., created_at, updated_at, last_login_at
 FROM users
 WHERE id = $1;
 ```

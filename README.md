@@ -103,7 +103,7 @@ make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /r
 
 ```bash
 make e2e          # весь набор
-make e2e-smoke    # только -m smoke (быстрый gate)
+make e2e-smoke    # только -m smoke (шаг make release)
 ```
 
 ## Release
