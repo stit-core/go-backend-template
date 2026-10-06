@@ -19,9 +19,11 @@ func TestLoginGuard_Attempt(t *testing.T) {
 	t.Parallel()
 	until := time.Date(2026, 1, 1, 12, 15, 0, 0, time.UTC)
 
-	lock, err := authbruteforce.NewLoginGuard(bruteforcetest.Permissive{}).Attempt(context.Background(), "a@b.com", "10.0.0.1")
+	rec := &bruteforcetest.Recorder{}
+	lock, err := authbruteforce.NewLoginGuard(rec).Attempt(context.Background(), "a@b.com", "10.0.0.1")
 	require.NoError(t, err)
 	require.Nil(t, lock, "an allowed attempt carries no lock")
+	require.Equal(t, []bruteforcetest.Attempt{{Subject: "a@b.com", IP: "10.0.0.1"}}, rec.Attempts(), "the attempt is counted with the key of the client")
 
 	lock, err = authbruteforce.NewLoginGuard(bruteforcetest.Locked{Until: until}).Attempt(context.Background(), "a@b.com", "10.0.0.1")
 	require.NoError(t, err)

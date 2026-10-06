@@ -14,6 +14,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	usermocks "git.stit.tech/stit-core/go-backend-template/internal/domain/user/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
@@ -57,6 +58,18 @@ func TestUserAdapter_User(t *testing.T) {
 			require.Equal(t, want, byEmail)
 		})
 	}
+}
+
+// Чтение под блокировкой идёт в транзакции входа: адаптер передаёт её ctx в user.Trusted, и строка
+// пользователя держится до открытия сессии.
+func TestUserAdapter_LocksInCallerTx(t *testing.T) {
+	t.Parallel()
+	a, repo := newAdapter(t)
+	repo.EXPECT().GetByIDForShare(mock.MatchedBy(pgkit.InTx), "u1").Return(&user.User{ID: "u1", Status: user.StatusActive}, nil).Once()
+
+	u, err := a.LockByID(pgkit.WithTestTx(context.Background()), "u1")
+	require.NoError(t, err)
+	require.Equal(t, "u1", u.ID)
 }
 
 // Каждая ошибка из user.TrustedErrors доходит до auth своим sentinel'ом, а не чужим: новая
