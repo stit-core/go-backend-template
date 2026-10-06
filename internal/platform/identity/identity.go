@@ -30,12 +30,8 @@ func From(ctx context.Context) (Identity, bool) {
 	return id, ok
 }
 
-// IPFrom и RequestIDFrom держат домены вне транспорта: значения запроса в ctx кладёт цепочка httpkit,
-// а usecase читает их только здесь (rule domain-architecture).
+// IPFrom держит домены вне транспорта: IP клиента в ctx кладёт цепочка httpkit, а usecase читает его
+// только здесь (rule domain-architecture).
 func IPFrom(ctx context.Context) string {
 	return httpkit.ClientIPFrom(ctx)
-}
-
-func RequestIDFrom(ctx context.Context) string {
-	return httpkit.RequestIDFrom(ctx)
 }

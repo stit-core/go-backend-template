@@ -11,7 +11,6 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
-	"git.stit.tech/stit-core/go-backend-template/pkg/tokens"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
@@ -98,10 +97,7 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) er
 	if err != nil {
 		return fmt.Errorf("load user: %w", err)
 	}
-	t, err := tokens.Generate()
-	if err != nil {
-		return fmt.Errorf("generate verify token: %w", err)
-	}
+	t := authnkit.NewToken()
 
 	var (
 		tokenID string
@@ -109,7 +105,7 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) er
 	)
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
 		var err error
-		tokenID, issued, err = uc.d.Repo.UpsertEmailVerification(txCtx, userID, tokens.Hash(t), uc.d.Clock.Now().Add(emailVerificationTTL))
+		tokenID, issued, err = uc.d.Repo.UpsertEmailVerification(txCtx, userID, authnkit.HashToken(t), uc.d.Clock.Now().Add(emailVerificationTTL))
 		if err != nil || !issued {
 			return err
 		}
@@ -168,12 +164,9 @@ func (uc *Usecase) issuePasswordReset(ctx context.Context, u *User) (outcome.Res
 		return resultThrottled, nil
 	}
 
-	token, err := tokens.Generate()
-	if err != nil {
-		return outcome.Error, fmt.Errorf("generate reset token: %w", err)
-	}
+	token := authnkit.NewToken()
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
-		tokenID, err := uc.d.Repo.InsertPasswordReset(txCtx, u.ID, tokens.Hash(token), uc.d.Clock.Now().Add(passwordResetTTL))
+		tokenID, err := uc.d.Repo.InsertPasswordReset(txCtx, u.ID, authnkit.HashToken(token), uc.d.Clock.Now().Add(passwordResetTTL))
 		if err != nil {
 			return err
 		}
@@ -194,7 +187,7 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 		return ErrWeakPassword
 	}
 
-	pr, err := uc.d.Repo.GetPasswordReset(ctx, tokens.Hash(token))
+	pr, err := uc.d.Repo.GetPasswordReset(ctx, authnkit.HashToken(token))
 	switch {
 	case err != nil:
 		return err
@@ -237,7 +230,7 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 }
 
 func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
-	ev, err := uc.d.Repo.GetEmailVerification(ctx, tokens.Hash(token))
+	ev, err := uc.d.Repo.GetEmailVerification(ctx, authnkit.HashToken(token))
 	switch {
 	case err != nil:
 		return err
@@ -263,9 +256,10 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 	return nil
 }
 
-// audit дописывает время, IP и запрос; сбой записи аудита операцию не отменяет — он уходит в лог.
+// audit дописывает время (IP клиента и ID запроса auditkit берёт из ctx); сбой записи аудита операцию не
+// отменяет — он уходит в лог.
 func (uc *Usecase) audit(ctx context.Context, e auditkit.Entry) {
-	e.At, e.IP, e.RequestID = uc.d.Clock.Now(), identity.IPFrom(ctx), identity.RequestIDFrom(ctx)
+	e.At = uc.d.Clock.Now()
 	if err := uc.d.Audit.Log(ctx, e); err != nil {
 		uc.d.Log.Error(ctx, "audit "+e.Action, "err", err)
 	}

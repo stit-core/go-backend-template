@@ -116,7 +116,7 @@ integration, нужен Docker) + build + gen-check + cover-check ≥75%. `make 
 - Conventional Commits. Дёргай `make <verb>`, не скрипты напрямую.
 
 ### Сначала спросить
-- `migrations/` (skill `/scaffold`, вариант migration), `pkg/policy` + `pkg/tokens`, `internal/platform/authgate/`,
+- `migrations/` (skill `/scaffold`, вариант migration), `pkg/policy`, `internal/platform/authgate/`,
   `go.mod`/`go.sum`, `git tag -a` / `make release` (артефакт вне репо).
 - Ослабить гейт (`//nolint`; правка `Makefile`, `scripts/`, `.golangci.yml`, `internal/archtest`,
   `.claude/settings.json`, `.claude/hooks/`, после которой он проверяет меньше) — только по явной

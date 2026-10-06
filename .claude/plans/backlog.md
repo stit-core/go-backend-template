@@ -2,11 +2,6 @@
 
 Кандидаты в работу, ещё не взятые в план: `- **<id>** — что и зачем. Триггер: когда браться.` Форма и жизненный цикл — skill `/plan`.
 
-- **publisher-stream-check** — старт не проверяет стрим домена-публикатора: без него сервис здоров,
-  а строки outbox копятся без PubAck. Покрытие subject'ов стримом видит JetStream API natskit и
-  outboxkit (в v1.2.0 проверки нет), эквивалент в шаблоне не пишется. Триггер: кит проверяет стрим
-  публикатора на старте — подключить в `events.OutboxFor`, тексты `.env.example` и
-  `architecture.md` (§ События) — «старт падает».
 - **infra-touch-migrations** — `make status` молчит на staged-переименовании закоммиченной
   миграции и шумит на правке ещё не выпущенной: сравнивать с тегом последнего релиза образа (без
   тегов обвязки — `git describe --tags --abbrev=0 --exclude 'template/*'`), а не с HEAD. Триггер:
@@ -19,10 +14,6 @@
   `user.events.registered` (события до `.v2`, `verification/delivery/nats`): снять подписку и
   `subjectUserRegisteredV1`, в накопитель — INFRA-HANDOFF «удалить durable». Триггер: следующий релиз
   после выкатки релиза с `.v2`.
-- **healthcheck-kit** — проверка здоровья контейнера без shell (`api healthcheck`: `GET /health` по
-  `HTTP_ADDR`) живёт в `cmd/api/healthcheck.go`, а нужна каждому сервису на httpkit в distroless-образе:
-  место — httpkit, рядом с `/health`. Триггер: golibinfra v1.3.0 (`harden-authn-release` S10) —
-  снимает `fix-reference-code` S9.
 - **new-domain-names** — `make new-domain` принимает имена, на которых срез не проходит гейт: `repo`
   (не компилируется), инициализмы (`api_key` — замечания линтера), существующая таблица
   (`password_reset` — `make gen` падает, дерево в полусостоянии). Триггер: S13–S14
@@ -33,3 +24,9 @@
 - **authntest-broken-hasher** — тесты сбоя хэширования (регистрация user, подтверждение сброса
   verification) держат свой `brokenHasher` поверх `authntest.DeterministicHasher`: хэшера со сбоем в
   authntest нет. Триггер: партия 3 golibinfra (v1.4.0) — фейк в authntest, локальные снять.
+- **logout-audit** — выход (`auth.Logout`) не пишет аудит: `session.Store.Revoke` не отдаёт, чью
+  сессию закрыл, а запись без учётной записи на любой токен — шум. Триггер: golibinfra отдаёт subject
+  закрытой сессии (партия 3) — аудит `logout` с учётной записью.
+- **clientip-test-setter** — `identitytest.Anon` кладёт IP клиента прогоном запроса через
+  `httpkit.ClientIP`: сеттера IP в ctx у httpkit нет. Триггер: сеттер в httpkit (партия 3 golibinfra) —
+  взять его.

@@ -107,7 +107,7 @@ Generic-примитив, нужный не только этому сервис
   все `Record*` — nil-safe. Исход (метка `result`) — `outcome.Result`: общие исходы — `pkg/outcome`,
   особые для домена — переменные `outcome.New(…)` в `metrics.go`; строка вместо исхода не
   компилируется. Экспорт — `telemetry.Module` в `cmd/api`: при `OTEL_SDK_DISABLED=true` сигналы не
-  уходят; запись метрики тест сверяет SDK-ридером (`sdkmetric.NewManualReader`).
+  уходят; запись метрики тест сверяет провайдером теста (`metrictest.NewProvider`).
 - **Repository**: создание — `Insert*` (не `Create*`), sqlc-аннотации — `Insert<Entity>`.
 
 ### Разбиение переростков
@@ -126,7 +126,8 @@ Generic-примитив, нужный не только этому сервис
 - Метод с метрикой пишет исход ровно раз на любом пути: исход возвращает внутренняя функция
   (`Login` → `login`), запись — одна, в публичном методе.
 - Security-значимые операции (вход, повтор refresh, смена и сброс пароля, verification) пишут `audit`
-  из usecase одним хелпером домена (`uc.audit`: время, IP, запрос) — в записи ID учётной записи, не
+  из usecase одним хелпером домена (`uc.audit`: время; IP клиента и ID запроса auditkit берёт из
+  ctx) — в записи ID учётной записи, не
   адрес; попытка входа на неизвестный адрес и блокировка guard'а — только исход в метрике; выход
   аудита не пишет — чью сессию он закрыл, хранилище сессий не отдаёт.
   След таких отказов по клиенту (IP, частота) — access-лог прокси перед сервисом.
@@ -136,7 +137,7 @@ Generic-примитив, нужный не только этому сервис
   authnkit/session): домен user — в `Update`, `Delete` и `Trusted.UpdatePassword` (её берут смена и
   сброс пароля), `cmd/seed-admin` — при повышении. Сессию открывает, ротирует и закрывает по токену
   auth; обновление проверяет, пускают ли пользователя, после ротации.
-- Транспортные значения из ctx (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`.
+- IP клиента из ctx (`identity.IPFrom`; его кладёт цепочка httpkit) — только `internal/platform/identity`.
 - ID, которые создаёт код (не БД), — `idkit.NewV7()`.
 
 ## Ports & adapters (cross-domain)
@@ -286,8 +287,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 - **JetStream-стримы.** drain и subscriber'ы требуют включённого JetStream
   (`NATS_JETSTREAM_ENABLED=true`) и стримов, покрывающих subject-префиксы доменов
   (`NATS_JS_STREAM_NAMES`, напр. `user,verification` → `user.>`/`verification.>`). Без стрима
-  подписки старт падает; без стрима публикатора сервис стартует, а строки его outbox не получают
-  PubAck и копятся.
+  подписки или публикатора старт падает: `events.OutboxFor` объявляет subject'ы домена
+  (`outboxkit.WithSubjects`), и Publish чужого subject'а — ошибка.
 - **Таблицы.** `audit_log`/`bruteforce_attempts`/`outbox_<domain>`/`authn_sessions` — схему держит
   golibinfra-kit (`auditpg.Migrations`, `bruteforcepg.Migrations`, `sessionpg.Migrations`,
   `outboxpg.TableMigrations(Table)` из `infra/outbox/outbox.go`); источники перечислены в

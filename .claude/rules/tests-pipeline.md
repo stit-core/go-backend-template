@@ -15,7 +15,8 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 ## Тест проверяет поведение
 
 - Утверждай результат, ошибку (`require.ErrorIs`) и эффекты: вызовы портов с точными
-  аргументами, запись в БД, событие (`outboxtest.Recorder`). `NotNil` ради покрытия — не тест:
+  аргументами, запись в БД, событие (`outboxtest.Recorder`), исход метрики (провайдер теста
+  `metrictest.NewProvider`, значение — `require.InDelta`). `NotNil` ради покрытия — не тест:
   тест без утверждений ловит archtest `TestTestsAssert`, пустышку — `/code-review`.
 - Рядом с happy path — error path и граница (пусто, максимум, чужой id).
 - Красный тест не подгоняй под код: сначала реши, кто прав; меняешь ожидание — причина в теле
@@ -53,7 +54,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | HTTP API | `cmd/api/api_test.go`: API проходит проверку старта httpkit (`Security` или `httpkit.Public`, уникальный метод+путь), операция без пометки — ошибка старта, под `Security` — коды 401 сессии; `openapi.json` совпадает с кодом |
 | подкоманды `main` | `cmd/api/healthcheck_test.go`: тестовый бинарь, перезапущенный как `api healthcheck` (`TestMain` зовёт `main`), — код выхода по `/health` на `HTTP_ADDR`, сервис не стартует |
 | сессии | `cmd/api/session_test.go` (integration): сквозь HTTP — ротация, повтор токена и выход закрывают сессию, смена и сброс пароля, блокировка и удаление — все сессии пользователя; `cmd/seed-admin/main_test.go` — повышение закрывает прежние сессии |
-| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, проверка здоровья (`checkHealth`) получает 200 от `/health` сервиса, 401 у каждой операции под `Security`, 429, 5xx без причины (она — в логе под тем же `request_id`), событие до подписчика, outbox verification — до стрима, `/openapi.json` = `openapi.json`, kit-таблицы графа = источники `cmd/migrate`, события fx — в лог сервиса, HTTP стартует последним и гасится первым; глобальный провайдер метрик — SDK telemetry, метрики доменов пишутся в провайдер telemetry; обе ссылки из писем гасятся; адрес, пароли, cookie сессии и токены писем — ни в логе сервиса, ни в `audit_log` и outbox |
+| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — старт, проверка здоровья (`httpkit.CheckHealth`) получает 200 от `/health` сервиса, без стрима публикатора старт падает, 401 у каждой операции под `Security`, 429, 5xx без причины (она — в логе под тем же `request_id`), событие до подписчика, outbox verification — до стрима, `/openapi.json` = `openapi.json`, kit-таблицы графа = источники `cmd/migrate`, события fx — в лог сервиса, HTTP стартует последним и гасится первым; глобальный провайдер метрик — провайдер telemetry, метрики доменов пишутся в него; обе ссылки из писем гасятся; адрес, пароли, cookie сессии и токены писем — ни в логе сервиса, ни в `audit_log` и outbox |
 
 ## TDD для багфиксов — обязательно
 
@@ -76,12 +77,13 @@ RED→GREEN: падающий тест, воспроизводящий баг �
 - Рукописный stateful-фейк допустим для протокольных портов (цепочки insert/markUsed);
   тогда интерфейс из `.mockery.yml` убирается — мок и фейк вместе не живут.
 - Identity-контексты — `internal/testkit/identitytest` (`Admin`/`Client`/`Anon`), не
-  inline `identity.With(...)`.
+  inline `identity.With(...)`: это ctx запроса с IP клиента и ID (`identitytest.IP`, `RequestID`),
+  с ними тест сверяет аудит, guard входа и лимитер.
 
 ## Интеграционные
 
 - Build-tag `//go:build integration` сверху файла; гоняются в `make check` (шаг `make test-int`).
-  Docker обязателен: без него `TestDockerRequired` роняет гейт, а не пропускает integration.
+  Docker обязателен: вне `-short` testkit без Docker роняет тест, а не пропускает его.
 - Контейнер+миграции+пул — `golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(path))`
   (нужна kit-таблица → ещё `testkit.WithMigrations(<kit>pg.Migrations)`);
   канон — `internal/domain/user/infra/postgres/repository_test.go`. Seed-хелперы строк

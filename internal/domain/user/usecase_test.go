@@ -86,9 +86,13 @@ func revoked(t *testing.T, id string, err error) *mocks.MockSessions {
 
 var errRevoke = errors.New("authn_sessions: connection refused")
 
-// audited — запись аудита: actor сделал action над пользователем id.
+// audited — запись аудита запроса identitytest: actor сделал action над пользователем id; IP клиента и ID
+// запроса auditkit берёт из ctx.
 func audited(actor, action, id string) *auditkit.Entry {
-	return &auditkit.Entry{ActorID: actor, Action: action, Resource: "user", ResourceID: id, At: fixedNow}
+	return &auditkit.Entry{
+		ActorID: actor, Action: action, Resource: "user", ResourceID: id, At: fixedNow,
+		IP: identitytest.IP, RequestID: identitytest.RequestID,
+	}
 }
 
 var errHashing = errors.New("argon2: out of memory")
@@ -120,7 +124,7 @@ func TestRegister(t *testing.T) {
 	}).Once()
 	f := newUC(t, withRepo(repo))
 
-	got, err := f.uc.Register(context.Background(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
+	got, err := f.uc.Register(identitytest.Anon(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
 	require.NoError(t, err)
 	require.Equal(t, "id-1", got.ID)
 	require.Equal(t, user.UserRegistered{ID: "id-1", At: fixedNow}, f.bus.Last(subjectRegistered),
@@ -163,7 +167,7 @@ func TestRegister_Rejected(t *testing.T) {
 			}
 			f := newUC(t, opts...)
 
-			_, err := f.uc.Register(context.Background(), &tc.in)
+			_, err := f.uc.Register(identitytest.Anon(), &tc.in)
 			require.ErrorIs(t, err, tc.want)
 			require.Zero(t, f.bus.Count())
 			require.Empty(t, f.audit.Entries())

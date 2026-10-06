@@ -9,8 +9,6 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth/mocks"
@@ -23,6 +21,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/logtest"
+	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
 	"git.stit.tech/stit-core/golibinfra/testkit/sessiontest"
 )
 
@@ -52,13 +51,14 @@ func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
 	return p
 }
 
-// loginGuard ждёт ровно одну попытку входа subject до проверки пароля и, если succeeded, — один успех.
+// loginGuard ждёт ровно одну попытку входа subject с IP запроса до проверки пароля и, если succeeded, — один
+// успех.
 func loginGuard(t *testing.T, subject string, succeeded bool) *mocks.MockLoginGuard {
 	t.Helper()
 	g := mocks.NewMockLoginGuard(t)
-	g.EXPECT().Attempt(mock.Anything, subject, "").Return(nil, nil).Once()
+	g.EXPECT().Attempt(mock.Anything, subject, identitytest.IP).Return(nil, nil).Once()
 	if succeeded {
-		g.EXPECT().RecordSuccess(mock.Anything, subject, "").Return(nil).Once()
+		g.EXPECT().RecordSuccess(mock.Anything, subject, identitytest.IP).Return(nil).Once()
 	}
 	return g
 }
@@ -146,6 +146,13 @@ func (f ucFixture) issue(t *testing.T, userID string) session.Token {
 	return tok
 }
 
+// audited — запись аудита запроса identitytest: время — часы usecase, IP клиента и ID запроса auditkit
+// берёт из ctx.
+func audited(e auditkit.Entry) *auditkit.Entry {
+	e.At, e.IP, e.RequestID = fixedNow, identitytest.IP, identitytest.RequestID
+	return &e
+}
+
 var errStore = errors.New("authn_sessions: connection refused")
 
 // failingSessions — хранилище сессий, у которого сбоит каждый вызов.
@@ -185,14 +192,14 @@ func TestLogin(t *testing.T) {
 		)
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)))
 
-		out, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
 		require.Equal(t, 1, f.sessions.Active("u1"), "the login opens a session of the user")
 		next, err := f.sessions.Rotate(context.Background(), out.RefreshToken)
 		require.NoError(t, err, "the refresh token is the token of that session")
 		require.Equal(t, "u1", next.Subject)
-		require.Equal(t, &auditkit.Entry{ActorID: "u1", Action: "login", Resource: "user", ResourceID: "u1", At: fixedNow}, f.audit.Last("login"))
+		require.Equal(t, audited(auditkit.Entry{ActorID: "u1", Action: "login", Resource: "user", ResourceID: "u1"}), f.audit.Last("login"))
 	})
 
 	// Сессия не открылась — входа нет: ни токенов, ни аудита входа.
@@ -205,7 +212,7 @@ func TestLogin(t *testing.T) {
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)),
 			withSessions(func(s session.Store) session.Store { return failingSessions{s} }))
 
-		out, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.ErrorIs(t, err, errStore)
 		require.Nil(t, out)
 		require.False(t, f.audit.Has("login"))
@@ -219,9 +226,11 @@ func TestLogin(t *testing.T) {
 		)
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", false)))
 
-		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "wrong"})
+		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "wrong"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
-		require.Equal(t, "u1", f.audit.Last("login_failed").ResourceID, "the audit names the account by ID, not by address")
+		require.Equal(t, audited(auditkit.Entry{
+			Action: "login_failed", Resource: "user", ResourceID: "u1", Metadata: map[string]any{"reason": "invalid_credentials"},
+		}), f.audit.Last("login_failed"), "the audit names the account by ID, not by address")
 	})
 
 	t.Run("blocked status", func(t *testing.T) {
@@ -232,7 +241,7 @@ func TestLogin(t *testing.T) {
 		)
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", false)))
 
-		out, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 		require.Nil(t, out)
 		require.True(t, f.audit.Has("login_failed"))
@@ -245,7 +254,7 @@ func TestLogin(t *testing.T) {
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, auth.ErrUserNotFound)
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "x@y.com", false)))
 
-		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
+		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 		require.Empty(t, f.audit.Entries(), "an unknown address does not reach the audit")
 	})
@@ -256,7 +265,7 @@ func TestLogin(t *testing.T) {
 		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, errors.New("db down"))
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "x@y.com", false)))
 
-		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
+		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
 		require.Error(t, err)
 		require.NotErrorIs(t, err, auth.ErrInvalidCredentials)
 		require.False(t, f.audit.Has("login_failed"))
@@ -265,11 +274,11 @@ func TestLogin(t *testing.T) {
 	t.Run("account locked", func(t *testing.T) {
 		t.Parallel()
 		g := mocks.NewMockLoginGuard(t)
-		g.EXPECT().Attempt(mock.Anything, "a@b.com", "").
+		g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).
 			Return(&auth.LockState{Until: fixedNow.Add(15 * time.Minute)}, nil).Once()
 		f := newUC(t, withGuard(g))
 
-		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "p"})
+		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "p"})
 		require.ErrorIs(t, err, auth.ErrAccountLocked)
 		var locked *auth.LockedError
 		require.ErrorAs(t, err, &locked)
@@ -281,10 +290,10 @@ func TestLogin(t *testing.T) {
 	t.Run("guard failure refuses the login", func(t *testing.T) {
 		t.Parallel()
 		g := mocks.NewMockLoginGuard(t)
-		g.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(nil, errors.New("guard store down")).Once()
+		g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, errors.New("guard store down")).Once()
 		f := newUC(t, withGuard(g))
 
-		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.ErrorContains(t, err, "guard store down")
 		require.NotErrorIs(t, err, auth.ErrInvalidCredentials, "a guard failure is not a wrong password")
 		require.False(t, f.audit.Has("login"))
@@ -293,10 +302,10 @@ func TestLogin(t *testing.T) {
 	t.Run("attempt the guard cannot count is invalid credentials", func(t *testing.T) {
 		t.Parallel()
 		g := mocks.NewMockLoginGuard(t)
-		g.EXPECT().Attempt(mock.Anything, "", "").Return(nil, auth.ErrInvalidCredentials).Once()
+		g.EXPECT().Attempt(mock.Anything, "", identitytest.IP).Return(nil, auth.ErrInvalidCredentials).Once()
 		f := newUC(t, withGuard(g))
 
-		_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "", Password: "pass1234"})
+		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "", Password: "pass1234"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 	})
 
@@ -307,11 +316,11 @@ func TestLogin(t *testing.T) {
 			&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}, nil,
 		).Once()
 		g := mocks.NewMockLoginGuard(t)
-		g.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(nil, nil).Once()
-		g.EXPECT().RecordSuccess(mock.Anything, "a@b.com", "").Return(errors.New("guard store down")).Once()
+		g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, nil).Once()
+		g.EXPECT().RecordSuccess(mock.Anything, "a@b.com", identitytest.IP).Return(errors.New("guard store down")).Once()
 		f := newUC(t, withUsers(users), withGuard(g))
 
-		out, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
 		require.True(t, f.audit.Has("login"))
@@ -324,7 +333,7 @@ func TestRefresh(t *testing.T) {
 	f := newUC(t, withUsers(canLogin(t)))
 	first := f.issue(t, "u1")
 
-	out, err := f.uc.Refresh(context.Background(), first.Value)
+	out, err := f.uc.Refresh(identitytest.Anon(), first.Value)
 	require.NoError(t, err)
 	require.Equal(t, "access.u1.client", out.AccessToken)
 	require.NotEqual(t, first.Value, out.RefreshToken)
@@ -340,14 +349,14 @@ func TestRefresh_Reused(t *testing.T) {
 	t.Parallel()
 	f := newUC(t, withUsers(canLogin(t)))
 	first := f.issue(t, "u1")
-	out, err := f.uc.Refresh(context.Background(), first.Value)
+	out, err := f.uc.Refresh(identitytest.Anon(), first.Value)
 	require.NoError(t, err)
 
-	_, err = f.uc.Refresh(context.Background(), first.Value)
+	_, err = f.uc.Refresh(identitytest.Anon(), first.Value)
 	require.ErrorIs(t, err, auth.ErrRefreshReused)
-	require.Equal(t, &auditkit.Entry{ActorID: "u1", Action: "refresh_reused", Resource: "session", ResourceID: first.SessionID, At: fixedNow},
+	require.Equal(t, audited(auditkit.Entry{ActorID: "u1", Action: "refresh_reused", Resource: "session", ResourceID: first.SessionID}),
 		f.audit.Last("refresh_reused"))
-	_, err = f.uc.Refresh(context.Background(), out.RefreshToken)
+	_, err = f.uc.Refresh(identitytest.Anon(), out.RefreshToken)
 	require.ErrorIs(t, err, auth.ErrRefreshInvalid, "the reuse closed the session with its next token")
 	require.Zero(t, f.sessions.Active("u1"))
 }
@@ -361,7 +370,7 @@ func TestRefresh_Expired(t *testing.T) {
 		tok := f.issue(t, "u1")
 		f.clock.Advance(sessionConfig.IdleTTL)
 
-		_, err := f.uc.Refresh(context.Background(), tok.Value)
+		_, err := f.uc.Refresh(identitytest.Anon(), tok.Value)
 		require.ErrorIs(t, err, auth.ErrRefreshExpired)
 	})
 	t.Run("session past its absolute lifetime", func(t *testing.T) {
@@ -372,20 +381,20 @@ func TestRefresh_Expired(t *testing.T) {
 		refresh := f.issue(t, "u1").Value
 		for range 3 {
 			f.clock.Advance(50 * time.Minute)
-			out, err := f.uc.Refresh(context.Background(), refresh)
+			out, err := f.uc.Refresh(identitytest.Anon(), refresh)
 			require.NoError(t, err)
 			refresh = out.RefreshToken
 		}
 		f.clock.Advance(31 * time.Minute)
 
-		_, err := f.uc.Refresh(context.Background(), refresh)
+		_, err := f.uc.Refresh(identitytest.Anon(), refresh)
 		require.ErrorIs(t, err, auth.ErrRefreshExpired, "three hours after the login the session is over")
 	})
 }
 
 func TestRefresh_UnknownToken(t *testing.T) {
 	t.Parallel()
-	_, err := newUC(t).uc.Refresh(context.Background(), "not-a-session-token")
+	_, err := newUC(t).uc.Refresh(identitytest.Anon(), "not-a-session-token")
 	require.ErrorIs(t, err, auth.ErrRefreshInvalid)
 }
 
@@ -408,7 +417,7 @@ func TestRefresh_UserCannotLogIn(t *testing.T) {
 			f := newUC(t, withUsers(users))
 			tok := f.issue(t, "u1")
 
-			out, err := f.uc.Refresh(context.Background(), tok.Value)
+			out, err := f.uc.Refresh(identitytest.Anon(), tok.Value)
 			require.ErrorIs(t, err, auth.ErrRefreshInvalid)
 			require.Nil(t, out)
 			require.Zero(t, f.sessions.Active("u1"), "the session is closed")
@@ -424,7 +433,7 @@ func TestRefresh_BlockedSessionNotClosed(t *testing.T) {
 	f := newUC(t, withUsers(users), withSessions(func(s session.Store) session.Store { return revokeFails{s} }))
 	tok := f.issue(t, "u1")
 
-	_, err := f.uc.Refresh(context.Background(), tok.Value)
+	_, err := f.uc.Refresh(identitytest.Anon(), tok.Value)
 	require.ErrorIs(t, err, auth.ErrRefreshInvalid)
 	e, logged := f.log.Find(slog.LevelError, "revoke session")
 	require.True(t, logged)
@@ -438,7 +447,7 @@ func TestRefresh_Failure(t *testing.T) {
 	t.Run("session store", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withSessions(func(s session.Store) session.Store { return failingSessions{s} }))
-		_, err := f.uc.Refresh(context.Background(), "tok")
+		_, err := f.uc.Refresh(identitytest.Anon(), "tok")
 		require.ErrorIs(t, err, errStore)
 	})
 	t.Run("user lookup", func(t *testing.T) {
@@ -448,7 +457,7 @@ func TestRefresh_Failure(t *testing.T) {
 		f := newUC(t, withUsers(users))
 		tok := f.issue(t, "u1")
 
-		_, err := f.uc.Refresh(context.Background(), tok.Value)
+		_, err := f.uc.Refresh(identitytest.Anon(), tok.Value)
 		require.ErrorContains(t, err, "db down")
 		require.NotErrorIs(t, err, auth.ErrRefreshInvalid)
 	})
@@ -460,18 +469,18 @@ func TestLogout(t *testing.T) {
 	f := newUC(t)
 	tok := f.issue(t, "u1")
 
-	require.NoError(t, f.uc.Logout(context.Background(), tok.Value))
+	require.NoError(t, f.uc.Logout(identitytest.Anon(), tok.Value))
 	require.Zero(t, f.sessions.Active("u1"))
 	_, err := f.sessions.Rotate(context.Background(), tok.Value)
 	require.ErrorIs(t, err, session.ErrInvalid, "the token of a closed session does not refresh")
-	require.NoError(t, f.uc.Logout(context.Background(), "unknown"))
+	require.NoError(t, f.uc.Logout(identitytest.Anon(), "unknown"))
 	require.Empty(t, f.audit.Entries(), "the store does not say whose session it closed")
 }
 
 func TestLogout_StoreFailure(t *testing.T) {
 	t.Parallel()
 	f := newUC(t, withSessions(func(s session.Store) session.Store { return failingSessions{s} }))
-	require.ErrorIs(t, f.uc.Logout(context.Background(), "tok"), errStore)
+	require.ErrorIs(t, f.uc.Logout(identitytest.Anon(), "tok"), errStore)
 }
 
 // pwUser отдаёт учётную запись u1 для смены пароля ровно один раз.
@@ -495,7 +504,8 @@ func TestChangePassword(t *testing.T) {
 			withSetter(setter), withPolicy(defaultPolicy(t, true)))
 
 		require.NoError(t, f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123"))
-		require.True(t, f.audit.Has("change_password"))
+		require.Equal(t, audited(auditkit.Entry{ActorID: "u1", Action: "change_password", Resource: "user", ResourceID: "u1"}),
+			f.audit.Last("change_password"))
 	})
 
 	t.Run("concurrent update", func(t *testing.T) {
@@ -567,7 +577,7 @@ func TestChangePassword_Guarded(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			g := mocks.NewMockLoginGuard(t)
-			g.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(tc.lock, tc.err).Once()
+			g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(tc.lock, tc.err).Once()
 			f := newUC(t, withUsers(pwUser(t)), withGuard(g), withPolicy(defaultPolicy(t, true)))
 
 			err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
@@ -591,11 +601,11 @@ func TestLogin_RecordsOutcome(t *testing.T) {
 		return withUsers(users)
 	}
 	locked := mocks.NewMockLoginGuard(t)
-	locked.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(&auth.LockState{Until: fixedNow.Add(time.Minute)}, nil).Once()
+	locked.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(&auth.LockState{Until: fixedNow.Add(time.Minute)}, nil).Once()
 	failing := mocks.NewMockLoginGuard(t)
-	failing.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(nil, errors.New("guard store down")).Once()
+	failing.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, errors.New("guard store down")).Once()
 	unkeyable := mocks.NewMockLoginGuard(t)
-	unkeyable.EXPECT().Attempt(mock.Anything, "a@b.com", "").Return(nil, auth.ErrInvalidCredentials).Once()
+	unkeyable.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, auth.ErrInvalidCredentials).Once()
 	tests := []struct {
 		name, result, password string
 		opts                   []ucOption
@@ -610,13 +620,12 @@ func TestLogin_RecordsOutcome(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			reader := sdkmetric.NewManualReader()
-			m := auth.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
-			f := newUC(t, append(tc.opts, withMetrics(m))...)
+			p := metrictest.NewProvider()
+			f := newUC(t, append(tc.opts, withMetrics(auth.NewMetrics(p.Meter("test"))))...)
 
-			_, err := f.uc.Login(context.Background(), &auth.LoginInput{Email: "a@b.com", Password: tc.password})
+			_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: tc.password})
 			require.Equal(t, tc.result == "ok", err == nil, "login error: %v", err)
-			require.Equal(t, map[string]int64{tc.result: 1}, counted(t, reader, "biz_auth_login_attempts_total"))
+			requireOutcome(t, p, "biz_auth_login_attempts_total", tc.result)
 		})
 	}
 }
@@ -655,35 +664,22 @@ func TestRefresh_RecordsOutcome(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			reader := sdkmetric.NewManualReader()
-			m := auth.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
-			f := newUC(t, append(tc.opts(t), withMetrics(m))...)
+			p := metrictest.NewProvider()
+			f := newUC(t, append(tc.opts(t), withMetrics(auth.NewMetrics(p.Meter("test"))))...)
 
-			_, err := f.uc.Refresh(context.Background(), tc.token(t, f))
+			_, err := f.uc.Refresh(identitytest.Anon(), tc.token(t, f))
 			require.Equal(t, tc.result == "ok", err == nil, "refresh error: %v", err)
-			require.Equal(t, map[string]int64{tc.result: 1}, counted(t, reader, "biz_auth_refresh_total"))
+			requireOutcome(t, p, "biz_auth_refresh_total", tc.result)
 		})
 	}
 }
 
-// counted — значения счётчика name по метке result.
-func counted(t *testing.T, reader *sdkmetric.ManualReader, name string) map[string]int64 {
+// requireOutcome: вызов записал в счётчик name исход result ровно один раз и других исходов не писал.
+func requireOutcome(t *testing.T, p *metrictest.Provider, name, result string) {
 	t.Helper()
-	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(context.Background(), &rm))
-	got := map[string]int64{}
-	for _, scope := range rm.ScopeMetrics {
-		for _, m := range scope.Metrics {
-			if m.Name != name {
-				continue
-			}
-			sum, ok := m.Data.(metricdata.Sum[int64])
-			require.True(t, ok, "%s is an int64 counter", name)
-			for _, dp := range sum.DataPoints {
-				result, _ := dp.Attributes.Value("result")
-				got[result.AsString()] += dp.Value
-			}
-		}
-	}
-	return got
+	snap := p.Collect(t)
+	got := snap.Get(t, name, "result", result)
+	require.Equal(t, metrictest.Counter, got.Kind)
+	require.InDelta(t, 1, got.Value, 0)
+	require.InDelta(t, 1, snap.Value(name), 0, "one outcome per call: %v", snap.Find(name))
 }

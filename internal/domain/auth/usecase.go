@@ -231,9 +231,10 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 	return nil
 }
 
-// audit дописывает время, IP и запрос; сбой записи аудита операцию не отменяет — он уходит в лог.
+// audit дописывает время (IP клиента и ID запроса auditkit берёт из ctx); сбой записи аудита операцию не
+// отменяет — он уходит в лог.
 func (uc *Usecase) audit(ctx context.Context, e auditkit.Entry) {
-	e.At, e.IP, e.RequestID = uc.d.Clock.Now(), identity.IPFrom(ctx), identity.RequestIDFrom(ctx)
+	e.At = uc.d.Clock.Now()
 	if err := uc.d.Audit.Log(ctx, e); err != nil {
 		uc.d.Log.Error(ctx, "audit "+e.Action, "err", err)
 	}

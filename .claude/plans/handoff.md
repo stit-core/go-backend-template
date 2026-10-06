@@ -104,3 +104,16 @@ WHO    проект (compose env, алерты)
 DECIDE предел попыток outbox: 25 ок?
 RISK   с OUTBOX_MAX_ATTEMPTS=0 сервис не стартует; без алерта выпавшее из доставки событие не заметят
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   стрим каждого домена-публикатора — условие старта: NATS_JETSTREAM_ENABLED=true и
+       NATS_JS_STREAM_NAMES со всеми публикаторами — user и verification (natskit создаёт стрим
+       `<имя>` с subject'ами `<имя>.>`)
+WHY    fix-reference-code S9 — outbox домена объявляет свои subject'ы (outboxkit.WithSubjects): без стрима
+       его строки копились бы без PubAck
+ACTION compose api: NATS_JETSTREAM_ENABLED=true, NATS_JS_STREAM_NAMES=user,verification (или стримы на
+       стороне NATS с теми же subject'ами)
+WHO    проект (compose env, NATS)
+DECIDE —
+RISK   без стрима verification или user сервис не стартует
+===

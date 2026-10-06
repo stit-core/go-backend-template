@@ -9,12 +9,10 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification/mocks"
-	"git.stit.tech/stit-core/go-backend-template/pkg/tokens"
+	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
@@ -22,6 +20,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/logtest"
+	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
 	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
@@ -120,9 +119,13 @@ type brokenHasher struct{ authntest.DeterministicHasher }
 
 func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
 
-// audited — запись аудита: пользователь u1 сделал action над своей учётной записью.
+// audited — запись аудита запроса identitytest: пользователь u1 сделал action над своей учётной записью;
+// IP клиента и ID запроса auditkit берёт из ctx.
 func audited(action string) *auditkit.Entry {
-	return &auditkit.Entry{ActorID: "u1", Action: action, Resource: "user", ResourceID: "u1", At: fixedNow}
+	return &auditkit.Entry{
+		ActorID: "u1", Action: action, Resource: "user", ResourceID: "u1", At: fixedNow,
+		IP: identitytest.IP, RequestID: identitytest.RequestID,
+	}
 }
 
 // userByID отдаёт пользователя u1 по ID ровно times раз.
@@ -146,11 +149,11 @@ func activeUser(t *testing.T) *mocks.MockUserReader {
 	return userByEmail(t, &verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil)
 }
 
-// limiter ждёт ровно одну проверку лимита сброса пользователя userID и отвечает allowed.
+// limiter ждёт ровно одну проверку лимита сброса пользователя userID с IP запроса и отвечает allowed.
 func limiter(t *testing.T, userID string, allowed bool, err error) *mocks.MockResetLimiter {
 	t.Helper()
 	l := mocks.NewMockResetLimiter(t)
-	l.EXPECT().Allow(mock.Anything, userID, "").Return(allowed, err).Once()
+	l.EXPECT().Allow(mock.Anything, userID, identitytest.IP).Return(allowed, err).Once()
 	return l
 }
 
@@ -173,7 +176,7 @@ func TestIssueEmailVerification_HappyPath(t *testing.T) {
 	f := newUC(t, withRepo(repo), withUsers(userByID(t, 1)), withMailer(mailer))
 
 	require.NoError(t, f.uc.IssueEmailVerification(context.Background(), "u1"))
-	require.Equal(t, tokens.Hash(sentToken), storedHash, "the mailed token is the one stored by hash")
+	require.Equal(t, authnkit.HashToken(sentToken), storedHash, "the mailed token is the one stored by hash")
 	require.Equal(t, verification.EmailVerificationRequested{TokenID: "vid", UserID: "u1", At: fixedNow},
 		f.bus.Last(subjectEmailVerificationRequested), "TokenID is the id of the stored token, not the token")
 	require.Equal(t, 1, f.bus.Count())
@@ -209,7 +212,7 @@ func TestIssueEmailVerification_Redelivery(t *testing.T) {
 
 	require.Len(t, mailed, 2)
 	require.NotEqual(t, mailed[0], mailed[1], "the resent email carries a new token")
-	require.Equal(t, []string{tokens.Hash(mailed[0]), tokens.Hash(mailed[1])}, hashes)
+	require.Equal(t, []string{authnkit.HashToken(mailed[0]), authnkit.HashToken(mailed[1])}, hashes)
 	require.Len(t, f.bus.Published(subjectEmailVerificationRequested), 2, "one event per issued token")
 }
 
@@ -280,8 +283,8 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 		}).Once().NotBefore(insert)
 	f := newUC(t, withRepo(repo), withUsers(activeUser(t)), withMailer(mailer), withLimiter(limiter(t, "u1", true, nil)))
 
-	require.NoError(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"))
-	require.Equal(t, tokens.Hash(sentToken), capturedHash)
+	require.NoError(t, f.uc.RequestPasswordReset(identitytest.Anon(), "a@b.com"))
+	require.Equal(t, authnkit.HashToken(sentToken), capturedHash)
 	require.Equal(t, verification.PasswordResetRequested{TokenID: "rid", UserID: "u1", At: fixedNow},
 		f.bus.Last(subjectPasswordResetRequested))
 	require.Equal(t, 1, f.bus.Count())
@@ -324,7 +327,7 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 		{name: "limit exhausted", result: "throttled", opts: func(t *testing.T) []ucOption {
 			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, nil))}
 		}},
-		{name: "limiter failure, client IP lost", result: "error", failed: "guard store down", opts: func(t *testing.T) []ucOption {
+		{name: "limiter failure", result: "error", failed: "guard store down", opts: func(t *testing.T) []ucOption {
 			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, errors.New("guard store down")))}
 		}},
 		{name: "reset not stored", result: "error", failed: "db down", opts: func(t *testing.T) []ucOption {
@@ -340,11 +343,10 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			reader := sdkmetric.NewManualReader()
-			m := verification.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
-			f := newUC(t, append(tc.opts(t), withMetrics(m))...)
+			p := metrictest.NewProvider()
+			f := newUC(t, append(tc.opts(t), withMetrics(verification.NewMetrics(p.Meter("test"))))...)
 
-			require.NoError(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"))
+			require.NoError(t, f.uc.RequestPasswordReset(identitytest.Anon(), "a@b.com"))
 			require.Len(t, f.bus.Published(subjectPasswordResetRequested), tc.events)
 			require.Equal(t, tc.events, f.bus.Count())
 			e, logged := f.log.Find(slog.LevelError, "password reset request")
@@ -353,7 +355,7 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 				require.Equal(t, "u1", e.Str("user_id"))
 				require.Contains(t, e.Str("err"), tc.failed)
 			}
-			require.Equal(t, map[string]int64{tc.result: 1}, counted(t, reader, "biz_verification_password_reset_requested_total"))
+			requireOutcome(t, p, "biz_verification_password_reset_requested_total", tc.result)
 		})
 	}
 }
@@ -362,42 +364,29 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 // в метрику.
 func TestRequestPasswordReset_LookupFailure(t *testing.T) {
 	t.Parallel()
-	reader := sdkmetric.NewManualReader()
-	m := verification.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
-	f := newUC(t, withUsers(userByEmail(t, nil, errDown)), withMetrics(m))
+	p := metrictest.NewProvider()
+	f := newUC(t, withUsers(userByEmail(t, nil, errDown)), withMetrics(verification.NewMetrics(p.Meter("test"))))
 
-	require.ErrorIs(t, f.uc.RequestPasswordReset(context.Background(), "a@b.com"), errDown)
+	require.ErrorIs(t, f.uc.RequestPasswordReset(identitytest.Anon(), "a@b.com"), errDown)
 	require.Zero(t, f.bus.Count())
-	require.Equal(t, map[string]int64{"error": 1}, counted(t, reader, "biz_verification_password_reset_requested_total"))
+	requireOutcome(t, p, "biz_verification_password_reset_requested_total", "error")
 }
 
-// counted — значения счётчика name по метке result.
-func counted(t *testing.T, reader *sdkmetric.ManualReader, name string) map[string]int64 {
+// requireOutcome: вызов записал в счётчик name исход result ровно один раз и других исходов не писал.
+func requireOutcome(t *testing.T, p *metrictest.Provider, name, result string) {
 	t.Helper()
-	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(context.Background(), &rm))
-	got := map[string]int64{}
-	for _, scope := range rm.ScopeMetrics {
-		for _, m := range scope.Metrics {
-			if m.Name != name {
-				continue
-			}
-			sum, ok := m.Data.(metricdata.Sum[int64])
-			require.True(t, ok, "%s is an int64 counter", name)
-			for _, dp := range sum.DataPoints {
-				result, _ := dp.Attributes.Value("result")
-				got[result.AsString()] += dp.Value
-			}
-		}
-	}
-	return got
+	snap := p.Collect(t)
+	got := snap.Get(t, name, "result", result)
+	require.Equal(t, metrictest.Counter, got.Kind)
+	require.InDelta(t, 1, got.Value, 0)
+	require.InDelta(t, 1, snap.Value(name), 0, "one outcome per call: %v", snap.Find(name))
 }
 
 // resetToken — репозиторий, который находит по хэшу токена tok ссылку сброса pr пользователя u1.
 func resetToken(t *testing.T, pr *verification.PasswordResetToken, err error) *mocks.MockRepository {
 	t.Helper()
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().GetPasswordReset(mock.Anything, tokens.Hash("tok")).Return(pr, err).Once()
+	repo.EXPECT().GetPasswordReset(mock.Anything, authnkit.HashToken("tok")).Return(pr, err).Once()
 	return repo
 }
 
@@ -416,7 +405,7 @@ func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	pwSet.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(claim)
 	f := newUC(t, withRepo(repo), withUsers(userByID(t, 1)), withPwSet(pwSet))
 
-	require.NoError(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"))
+	require.NoError(t, f.uc.ConfirmPasswordReset(identitytest.Anon(), "tok", "newpassword123"))
 	require.Equal(t, 1, f.tx.Calls(), "the claim, the revocation of the other links and the password write share one transaction")
 	require.Equal(t, audited("password_reset_confirmed"), f.audit.Last("password_reset_confirmed"))
 }
@@ -462,7 +451,7 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 			t.Parallel()
 			f := newUC(t, tc.opts(t)...)
 
-			require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", tc.password), tc.want)
+			require.ErrorIs(t, f.uc.ConfirmPasswordReset(identitytest.Anon(), "tok", tc.password), tc.want)
 			require.Zero(t, f.tx.Calls())
 			require.Empty(t, f.audit.Entries())
 		})
@@ -498,7 +487,7 @@ func TestConfirmPasswordReset_RolledBack(t *testing.T) {
 			tc.expect(repo, pwSet)
 			f := newUC(t, withRepo(repo), withUsers(userByID(t, 1)), withPwSet(pwSet))
 
-			require.ErrorIs(t, f.uc.ConfirmPasswordReset(context.Background(), "tok", "newpassword123"), tc.want)
+			require.ErrorIs(t, f.uc.ConfirmPasswordReset(identitytest.Anon(), "tok", "newpassword123"), tc.want)
 			require.Equal(t, 1, f.tx.Calls())
 			require.Empty(t, f.audit.Entries())
 		})
@@ -509,7 +498,7 @@ func TestConfirmPasswordReset_RolledBack(t *testing.T) {
 func verifyToken(t *testing.T, ev *verification.EmailVerificationToken, err error) *mocks.MockRepository {
 	t.Helper()
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().GetEmailVerification(mock.Anything, tokens.Hash("tok")).Return(ev, err).Once()
+	repo.EXPECT().GetEmailVerification(mock.Anything, authnkit.HashToken("tok")).Return(ev, err).Once()
 	return repo
 }
 
@@ -526,7 +515,7 @@ func TestConfirmEmail_HappyPath(t *testing.T) {
 	emailSet.EXPECT().MarkEmailVerified(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(claim)
 	f := newUC(t, withRepo(repo), withEmailSet(emailSet))
 
-	require.NoError(t, f.uc.ConfirmEmail(context.Background(), "tok"))
+	require.NoError(t, f.uc.ConfirmEmail(identitytest.Anon(), "tok"))
 	require.Equal(t, 1, f.tx.Calls(), "the claim and the email mark share one transaction")
 	require.Equal(t, audited("email_confirmed"), f.audit.Last("email_confirmed"))
 }
@@ -576,7 +565,7 @@ func TestConfirmEmail_Rejected(t *testing.T) {
 			}
 			f := newUC(t, withRepo(tc.repo(t)), withEmailSet(emailSet))
 
-			require.ErrorIs(t, f.uc.ConfirmEmail(context.Background(), "tok"), tc.want)
+			require.ErrorIs(t, f.uc.ConfirmEmail(identitytest.Anon(), "tok"), tc.want)
 			require.Equal(t, tc.tx, f.tx.Calls())
 			require.Empty(t, f.audit.Entries())
 		})

@@ -14,8 +14,9 @@
 небезопасным из коробки (слабая authn/session-логика, отсутствие rate-limit/
 brute-force-защиты там, где она нужна, утечка секретов/PII в логи или ответы API,
 небезопасная обработка ввода), и ошибки в security-sensitive коде
-(`pkg/policy`, `pkg/tokens`, `internal/platform/authgate/`, миграции с эффектом
-на изоляцию данных).
+(`pkg/policy`, `internal/platform/authgate/`, вход и сессии `internal/domain/auth/`,
+одноразовые ссылки `internal/domain/verification/`, миграции с эффектом на изоляцию
+данных).
 
 Вне скоупа: уязвимости в `golibinfra` (репортить в его репозиторий) и в
 upstream-зависимостях (huma, chi, pgx и т.д.) — их мейнтейнерам; здесь — только

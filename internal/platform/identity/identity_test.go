@@ -60,9 +60,3 @@ func TestIPFrom(t *testing.T) {
 	require.Equal(t, "203.0.113.7", got)
 	require.Empty(t, identity.IPFrom(context.Background()), "a context outside a request carries no IP")
 }
-
-func TestRequestIDFrom_EmptyContext(t *testing.T) {
-	t.Parallel()
-
-	require.Empty(t, identity.RequestIDFrom(context.Background()))
-}

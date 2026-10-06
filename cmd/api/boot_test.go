@@ -25,14 +25,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
 	"git.stit.tech/stit-core/golibinfra/httpkit"
+	"git.stit.tech/stit-core/golibinfra/natskit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/telemetry"
 	"git.stit.tech/stit-core/golibinfra/testkit"
+	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
 
 	"git.stit.tech/stit-core/go-backend-template/cmd/migrate/sources"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
@@ -168,33 +169,35 @@ func serviceEnv(t *testing.T) *testkit.PostgresFixture {
 func TestBoot(t *testing.T) {
 	pg := serviceEnv(t)
 
-	logs, mail, metrics := &serviceLog{}, &mailTap{}, sdkmetric.NewManualReader()
+	logs, mail, metrics := &serviceLog{}, &mailTap{}, metrictest.NewProvider()
 	var (
-		srv        *httpkit.Server
-		kitSources []pgkit.Source
+		srv         *httpkit.Server
+		kitSources  []pgkit.Source
+		telemetryMP *sdkmetric.MeterProvider
 	)
 	app := fxtest.New(t, service,
 		// Тройник лога сервиса: события fx доходят до logs, только если service пишет их в logkit.
 		fx.Decorate(func(l *slog.Logger) *slog.Logger { return slog.New(slog.NewMultiHandler(l.Handler(), logs)) }),
 		fx.Decorate(func(m verification.Mailer) verification.Mailer { mail.Mailer = m; return mail }),
-		// Провайдер метрик telemetry — с ридером теста: метрики доменов доходят до metrics, только если
+		// Провайдер метрик telemetry — провайдер теста: метрики доменов доходят до metrics, только если
 		// домены пишут в провайдер, который экспортирует сигналы.
 		fx.Decorate(func(p *telemetry.Providers) *telemetry.Providers {
+			telemetryMP = p.MeterProvider
 			tapped := *p
-			tapped.MeterProvider = sdkmetric.NewMeterProvider(sdkmetric.WithReader(metrics))
+			tapped.MeterProvider = metrics.MeterProvider
 			return &tapped
 		}),
 		fx.Populate(&srv),
 		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
 	app.RequireStart()
-	require.IsType(t, &sdkmetric.MeterProvider{}, otel.GetMeterProvider(),
-		"telemetry.Module sets the global meter provider: without it every metric of the service is a no-op")
+	require.Same(t, telemetryMP, otel.GetMeterProvider(),
+		"telemetry.Module sets its meter provider as the global one: without it every metric of the kits is a no-op")
 
 	// cmd/migrate — отдельный бинарь без графа сервиса: его список обязан совпасть с kit-таблицами графа.
 	require.ElementsMatch(t, sourceNames(sources.Kits), sourceNames(kitSources),
 		"sources.Kits (cmd/migrate) differs from the kit tables of the service graph (group %s)", pgkit.MigrationsGroup)
 
-	require.NoError(t, checkHealth(t.Context(), srv.Addr().String()), "api healthcheck gets 200 from /health of the service")
+	require.NoError(t, httpkit.CheckHealth(t.Context(), srv.Addr().String()), "api healthcheck gets 200 from /health of the service")
 
 	base := "http://" + srv.Addr().String()
 	call := func(c *http.Client, method, path, body string) int {
@@ -232,7 +235,6 @@ func TestBoot(t *testing.T) {
 			JOIN users u ON u.id = ev.user_id WHERE u.email = $1`, email).Scan(&n)
 		return err == nil && n == 1
 	}, 15*time.Second, 100*time.Millisecond, "user.registered goes outbox → JetStream → verification subscriber")
-	// Стрим публикатора старт не проверяет: без него строки outbox не получают PubAck.
 	require.Eventually(t, func() bool {
 		var n int
 		err := db.QueryRow(t.Context(), `SELECT count(*) FROM outbox_verification
@@ -327,11 +329,10 @@ func TestBoot(t *testing.T) {
 		require.Empty(t, storedLeaks(t, db, table, secrets), "a secret is stored in %s", table)
 	}
 
-	var recorded metricdata.ResourceMetrics
-	require.NoError(t, metrics.Collect(t.Context(), &recorded))
-	require.Equal(t, int64(1), counter(recorded, "biz_auth_login_attempts_total", "ok"),
+	snap := metrics.Collect(t)
+	require.InDelta(t, 1, snap.Get(t, "biz_auth_login_attempts_total", "result", "ok").Value, 0,
 		"the auth domain writes its metrics to the meter provider of telemetry")
-	require.Equal(t, int64(1), counter(recorded, "biz_verification_password_reset_requested_total", "ok"),
+	require.InDelta(t, 1, snap.Get(t, "biz_verification_password_reset_requested_total", "result", "ok").Value, 0,
 		"the verification domain writes its metrics to the meter provider of telemetry")
 
 	app.RequireStop()
@@ -345,6 +346,18 @@ func TestBoot(t *testing.T) {
 }
 
 var pathParam = regexp.MustCompile(`\{[^}]*\}`)
+
+// Стрим домена-публикатора — условие старта: без него строки его outbox копились бы, не получая PubAck.
+func TestBoot_PublisherStreamRequired(t *testing.T) {
+	serviceEnv(t)
+	t.Setenv("NATS_JS_STREAM_NAMES", "user")
+	app := fx.New(service)
+	require.NoError(t, app.Err())
+
+	err := app.Start(t.Context())
+	require.ErrorIs(t, err, natskit.ErrNoStream)
+	require.ErrorContains(t, err, "instance verification")
+}
 
 // storedLeaks — секреты, которые встречаются в строках таблицы table (строка целиком, как текст).
 func storedLeaks(t *testing.T, db *pgxpool.Pool, table string, secrets []string) []string {
@@ -361,25 +374,6 @@ func storedLeaks(t *testing.T, db *pgxpool.Pool, table string, secrets []string)
 		}
 	}
 	return found
-}
-
-// counter — значение счётчика name с меткой result.
-func counter(rm metricdata.ResourceMetrics, name, result string) int64 {
-	var n int64
-	for _, scope := range rm.ScopeMetrics {
-		for _, m := range scope.Metrics {
-			sum, ok := m.Data.(metricdata.Sum[int64])
-			if m.Name != name || !ok {
-				continue
-			}
-			for _, dp := range sum.DataPoints {
-				if v, _ := dp.Attributes.Value("result"); v.AsString() == result {
-					n += dp.Value
-				}
-			}
-		}
-	}
-	return n
 }
 
 func sourceNames(srcs []pgkit.Source) []string {

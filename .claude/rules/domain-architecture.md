@@ -65,9 +65,9 @@ paths:
   Чистое правило/константа правила → `policy.go` домена, общее для доменов (правило пароля,
   `ForbiddenError`) — `pkg/policy`; не inline в usecase. Исход метрики — `outcome.Result`, ID,
   которые создаёт код, — `idkit.NewV7()`, страница списка — `paging.Page`.
-- **Usecase не знает транспорта.** `httpkit`/`natskit`/huma в usecase запрещены; ctx-геттеры
-  (`IPFrom`, `RequestIDFrom`) — только `internal/platform/identity`. Named returns не используем
-  (линтер `nonamedreturns`).
+- **Usecase не знает транспорта.** `httpkit`/`natskit`/huma в usecase запрещены; IP клиента —
+  `identity.IPFrom` (ctx-геттер — только `internal/platform/identity`), IP и ID запроса в аудит
+  auditkit берёт из ctx сам. Named returns не используем (линтер `nonamedreturns`).
   Метрика — только под алерт; у метода с метрикой исход пишется ровно раз на любом пути, запись
   проверяет тест. Security-операции пишут audit из usecase (`uc.audit`, в записи — ID, не адрес).
   Блокировка, удаление, смена роли или пароля той же транзакцией закрывают все сессии пользователя

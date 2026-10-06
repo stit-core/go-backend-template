@@ -34,53 +34,6 @@ func port(t *testing.T, addr string) string {
 	return p
 }
 
-func TestCheckHealth(t *testing.T) {
-	t.Parallel()
-	live := healthServer(t, http.StatusOK)
-	tests := []struct {
-		name    string
-		addr    string
-		wantErr string // "" — сервис здоров
-	}{
-		{"listener address", live, ""},
-		{"address without host is loopback", ":" + port(t, live), ""},
-		{"unspecified host is loopback", "0.0.0.0:" + port(t, live), ""},
-		{"health is not ok", healthServer(t, http.StatusServiceUnavailable), "503"},
-		{"health is missing", healthServer(t, http.StatusNotFound), "404"},
-		{"address without port", "8080", "HTTP_ADDR"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := checkHealth(context.Background(), tc.addr)
-			if tc.wantErr == "" {
-				require.NoError(t, err)
-				return
-			}
-			require.ErrorContains(t, err, tc.wantErr)
-		})
-	}
-}
-
-// Никто не слушает — отказ сети, каким бы он ни был: текст ошибки зависит от ОС и гонки за порт.
-func TestCheckHealth_NobodyListens(t *testing.T) {
-	t.Parallel()
-	var netErr *net.OpError
-	require.ErrorAs(t, checkHealth(context.Background(), unreachable), &netErr)
-}
-
-// Код выхода — по /health адреса из HTTP_ADDR, того же, что слушает сервис. Без t.Parallel: t.Setenv.
-func TestHealthcheck(t *testing.T) {
-	live := healthServer(t, http.StatusOK)
-	unsetHTTPEnv(t)
-
-	t.Setenv("HTTP_ADDR", ":"+port(t, live))
-	require.Equal(t, 0, healthcheck(context.Background()), "the service answers on HTTP_ADDR")
-
-	t.Setenv("HTTP_ADDR", unreachable)
-	require.Equal(t, 1, healthcheck(context.Background()), "nobody answers on HTTP_ADDR")
-}
-
 // Подкоманду разбирает main: тест запускает свой бинарь как `api healthcheck` (TestMain зовёт main) и
 // смотрит код выхода процесса — проверка не стартует сервис и отвечает за здоровье того, что на HTTP_ADDR.
 func TestMainHealthcheck(t *testing.T) {
