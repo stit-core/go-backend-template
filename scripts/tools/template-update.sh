@@ -104,17 +104,17 @@ tree() {
 base=$(tree "$FROM") head=$(tree "$TO")
 
 # git apply атомарен: правка файла, которого в форке нет, или удаление файла, который форк менял,
-# сорвали бы перенос целиком.
-absent=() kept=()
+# сорвали бы перенос целиком. Файл, удалённый и шаблоном, и форком, решать не нужно.
+absent=() kept=() excludes=()
 while IFS=$'\t' read -r st f; do
     if [ "$st" != A ] && [ ! -e "$f" ]; then
-        absent+=("$f")
+        excludes+=("--exclude=$f")
+        [ "$st" = D ] || absent+=("$f")
     elif [ "$st" = D ] && [ "$(git hash-object -- "$f")" != "$(git rev-parse "$base:$f")" ]; then
+        excludes+=("--exclude=$f")
         kept+=("$f")
     fi
 done < <(git diff --no-renames --name-status "$base" "$head" -- "${paths[@]}")
-excludes=()
-for f in "${absent[@]}" "${kept[@]}"; do excludes+=("--exclude=$f"); done
 
 patch=$(git rev-parse --git-path template-update.patch)
 git diff --binary --no-renames "$base" "$head" -- "${paths[@]}" >"$patch"

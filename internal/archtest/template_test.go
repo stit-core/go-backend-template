@@ -44,6 +44,11 @@ func TestTemplatePaths(t *testing.T) {
 	require.NoError(t, err, "git tag --points-at HEAD")
 	for _, tag := range strings.Fields(string(tags)) {
 		require.Equal(t, tag, v, "HEAD is tagged %s, .template/version says %s", tag, v)
+		kind := exec.CommandContext(t.Context(), "git", "cat-file", "-t", "refs/tags/"+tag)
+		kind.Dir = root
+		out, err := kind.Output()
+		require.NoError(t, err, "git cat-file -t %s", tag)
+		require.Equal(t, "tag", strings.TrimSpace(string(out)), "%s is a lightweight tag: make template-update shows the annotation of the tag", tag)
 	}
 }
 
@@ -90,6 +95,7 @@ func TestTemplateUpdate(t *testing.T) {
 		"h/dropped.md":      "d1\n",
 		"h/removed.md":      "x1\n",
 		"h/edited.md":       "e1\n",
+		"h/gone.md":         "g1\n",
 		"h/own/local.md":    "o1\n",
 	}
 	writeFiles(t, tmpl, v1)
@@ -106,7 +112,7 @@ func TestTemplateUpdate(t *testing.T) {
 		"h/own/local.md":    "o1 v2\n",
 		"h/new.md":          "n1\n",
 	})
-	git(t, tmpl, "rm", "-q", "h/removed.md", "h/edited.md")
+	git(t, tmpl, "rm", "-q", "h/removed.md", "h/edited.md", "h/gone.md")
 	commitAll(t, tmpl)
 	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0\n\nBreaking:\n- h/rule.md → правка форка")
 
@@ -119,6 +125,7 @@ func TestTemplateUpdate(t *testing.T) {
 		"h/edited.md":   "e1 fork\n",
 	})
 	delete(fork1, "h/dropped.md")
+	delete(fork1, "h/gone.md")
 	writeFiles(t, fork, fork1)
 	git(t, fork, "init", "-q")
 	commitAll(t, fork)
@@ -136,6 +143,7 @@ func TestTemplateUpdate(t *testing.T) {
 	require.Contains(t, out, "конфликты — разреши и git add:\n  h/conflict.md\n")
 	require.Contains(t, out, "нет в форке — не тронуты:\n  h/dropped.md\n")
 	require.Contains(t, out, "шаблон удалил, форк менял — реши сам:\n  h/edited.md\n")
+	require.NotContains(t, out, "h/gone.md", "deleted by both the template and the fork: nothing to decide")
 	require.Equal(t, map[string]string{
 		".template/version": "template/v1.1.0\n",
 		"h/rule.md":         "r1\nr2 v2\nr3\n",
