@@ -44,14 +44,15 @@ scoped=$(mktemp) || exit 1
 trap 'rm -f "$scoped"' EXIT
 
 # Блок профиля: <файл>:<начало>,<конец> <statement'ов> <счётчик>; блок приходит от каждого тестового бинаря,
-# покрыт — если счётчик хоть одного больше нуля. Блоки scope идут ещё и в $scoped — для покрытия функций.
+# покрыт — если счётчик хоть одного больше нуля. Блоки scope идут ещё и в $scoped — для покрытия функций;
+# там блок пустого тела считается за statement: иначе -func даёт исполненной пустой функции 0.0% (0 из 0).
 report=$(LC_ALL=C awk -v testkit="$module/internal/testkit/" -v scoped="$scoped" '
     FNR == NR { if ($0 != "") gen[$0] = 1; next }
     FNR == 1 { print > scoped; next }
     {
         file = substr($1, 1, index($1, ":") - 1)
         if (file in gen || index(file, testkit) == 1) next
-        print > scoped
+        line = $0; if ($2 == 0) { $2 = 1 }; print > scoped; $0 = line
         if (!($1 in stmts)) { stmts[$1] = $2; fileOf[$1] = file; order[++n] = $1 }
         if ($3 > 0) hit[$1] = 1
     }
