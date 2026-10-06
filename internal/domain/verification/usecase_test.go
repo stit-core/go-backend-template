@@ -48,6 +48,7 @@ type ucOpts struct {
 	mailer   *mocks.MockMailer
 	limiter  *mocks.MockResetLimiter
 	hasher   authnkit.Hasher
+	audit    auditkit.Logger
 	metrics  *verification.Metrics
 }
 
@@ -67,6 +68,8 @@ func withMailer(m *mocks.MockMailer) ucOption { return func(o *ucOpts) { o.maile
 func withLimiter(l *mocks.MockResetLimiter) ucOption { return func(o *ucOpts) { o.limiter = l } }
 
 func withHasher(h authnkit.Hasher) ucOption { return func(o *ucOpts) { o.hasher = h } }
+
+func withAudit(a auditkit.Logger) ucOption { return func(o *ucOpts) { o.audit = a } }
 
 func withMetrics(m *verification.Metrics) ucOption { return func(o *ucOpts) { o.metrics = m } }
 
@@ -91,6 +94,9 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	aud := &audittest.Recorder{}
 	tx := &pgtest.Recorder{}
 	log := logtest.Capture()
+	if o.audit == nil {
+		o.audit = aud
+	}
 	uc := verification.NewUsecase(verification.UsecaseDeps{
 		Repo:          o.repo,
 		Users:         o.users,
@@ -101,7 +107,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Events:        bus,
 		Mailer:        o.mailer,
 		Limiter:       o.limiter,
-		Audit:         aud,
+		Audit:         o.audit,
 		Log:           log,
 		Clock:         clockkit.NewFixed(fixedNow),
 		Metrics:       o.metrics,
@@ -112,12 +118,18 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 var (
 	errHashing = errors.New("argon2: out of memory")
 	errDown    = errors.New("db down")
+	errAudit   = errors.New("audit_log: connection refused")
 )
 
 // brokenHasher — хэшер, у которого сбоит хэширование: у authntest такого фейка нет.
 type brokenHasher struct{ authntest.DeterministicHasher }
 
 func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
+
+// failingAudit — журнал аудита, запись в который не проходит: у audittest такого фейка нет.
+type failingAudit struct{}
+
+func (failingAudit) Log(context.Context, auditkit.Entry) error { return errAudit }
 
 // audited — запись аудита запроса identitytest: пользователь u1 сделал action над своей учётной записью;
 // IP клиента и ID запроса auditkit берёт из ctx.
@@ -518,6 +530,21 @@ func TestConfirmEmail_HappyPath(t *testing.T) {
 	require.NoError(t, f.uc.ConfirmEmail(identitytest.Anon(), "tok"))
 	require.Equal(t, 1, f.tx.Calls(), "the claim and the email mark share one transaction")
 	require.Equal(t, audited("email_confirmed"), f.audit.Last("email_confirmed"))
+}
+
+// Сбой записи аудита подтверждение не отменяет: email отмечен, причина — в логе.
+func TestConfirmEmail_AuditNotWritten(t *testing.T) {
+	t.Parallel()
+	repo := verifyToken(t, pendingVerification(fixedNow), nil)
+	repo.EXPECT().MarkEmailVerificationUsed(mock.MatchedBy(pgkit.InTx), "vid").Return(nil).Once()
+	emailSet := mocks.NewMockEmailVerificationSetter(t)
+	emailSet.EXPECT().MarkEmailVerified(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
+	f := newUC(t, withRepo(repo), withEmailSet(emailSet), withAudit(failingAudit{}))
+
+	require.NoError(t, f.uc.ConfirmEmail(identitytest.Anon(), "tok"))
+	e, logged := f.log.Find(slog.LevelError, "audit email_confirmed")
+	require.True(t, logged)
+	require.Contains(t, e.Str("err"), errAudit.Error())
 }
 
 // Отказ подтверждения: email не отмечен, аудита нет; до транзакции доходит только годный токен.

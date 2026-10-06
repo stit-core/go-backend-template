@@ -313,3 +313,51 @@ func TestDeletedUserIsUntouched(t *testing.T) {
 	require.Equal(t, []any{u.Name, "deleted", u.PasswordHash, deletedVersion, false},
 		[]any{name, status, hash, version, verified})
 }
+
+// Отказы, до SQL не дошедшие или пришедшие от драйвера: битый id записи — тот же «нет такого», что у
+// несуществующего, а сбой БД — ошибка с причиной, не sentinel домена (недоступная база не выглядит как «нет
+// такого», «уже есть» или устаревшая версия: API ответит 500, а не 404 или 409).
+func TestRepository_Failures(t *testing.T) {
+	t.Parallel()
+	repo := setup(t)
+
+	t.Run("malformed id is not found", func(t *testing.T) {
+		ctx := context.Background()
+		_, err := repo.Update(ctx, &user.User{ID: "not-a-uuid", Name: "x", Status: user.StatusActive, Version: 1})
+		require.ErrorIs(t, err, user.ErrNotFound, "Update")
+		_, err = repo.UpdatePassword(ctx, "not-a-uuid", "hash", 1)
+		require.ErrorIs(t, err, user.ErrNotFound, "UpdatePassword")
+		require.ErrorIs(t, repo.SetEmailVerified(ctx, "not-a-uuid"), user.ErrNotFound, "SetEmailVerified")
+	})
+
+	t.Run("database failure keeps its cause", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		const id = "00000000-0000-0000-0000-000000000001"
+		calls := map[string]func() error{
+			"Insert":          func() error { return repo.Insert(ctx, pgseed.NewUser()) },
+			"GetByID":         func() error { _, err := repo.GetByID(ctx, id); return err },
+			"GetByIDForShare": func() error { _, err := repo.GetByIDForShare(ctx, id); return err },
+			"GetByEmail":      func() error { _, err := repo.GetByEmail(ctx, "a@b.com"); return err },
+			"Update": func() error {
+				_, err := repo.Update(ctx, &user.User{ID: id, Name: "x", Status: user.StatusActive, Version: 1})
+				return err
+			},
+			"Delete":           func() error { return repo.Delete(ctx, id) },
+			"UpdatePassword":   func() error { _, err := repo.UpdatePassword(ctx, id, "hash", 1); return err },
+			"SetEmailVerified": func() error { return repo.SetEmailVerified(ctx, id) },
+			"List": func() error {
+				_, err := repo.List(ctx, user.ListFilter{}, paging.Page{Number: 1, Size: paging.DefaultSize})
+				return err
+			},
+			"Count": func() error { _, err := repo.Count(ctx, user.ListFilter{}); return err },
+		}
+		for name, call := range calls {
+			err := call()
+			require.ErrorIs(t, err, context.Canceled, name)
+			for _, sentinel := range []error{user.ErrNotFound, user.ErrAlreadyExists, user.ErrConcurrentUpdate} {
+				require.NotErrorIs(t, err, sentinel, name)
+			}
+		}
+	})
+}

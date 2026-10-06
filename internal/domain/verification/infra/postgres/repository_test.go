@@ -203,3 +203,67 @@ func TestGetEmailVerification_UnknownTokenHash(t *testing.T) {
 	_, err := repo.GetEmailVerification(context.Background(), "hash:absent")
 	require.ErrorIs(t, err, verification.ErrInvalidVerificationToken)
 }
+
+// Отказы, до SQL не дошедшие или пришедшие от драйвера. Id пользователя и строк приходят из БД и событий:
+// битый — ошибка, а не тихий no-op (отзыв ссылок, который ничего не отозвал) и не строка для чужого id;
+// погашение по битому id — отказ неизвестной ссылки. Сбой БД — ошибка с причиной, не sentinel домена:
+// недоступная база не выглядит как негодная или погашенная ссылка.
+func TestRepository_Failures(t *testing.T) {
+	t.Parallel()
+	repo, userID := setup(t)
+	sentinels := []error{verification.ErrInvalidResetToken, verification.ErrInvalidVerificationToken, verification.ErrTokenUsed}
+
+	t.Run("malformed id", func(t *testing.T) {
+		ctx := context.Background()
+		calls := map[string]func() error{
+			"InsertPasswordReset": func() error {
+				_, err := repo.InsertPasswordReset(ctx, "not-a-uuid", "hash:bad-user", tokenExpiry)
+				return err
+			},
+			"RevokePasswordResets": func() error { return repo.RevokePasswordResets(ctx, "not-a-uuid") },
+			"UpsertEmailVerification": func() error {
+				_, _, err := repo.UpsertEmailVerification(ctx, "not-a-uuid", "hash:bad-user", tokenExpiry)
+				return err
+			},
+			"MarkEmailVerificationSent": func() error { return repo.MarkEmailVerificationSent(ctx, "not-a-uuid") },
+		}
+		for name, call := range calls {
+			err := call()
+			require.Error(t, err, name)
+			for _, sentinel := range sentinels {
+				require.NotErrorIs(t, err, sentinel, name)
+			}
+		}
+		require.ErrorIs(t, repo.MarkPasswordResetUsed(ctx, "not-a-uuid"), verification.ErrInvalidResetToken)
+		require.ErrorIs(t, repo.MarkEmailVerificationUsed(ctx, "not-a-uuid"), verification.ErrInvalidVerificationToken)
+	})
+
+	t.Run("database failure keeps its cause", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		const id = "00000000-0000-0000-0000-000000000001"
+		calls := map[string]func() error{
+			"InsertPasswordReset": func() error {
+				_, err := repo.InsertPasswordReset(ctx, userID, "hash:canceled", tokenExpiry)
+				return err
+			},
+			"GetPasswordReset":      func() error { _, err := repo.GetPasswordReset(ctx, "hash:canceled"); return err },
+			"MarkPasswordResetUsed": func() error { return repo.MarkPasswordResetUsed(ctx, id) },
+			"RevokePasswordResets":  func() error { return repo.RevokePasswordResets(ctx, userID) },
+			"UpsertEmailVerification": func() error {
+				_, _, err := repo.UpsertEmailVerification(ctx, userID, "hash:canceled", tokenExpiry)
+				return err
+			},
+			"MarkEmailVerificationSent": func() error { return repo.MarkEmailVerificationSent(ctx, id) },
+			"GetEmailVerification":      func() error { _, err := repo.GetEmailVerification(ctx, "hash:canceled"); return err },
+			"MarkEmailVerificationUsed": func() error { return repo.MarkEmailVerificationUsed(ctx, id) },
+		}
+		for name, call := range calls {
+			err := call()
+			require.ErrorIs(t, err, context.Canceled, name)
+			for _, sentinel := range sentinels {
+				require.NotErrorIs(t, err, sentinel, name)
+			}
+		}
+	})
+}

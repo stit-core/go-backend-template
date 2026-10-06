@@ -3,6 +3,7 @@ package user_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -18,11 +19,11 @@ import (
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
-	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/ptrkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
+	"git.stit.tech/stit-core/golibinfra/testkit/logtest"
 	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
@@ -39,12 +40,14 @@ type ucFixture struct {
 	uc    *user.Usecase
 	bus   *outboxtest.Recorder
 	audit *audittest.Recorder
+	log   *logtest.Recorder
 }
 
 type ucOpts struct {
 	repo     *mocks.MockRepository
 	sessions *mocks.MockSessions
 	hasher   authnkit.Hasher
+	audit    auditkit.Logger
 }
 
 type ucOption func(*ucOpts)
@@ -52,6 +55,7 @@ type ucOption func(*ucOpts)
 func withRepo(r *mocks.MockRepository) ucOption   { return func(o *ucOpts) { o.repo = r } }
 func withSessions(s *mocks.MockSessions) ucOption { return func(o *ucOpts) { o.sessions = s } }
 func withHasher(h authnkit.Hasher) ucOption       { return func(o *ucOpts) { o.hasher = h } }
+func withAudit(a auditkit.Logger) ucOption        { return func(o *ucOpts) { o.audit = a } }
 
 // newUC — usecase на строгих моках репозитория и сессий и настоящей policy: право решает identity
 // кейса, вызов порта, которого кейс не ждёт, — провал; порт с ожиданиями кейс передаёт опцией.
@@ -61,7 +65,10 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	for _, fn := range opts {
 		fn(o)
 	}
-	bus, aud := &outboxtest.Recorder{}, &audittest.Recorder{}
+	bus, aud, log := &outboxtest.Recorder{}, &audittest.Recorder{}, logtest.Capture()
+	if o.audit == nil {
+		o.audit = aud
+	}
 	uc := user.NewUsecase(user.UsecaseDeps{
 		Repo:     o.repo,
 		Hasher:   o.hasher,
@@ -69,11 +76,11 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Tx:       pgtest.Identity{},
 		Events:   bus,
 		Sessions: o.sessions,
-		Audit:    aud,
-		Log:      logkit.Nop(),
+		Audit:    o.audit,
+		Log:      log,
 		Clock:    clockkit.NewFixed(fixedNow),
 	})
-	return ucFixture{uc: uc, bus: bus, audit: aud}
+	return ucFixture{uc: uc, bus: bus, audit: aud, log: log}
 }
 
 // revoked ждёт ровно одно закрытие всех сессий пользователя id в транзакции записи и отвечает err.
@@ -95,12 +102,20 @@ func audited(actor, action, id string) *auditkit.Entry {
 	}
 }
 
-var errHashing = errors.New("argon2: out of memory")
+var (
+	errHashing = errors.New("argon2: out of memory")
+	errAudit   = errors.New("audit_log: connection refused")
+)
 
 // brokenHasher — хэшер, у которого сбоит хэширование: у authntest такого фейка нет.
 type brokenHasher struct{ authntest.DeterministicHasher }
 
 func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
+
+// failingAudit — журнал аудита, запись в который не проходит: у audittest такого фейка нет.
+type failingAudit struct{}
+
+func (failingAudit) Log(context.Context, auditkit.Entry) error { return errAudit }
 
 func requireForbidden(t *testing.T, err error) {
 	t.Helper()
@@ -131,6 +146,25 @@ func TestRegister(t *testing.T) {
 		"the event carries the ID only: consumers read the address by ID")
 	require.Equal(t, 1, f.bus.Count())
 	require.Equal(t, audited("id-1", "register", "id-1"), f.audit.Last("register"))
+}
+
+// Сбой записи аудита регистрацию не отменяет: пользователь и событие записаны, причина — в логе.
+func TestRegister_AuditNotWritten(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().Insert(mock.MatchedBy(pgkit.InTx), mock.Anything).RunAndReturn(func(_ context.Context, u *user.User) error {
+		u.ID = "id-1"
+		return nil
+	}).Once()
+	f := newUC(t, withRepo(repo), withAudit(failingAudit{}))
+
+	got, err := f.uc.Register(identitytest.Anon(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
+	require.NoError(t, err)
+	require.Equal(t, "id-1", got.ID)
+	require.Equal(t, 1, f.bus.Count())
+	e, logged := f.log.Find(slog.LevelError, "audit register")
+	require.True(t, logged)
+	require.Contains(t, e.Str("err"), errAudit.Error())
 }
 
 // Отказ регистрации ничего не пишет: ни пользователя, ни события, ни аудита.

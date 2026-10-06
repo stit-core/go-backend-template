@@ -267,6 +267,18 @@ func TestList_Defaults(t *testing.T) {
 	require.Empty(t, data[[]view](t, resp))
 }
 
+// Список — только admin: отказ policy — 403.
+func TestList_Forbidden(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().List(callerIs("u1"), user.ListFilter{}, paging.Page{Number: 1, Size: paging.DefaultSize}).
+		Return(nil, 0, &policy.ForbiddenError{Reason: "admin only"}).Once()
+	api := setup(t, uc)
+
+	resp := api.GetCtx(identitytest.Client("u1"), "/api/users")
+	handlertest.AssertAPIError(t, resp, http.StatusForbidden, "FORBIDDEN")
+}
+
 func TestList_InvalidStatus(t *testing.T) {
 	t.Parallel()
 	api := setup(t, mocks.NewMockUsecase(t))
