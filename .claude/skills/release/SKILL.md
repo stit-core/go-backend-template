@@ -84,7 +84,9 @@ make release VERSION=vX.Y.Z
 ## Откат
 
 **Полностью в infra-репо** (этот репо не участвует — image в registry):
-`make bump SVC=backend TAG=<предыдущий>`.
+`make bump SVC=backend TAG=<предыдущий>`. Релиз с миграцией приложения — сначала `migrate down`
+образом откатываемого релиза, по разу на миграцию, затем `make bump` (`docs/reference/release.md`
+§ Откат).
 
 ## Anti-patterns
 
