@@ -115,6 +115,9 @@ func TestGetByEmail(t *testing.T) {
 	}
 	_, err := repo.GetByEmail(ctx, "bob@example.com")
 	require.ErrorIs(t, err, user.ErrNotFound)
+	// NUL Postgres в TEXT не хранит: такого адреса нет, а не ошибка драйвера.
+	_, err = repo.GetByEmail(ctx, "alice\x00@example.com")
+	require.ErrorIs(t, err, user.ErrNotFound)
 }
 
 // Список и счётчик видят одних и тех же — не удалённых, с фильтром статуса; список — новые первыми.

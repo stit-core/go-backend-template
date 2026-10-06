@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/postgres/db"
@@ -71,6 +72,10 @@ func (r *Repository) GetByIDForShare(ctx context.Context, id string) (*user.User
 }
 
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*user.User, error) {
+	// NUL Postgres в TEXT не хранит: такого адреса нет, запрос упал бы ошибкой драйвера.
+	if strings.ContainsRune(email, 0) {
+		return nil, user.ErrNotFound
+	}
 	row, err := r.q.GetUserByEmail(ctx, email)
 	if pgkit.IsNoRows(err) {
 		return nil, user.ErrNotFound
