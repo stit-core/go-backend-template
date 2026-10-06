@@ -151,8 +151,8 @@ blocked-by: —
   сверена с каноном DI, «Граница с golibinfra» и перечни китов — по факту; самопроверка прозы
   видит и имена правил и скиллов (встроенные `/code-review` и `/security-review` — не скиллы
   репо), и файлы корня (`Makefile`, `openapi.json`, `.env.example`); troubleshooting
-  `docs/contributing.md` — archtest требует golangci-lint (`make setup`)
-  (HAR-02, HAR-08, HAR-12, ENF-13, DOG-04, FX-07)
+  `docs/contributing.md` — archtest требует golangci-lint (`make setup`); мелочи S6 — R1–R4
+  перепроверки `validation-repair-harness-B.md` (HAR-02, HAR-08, HAR-12, ENF-13, DOG-04, FX-07)
   - Проверка: AC3 → самопроверка OK · Закрывает: AC3 · Зависит от: S1
 - [ ] **S4** — Рецепты `field.md` и `env.md` в scaffold (HAR-07)
   - Проверка: пройти рецепт «поле» на тестовом поле в worktree → `make check` зелёный · Закрывает: AC3 · Зависит от: S3
@@ -184,7 +184,8 @@ blocked-by: —
   CLAUDE.md и ссылки на удаляемые файлы, wiring stack-deep-dive и de-template совпадает с кодом
   (LIF-02 – LIF-08, LIF-10, FX-04, FX-07). Сейчас после prune по `prune.md`: 19 мёртвых ссылок
   прозы (14 — `cmd/seed-admin`, в том числе в самом `prune.md`; 5 — пути учебных доменов),
-  `TestBoot` — 404 на регистрации, `cmd/migrate/sources.go` не собирается
+  `TestBoot` — 404 на регистрации, `cmd/migrate/sources.go` не собирается; de-template A.1 не
+  переписывает module path в прозе (M4 валидатора S6)
   - Проверка: AC6 → выполнен · Закрывает: AC6 · Зависит от: S7
 
 ### Итог программы
