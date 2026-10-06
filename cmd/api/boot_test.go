@@ -144,9 +144,9 @@ func attr(r slog.Record, key string) string {
 	return v
 }
 
-// TestBoot поднимает сервис набором опций main поверх Postgres и NATS в контейнерах:
-// конструкторы, Invoke и хуки выполняются по-настоящему, чего fx.ValidateApp не делает.
-func TestBoot(t *testing.T) {
+// serviceEnv поднимает Postgres и NATS в контейнерах и выставляет на них env сервиса.
+func serviceEnv(t *testing.T) *testkit.PostgresFixture {
+	t.Helper()
 	pg := testkit.StartPostgres(t, testkit.WithMigrations(sources.Kits...), testkit.WithMigrationsDir(repopath.Migrations()))
 	nats := testkit.StartNATS(t, testkit.WithJetStream())
 	unsetHTTPEnv(t)
@@ -160,6 +160,13 @@ func TestBoot(t *testing.T) {
 	} {
 		t.Setenv(k, v)
 	}
+	return pg
+}
+
+// TestBoot поднимает сервис набором опций main поверх Postgres и NATS в контейнерах:
+// конструкторы, Invoke и хуки выполняются по-настоящему, чего fx.ValidateApp не делает.
+func TestBoot(t *testing.T) {
+	pg := serviceEnv(t)
 
 	logs, mail, metrics := &serviceLog{}, &mailTap{}, sdkmetric.NewManualReader()
 	var (

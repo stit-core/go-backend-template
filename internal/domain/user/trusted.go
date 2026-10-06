@@ -6,13 +6,16 @@ import (
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 
 type TrustedDeps struct {
 	fx.In
 
-	Repo   Repository
-	Hasher authnkit.Hasher
+	Repo     Repository
+	Hasher   authnkit.Hasher
+	Tx       pgkit.Transactor
+	Sessions Sessions
 }
 
 // Trusted — операции user для других доменов, без policy: решение принял вызывающий, и берут их
@@ -44,9 +47,15 @@ func (t *Trusted) VerifyPassword(ctx context.Context, userID, plain string) (boo
 	return t.d.Hasher.Verify(ctx, plain, u.PasswordHash)
 }
 
+// UpdatePassword меняет пароль и той же транзакцией закрывает все сессии пользователя: сессии старого
+// пароля не переживают ни смену, ни сброс.
 func (t *Trusted) UpdatePassword(ctx context.Context, userID, hash string, version int) error {
-	_, err := t.d.Repo.UpdatePassword(ctx, userID, hash, version)
-	return err
+	return t.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		if _, err := t.d.Repo.UpdatePassword(txCtx, userID, hash, version); err != nil {
+			return err
+		}
+		return t.d.Sessions.RevokeAll(txCtx, userID)
+	})
 }
 
 func (t *Trusted) MarkEmailVerified(ctx context.Context, userID string) error {

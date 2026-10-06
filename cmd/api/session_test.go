@@ -1,0 +1,197 @@
+//go:build integration
+
+package main
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
+
+	"git.stit.tech/stit-core/golibinfra/httpkit"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+)
+
+// sessionAPI — клиент без cookie jar: cookie сессии тест держит сам и предъявляет их повторно.
+type sessionAPI struct {
+	t      *testing.T
+	base   string
+	client *http.Client
+}
+
+// call шлёт запрос с cookie (nil — без них) и отдаёт статус, тело и выданные cookie.
+func (a sessionAPI) call(method, path, body string, cookies map[string]string) (int, []byte, map[string]string) {
+	a.t.Helper()
+	req, err := http.NewRequestWithContext(a.t.Context(), method, a.base+path, strings.NewReader(body))
+	require.NoError(a.t, err)
+	req.Header.Set("Content-Type", "application/json")
+	for name, value := range cookies {
+		req.AddCookie(&http.Cookie{Name: name, Value: value})
+	}
+	resp, err := a.client.Do(req)
+	require.NoError(a.t, err)
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(a.t, err)
+	require.NoError(a.t, resp.Body.Close())
+	got := map[string]string{}
+	for _, c := range resp.Cookies() {
+		got[c.Name] = c.Value
+	}
+	return resp.StatusCode, data, got
+}
+
+// register заводит пользователя и отдаёт его ID.
+func (a sessionAPI) register(email string) string {
+	a.t.Helper()
+	status, body, _ := a.call(http.MethodPost, "/api/auth/register", `{"email":"`+email+`","password":"`+sessionPassword+`","name":"S"}`, nil)
+	require.Equal(a.t, http.StatusCreated, status, "register %s: %s", email, body)
+	var created struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(a.t, json.Unmarshal(body, &created))
+	return created.Data.ID
+}
+
+// login открывает сессию и отдаёт её cookie.
+func (a sessionAPI) login(email, password string) map[string]string {
+	a.t.Helper()
+	status, body, cookies := a.call(http.MethodPost, "/api/auth/login", `{"email":"`+email+`","password":"`+password+`"}`, nil)
+	require.Equal(a.t, http.StatusOK, status, "login %s: %s", email, body)
+	require.Len(a.t, cookies[authgate.CookieRefresh], 64, "the refresh token is an opaque authnkit token")
+	return cookies
+}
+
+// refresh обновляет сессию cookie и отдаёт статус и новые cookie.
+func (a sessionAPI) refresh(cookies map[string]string) (int, map[string]string) {
+	a.t.Helper()
+	status, _, got := a.call(http.MethodPost, "/api/auth/refresh", "", map[string]string{authgate.CookieRefresh: cookies[authgate.CookieRefresh]})
+	return status, got
+}
+
+const sessionPassword = "password123"
+
+// openSessions — незакрытые сессии пользователя в хранилище кита.
+func openSessions(t *testing.T, db *pgxpool.Pool, userID string) int {
+	t.Helper()
+	var n int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM authn_sessions WHERE subject = $1 AND revoked_at IS NULL`, userID).Scan(&n))
+	return n
+}
+
+// TestSessions — сессии refresh сквозь HTTP на графе сервиса и хранилище кита: ротация, повтор токена
+// закрывает сессию, выход закрывает свою, а смена и сброс пароля, блокировка и удаление — все сессии
+// пользователя.
+func TestSessions(t *testing.T) {
+	pg := serviceEnv(t)
+	mail := &mailTap{}
+	var srv *httpkit.Server
+	app := fxtest.New(t, service,
+		fx.Decorate(func(m verification.Mailer) verification.Mailer { mail.Mailer = m; return mail }),
+		fx.Populate(&srv))
+	app.RequireStart()
+	defer app.RequireStop()
+	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: &http.Client{Timeout: 10 * time.Second}}
+	db := pg.Pool(t)
+
+	const alice = "alice@example.com"
+	aliceID := api.register(alice)
+
+	t.Run("refresh rotates the token, a reuse closes the session", func(t *testing.T) {
+		first := api.login(alice, sessionPassword)
+		status, rotated := api.refresh(first)
+		require.Equal(t, http.StatusNoContent, status)
+		require.NotEqual(t, first[authgate.CookieRefresh], rotated[authgate.CookieRefresh])
+
+		status, _ = api.refresh(first)
+		require.Equal(t, http.StatusUnauthorized, status, "a reused token")
+		status, _ = api.refresh(rotated)
+		require.Equal(t, http.StatusUnauthorized, status, "the reuse closed the session with its next token")
+		var reused int
+		require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE action = 'refresh_reused' AND actor_id = $1`, aliceID).Scan(&reused))
+		require.Equal(t, 1, reused, "the reuse is in the audit of the account")
+	})
+
+	t.Run("logout closes its session", func(t *testing.T) {
+		other := api.login(alice, sessionPassword)
+		current := api.login(alice, sessionPassword)
+		status, _, _ := api.call(http.MethodPost, "/api/auth/logout", "", current)
+		require.Equal(t, http.StatusNoContent, status)
+
+		status, _ = api.refresh(current)
+		require.Equal(t, http.StatusUnauthorized, status)
+		status, _ = api.refresh(other)
+		require.Equal(t, http.StatusNoContent, status, "the other session lives on")
+	})
+
+	const newPassword = "new-password123"
+	t.Run("password change closes every session", func(t *testing.T) {
+		first, second := api.login(alice, sessionPassword), api.login(alice, sessionPassword)
+		status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
+			`{"user_id":"`+aliceID+`","old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, first)
+		require.Equal(t, http.StatusNoContent, status, "change password: %s", body)
+
+		for _, c := range []map[string]string{first, second} {
+			status, _ = api.refresh(c)
+			require.Equal(t, http.StatusUnauthorized, status)
+		}
+		require.Zero(t, openSessions(t, db, aliceID))
+	})
+
+	t.Run("password reset closes every session", func(t *testing.T) {
+		c := api.login(alice, newPassword)
+		status, _, _ := api.call(http.MethodPost, "/api/auth/password-reset/request", `{"email":"`+alice+`"}`, nil)
+		require.Equal(t, http.StatusNoContent, status)
+		resets, _ := mail.sent()
+		require.Len(t, resets, 1, "the reset is mailed")
+		status, body, _ := api.call(http.MethodPost, "/api/auth/password-reset/confirm", `{"token":"`+resets[0]+`","password":"reset-password123"}`, nil)
+		require.Equal(t, http.StatusNoContent, status, "confirm reset: %s", body)
+
+		status, _ = api.refresh(c)
+		require.Equal(t, http.StatusUnauthorized, status)
+		require.Zero(t, openSessions(t, db, aliceID))
+	})
+
+	t.Run("blocking closes every session, the blocked does not log in", func(t *testing.T) {
+		const admin, carol = "admin@example.com", "carol@example.com"
+		adminID := api.register(admin)
+		_, err := db.Exec(t.Context(), `UPDATE users SET role = 'admin' WHERE id = $1`, adminID)
+		require.NoError(t, err)
+		adminCookies := api.login(admin, sessionPassword)
+		carolID := api.register(carol)
+		c := api.login(carol, sessionPassword)
+		var version int
+		require.NoError(t, db.QueryRow(t.Context(), `SELECT version FROM users WHERE id = $1`, carolID).Scan(&version))
+
+		status, body, _ := api.call(http.MethodPatch, "/api/users/"+carolID, `{"status":"blocked","version":`+strconv.Itoa(version)+`}`, adminCookies)
+		require.Equal(t, http.StatusOK, status, "block: %s", body)
+		status, _ = api.refresh(c)
+		require.Equal(t, http.StatusUnauthorized, status)
+		require.Zero(t, openSessions(t, db, carolID))
+		status, _, _ = api.call(http.MethodPost, "/api/auth/login", `{"email":"`+carol+`","password":"`+sessionPassword+`"}`, nil)
+		require.Equal(t, http.StatusUnauthorized, status, "the blocked does not log in")
+	})
+
+	t.Run("deletion closes every session", func(t *testing.T) {
+		const dave = "dave@example.com"
+		daveID := api.register(dave)
+		c := api.login(dave, sessionPassword)
+
+		status, body, _ := api.call(http.MethodDelete, "/api/users/"+daveID, "", c)
+		require.Equal(t, http.StatusNoContent, status, "delete: %s", body)
+		status, _ = api.refresh(c)
+		require.Equal(t, http.StatusUnauthorized, status)
+		require.Zero(t, openSessions(t, db, daveID))
+	})
+}

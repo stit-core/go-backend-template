@@ -11,6 +11,7 @@ packages:
   git.stit.tech/stit-core/go-backend-template/internal/domain/user:
     interfaces:
       Repository:
+      Sessions:
   git.stit.tech/stit-core/go-backend-template/internal/domain/auth:
     interfaces:
       UserReader:

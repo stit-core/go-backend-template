@@ -15,12 +15,15 @@ import (
 	usermocks "git.stit.tech/stit-core/go-backend-template/internal/domain/user/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
+	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
 
 func newAdapter(t *testing.T) (*userAdapter, *usermocks.MockRepository) {
 	t.Helper()
 	repo := usermocks.NewMockRepository(t)
-	return newUserAdapter(user.NewTrusted(user.TrustedDeps{Repo: repo, Hasher: authntest.DeterministicHasher{}})), repo
+	return newUserAdapter(user.NewTrusted(user.TrustedDeps{
+		Repo: repo, Hasher: authntest.DeterministicHasher{}, Tx: pgtest.Identity{}, Sessions: usermocks.NewMockSessions(t),
+	})), repo
 }
 
 func TestUserAdapter_User(t *testing.T) {

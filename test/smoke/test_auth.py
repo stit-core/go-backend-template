@@ -143,10 +143,11 @@ def test_change_password(
         )
         == 422
     )
-    # верный old → 204
+    # верный old → 204; смена пароля закрывает все сессии учётной записи — refresh этой → 401
     api.change_password(
         ChangePasswordRequest(user_id=uid, old_password=user.password, new_password=new_password)
     )
+    assert api.status("POST", "/api/auth/refresh") == 401
     # старый пароль больше не логинит, новый — да
     with Api(stack) as fresh:
         assert (

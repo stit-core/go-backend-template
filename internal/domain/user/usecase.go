@@ -33,6 +33,11 @@ type Repository interface {
 	Count(ctx context.Context, filter ListFilter) (int, error)
 }
 
+// Sessions — сессии пользователя (authnkit/session): RevokeAll закрывает все и участвует в транзакции из ctx.
+type Sessions interface {
+	RevokeAll(ctx context.Context, userID string) error
+}
+
 type Authorizer interface {
 	CanGetByID(ctx context.Context, caller identity.Identity, targetID string) policy.Decision
 	CanList(ctx context.Context, caller identity.Identity) policy.Decision
@@ -44,14 +49,15 @@ type Authorizer interface {
 type UsecaseDeps struct {
 	fx.In
 
-	Repo   Repository
-	Hasher authnkit.Hasher
-	Policy Authorizer
-	Tx     pgkit.Transactor
-	Events outboxkit.Publisher
-	Audit  auditkit.Logger
-	Log    logkit.Logger
-	Clock  clockkit.Clock
+	Repo     Repository
+	Hasher   authnkit.Hasher
+	Policy   Authorizer
+	Tx       pgkit.Transactor
+	Events   outboxkit.Publisher
+	Sessions Sessions
+	Audit    auditkit.Logger
+	Log      logkit.Logger
+	Clock    clockkit.Clock
 }
 
 type Usecase struct {
@@ -129,7 +135,8 @@ func (uc *Usecase) List(ctx context.Context, filter ListFilter, page paging.Page
 	return list, total, nil
 }
 
-// Update — все поля входа одной записью или ни одного: статус меняет только админ, переход — сущность.
+// Update — все поля входа одной записью или ни одного: статус меняет только админ, переход — сущность;
+// у учётной записи, которую не пускают, той же транзакцией закрываются все сессии.
 func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (*User, error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
@@ -167,6 +174,11 @@ func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (*User
 		if updated, err = uc.d.Repo.Update(txCtx, u); err != nil {
 			return err
 		}
+		if !u.CanLogin() {
+			if err := uc.d.Sessions.RevokeAll(txCtx, u.ID); err != nil {
+				return err
+			}
+		}
 		return uc.d.Events.Publish(txCtx, subjectUserUpdated, UserUpdated{ID: updated.ID, At: uc.d.Clock.Now()})
 	}); err != nil {
 		return nil, err
@@ -177,6 +189,7 @@ func (uc *Usecase) Update(ctx context.Context, id string, in UpdateInput) (*User
 	return updated, nil
 }
 
+// Delete закрывает все сессии удалённого той же транзакцией.
 func (uc *Usecase) Delete(ctx context.Context, id string) error {
 	caller, ok := identity.From(ctx)
 	if !ok {
@@ -188,6 +201,9 @@ func (uc *Usecase) Delete(ctx context.Context, id string) error {
 
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
 		if err := uc.d.Repo.Delete(txCtx, id); err != nil {
+			return err
+		}
+		if err := uc.d.Sessions.RevokeAll(txCtx, id); err != nil {
 			return err
 		}
 		return uc.d.Events.Publish(txCtx, subjectUserDeleted, UserDeleted{ID: id, At: uc.d.Clock.Now()})

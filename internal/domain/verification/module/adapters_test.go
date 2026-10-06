@@ -17,10 +17,17 @@ import (
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 )
 
-func newAdapter(t *testing.T) (*userAdapter, *usermocks.MockRepository) {
+// callerTx — транзакции Trusted внутри транзакции вызывающего, как у pgkit: своей не открывает, поэтому
+// запись видит транзакцию, только если её принёс ctx адаптера.
+type callerTx struct{ pgkit.Transactor }
+
+func (callerTx) WithTx(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
+
+func newAdapter(t *testing.T) (*userAdapter, *usermocks.MockRepository, *usermocks.MockSessions) {
 	t.Helper()
-	repo := usermocks.NewMockRepository(t)
-	return newUserAdapter(user.NewTrusted(user.TrustedDeps{Repo: repo, Hasher: authntest.DeterministicHasher{}})), repo
+	repo, sessions := usermocks.NewMockRepository(t), usermocks.NewMockSessions(t)
+	a := newUserAdapter(user.NewTrusted(user.TrustedDeps{Repo: repo, Hasher: authntest.DeterministicHasher{}, Tx: callerTx{}, Sessions: sessions}))
+	return a, repo, sessions
 }
 
 func TestUserAdapter_User(t *testing.T) {
@@ -36,7 +43,7 @@ func TestUserAdapter_User(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			a, repo := newAdapter(t)
+			a, repo, _ := newAdapter(t)
 			found := &user.User{ID: "u1", Email: "a@b.com", Status: tc.status, Version: 3}
 			repo.EXPECT().GetByID(mock.Anything, "u1").Return(found, nil).Once()
 			repo.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(found, nil).Once()
@@ -52,11 +59,13 @@ func TestUserAdapter_User(t *testing.T) {
 	}
 }
 
-// Запись пароля и отметка email остаются в транзакции verification: адаптер передаёт её ctx в user.Trusted.
+// Запись пароля с закрытием сессий и отметка email остаются в транзакции verification: адаптер передаёт её
+// ctx в user.Trusted.
 func TestUserAdapter_WritesInCallerTx(t *testing.T) {
 	t.Parallel()
-	a, repo := newAdapter(t)
+	a, repo, sessions := newAdapter(t)
 	repo.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash", 3).Return(&user.User{ID: "u1", Version: 4}, nil).Once()
+	sessions.EXPECT().RevokeAll(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
 	repo.EXPECT().SetEmailVerified(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
 	ctx := pgkit.WithTestTx(context.Background())
 
@@ -102,12 +111,12 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 			for _, from := range user.TrustedErrors {
 				want, ok := translated[from]
 				require.True(t, ok, "%v from user.Trusted has no verification error", from)
-				a, repo := newAdapter(t)
+				a, repo, _ := newAdapter(t)
 				got := c.call(a, repo, from)
 				require.ErrorIs(t, got, want)
 				require.NotErrorIs(t, got, from, "the user sentinel must not leak to verification")
 			}
-			a, repo := newAdapter(t)
+			a, repo, _ := newAdapter(t)
 			require.ErrorIs(t, c.call(a, repo, infra), infra, "an infrastructure error passes through")
 		})
 	}

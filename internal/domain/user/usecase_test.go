@@ -42,36 +42,49 @@ type ucFixture struct {
 }
 
 type ucOpts struct {
-	repo   *mocks.MockRepository
-	hasher authnkit.Hasher
+	repo     *mocks.MockRepository
+	sessions *mocks.MockSessions
+	hasher   authnkit.Hasher
 }
 
 type ucOption func(*ucOpts)
 
-func withRepo(r *mocks.MockRepository) ucOption { return func(o *ucOpts) { o.repo = r } }
-func withHasher(h authnkit.Hasher) ucOption     { return func(o *ucOpts) { o.hasher = h } }
+func withRepo(r *mocks.MockRepository) ucOption   { return func(o *ucOpts) { o.repo = r } }
+func withSessions(s *mocks.MockSessions) ucOption { return func(o *ucOpts) { o.sessions = s } }
+func withHasher(h authnkit.Hasher) ucOption       { return func(o *ucOpts) { o.hasher = h } }
 
-// newUC — usecase на строгом моке репозитория и настоящей policy: право решает identity кейса, вызов
-// репозитория, которого кейс не ждёт, — провал; порт с ожиданиями кейс передаёт опцией.
+// newUC — usecase на строгих моках репозитория и сессий и настоящей policy: право решает identity
+// кейса, вызов порта, которого кейс не ждёт, — провал; порт с ожиданиями кейс передаёт опцией.
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
-	o := &ucOpts{repo: mocks.NewMockRepository(t), hasher: authntest.DeterministicHasher{}}
+	o := &ucOpts{repo: mocks.NewMockRepository(t), sessions: mocks.NewMockSessions(t), hasher: authntest.DeterministicHasher{}}
 	for _, fn := range opts {
 		fn(o)
 	}
 	bus, aud := &outboxtest.Recorder{}, &audittest.Recorder{}
 	uc := user.NewUsecase(user.UsecaseDeps{
-		Repo:   o.repo,
-		Hasher: o.hasher,
-		Policy: user.NewPolicy(),
-		Tx:     pgtest.Identity{},
-		Events: bus,
-		Audit:  aud,
-		Log:    logkit.Nop(),
-		Clock:  clockkit.NewFixed(fixedNow),
+		Repo:     o.repo,
+		Hasher:   o.hasher,
+		Policy:   user.NewPolicy(),
+		Tx:       pgtest.Identity{},
+		Events:   bus,
+		Sessions: o.sessions,
+		Audit:    aud,
+		Log:      logkit.Nop(),
+		Clock:    clockkit.NewFixed(fixedNow),
 	})
 	return ucFixture{uc: uc, bus: bus, audit: aud}
 }
+
+// revoked ждёт ровно одно закрытие всех сессий пользователя id в транзакции записи и отвечает err.
+func revoked(t *testing.T, id string, err error) *mocks.MockSessions {
+	t.Helper()
+	s := mocks.NewMockSessions(t)
+	s.EXPECT().RevokeAll(mock.MatchedBy(pgkit.InTx), id).Return(err).Once()
+	return s
+}
+
+var errRevoke = errors.New("authn_sessions: connection refused")
 
 // audited — запись аудита: actor сделал action над пользователем id.
 func audited(actor, action, id string) *auditkit.Entry {
@@ -283,24 +296,33 @@ func TestList_RepositoryError(t *testing.T) {
 }
 
 // Правка — чтение и запись одной транзакцией, событие — в ней же; статус меняет только админ, и свой тоже.
+// Блокировка той же транзакцией закрывает все сессии пользователя: заблокированный не обновит токены.
 func TestUpdate(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name  string
-		ctx   context.Context
-		in    user.UpdateInput
-		write *user.User // что уходит в репозиторий
-		actor string
+		name   string
+		ctx    context.Context
+		before *user.User // пользователь в БД до правки
+		in     user.UpdateInput
+		write  *user.User // что уходит в репозиторий
+		actor  string
+		revoke bool // закрываются все сессии
 	}{
 		{
-			name: "admin applies name and status in one write", ctx: identitytest.Admin("a1"),
+			name: "admin applies name and status in one write", ctx: identitytest.Admin("a1"), before: stored(),
 			in:    user.UpdateInput{Name: ptrkit.Of("New"), Status: ptrkit.Of(user.StatusBlocked), Version: 3},
-			write: &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusBlocked, Version: 3}, actor: "a1",
+			write: &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusBlocked, Version: 3}, actor: "a1", revoke: true,
 		},
 		{
-			name: "client renames self", ctx: identitytest.Client("u1"),
+			name: "client renames self", ctx: identitytest.Client("u1"), before: stored(),
 			in:    user.UpdateInput{Name: ptrkit.Of("New"), Version: 3},
 			write: &user.User{ID: "u1", Email: "a@b.com", Name: "New", Status: user.StatusActive, Version: 3}, actor: "u1",
+		},
+		{
+			name: "admin unblocks", ctx: identitytest.Admin("a1"),
+			before: &user.User{ID: "u1", Email: "a@b.com", Name: "Old", Status: user.StatusBlocked, Version: 3},
+			in:     user.UpdateInput{Status: ptrkit.Of(user.StatusActive), Version: 3},
+			write:  &user.User{ID: "u1", Email: "a@b.com", Name: "Old", Status: user.StatusActive, Version: 3}, actor: "a1",
 		},
 	}
 	for _, tc := range tests {
@@ -308,9 +330,13 @@ func TestUpdate(t *testing.T) {
 			t.Parallel()
 			saved := &user.User{ID: "u1", Name: tc.write.Name, Status: tc.write.Status, Version: 4}
 			repo := mocks.NewMockRepository(t)
-			read := repo.EXPECT().GetByID(mock.MatchedBy(pgkit.InTx), "u1").Return(stored(), nil).Once()
-			repo.EXPECT().Update(mock.MatchedBy(pgkit.InTx), tc.write).Return(saved, nil).Once().NotBefore(read)
-			f := newUC(t, withRepo(repo))
+			read := repo.EXPECT().GetByID(mock.MatchedBy(pgkit.InTx), "u1").Return(tc.before, nil).Once()
+			write := repo.EXPECT().Update(mock.MatchedBy(pgkit.InTx), tc.write).Return(saved, nil).Once().NotBefore(read)
+			sessions := mocks.NewMockSessions(t)
+			if tc.revoke {
+				sessions.EXPECT().RevokeAll(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(write)
+			}
+			f := newUC(t, withRepo(repo), withSessions(sessions))
 
 			got, err := f.uc.Update(tc.ctx, "u1", tc.in)
 			require.NoError(t, err)
@@ -330,6 +356,7 @@ func TestUpdate_Rejected(t *testing.T) {
 		ctx    context.Context
 		in     user.UpdateInput
 		expect func(repo *mocks.MockRepository) // nil — до репозитория не доходит
+		revoke error                            // ответ закрытия сессий; nil — до него не доходит
 		want   error                            // nil — отказ policy
 	}{
 		{
@@ -368,6 +395,14 @@ func TestUpdate_Rejected(t *testing.T) {
 			},
 			want: user.ErrInvalidStatusTransition,
 		},
+		{
+			name: "sessions of the blocked not closed", ctx: identitytest.Admin("a1"), in: user.UpdateInput{Status: ptrkit.Of(user.StatusBlocked), Version: 3},
+			expect: func(repo *mocks.MockRepository) {
+				repo.EXPECT().GetByID(mock.Anything, "u1").Return(stored(), nil).Once()
+				repo.EXPECT().Update(mock.Anything, mock.Anything).Return(&user.User{ID: "u1", Status: user.StatusBlocked, Version: 4}, nil).Once()
+			},
+			revoke: errRevoke, want: errRevoke,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -376,7 +411,11 @@ func TestUpdate_Rejected(t *testing.T) {
 			if tc.expect != nil {
 				tc.expect(repo)
 			}
-			f := newUC(t, withRepo(repo))
+			sessions := mocks.NewMockSessions(t)
+			if tc.revoke != nil {
+				sessions = revoked(t, "u1", tc.revoke)
+			}
+			f := newUC(t, withRepo(repo), withSessions(sessions))
 
 			_, err := f.uc.Update(tc.ctx, "u1", tc.in)
 			if tc.want == nil {
@@ -390,7 +429,8 @@ func TestUpdate_Rejected(t *testing.T) {
 	}
 }
 
-// Удалить пользователя вправе он сам и админ; удаление и событие — одной транзакцией.
+// Удалить пользователя вправе он сам и админ; удаление, закрытие всех его сессий и событие — одной
+// транзакцией.
 func TestDelete(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -407,10 +447,12 @@ func TestDelete(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo := mocks.NewMockRepository(t)
+			sessions := mocks.NewMockSessions(t)
 			if tc.actor != "" {
-				repo.EXPECT().Delete(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
+				del := repo.EXPECT().Delete(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
+				sessions.EXPECT().RevokeAll(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(del)
 			}
-			f := newUC(t, withRepo(repo))
+			f := newUC(t, withRepo(repo), withSessions(sessions))
 
 			err := f.uc.Delete(tc.ctx, "u1")
 			if tc.actor == "" {
@@ -434,6 +476,18 @@ func TestDelete_UnknownOrAlreadyDeleted(t *testing.T) {
 	f := newUC(t, withRepo(repo))
 
 	require.ErrorIs(t, f.uc.Delete(identitytest.Client("u1"), "u1"), user.ErrNotFound)
+	require.Zero(t, f.bus.Count())
+	require.Empty(t, f.audit.Entries())
+}
+
+// Сессии удалённого не закрылись — удаления нет: транзакция откатывается, ни события, ни аудита.
+func TestDelete_SessionsNotClosed(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().Delete(mock.Anything, "u1").Return(nil).Once()
+	f := newUC(t, withRepo(repo), withSessions(revoked(t, "u1", errRevoke)))
+
+	require.ErrorIs(t, f.uc.Delete(identitytest.Client("u1"), "u1"), errRevoke)
 	require.Zero(t, f.bus.Count())
 	require.Empty(t, f.audit.Entries())
 }

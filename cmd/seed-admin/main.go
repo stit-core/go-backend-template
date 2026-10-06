@@ -16,7 +16,10 @@ import (
 	"github.com/kelseyhightower/envconfig"
 
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/authnkit/session"
+	sessionpg "git.stit.tech/stit-core/golibinfra/authnkit/session/pgstore"
 	"git.stit.tech/stit-core/golibinfra/logkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 
 var (
@@ -38,15 +41,24 @@ func main() {
 }
 
 func run(ctx context.Context, log logkit.Logger) int {
-	dsn := os.Getenv("PG_DSN")
 	email := os.Getenv("SEED_ADMIN_EMAIL")
 	password := os.Getenv("SEED_ADMIN_PASSWORD")
 	name := os.Getenv("SEED_ADMIN_NAME")
 	if name == "" {
 		name = "Admin"
 	}
-	if dsn == "" || email == "" || password == "" {
-		log.Error(ctx, "PG_DSN, SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD are required")
+	if email == "" || password == "" {
+		log.Error(ctx, "SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD are required")
+		return 1
+	}
+	poolCfg, err := pgkit.NewPoolConfig()
+	if err != nil {
+		log.Error(ctx, "pg config", "err", err)
+		return 1
+	}
+	sessionCfg, err := session.NewConfig()
+	if err != nil {
+		log.Error(ctx, "session config", "err", err)
 		return 1
 	}
 
@@ -66,15 +78,28 @@ func run(ctx context.Context, log logkit.Logger) int {
 		return 1
 	}
 
-	conn, err := pgx.Connect(ctx, dsn)
+	pool, err := pgkit.NewPool(ctx, poolCfg)
 	if err != nil {
 		log.Error(ctx, "pg connect", "err", err)
 		return 1
 	}
-	defer func() { _ = conn.Close(ctx) }() //nolint:errcheck // процесс завершается, ошибку закрытия некуда вернуть
-
-	id, err := upsertAdmin(ctx, conn, email, hash, name)
+	defer pool.Close()
+	db := pgkit.NewDB(pool)
+	sessions, err := sessionpg.NewStore(db, sessionCfg)
 	if err != nil {
+		log.Error(ctx, "session store", "err", err)
+		return 1
+	}
+
+	var id string
+	if err := pgkit.NewPoolTransactor(pool).WithTx(ctx, func(txCtx context.Context) error {
+		var err error
+		if id, err = upsertAdmin(txCtx, db, email, hash, name); err != nil {
+			return err
+		}
+		// Права и пароль сменились: прежние сессии учётной записи не получают ни того, ни другого.
+		return sessions.RevokeAll(txCtx, id)
+	}); err != nil {
 		log.Error(ctx, "seed admin failed", "err", err)
 		return 1
 	}
@@ -82,25 +107,18 @@ func run(ctx context.Context, log logkit.Logger) int {
 	return 0
 }
 
-// upsertAdmin идемпотентен: повторный запуск обновляет role/hash, не плодит
-// строк. Уникальность users — частичный индекс LOWER(email) WHERE
-// status != 'deleted'; матчим по нему вручную в транзакции.
-func upsertAdmin(ctx context.Context, conn *pgx.Conn, email, passwordHash, name string) (string, error) {
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return "", fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // после Commit — no-op с ErrTxClosed
-
+// upsertAdmin идемпотентен: повторный запуск обновляет role/hash, не плодит строк. Уникальность users —
+// частичный индекс LOWER(email) WHERE status != 'deleted'; матчим по нему вручную в транзакции из ctx.
+func upsertAdmin(ctx context.Context, db *pgkit.DB, email, passwordHash, name string) (string, error) {
 	var id string
-	err = tx.QueryRow(
+	err := db.QueryRow(
 		ctx,
 		"SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND status <> 'deleted' FOR UPDATE",
 		email,
 	).Scan(&id)
 	switch {
 	case err == nil:
-		if _, err := tx.Exec(
+		if _, err := db.Exec(
 			ctx,
 			"UPDATE users SET role = 'admin', password_hash = $1 WHERE id = $2",
 			passwordHash, id,
@@ -108,7 +126,7 @@ func upsertAdmin(ctx context.Context, conn *pgx.Conn, email, passwordHash, name 
 			return "", fmt.Errorf("update: %w", err)
 		}
 	case errors.Is(err, pgx.ErrNoRows):
-		if err := tx.QueryRow(
+		if err := db.QueryRow(
 			ctx,
 			"INSERT INTO users (email, password_hash, name, status, role, email_verified) "+
 				"VALUES ($1, $2, $3, 'active', 'admin', true) RETURNING id",
@@ -119,5 +137,5 @@ func upsertAdmin(ctx context.Context, conn *pgx.Conn, email, passwordHash, name 
 	default:
 		return "", fmt.Errorf("lookup: %w", err)
 	}
-	return id, tx.Commit(ctx)
+	return id, nil
 }
