@@ -33,7 +33,7 @@ if [ "${1:-}" = "--status" ]; then
     elif [ -n "$l" ] && newer "$v" "$l"; then
         echo "$v · в шаблоне новее: $l → skill /upgrade"
     elif [ -n "$l" ]; then
-        echo "$v · новее тегов шаблона нет"
+        echo "$v · новее известных тегов шаблона нет (свежие теги — make template-update)"
     else
         echo "$v · тегов шаблона в репо нет — в форке их подтянет make template-update"
     fi

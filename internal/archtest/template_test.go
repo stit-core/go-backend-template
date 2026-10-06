@@ -138,7 +138,7 @@ func TestTemplateUpdate(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(fork, "h", "dropped.md"))
 	require.NoFileExists(t, filepath.Join(fork, "h", "removed.md"))
 	require.Contains(t, git(t, fork, "status", "--porcelain"), "UU h/conflict.md")
-	require.Contains(t, status(), "template/v1.1.0 · новее тегов шаблона нет")
+	require.Contains(t, status(), "template/v1.1.0 · новее известных тегов шаблона нет")
 }
 
 // TestTemplateUpdateFirstBase: первый перенос идёт от коммита шаблона, из которого создан форк (дерево
