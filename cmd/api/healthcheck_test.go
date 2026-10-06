@@ -105,3 +105,17 @@ func TestMainHealthcheck(t *testing.T) {
 		})
 	}
 }
+
+// Переменная перезапуска в окружении самого прогона тестов не подменяет их проверкой здоровья, даже если
+// /health на HTTP_ADDR жив: иначе она молча выключила бы все тесты пакета в гейте.
+func TestMainArgsEnvKeepsTests(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestFxGraphValidates$", "-test.v")
+	cmd.Env = []string{mainArgsEnv + "=healthcheck", "HTTP_ADDR=" + healthServer(t, http.StatusOK)}
+
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "output:\n%s", out)
+	require.Contains(t, string(out), "--- PASS: TestFxGraphValidates", "the tests ran, not main")
+}

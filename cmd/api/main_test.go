@@ -16,12 +16,14 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/allowlist"
 )
 
-// mainArgsEnv — аргументы процесса api: с ней тестовый бинарь вместо тестов запускает main — так тест
-// проверяет разбор подкоманд в main.
+// mainArgsEnv — аргументы процесса api: тестовый бинарь, перезапущенный с ней тестом, вместо тестов
+// запускает main — так тест проверяет разбор подкоманд в main.
 const mainArgsEnv = "API_TEST_MAIN_ARGS"
 
+// TestMain отличает перезапуск по пустой командной строке: go test всегда передаёт бинарю флаги -test.*,
+// и переменная, унаследованная самим прогоном, тестов не выключает.
 func TestMain(m *testing.M) {
-	if args, ok := os.LookupEnv(mainArgsEnv); ok {
+	if args, ok := os.LookupEnv(mainArgsEnv); ok && len(os.Args) == 1 {
 		os.Args = append([]string{"api"}, strings.Fields(args)...)
 		main()
 		return

@@ -54,10 +54,11 @@ GATE = $(MAKE) --no-print-directory PKG= VERBOSE= FORMAT=
 
 # make check не запускается там, где сказал бы «clean», не проверив всё: -i глушит ошибки шагов,
 # -n/-q/-t их не выполняют, подмена переменных гейта меняет шаги, GOFLAGS (из env или
-# go env -w) — go test и vet. override — чтобы guard не выключался своей же переменной.
+# go env -w) — go test и vet, API_TEST_MAIN_ARGS — перезапуск тестов cmd/api в main.
+# override — чтобы guard не выключался своей же переменной.
 ifneq (,$(filter check,$(MAKECMDGOALS)))
 override gate_bad := $(foreach f,i n q t,$(if $(findstring $f,$(firstword -$(MAKEFLAGS))),-$f)) \
-	$(foreach v,MAKE SHELL .SHELLFLAGS GATE DETAIL,$(if $(filter command% environment%,$(origin $v)),$v=…)) \
+	$(foreach v,MAKE SHELL .SHELLFLAGS GATE DETAIL API_TEST_MAIN_ARGS,$(if $(filter command% environment%,$(origin $v)),$v=…)) \
 	$(if $(shell go env GOFLAGS),GOFLAGS=$(shell go env GOFLAGS))
 ifneq (,$(strip $(gate_bad)))
 $(error make check не запускается с $(strip $(gate_bad)) — запусти просто make check)
