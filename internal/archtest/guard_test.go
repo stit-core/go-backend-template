@@ -12,8 +12,8 @@ import (
 )
 
 // TestGuardBash: хук .claude/hooks/guard-bash.sh не пускает из сессии Claude удобные обходы git-хуков —
-// флаги (и в кавычках, и через интерпретатор), алиасы и include конфига, SKIP_PREPUSH и hooksPath,
-// send-pack, правку и chmod хуков и .git/config — и не мешает обычной работе.
+// флаги (и в кавычках, и через интерпретатор), алиасы и include конфига, снятие секции core,
+// SKIP_PREPUSH и hooksPath, send-pack, правку и chmod хуков и .git/config — и не мешает обычной работе.
 func TestGuardBash(t *testing.T) {
 	t.Parallel()
 	guard := filepath.Join(repoRoot(t), ".claude", "hooks", "guard-bash.sh")
@@ -44,6 +44,7 @@ func TestGuardBash(t *testing.T) {
 		{"'git' commit -n -m x", true},
 		{`\git commit -n -m x`, true},
 		{`g\it commit -n -m x`, true},
+		{"$'git' commit -n -m x", true},
 		{"git commit --no-ver'i'fy -m x", true},
 		{"bash -c 'git commit -n -m x'", true},
 		{`sh -c "git commit -n -m x"`, true},
@@ -57,6 +58,9 @@ func TestGuardBash(t *testing.T) {
 		{"git -c include.path=/tmp/x.cfg push", true},
 		{"git config --global include.path /tmp/x.cfg", true},
 		{`git -c core.hooks"P"ath=/dev/null push`, true},
+		{"git config --remove-section core", true},
+		{"git config --local --rename-section CORE corex", true},
+		{"git config remove-section core", true},
 		{"git send-pack origin HEAD:refs/heads/main", true},
 		{"echo 'export SKIP_PREPUSH=1' >> ~/.bashrc", true},
 		{`git commit -m "fix: -n and --no-verify in a message"`, false},
@@ -75,6 +79,8 @@ func TestGuardBash(t *testing.T) {
 		{"sort scripts/git-hooks/commit-msg", false},
 		{"cp scripts/git-hooks/pre-push /tmp/pre-push.copy", false},
 		{"cat .git/config", false},
+		{"git config --remove-section remote.old", false},
+		{`git commit -m "docs: git config --remove-section core"`, false},
 		{"bash -c 'make check'", false},
 		{"make check", false},
 	} {

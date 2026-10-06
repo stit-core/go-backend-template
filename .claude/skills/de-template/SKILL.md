@@ -27,9 +27,10 @@ description: Развернуть платформу форка go-backend-templ
 
 ## Gate (проверить ДО любых правок)
 
-1. **Не канонический шаблон.** Origin — репо шаблона → СТОП: процедура его уничтожит.
+1. **Не канонический шаблон.** Origin — репо шаблона (без учёта регистра) → СТОП: процедура его
+   уничтожит.
    ```bash
-   git config --get remote.origin.url | grep -qE '[:/]stit-core/go-backend-template(\.git)?/?$' \
+   git config --get remote.origin.url | grep -qiE '[:/]stit-core/go-backend-template(\.git)?/?$' \
      && echo "STOP: origin — канонический шаблон; de-template — только в форке"
    ```
    Гейт держит то же: в каноническом репо `make check` красный на чужом module path и внешней

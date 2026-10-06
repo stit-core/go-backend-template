@@ -131,10 +131,11 @@ integration, нужен Docker) + build + gen-check + cover-check (покрыт�
 
 ### Не делать никогда
 - Обходить хуки и гейт: `--no-verify`, `git commit -n`, `SKIP_PREPUSH`, `core.hooksPath`, алиасы,
-  `send-pack`, правка хуков. Удобные формы блокируют `permissions.deny` и хук `guard-bash` — барьер от
-  случайного обхода, а не песочница; правка хуков инструментами Edit и Write — правка гейта (§ Сначала
-  спросить). `make check` не запускается с флагами make, которые глушат или подменяют шаги, вторым
-  makefile и `GOFLAGS`.
+  `send-pack`, правка хуков, свой makefile для `make check`. Удобные формы блокируют `permissions.deny`
+  и хук `guard-bash`; `make check` не запускается с флагами make, которые глушат или подменяют шаги, с
+  `GOFLAGS` и лишним makefile в обычных формах (`-f`, `MAKEFILES`). Это барьер от случайного обхода, а не
+  песочница: правку хуков инструментами Edit и Write и makefile, написанный под подделку, машина не
+  ловит — это правка гейта (§ Сначала спросить); вердикт для remote — pre-push в свежем worktree.
   Коммитить/цитировать `.env`, `.env.local`, `*.pem`, `*.key` (в репо живут только `*.example`-шаблоны).
 - Править сгенерированное руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
 - Image-теги `:latest`/`:edge`/lightweight. Deploy-команды (`make bump`, `make ship`, `ssh`,

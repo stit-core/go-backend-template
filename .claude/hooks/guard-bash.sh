@@ -3,14 +3,16 @@
 # exit 2 блокирует вызов, stderr уходит Claude.
 #
 # Блокирует: git commit с -n; git с --no-veri… (любая подкоманда); git send-pack и http-push (push без
-# pre-push); алиасы и include конфига git (-c alias.…, git config include.path …); SKIP_PREPUSH и ключ
-# hooksPath в любой команде (прочитать — git config --list, поиск — инструментом Grep); по путям
-# scripts/git-hooks, хуков (pre-push, pre-commit, commit-msg) и .git/config — всё, кроме чтения, и
-# запись перенаправлением. Слово с кавычками или `\` внутри — как без них ("git", --no-ver'i'fy).
+# pre-push); алиасы и include конфига git (-c alias.…, git config include.path …); снятие секции core
+# (git config --remove-section или --rename-section core — с ней уходит hooksPath); SKIP_PREPUSH и ключ
+# hooksPath в любой команде (прочитать — git config --list, поиск — инструментом Grep, сообщение
+# коммита — heredoc); по путям scripts/git-hooks, хуков (pre-push, pre-commit, commit-msg) и
+# .git/config — всё, кроме чтения, и запись перенаправлением. Слово с кавычками ($'…' тоже) или `\`
+# внутри — как без них ("git", $'git', --no-ver'i'fy).
 # Команда проверяется построчно; тела heredoc и строки в кавычках с пробелом — данные (сообщение
 # коммита может упоминать флаги), но у интерпретатора (bash -c, sh -s, eval, | bash, bash <<EOF) — код.
-# Это барьер от случайного обхода, а не песочница: подстановки оболочки ($G, $(…)), glob и правку
-# хуков инструментами Edit и Write он не видит. Ослабить сам гейт не даёт make check.
+# Это барьер от случайного обхода, а не песочница: чего он не видит — docs/contributing.md § Кто что
+# enforce'ит. Ослабить сам гейт не даёт make check.
 set -uo pipefail
 
 block() {
@@ -33,8 +35,8 @@ text=$(printf '%s\n' "$cmd" | awk '
 sep='(^|[;&|(`[:space:]])'
 re_interp="${sep}((ba|da|z)?sh)[[:space:]]+(-[[:alnum:]]*[cs])([[:space:]]|\$)|${sep}eval([[:space:]]|\$)|\\|[[:space:]]*((ba|da|z)?sh)[[:space:]]*(\$|[;&|)])|${sep}((ba|da|z)?sh)[[:space:]]*<<"
 [[ $text =~ $re_interp ]] && text=$(printf '%s' "$cmd" | tr -d "\"'")
-# Кавычки без пробела внутри и `\` перед буквой слово не меняют: "git" и \git — git.
-text=$(printf '%s' "$text" | sed -E -e "s/'([^' ]*)'/\\1/g" -e 's/"([^" \\]*)"/\1/g' -e 's/\\([[:alnum:]_.-])/\1/g')
+# Кавычки без пробела внутри ($'…', $"…" тоже) и `\` перед буквой слово не меняют: $'git' и \git — git.
+text=$(printf '%s' "$text" | sed -E -e "s/\\\$?'([^' ]*)'/\\1/g" -e 's/\$?"([^" \\]*)"/\1/g' -e 's/\\([[:alnum:]_.-])/\1/g')
 
 lower=$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')
 [[ $lower == *skip_prepush* ]] && block "SKIP_PREPUSH"
@@ -108,7 +110,7 @@ done <<<"$(printf '%s' "$text" | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | q
 segments=$(printf '%s' "$text" | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | tr '\n' ';' |
     sed -E -e 's/"([^"\\]|\\.)*"//g' -e "s/'[^']*'//g" | tr ';&|()`' '\n\n\n\n\n\n')
 while read -r -a words; do
-    git=0 sub="" skip=0
+    git=0 sub="" skip=0 prev=""
     for w in ${words[@]+"${words[@]}"}; do
         if [ "$git" = 0 ]; then
             [[ $w == git || $w == */git ]] && git=1
@@ -127,7 +129,11 @@ while read -r -a words; do
                 # -n в кластере коротких флагов до первого флага со значением: -an, -nm.
                 -[a-zA-Z]*) [[ $sub == commit && ${w%%[mFcCtS]*} == *n* ]] && block "git commit $w" ;;
             esac
+            # Имя секции git не различает по регистру.
+            [[ $sub == config && $prev =~ ^(--)?(remove|rename)-section$ && $w == [Cc][Oo][Rr][Ee] ]] &&
+                block "git config $prev $w"
         fi
+        prev=$w
     done
 done <<<"$segments"
 exit 0

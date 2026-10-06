@@ -10,9 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMakeCheckCannotBeForged: «✓ check clean» печатает только настоящий гейт — ни флаги make, ни второй
-// makefile, ни подмена переменных его не подделывают. Настоящий гейт здесь падает на первом шаге:
-// gofumpt в PATH — false, поэтому проба не гоняет гейт целиком.
+// TestMakeCheckCannotBeForged: флаги make, подмена переменных гейта и лишний makefile (check: или check::,
+// до или после Makefile, MAKEFILES) не подделывают «✓ check clean». Makefile под подделку (переприсваивает
+// MAKEFILE_LIST) обходит любую сверку внутри make — это правка гейта, вердикт для remote — pre-push.
+// Настоящий гейт здесь падает на первом шаге: gofumpt в PATH — false, поэтому проба не гоняет гейт целиком.
 func TestMakeCheckCannotBeForged(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
