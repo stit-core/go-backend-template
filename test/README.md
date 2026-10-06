@@ -8,7 +8,7 @@
 
 | Зона | Где | Отвечает за |
 |---|---|---|
-| Стек | `stack/` | docker-compose + креды seed-admin (bash). `up.sh`/`down.sh`, `lib.sh`, `compose.yml`, `Dockerfile.local`. |
+| Стек | `stack/` | docker-compose + креды seed-admin (bash). `up.sh`/`down.sh`, `lib.sh`, `compose.yml`, `Dockerfile.local`; env сервиса — из `.env.example`. |
 | Транспорт+модели | `client/` | типизированная httpx-обёртка + pydantic-DTO (строгое зеркало huma: лишнее поле или тип — ошибка разбора). |
 | Сценарии | `scenarios/` | переиспользуемые step-функции над `client` (без ассертов). |
 | Infra-интроспекция | `infra/` | типизированный доступ к side-effects: `pg.py` (psycopg, users/сессии refresh/bruteforce/email_verifications), `outbox.py` (per-domain `outbox_<domain>`), `nats.py` (core-NATS collector). |
@@ -34,8 +34,9 @@ Showcase полного async-пути — `e2e/test_event_flow.py`. Bruteforce-
 ## Admin-принципал
 
 Публичного пути сделать admin нет (`register` → `client`). Стек при старте
-гоняет one-off `cmd/seed-admin` (creds `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`
-из `.env.local`, дефолты в `up.sh`), `api` ждёт его completed. Фикстура
+гоняет one-off `cmd/seed-admin`, если он есть (своя идентичность; creds
+`E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD` из `.env.local`, дефолты в `up.sh`), `api`
+ждёт его completed. Фикстура
 `admin` логинится этими кредами; `other_user` — второй client для
 cross-user 403.
 
@@ -57,7 +58,7 @@ cross-user 403.
 password-reset confirm). У шаблона нет канала доставки: dev-заглушка
 `verification/infra/logmail` письмо не отправляет и токен не пишет никуда, в
 outbox и NATS токена тоже нет. Путь писем целиком — запрос сброса, оба письма,
-погашение обеих ссылок — проходит `TestBoot` (`cmd/api`, шаг `make check`) с
+погашение обеих ссылок — проходит `TestIdentity` (`cmd/api`, шаг `make check`) с
 перехватом mailer графа; правила погашения держат usecase- и
 integration-тесты verification. Реальный Mailer + mail-capture (Mailpit) —
 extension point форка.

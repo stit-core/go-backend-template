@@ -136,6 +136,8 @@ blocked-by: —
   проход правды S3 потом сверит и её тексты.
 - `fix-reference-code` S13 (канон тестов) — двумя частями: user и verification — пока шаблон ждёт
   v1.3.0, auth — после S9 (сессии на ките переписывают его тесты); шаг закрывается второй частью.
+- `repair-harness` S8 и S9 идут до S7: шаблон не простаивает, пока golibinfra готовит v1.4.0; S7
+  после bump повторяет prune в worktree (AC6) и гейт (AC8).
 - Базовый аудит golibinfra (S4) идёт двумя частями: киты вне httpkit и `testkit/handlertest` —
   сразу после PASS этапа S1–S9 `harden-kits` (их код до v1.2.0 уже не меняется), httpkit и
   handlertest — после тега v1.2.0 — партия 2 на критическом пути, так она стартует раньше.
@@ -146,8 +148,8 @@ S1–S4 закрыты: `harden-gate` и `fix-reference-code` удалены, ш
 origin; golibinfra v1.2.0 и v1.3.0 в origin.
 - **S5** — партия 3 golibinfra (v1.4.0): `harden-kits-contracts` (этап 2 из 3 идёт) →
   `harden-tests-archkit-release` (`archkit`, релиз).
-- **S6** — `repair-harness`: S1, S2, S5, S6 приняты; S3, S4 — можно начинать (код эталона закрыт);
-  S7, S8 — после v1.4.0; затем S9–S11.
+- **S6** — `repair-harness`: S1 – S6 приняты; S8 сделан, S9 — следом (до S7), затем валидатор
+  S8 – S9; S7 — после v1.4.0; затем S10, S11.
 - Предел контекста агента — 950 тыс. (владелец): наблюдатель `ctxwatch.py`, сворачивание и
   продолжатель — `prompts.md`; агенты не запускают `/code-review` и вложенных агентов. Оперативные
   заметки — `orchestrator-todo.md` (каталог материалов).

@@ -13,7 +13,7 @@ status: draft
 `services/service.md` strategy-репо — `scaffold` читает его домены из
 `<strategy-path>/docs/projects/<project-slug>/services/<service-slug>/domains/`, границы — паспорт
 `services/<service-slug>/README.md`. `strategy-path`: путь к форку `<org>/strategy` (дефолт
-`../strategy` — sibling-чекаут рядом с этим репо). На каноническом шаблоне не заданы.>
+`../strategy` — sibling-чекаут рядом с этим репо). Strategy-репо нет — все три `—`.>
 
 ## Versioning
 <Схема версий (semver `vX.Y.Z`). Как версия и commit попадают в бинарь (ldflags

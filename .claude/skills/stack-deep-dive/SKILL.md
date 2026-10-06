@@ -20,8 +20,8 @@ kit'ы). Канон артефактов и обязательных H2 — `doc
 маппинг `Generates → код` — `.claude/skills/de-template/references/wiring.md`.
 Скилл их не дублирует, а исполняет.
 
-В онбординг-флоу `init-service` чейнит сюда после проектирования доменов
-(в соседнем strategy-репо), затем — `de-template`.
+В онбординге `init-service` чейнит сюда первым этапом (домены проектируются
+отдельно — в соседнем strategy-репо), затем — `de-template`.
 
 ## Главный ритм: AskUserQuestion
 
@@ -78,13 +78,9 @@ enum'ы из канона — даёт как опции; имена env, subjec
 2. Для каждого присутствующего файла: прочитать frontmatter (`status`,
    `kind`) и H2-заголовки; считать заполненность обязательных секций
    (см. `references/field-checklists.md`).
-3. Прогнать `make validate-stack-docs`. Если
-   зелёный + все 8 stable — выйти: «стек спроектирован, делать нечего».
-
-   ⚠️ Перед валидатором проверить, что 8 kind-файлов **существуют**:
-   на пустом `docs/stack/` (только `_templates/` + README) валидатор
-   даёт ложный OK, ему нечего проверять. Если файлов меньше 8 —
-   зафиксировать «нужно завести K из 8» как первый шаг.
+3. Прогнать `make validate-stack-docs A=--stable`: зелёный — все 8 на месте
+   и stable, выйти: «стек спроектирован, делать нечего». Иначе он называет,
+   каких kind'ов нет и что не stable; заведение недостающих — первый шаг.
 4. Прочитать `state/` (если есть) — `## Открытые вопросы`; пометки
    `**blocker**` приоритетны.
 5. Сжатая карта в чат:
@@ -131,7 +127,8 @@ enum'ы из канона — даёт как опции; имена env, subjec
    ёмкость.
 3. **persistence** — Postgres: driver, миграции, kit-таблицы, пул.
 4. **messaging** — published/consumed subjects, delivery semantics.
-5. **auth** — authn/authz, authgate, роли, seed-admin, brute-force.
+5. **auth** — идентичность (`own` / `external`), authn/authz, authgate, роли,
+   seed-admin, brute-force.
 6. **observability** — логирование: режим вывода (stdout), формат,
    уровни, структурные поля.
 7. **config** (роллап) — required/optional env, секреты, валидация —

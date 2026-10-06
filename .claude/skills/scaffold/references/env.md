@@ -40,9 +40,8 @@
 
 - `.env.example`: required — строкой `<ИМЯ>=<значение для локального запуска>` в разделе Required
   (иначе красный `TestEnvExampleHasRequired`), секрет — значение только для разработки; optional —
-  закомментированной строкой с дефолтом и смыслом.
-- Required — ещё в env `TestBoot` (`serviceEnv` в `cmd/api/boot_test.go`) и в `x-app-env` e2e-стенда
-  (`test/stack/compose.yml`): без неё сервис там не стартует.
+  закомментированной строкой с дефолтом и смыслом. Env из него берут boot-тест (`serviceEnv` в
+  `cmd/api/boot_test.go`) и e2e-стенд (`env_file` в `test/stack/compose.yml`).
 - Форк — строка в `docs/stack/config.md` (Required или Optional, секрет — ещё § Secrets).
 
 ### 5. Handoff

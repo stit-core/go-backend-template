@@ -32,6 +32,7 @@ id: stack.service      # stack.<name>
 kind: service          # один из 8 выше
 name: service          # == basename файла без .md
 status: draft          # draft → stable (через валидатор)
+identity: own          # только auth: own — домены идентичности остаются, external — их удаляет prune
 ```
 
 ## Workflow
@@ -43,6 +44,7 @@ status: draft          # draft → stable (через валидатор)
 
 ## Gate
 
-`/de-template` не запускается, пока не все артефакты `stable` и валидатор не зелёный.
+`/de-template` не запускается, пока не все 8 артефактов `stable` и валидатор не зелёный:
+`make validate-stack-docs A=--stable`.
 Зеркалит дисциплину доменов (она в соседнем strategy-репо): код разворачивается только из
 stable-артефактов, не из draft.

@@ -1,53 +1,46 @@
 ---
 name: de-template
-description: Развернуть форк go-backend-template в самостоятельный проект по stable-артефактам docs/stack (домены — в соседнем strategy-репо) — module path, README, .env.example, platform/cmd wiring, prune reference-доменов. Используй, когда init-service дошёл до развёртывания (стек спроектирован и stable) или юзер просит превратить форк в свой проект и убрать шаблонную мету. Движок skill-only: и механика, и wiring — reviewable edits под этой процедурой. На каноническом репозитории шаблона не запускать — это его уничтожит.
+description: Развернуть платформу форка go-backend-template по stable-артефактам docs/stack — module path, README, .env.example, план и handoff с чистого листа, wiring platform и cmd. Используй, когда init-service дошёл до развёртывания (стек спроектирован и stable) или юзер просит превратить форк в свой проект и убрать шаблонную мету. Домены не трогает: свои — scaffold, домены идентичности — prune init-service. Движок skill-only: и механика, и wiring — reviewable edits под этой процедурой. На каноническом репозитории шаблона не запускать — это его уничтожит.
 ---
 
 # Skill: de-template (движок развёртывания)
 
 Превращает форк шаблона в проект, который ничего не помнит про `go-backend-template`, кроме версии
-обвязки `.template/` — по ней приходят обновления (`/upgrade`). Читает
-**stable** `docs/stack` и разворачивает фундамент по секциям `Generates` восьми
-stack-артефактов. Домены живут в соседнем strategy-репо и разворачиваются отдельно (`scaffold`
-domain), не здесь. Движок **skill-only**: нет committed-скрипта — и детерминированная механика
-(rewrite/prune/env), и doc-driven wiring идут как **reviewable edits** под этой процедурой;
-механика — по точным командам ниже, wiring — диффом поверх скелета, который юзер ревьюит.
+обвязки `.template/` — по ней приходят обновления (`/upgrade`). Читает **stable** `docs/stack` и
+разворачивает платформу по секциям `Generates` восьми stack-артефактов. Домены — не здесь: свои
+разворачивает `scaffold` (вариант domain), домены идентичности остаются или уходят по решению
+`docs/stack/auth.md` (prune — этап init-service после своих доменов). Движок **skill-only**: механика —
+по точным командам ниже, wiring — диффом поверх скелета, который юзер ревьюит.
 
-Запускается **один раз** на форке. Финал — зелёный `make build` и проект без следов шаблона.
+Запускается **один раз** на форке, этапом онбординга (`/init-service`). Финал — зелёный `make check`.
 
 ## Когда применять
 
 - Юзер просит развернуть фундамент форка / сделать из шаблона свой проект
-- `init-service` дошёл до развёртывания (стек спроектирован, валидатор зелёный; домены — в strategy-репо)
+- `init-service` дошёл до развёртывания (стек спроектирован, валидатор зелёный)
 
 ## Когда НЕ применять
 
-- Стек ещё не `stable` — сначала `stack-deep-dive` (gate ниже). Домены — в соседнем strategy-репо.
-- Проект уже де-темплейтизирован (свой module path, reference-домены удалены) — обычный
-  день-в-день через `/smartdev`.
-- **Канонический репозиторий шаблона** — никогда (guard ниже). Только форк/копия.
+- Стек ещё не `stable` — сначала `stack-deep-dive` (gate ниже).
+- Проект уже де-темплейтизирован (свой module path) — обычный день-в-день через `/smartdev`.
+- **Канонический репозиторий шаблона** — никогда (gate ниже). Только форк.
 
 ## Gate (проверить ДО любых правок)
 
-1. **Не канонический шаблон.** `go.mod` module path всё ещё `git.stit.tech/stit-core/go-backend-template`
-   И каталог — не временная копия/форк → СТОП. Запуск на самом шаблоне его уничтожит. Спроси
-   юзера явно подтвердить, что это форк/тест-копия, прежде чем продолжать.
-2. **Стек stable.** Валидатор зелёный, иначе СТОП → `stack-deep-dive`.
-   Сначала проверь, что 8 stack-kind'ов существуют — на пустом `docs/stack` (только
-   `_templates/`+README) валидатор даёт ложный `OK`, ему нечего проверять:
+1. **Не канонический шаблон.** Origin — репо шаблона → СТОП: процедура его уничтожит.
    ```bash
-   for k in service runtime config persistence messaging auth observability dependencies; do
-     test -f "docs/stack/$k.md" || echo "STOP: docs/stack/$k.md нет — стек не спроектирован (/stack-deep-dive)"
-   done
-   make validate-stack-docs
+   git config --get remote.origin.url | grep -qE '[:/]stit-core/go-backend-template(\.git)?/?$' \
+     && echo "STOP: origin — канонический шаблон; de-template — только в форке"
    ```
-   Все 8 артефактов `status: stable`, секции `Generates` непусты — это вход движка. Домены
-   (соседний strategy-репо) для de-template не нужны: движок разворачивает только платформу,
-   спроектированные домены скаффолдятся отдельно (`scaffold` domain) до prune reference (Phase A.5).
-3. **State stack-deep-dive чист.** Открытые `**blocker**`-вопросы у `stack-deep-dive`
-   означают незакрытые платформенные решения — артефакт мог попасть в `stable` только если
-   blocker'ов нет (§5/§6 его `references/draft-stable.md`), но защёлка: пробежаться по
-   state-каталогу (коммитится вместе с репо) и убедиться.
+   Гейт держит то же: в каноническом репо `make check` красный на чужом module path и внешней
+   идентичности (archtest `TestCanonicalTemplate`), pre-push такое не отправит.
+2. **Стек stable** — все 8 артефактов на месте, `status: stable`, валидатор зелёный; иначе СТОП →
+   `stack-deep-dive`:
+   ```bash
+   make validate-stack-docs A=--stable
+   ```
+3. **State stack-deep-dive чист** по `**blocker**`-вопросам: артефакт мог попасть в `stable` только без
+   них (§5/§6 `references/draft-stable.md` того скилла), но защёлка — state коммитится вместе с репо.
    ```bash
    grep -RlE '\*\*blocker\*\*' .claude/skills/stack-deep-dive/state/ 2>/dev/null \
      && echo "STOP: есть открытые blocker'ы в state stack-deep-dive — добей их сначала" \
@@ -60,76 +53,67 @@ domain), не здесь. Движок **skill-only**: нет committed-скри
 
 ### A.1 Module path
 
-Новый путь — из `docs/stack/service.md § Generates` (поле module path). Перепиши **везде**
-(go.mod + все импорты) одной заменой:
+Новый путь — из `docs/stack/service.md § Generates`. Меняется в коде и конфигах генерации — `go.mod`,
+`*.go`, `.mockery.yml`; проза его не меняет: там это путь шаблона (откуда форк, что не так у
+неперенастроенного форка), и перенос обвязки (`make template-update`) правит module path тоже только в
+Go-файлах.
 
 ```bash
 OLD=git.stit.tech/stit-core/go-backend-template
 NEW=<module path из docs/stack/service.md>
-git grep -lF "$OLD" | xargs sed -i "s#$OLD#$NEW#g"
+git grep -lF "$OLD" -- go.mod '*.go' .mockery.yml | xargs sed -i "s#$OLD#$NEW#g"
 go mod tidy
 ```
 
 Проверь `head -1 go.mod` == `module $NEW` и `go build ./...` (импорты резолвятся).
 
-### A.2 README-шапка
+### A.2 README и CONTRIBUTING
 
-Из `docs/stack/service.md` (имя, назначение, бинари): замени шаблонную шапку `README.md` на
-проектную. Убери упоминания «шаблон»/«template»/«форкни». Детали release/ecosystem/architecture
-остаются ссылками на `docs/reference/*` (они общие).
+Из `docs/stack/service.md` (имя, назначение, бинари): шапка `README.md` — проектная, раздел «Как начать»
+шаблона (форк → `/init-service`) — вон; заголовок `CONTRIBUTING.md` — имя проекта. Убери
+«шаблон»/«template»/«форкни». Детали release/ecosystem/architecture остаются ссылками на
+`docs/reference/*` (они общие). `CLAUDE.md` и доки шаблона (`.template/paths`) не правь: они верны и для
+форка, а правку форка перенос обвязки показал бы конфликтом.
 
 ### A.3 `.env.example`
 
 Из `docs/stack/config.md § Generates` (required+optional env с дефолтами): приведи `.env.example`
 к фактическому контракту проекта. Секреты — только имена ключей (значения не коммить;
-`.claude/rules/env-local.md`).
+`.claude/rules/env-local.md`). Boot-тест и e2e-стенд берут env из него.
 
-### A.4 Strip шаблонной меты
+### A.4 Планы и handoff
 
-- Удали `docs/getting-started.md` ([META] — гайд «как форкнуть шаблон», форку не нужен).
-- `docs/contributing.md` ([META] про устройство `.claude`-системы) — **оставь** (система
-  наследуется форком); при желании переформулируй «шаблон» → имя проекта.
-- `.claude/plans/` — форк стартует без планов и handoff шаблона: только `backlog.md` и
-  `handoff.md` с `_пусто_` (планы шаблона — не планы форка).
-- `.template/` — **оставь**: версия обвязки и пути шаблона, по ним форк получает обновления
-  обвязки (skill `/upgrade`).
-
-### A.5 Prune reference-доменов
-
-`auth`/`user`/`verification` — учебные. Удаляются по полному чеклисту (7 точек) —
-см. **`references/prune.md`**. Делай это **после** того как свои домены спроектированы (в
-соседнем strategy-репо) и сгенерированы (иначе теряешь живой образец). Если свои домены ещё не
-скаффолжены — сначала они, по таблице «Маршрут задачи» (CLAUDE.md), потом prune.
+`.claude/plans/` — форк стартует без планов и handoff шаблона: только `backlog.md` и `handoff.md` с
+`_пусто_`; план онбординга (`onboarding`, `/init-service`) остаётся. `.template/` — **оставь**: версия
+обвязки, пути шаблона и доменов идентичности.
 
 ## Phase B — doc-driven wiring
 
 Шесть оставшихся `Generates` (runtime/messaging/observability/auth/persistence/dependencies)
 разворачиваются как **reviewable diff поверх скелета** — `cmd/api/main.go` композиция, fx-модули,
-logging, subjects, authgate, pgkit, kit-prune. Процедура и маппинг `Generates`→код —
-см. **`references/wiring.md`**. Не правь сгенерированное (`infra/postgres/db/*`, `mocks/*`) —
-только `make gen`.
+logging, subjects, authgate, pgkit, киты. Процедура и маппинг `Generates`→код — `references/wiring.md`.
+Не правь сгенерированное (`infra/postgres/db/*`, `mocks/*`) — только `make gen`.
 
 ## Verify
 
 ```bash
-make build      # фундамент компилируется
 make check      # готово — по CLAUDE.md § Готово
 ```
-
-Зелёный `make build` на развёрнутом форке — главный критерий движка.
 
 ## Anti-patterns
 
 - ❌ Запуск на каноническом шаблоне (см. Gate) — уничтожает шаблон.
 - ❌ Старт до `stable`-артефактов — движку не из чего разворачивать.
-- ❌ Prune reference-доменов раньше, чем свои спроектированы/сгенерированы.
+- ❌ Module path в прозе: там он — путь шаблона.
+- ❌ Удаление доменов здесь — свои растут через `scaffold`, домены идентичности — решение `auth.md`, prune
+  после своих доменов (`/init-service`).
 - ❌ Wiring «по памяти» вместо `Generates`-секций — артефакты source of truth.
 - ❌ Правка сгенерированного руками вместо `make gen`.
 - ❌ Коммит значений секретов в `.env.example` (только имена ключей).
 
 ## См. также
 
-- `references/prune.md` — удаление reference-доменов (7 точек).
 - `references/wiring.md` — doc-driven wiring 6 `Generates`-kinds.
 - `docs/stack/README.md` — контракт 8 артефактов и их `Generates`.
-- `.claude/skills/init-service/SKILL.md` — оркестратор, чейнит сюда последним шагом.
+- `.claude/skills/init-service/SKILL.md` — оркестратор онбординга; prune доменов идентичности —
+  его `references/prune.md`.

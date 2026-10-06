@@ -61,7 +61,8 @@ make validate-stack-docs
   `kind ∈ 8 stack-kinds`);
 - `basename == name`; `id == "stack.<name>"`;
 - все обязательные H2 для kind присутствуют;
-- при `status: stable` — секции непусты.
+- при `status: stable` — секции непусты (плейсхолдер шаблона `<…>`, и
+  многострочный, — не содержимое), у `auth` — `identity: own | external`.
 
 Если красный — вернись к проблемным секциям, не маркируй stable.
 
@@ -104,10 +105,11 @@ make validate-stack-docs
 > fx.Lifecycle; graceful shutdown описан; jobs перечислены с интервалами?
 
 - ✅ `cmd/api` поднимает HTTP (chi+huma) + outbox-drain + 2 NATS-subs
-  + 1 cleanup-job; OnStop закрывает в правильном порядке (HTTP →
-  subs → drain → pool); таймауты явные.
+  + 1 cleanup-job; остановка — в бюджете `fx.StopTimeout`: за
+  балансировщиком пауза `HTTP_SHUTDOWN_DRAIN_DELAY=5s`, дообработка и
+  дренаж NATS — в своих долях; порядок хуков — китов (HTTP первым).
 - ❌ `Entrypoints: HTTP server`, остальное «и ещё что-то» — outbox/jobs
-  упущены, shutdown не описан.
+  упущены; или свой порядок закрытия, которого шаблон не делает.
 
 ### config
 
@@ -147,11 +149,11 @@ make validate-stack-docs
 
 ### auth
 
-> Authn механизм явный (JWT/session/none); authgate описывает что
-> middleware кладёт в principal; роли перечислены; seed-admin путь
-> идемпотентен; brute-force защищает login?
+> Идентичность выбрана (own/external); authn механизм явный
+> (JWT/session/none); authgate описывает что middleware кладёт в principal;
+> роли перечислены; seed-admin путь идемпотентен; brute-force защищает login?
 
-- ✅ JWT HS256 (authnkit) с секретом из env (`JWT_SECRET`, ≥32 байт); authgate кладёт
+- ✅ `identity: own`; JWT HS256 (authnkit) с секретом из env (`JWT_SECRET`, ≥32 байт); authgate кладёт
   `identity.Identity{UserID, Role}`; роли `client`/`admin`; seed-admin через
   `cmd/seed-admin` (env `SEED_ADMIN_*`), идемпотентен; cleanup попыток —
   `bruteforcepg.Module` кита (`BRUTEFORCE_CLEANUP_INTERVAL=5m`).

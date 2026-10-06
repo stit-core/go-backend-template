@@ -13,7 +13,11 @@
 - `cmd/migrate` + порядок накатки app+kit миграций.
 
 ### 2. dependencies → `docs/stack/dependencies.md`
-- kit-импорты + fx-провайдеры **только нужных** kit'ов golibinfra; прунь неиспользуемые из `go.mod`.
+- киты golibinfra — из `golibinfra kits`: нужный — его `<kit>.NewConfig` в `kitConfigs` и модуль в графе
+  (`cmd/api/main.go`); кит шаблона, которого там нет, — вон из графа, импорты — `go mod tidy`.
+- `timerkit.Module` и пробы healthkit (`healthkit.Provide(<kit>.Probe)`) — потребители групп китов:
+  без первого не идут джобы (дренаж outbox, cleanup — `TestFxGraphValidates` красный), без проб `/ready`
+  не видит зависимость. Их не убирают, пока в графе есть кит с джобом или пробой.
 - wiring внешних runtime-deps (Redis/NATS/…), если стек их объявил.
 - golibinfra-first: generic-примитив → golibinfra, не локально (CLAUDE.md § Стиль; обоснование — `docs/reference/architecture.md § Граница с golibinfra`).
 
@@ -24,10 +28,10 @@
 - (детали паттерна — `scaffold` вариант event + rule `events-and-messaging`.)
 
 ### 4. auth → `docs/stack/auth.md`
-- authgate-wiring + middleware (`internal/platform/authgate`).
-- authnkit-провайдеры (JWT verifier, hasher).
-- `cmd/seed-admin` (если форк его сохраняет под свой домен).
-- bruteforce guard + cleanup-job.
+- authgate-wiring + middleware (`internal/platform/authgate`), authnkit-провайдеры (JWT verifier,
+  hasher): при `identity: external` — проверка токенов внешней идентичности (issuer, audience, ключ).
+- `identity: own` — домены идентичности, `cmd/seed-admin`, кит сессий и bruteforce guard остаются
+  (роли, TTL, пороги — по артефакту); `external` — их удаляет prune после своих доменов (`/init-service`).
 - Если стек объявил «без authn» — пропусти и не подключай authgate.
 
 ### 5. observability → `docs/stack/observability.md`

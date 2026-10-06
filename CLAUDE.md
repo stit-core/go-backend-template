@@ -1,6 +1,7 @@
-# go-backend-template — гайд для агентов
+# Гайд для агентов
 
-Шаблон Go HTTP-бэкенда stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + киты `golibinfra`.
+Go HTTP-бэкенд stit на шаблоне `go-backend-template`: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + киты
+`golibinfra`.
 
 Этот файл — ядро (always-on) + роутер. Детали — в `docs/`, контекстные правила — в
 `.claude/rules/`, процедуры — в `.claude/skills/`. Карта документации — `docs/README.md`.
@@ -14,8 +15,8 @@
   же обвязкой. Карта — `docs/reference/ecosystem.md`.
 - **`/smartdev`** — cockpit сессии: сводка состояния (ветка, drift, активный план, TODO) +
   переключение в нужный режим. Запускай в начале / после `/clear`.
-- **Потребителю шаблона** — `docs/getting-started.md`: форк → `/init-service` → проектирование
-  стека (домены уже готовы в соседнем strategy-репо) → `/de-template` → свои домены → свой проект.
+- **Онбординг форка** — `/init-service`, планом: стек → `/de-template` → свои домены → домены
+  идентичности (остаются или prune — по `docs/stack/auth.md`).
 
 ## Маршрут задачи
 
@@ -43,7 +44,10 @@ Claim «готово» и коммит — только когда:
 DDD-артефакты доменов — в соседнем strategy-репо (`../strategy`, форк
 `business-strategy-template`): `docs/projects/<slug>/services/<svc>/domains/<ctx>/`; артефакты
 стека — `docs/stack/`. Это source of truth: код пишется по ним, не наоборот.
-`auth`/`user`/`verification` — code-only референс-примеры (изучить, потом удалить под свой проект).
+`auth`/`user`/`verification` — домены идентичности (вход, сессии, учётные записи; механика — в китах):
+у проекта со своей идентичностью остаются и растут по его артефактам, с внешней (`identity: external`
+в `docs/stack/auth.md`) их удаляет prune. Проза ссылается на них как на образцы; у проекта без них —
+`git show <версия>:<путь>`, версия — `.template/version`.
 
 ## Команды
 

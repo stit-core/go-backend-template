@@ -10,6 +10,43 @@
 этот репо). Этот файл — **мост** от их формы к Go-коду именно этого бэкенда; его потребляет
 `scaffold` (вариант domain), разворачивая код по stable-артефактам.
 
+Strategy-репо у проекта нет — вход домена тот же по смыслу, но от юзера: контракт (сущность, операции,
+права, события) одним блоком до кода (`/init-service`, этап 3).
+
+## Сервис
+
+| Артефакт strategy | Здесь |
+|---|---|
+| Паспорт `services/<svc>/README.md`: `Owned Contexts` | домены `internal/domain/<context>/` |
+| `Exposes` | операции huma в `delivery/http` доменов, контракт — `openapi.json` |
+| `Dependencies` — соседние сервисы и интеграции | порт в usecase потребителя + адаптер `infra/<интеграция>/` (§ Integration client) |
+| `Resources`, `Messaging` | `docs/stack/dependencies.md § External runtime deps`, `docs/stack/messaging.md` — subject'ы, outbox и подписчики |
+| `Workers` → `workers/<slug>.md` (kind `worker`) | § Worker |
+
+## Worker
+
+Отдельного процесса нет: воркер — тот же бинарь `cmd/api`, бизнес-правил не держит, зовёт usecase.
+
+| Секция `kind: worker` | Go-код |
+|---|---|
+| Trigger `topic:<topic>` | подписчик `delivery/nats/` модуля-владельца, `fx.Invoke(Register)` (rule `events-and-messaging`) |
+| Trigger schedule | джоб `timerkit.Provide` в `module/module.go` владельца; интервал — env (runtime) |
+| Handles | вызовы методов `Usecase` из обработчика |
+| Semantics: idempotency, retry, ordering | идемпотентность — схема потребителя (unique-индекс, `ON CONFLICT`); повтор и DLQ — natskit (`NATS_JS_MAX_DELIVER`), порядок — § Events |
+| On failure | DLQ JetStream / dead outbox — сигнал в лог `ERROR` |
+
+## Integration client
+
+`services/_shared/integrations/<slug>/` (kind `integration-client`) — клиент внешней системы или соседнего
+проекта; домен зовёт его функции по `slug`, транспорта не зная.
+
+| Секция | Go-код |
+|---|---|
+| Functions (`out`) | методы порта в `usecase.go` потребителя (имя — по `slug`) |
+| Transport | адаптер `internal/domain/<context>/infra/<integration>/`; HTTP — `golibinfra/httpclient`; адрес и ключи — env (`docs/stack/config.md`) |
+| Functions (`in`, колбэк) | операция huma или подписчик `delivery/nats/` — вход, который зовёт usecase |
+| Errors | sentinel'ы порта в `errors.go` потребителя; адаптер переводит в них ответы провайдера |
+
 ## Bounded context
 
 `../strategy/docs/projects/<slug>/services/<svc>/domains/<context>/` ↔ `internal/domain/<context>/` — один Go-пакет, один FX-модуль (`module/module.go`).

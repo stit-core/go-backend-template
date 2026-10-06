@@ -22,3 +22,8 @@ _e2e_hash() {
 
 E2E_PROJECT="e2e-$(printf '%s' "$PWD" | _e2e_hash | cut -c1-12)"
 export COMPOSE_PROJECT_NAME="$E2E_PROJECT"
+
+# Admin для e2e заводит seed-admin — он есть у проекта со своей идентичностью.
+if [ -d cmd/seed-admin ]; then
+    export COMPOSE_PROFILES=seed-admin
+fi

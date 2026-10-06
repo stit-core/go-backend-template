@@ -157,8 +157,8 @@ template-update: ## Обвязка шаблона в форк: новые тег
 plan-check: ## Формат планов .claude/plans/ (A=--summary — сводка активных планов)
 	@bash scripts/tools/validate-plan.sh $(A)
 
-validate-stack-docs: ## Валидатор stack-артефактов docs/stack (8 kinds, status/frontmatter)
-	@bash scripts/tools/validate-stack-doc.sh docs/stack
+validate-stack-docs: ## Валидатор stack-артефактов docs/stack (A=--stable — все 8 stable: вход de-template)
+	@bash scripts/tools/validate-stack-doc.sh $(A) docs/stack
 
 ##@ DEV
 local-deps-up: ## Поднять локальные зависимости (postgres/nats) для go run

@@ -2,7 +2,7 @@
 # test/stack/up.sh — собрать бинари локально и поднять стек.
 #
 # Шаги:
-#   1. Build api/migrate/seed-admin бинарей локально в test/stack/bin/
+#   1. Build бинарей cmd/* локально в test/stack/bin/
 #      (использует прогретый GOMODCACHE; не нужен ssh/.netrc в docker).
 #   2. docker compose up -d --build.
 #   3. Дождаться healthy / migrate completed.
@@ -43,7 +43,8 @@ export E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD
 # === Build binaries locally ===
 mkdir -p "$BIN_DIR"
 echo "== Build (CGO_ENABLED=0) =="
-for target in api migrate seed-admin; do
+for dir in cmd/*/; do
+    target=$(basename "$dir")
     out="$BIN_DIR/$target"
     echo "  go build -> $out"
     if ! CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags='-s -w' -o "$out" "./cmd/$target" 2>&1; then

@@ -10,8 +10,6 @@ x-app-env: &app-env
   PG_MIGRATIONS_PATH: /migrations
 
   NATS_URL: nats://nats:4222
-  NATS_JETSTREAM_ENABLED: "true"
-  NATS_JS_STREAM_NAMES: "user,verification"
 
   JWT_SECRET: smoke-only-secret-do-not-use-in-prod-min-32chars
   JWT_ACCESS_TTL: 15m
@@ -69,6 +67,7 @@ services:
     build:
       context: ../..
       dockerfile: test/stack/Dockerfile.local
+    env_file: ../../.env.example
     environment:
       <<: *app-env
     entrypoint: ["migrate"]
@@ -78,8 +77,11 @@ services:
         condition: service_healthy
     networks: [smoke]
 
+  # Admin для e2e — у проекта со своей идентичностью (cmd/seed-admin): профиль включает lib.sh.
   seed-admin:
     image: ${COMPOSE_PROJECT_NAME:-backend-smoke}:local
+    profiles: [seed-admin]
+    env_file: ../../.env.example
     environment:
       <<: *app-env
       SEED_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
@@ -95,6 +97,7 @@ services:
 
   api:
     image: ${COMPOSE_PROJECT_NAME:-backend-smoke}:local
+    env_file: ../../.env.example
     environment:
       <<: *app-env
     entrypoint: ["api"]
@@ -113,6 +116,7 @@ services:
         condition: service_completed_successfully
       seed-admin:
         condition: service_completed_successfully
+        required: false
     ports:
       - "127.0.0.1::8080"
     networks: [smoke]

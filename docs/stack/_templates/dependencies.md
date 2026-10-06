@@ -11,7 +11,7 @@ status: draft
 <Какие kit'ы golibinfra подключены и зачем (таблица `| Kit | Зачем |`). В графе `cmd/api` шаблона: telemetry, logkit, pgkit, natskit, httpkit, timerkit, authnkit (с session), bruteforcekit, auditkit, clockkit, outboxkit, healthkit; в коде доменов — ещё bizmetric; полный набор — README golibinfra § Пакеты нужной версии (storagekit, httpclient, …). Версия golibinfra.>
 
 ## Что НЕ подключено
-<Kit'ы, доступные в golibinfra, но НЕ wired в `cmd/api/main.go` — их env'ы runtime игнорирует, de-template их prune'ит. Перечисли (напр. cachekit/flagkit/storagekit/httpclient), чтобы не было ложных ожиданий «эта env читается».>
+<Kit'ы golibinfra вне графа `cmd/api` — их env сервис не читает. Перечисли (напр. cachekit/flagkit/storagekit/httpclient), чтобы не было ложных ожиданий «эта env читается»; кит шаблона, который здесь не нужен, de-template убирает из графа.>
 
 ## External runtime deps
 <Внешние runtime-зависимости, каждая — инфра-поверхность (INFRA-HANDOFF). Инфраструктурные: Postgres (обяз.), NATS, Redis, S3/MinIO — что реально используется. Внешние backend'ы/интеграции (геокодеры, платёжки, провайдеры): опиши как интеграцию — что/зачем, env-ключи, режим отказа (какой HTTP-код отдаём), retry/timeout, quota/лимиты, как менять провайдера.>

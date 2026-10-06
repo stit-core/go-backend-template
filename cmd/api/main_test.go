@@ -54,16 +54,25 @@ func TestFxGraphHasNoContext(t *testing.T) {
 // envAllowlist — required-переменные конфигов, которых нет в .env.example.
 var envAllowlist = allowlist.List{}
 
+var envLine = regexp.MustCompile(`(?m)^([A-Z][A-Z0-9_]*)=(.*)$`)
+
+// envExample — переменные .env.example: минимум, с которым сервис стартует (boot-тест берёт env из него).
+func envExample(t *testing.T) map[string]string {
+	t.Helper()
+	data, err := os.ReadFile("../../.env.example")
+	require.NoError(t, err)
+	env := map[string]string{}
+	for _, m := range envLine.FindAllStringSubmatch(string(data), -1) {
+		env[m[1]] = strings.TrimSpace(m[2])
+	}
+	return env
+}
+
 // TestEnvExampleHasRequired: .env.example — минимум, с которым сервис стартует; required-
 // переменная конфига, которой там нет, роняет запуск по примеру.
 func TestEnvExampleHasRequired(t *testing.T) {
 	t.Parallel()
-	data, err := os.ReadFile("../../.env.example")
-	require.NoError(t, err)
-	example := map[string]bool{}
-	for _, m := range regexp.MustCompile(`(?m)^([A-Z][A-Z0-9_]*)=`).FindAllStringSubmatch(string(data), -1) {
-		example[m[1]] = true
-	}
+	example := envExample(t)
 	configs := []reflect.Type{reflect.TypeFor[appconfig.App]()}
 	for _, ctor := range kitConfigs {
 		configs = append(configs, reflect.TypeOf(ctor).Out(0))
@@ -71,7 +80,7 @@ func TestEnvExampleHasRequired(t *testing.T) {
 	var missing []string
 	for _, c := range configs {
 		for _, key := range requiredEnv(c) {
-			if !example[key] && !slices.Contains(missing, key) {
+			if _, ok := example[key]; !ok && !slices.Contains(missing, key) {
 				missing = append(missing, key)
 			}
 		}

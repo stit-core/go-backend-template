@@ -18,7 +18,7 @@ fx.Invoke. Какие periodic jobs (`timerkit.Provide` в модуле-влад
 модулей китов) и на каком интервале.>
 
 ## Shutdown
-<Graceful shutdown: что закрывается на OnStop, таймауты, дренаж in-flight.>
+<Бюджет остановки (`fx.StopTimeout`: HTTP — не больше ⅔, дренаж NATS — остаток) и env задержек: `HTTP_SHUTDOWN_DRAIN_DELAY` (за балансировщиком), `HTTP_SHUTDOWN_TIMEOUT`, `NATS_DRAIN_TIMEOUT`. Порядок хуков задают киты и fx — HTTP гасится первым (`docs/reference/architecture.md § fx`).>
 
 ## Generates
 <Что de-template родит:

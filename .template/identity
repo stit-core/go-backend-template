@@ -1,0 +1,23 @@
+# Домены идентичности — вход и сессии, учётные записи, подтверждение адреса и сброс пароля — и то, что
+# живёт только ради них. Проект с внешней идентичностью (identity: external в docs/stack/auth.md) удаляет
+# эти пути (skill init-service, references/prune.md); образцы, на которые здесь ссылается проза, у него —
+# в версии шаблона (.template/version).
+internal/domain/auth
+internal/domain/user
+internal/domain/verification
+internal/testkit/pgseed
+cmd/seed-admin
+cmd/api/identity_test.go
+migrations/0001_users.up.sql
+migrations/0001_users.down.sql
+migrations/0002_auth.up.sql
+migrations/0002_auth.down.sql
+migrations/0003_email_verifications_idempotency.up.sql
+migrations/0003_email_verifications_idempotency.down.sql
+migrations/0004_email_verifications_sent_at.up.sql
+migrations/0004_email_verifications_sent_at.down.sql
+migrations/0005_drop_refresh_sessions.up.sql
+migrations/0005_drop_refresh_sessions.down.sql
+test/e2e
+test/scenarios
+test/smoke/test_auth.py

@@ -1,7 +1,7 @@
 # Contributing — работа с шаблоном через Claude Code
 
 **[META]** Для контрибьютора *самого шаблона*: как устроена `.claude`-система, что
-enforce'ится детерминированно, как вмешаться. (Потребителю шаблона — `getting-started.md`.)
+enforce'ится детерминированно, как вмешаться. (Потребителю шаблона — `README.md` § Как начать и `/init-service`.)
 
 ## Что где лежит и когда грузится
 
@@ -38,7 +38,7 @@ prompt → /smartdev (cockpit: make status, читает активные пла
 | git-хуки | `scripts/git-hooks/` (подключает `make setup` через `core.hooksPath`): commit-msg (Conventional Commits), pre-commit (fmt-check+vet+lint+validate-stack/plan), pre-push (`make check` на чистом дереве, только HEAD) | **детерминированно** |
 | permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-verify`, force-push, reset --hard, правка `*.pem`/`*.key`/generated); чтение `.env`/`.env.local` — только для инструмента Read: `cat` и другие команды Bash deny не видит, их держит правило (CLAUDE.md, rule `env-local`) |
 | Хук Claude Code | `.claude/hooks/guard-bash.sh` (PreToolUse, Bash) | **детерминированно** (блок `git commit -n`, `--no-veri…`, `SKIP_PREPUSH`, `core.hooksPath`; команда проверяется построчно) |
-| Самопроверка обвязки | `internal/archtest/harness_test.go`, `internal/archtest/template_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели, пути и файлы, скиллы и правила в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`; пути `.template/paths` есть, тег обвязки на HEAD = `.template/version`, `make template-update` переносит обвязку в форк, маркеров конфликта в репо нет) |
+| Самопроверка обвязки | `internal/archtest/harness_test.go`, `internal/archtest/template_test.go`, `internal/archtest/onboarding_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели, пути и файлы, скиллы и правила в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`; пути `.template/paths` есть, тег обвязки на HEAD = `.template/version`, `make template-update` переносит обвязку в форк, маркеров конфликта в репо нет; пути `.template/identity` есть, prune называет каждый файл, который знает их пакеты; канонический репо шаблона (origin) — с module path шаблона; валидатор stack отвергает шаблоны как есть) |
 | Самозащита гейта | `Makefile` (`make check`), pre-push | **детерминированно** (`make check` не запускается с `-i`/`-n`, подменой своих переменных, `GOFLAGS` и `API_TEST_MAIN_ARGS`; pre-push не передаёт гейту флаги make) |
 | Path-scoped rules | `.claude/rules/*.md` | контекстная подсказка |
 | CLAUDE.md | repo root | always-on advisory |

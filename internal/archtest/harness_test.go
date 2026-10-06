@@ -78,6 +78,13 @@ var hubTargets = []string{"bump", "ps", "ship"}
 // соседнего <org>/strategy, куда проза отправляет проектировать домены.
 var notRepoSkills = []string{"clear", "code-review", "security-review", "domain-deep-dive"}
 
+// domainLayout — файлы раскладки домена (docs/reference/architecture.md): в прозе это термины, а не ссылки —
+// файл есть в домене, когда есть его содержимое.
+var domainLayout = []string{
+	"entity.go", "dto.go", "errors.go", "events.go", "policy.go", "usecase.go", "trusted.go", "metrics.go",
+	"handler.go", "view.go", "repository.go", "module.go", "adapters.go", "contract_test.go",
+}
+
 var (
 	codeSpan    = regexp.MustCompile("(?s)```.*?```|`[^`\n]+`")
 	makeCall    = regexp.MustCompile(`\bmake\s+([a-z][a-z0-9-]*)`)
@@ -106,6 +113,11 @@ func TestProseReferencesExist(t *testing.T) {
 	for _, m := range makeTarget.FindAllStringSubmatch(string(makefile), -1) {
 		targets = append(targets, m[1])
 	}
+	architecture, err := os.ReadFile(filepath.Join(root, "docs", "reference", "architecture.md"))
+	require.NoError(t, err)
+	for _, name := range domainLayout {
+		require.Contains(t, string(architecture), name, "domainLayout names a file the domain layout of architecture.md does not")
+	}
 	files := trackedFiles(t, root)
 	repo := map[string]bool{}  // файлы и каталоги (с "/" на конце) репо
 	names := map[string]bool{} // имена файлов репо без пути
@@ -119,6 +131,15 @@ func TestProseReferencesExist(t *testing.T) {
 	api := openAPIPaths(t, root)
 	skill := func(name string) bool {
 		return repo[".claude/skills/"+name+"/SKILL.md"] || slices.Contains(notRepoSkills, name)
+	}
+	// Проект с внешней идентичностью удалил домены идентичности по решению: образцы прозы в них — в версии
+	// шаблона, их проверяет самопроверка шаблона.
+	var pruned []string
+	if identityExternal(t) {
+		pruned = identityPaths(t)
+	}
+	inPruned := func(ref string) bool {
+		return slices.ContainsFunc(pruned, func(p string) bool { return under(strings.TrimSuffix(ref, "/"), p) })
 	}
 
 	var dead []string
@@ -154,11 +175,11 @@ func TestProseReferencesExist(t *testing.T) {
 				top, _, isPath := strings.Cut(ref, "/")
 				switch {
 				case !isPath && fileName.MatchString(ref):
-					if !names[ref] && !gitIgnored(t, root, ref) {
+					if !names[ref] && !slices.Contains(domainLayout, ref) && !gitIgnored(t, root, ref) {
 						dead = append(dead, doc+": "+ref)
 					}
 				case isPath && repo[top+"/"]:
-					if !inRepo(repo, goSymbol.ReplaceAllString(ref, "")) && !gitIgnored(t, root, ref) {
+					if clean := goSymbol.ReplaceAllString(ref, ""); !inRepo(repo, clean) && !inPruned(clean) && !gitIgnored(t, root, ref) {
 						dead = append(dead, doc+": "+ref)
 					}
 				}

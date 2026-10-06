@@ -38,7 +38,8 @@
    назначение (Other), `project-slug` — папка продукта в соседнем strategy-репо
    (Other), `service-slug` — этот сервис в реестре `services/service.md`
    strategy-репо, откуда `scaffold` берёт домены (Other), `strategy-path` —
-   путь к форку `<org>/strategy` (дефолт `../strategy`; Other для иной раскладки).
+   путь к форку `<org>/strategy` (дефолт `../strategy`; Other для иной раскладки;
+   strategy-репо нет — все три `—`).
 2. `Versioning`: схема (semver `vX.Y.Z` — стандарт; Other для отклонения),
    как попадает в бинарь (ldflags — Other), что логируется (стандарт —
    `"starting" component/version/commit`).
@@ -67,8 +68,11 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 **Anti-patterns**:
 - `Entrypoints: HTTP` при том, что в `messaging` объявлены consumed
   subjects → subscribers упущены.
-- Shutdown «закрывается всё» без порядка (HTTP first → subs → drain
-  → pool — стандартный порядок).
+- Свой порядок закрытия в `Shutdown`: порядок хуков задают киты и fx
+  (HTTP гасится первым — `TestBoot`), приложение — только бюджет.
+- Задержки остановки сверх бюджета (`HTTP_SHUTDOWN_DRAIN_DELAY` +
+  `HTTP_SHUTDOWN_TIMEOUT` > ⅔ `fx.StopTimeout`, `NATS_DRAIN_TIMEOUT` > ⅓) —
+  старт падает (`checkStopBudget`).
 
 **Порядок копания**:
 
@@ -76,9 +80,10 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
    NATS-subscribers, scheduled jobs} + Other.
 2. `Lifecycle`: fx-композиция модулей (Other), интервалы jobs (Other),
    что регистрируется через `fx.Invoke` (Other).
-3. `Shutdown`: порядок закрытия (Other), таймауты (Other), как
-   дренится in-flight (HTTP graceful, drain полное, subs — drain
-   текущих обработок).
+3. `Shutdown`: стоит ли сервис за балансировщиком (yes/no → пауза
+   `HTTP_SHUTDOWN_DRAIN_DELAY`, Other — значение), дообработка запросов
+   `HTTP_SHUTDOWN_TIMEOUT` и дренаж подписок `NATS_DRAIN_TIMEOUT` (Other) —
+   в бюджете `fx.StopTimeout`; больше — поднять бюджет (Other).
 4. `Generates`: список фактических fx-модулей по результатам 1–3.
 
 ---
@@ -195,10 +200,12 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 ## auth
 
 **Обязательные H2**: `Authn`, `Authgate`, `Roles`, `Seed-admin`,
-`Brute-force`, `Generates`.
+`Brute-force`, `Generates`; во frontmatter — `identity: own | external`.
 
 **Generates содержит**: authgate-wiring + middleware, authnkit-провайдеры
-(JWT verifier, hasher), `cmd/seed-admin`, bruteforce guard + cleanup-job.
+(JWT verifier, hasher); при `own` — домены идентичности, `cmd/seed-admin`,
+bruteforce guard + cleanup-job; при `external` — их удаление (prune,
+`/init-service`).
 
 **Cross-kind**:
 - `config § Required/Secrets` — `JWT_SECRET`, `SEED_ADMIN_*`;
@@ -215,6 +222,9 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 
 **Порядок копания**:
 
+0. `identity`: enum `own` (учётные записи, вход и сессии — в этом сервисе:
+   домены идентичности шаблона остаются) / `external` (токены выпускает
+   другой сервис или IdP: домены идентичности удаляются).
 1. `Authn`:
    - `type`: enum `JWT` / `session` / `none` / `mixed`;
    - алгоритм (если JWT): HS256 — authnkit другого не подписывает; иной алгоритм — план в
@@ -269,8 +279,9 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 **Обязательные H2**: `golibinfra kits`, `Что НЕ подключено`,
 `External runtime deps`, `Capacity`, `Generates`.
 
-**Generates содержит**: kit-импорты + fx-провайдеры (только нужные;
-prune ненужных), wiring внешних deps (Postgres/S3/NATS/…),
+**Generates содержит**: kit-импорты + fx-провайдеры (только нужные; кит
+шаблона, который не нужен, — вон из графа, кроме timerkit и проб healthkit —
+`.claude/skills/de-template/references/wiring.md`), wiring внешних deps (Postgres/S3/NATS/…),
 golibinfra-first принцип (generic util → golibinfra, не локально).
 
 **Cross-kind**:

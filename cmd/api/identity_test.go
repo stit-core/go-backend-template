@@ -1,5 +1,7 @@
 //go:build integration
 
+// Потоки доменов идентичности сквозь HTTP: файл в .template/identity — prune удаляет его вместе с ними.
+
 package main
 
 import (
@@ -8,7 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,16 +22,246 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
 	"git.stit.tech/stit-core/golibinfra/httpkit"
+	"git.stit.tech/stit-core/golibinfra/natskit"
+	"git.stit.tech/stit-core/golibinfra/telemetry"
+	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
 )
+
+// requestLog — что тест читает из лога сервиса: request_id строк handler error (причина 5xx) и текст
+// записей до маскирования — в нём не должно быть секретов.
+type requestLog struct {
+	mu                  sync.Mutex
+	handlerErrors, text []string
+}
+
+func (h *requestLog) Handle(ctx context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.text = append(h.text, r.Message)
+	r.Attrs(func(a slog.Attr) bool {
+		h.text = append(h.text, a.String())
+		return true
+	})
+	if r.Message == "handler error" {
+		h.handlerErrors = append(h.handlerErrors, httpkit.RequestIDFrom(ctx))
+	}
+	return nil
+}
+
+func (h *requestLog) Enabled(context.Context, slog.Level) bool { return true }
+func (h *requestLog) WithGroup(string) slog.Handler            { return h }
+
+func (h *requestLog) WithAttrs(attrs []slog.Attr) slog.Handler {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, a := range attrs {
+		h.text = append(h.text, a.String())
+	}
+	return h
+}
+
+// logged5xx — причина 5xx с этим request_id дошла до лога; запись идёт из горутины сервера.
+func (h *requestLog) logged5xx(requestID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return slices.Contains(h.handlerErrors, requestID)
+}
+
+// leaked — секреты, которые встречаются в логе сервиса.
+func (h *requestLog) leaked(secrets []string) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var found []string
+	for _, secret := range secrets {
+		if slices.ContainsFunc(h.text, func(line string) bool { return strings.Contains(line, secret) }) {
+			found = append(found, secret)
+		}
+	}
+	return found
+}
+
+// mailTap — токены писем сервиса: тест гасит их, как получатель письма, и ищет в логе и таблицах.
+type mailTap struct {
+	verification.Mailer
+	mu            sync.Mutex
+	reset, verify []string
+}
+
+func (m *mailTap) SendPasswordReset(ctx context.Context, email, token string) error {
+	m.mu.Lock()
+	m.reset = append(m.reset, token)
+	m.mu.Unlock()
+	return m.Mailer.SendPasswordReset(ctx, email, token)
+}
+
+func (m *mailTap) SendEmailVerification(ctx context.Context, email, token string) error {
+	m.mu.Lock()
+	m.verify = append(m.verify, token)
+	m.mu.Unlock()
+	return m.Mailer.SendEmailVerification(ctx, email, token)
+}
+
+// sent — токены писем сброса и подтверждения адреса.
+func (m *mailTap) sent() ([]string, []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.reset), slices.Clone(m.verify)
+}
+
+// TestIdentity — потоки доменов идентичности на графе main поверх Postgres и NATS в контейнерах:
+// регистрация, вход и сессия, антибрутфорс, письма через outbox и подписчика, 5xx, секреты вне лога и
+// таблиц, метрики доменов.
+func TestIdentity(t *testing.T) {
+	pg := serviceEnv(t)
+
+	logs, mail, metrics := &requestLog{}, &mailTap{}, metrictest.NewProvider()
+	var srv *httpkit.Server
+	app := fxtest.New(t, service,
+		teeLog(logs),
+		fx.Decorate(func(m verification.Mailer) verification.Mailer { mail.Mailer = m; return mail }),
+		// Провайдер метрик telemetry — провайдер теста: метрики доменов доходят до metrics, только если
+		// домены пишут в провайдер, который экспортирует сигналы.
+		fx.Decorate(func(p *telemetry.Providers) *telemetry.Providers {
+			tapped := *p
+			tapped.MeterProvider = metrics.MeterProvider
+			return &tapped
+		}),
+		fx.Populate(&srv))
+	app.RequireStart()
+	defer app.RequireStop()
+
+	base := "http://" + srv.Addr().String()
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	user := &http.Client{Jar: jar, Timeout: 10 * time.Second}
+	anon := &http.Client{Timeout: 10 * time.Second}
+
+	const email, password, wrongPassword = "boot@example.com", "password123", "wrong-password"
+	require.Equal(t, http.StatusCreated, call(t, user, http.MethodPost, base+"/api/auth/register",
+		`{"email":"`+email+`","password":"`+password+`","name":"Boot"}`), "register")
+	require.Equal(t, http.StatusOK, call(t, user, http.MethodPost, base+"/api/auth/login",
+		`{"email":"`+email+`","password":"`+password+`"}`), "login")
+	require.Equal(t, http.StatusOK, call(t, user, http.MethodGet, base+"/api/users/me", ""), "/me with the session cookie")
+	require.Equal(t, http.StatusNoContent, call(t, anon, http.MethodPost, base+"/api/auth/password-reset/request",
+		`{"email":"`+email+`"}`), "password reset request")
+	// Ключ антибрутфорса — адрес соединения: без HTTP_TRUST_PROXY_HOPS X-Forwarded-For его не меняет, и
+	// клиент, подставляющий в каждый запрос свою цепочку адресов (как за одним, двумя или тремя прокси),
+	// получает блокировку, как все.
+	status := 0
+	for i := range 6 {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/api/auth/login",
+			strings.NewReader(`{"email":"`+email+`","password":"`+wrongPassword+`"}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d, 203.0.113.%d, 192.0.2.%d", i+1, i+1, i+1))
+		resp, err := anon.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		status = resp.StatusCode
+	}
+	require.Equal(t, http.StatusTooManyRequests, status, "the brute-force guard locks the account after repeated failures, whatever X-Forwarded-For says")
+
+	db := pg.Pool(t)
+	require.Eventually(t, func() bool {
+		var n int
+		err := db.QueryRow(t.Context(), `SELECT count(*) FROM email_verifications ev
+			JOIN users u ON u.id = ev.user_id WHERE u.email = $1`, email).Scan(&n)
+		return err == nil && n == 1
+	}, 15*time.Second, 100*time.Millisecond, "user.registered goes outbox → JetStream → verification subscriber")
+	require.Eventually(t, func() bool {
+		var n int
+		err := db.QueryRow(t.Context(), `SELECT count(*) FROM outbox_verification
+			WHERE subject LIKE 'verification.%' AND published_at IS NOT NULL`).Scan(&n)
+		return err == nil && n > 0
+	}, 15*time.Second, 100*time.Millisecond, "verification publishes through its own outbox into its stream")
+
+	// 5xx — без причины и с request_id, причина — в лог сервиса с тем же request_id.
+	_, err = db.Exec(t.Context(), `ALTER TABLE users RENAME TO users_offline`)
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/api/users/me", nil)
+	require.NoError(t, err)
+	resp, err := user.Do(req)
+	require.NoError(t, err)
+	var internal httpkit.APIError
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&internal))
+	require.NoError(t, resp.Body.Close())
+	_, err = db.Exec(t.Context(), `ALTER TABLE users_offline RENAME TO users`)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.Equal(t, "INTERNAL", internal.Code)
+	require.Empty(t, internal.Detail, "a 5xx carries no cause")
+	require.NotEmpty(t, internal.RequestID)
+	require.True(t, logs.logged5xx(internal.RequestID), "the cause is in the service log under the request_id of the response")
+
+	require.Eventually(t, func() bool { resets, verifies := mail.sent(); return len(resets) == 1 && len(verifies) == 1 },
+		15*time.Second, 100*time.Millisecond, "the service mails the email verification and the password reset")
+	resets, verifies := mail.sent()
+	// Получатель гасит обе ссылки: подтверждения пишут свой аудит.
+	const newPassword = "new-password123"
+	require.Equal(t, http.StatusNoContent, call(t, anon, http.MethodPost, base+"/api/auth/email-verify",
+		`{"token":"`+verifies[0]+`"}`), "email verification")
+	require.Equal(t, http.StatusNoContent, call(t, anon, http.MethodPost, base+"/api/auth/password-reset/confirm",
+		`{"token":"`+resets[0]+`","password":"`+newPassword+`"}`), "password reset confirmation")
+
+	// Адрес, пароли, cookie сессии и токены писем не попадают в лог даже до маскирования.
+	baseURL, err := url.Parse(base)
+	require.NoError(t, err)
+	secrets := []string{resets[0], verifies[0], email, password, wrongPassword, newPassword}
+	for _, c := range jar.Cookies(baseURL) {
+		secrets = append(secrets, c.Value)
+	}
+	require.Len(t, secrets, 8, "two mail tokens, the address, three passwords, two session cookies")
+	require.Empty(t, logs.leaked(secrets), "a secret reached the service log")
+	// Их нет и в таблицах, которые хранят дольше лога и читают шире: аудит и outbox.
+	for _, table := range []string{"audit_log", "outbox_user", "outbox_verification"} {
+		require.Empty(t, storedLeaks(t, db, table, secrets), "a secret is stored in %s", table)
+	}
+
+	snap := metrics.Collect(t)
+	require.InDelta(t, 1, snap.Get(t, "biz_auth_login_attempts_total", "result", "ok").Value, 0,
+		"the auth domain writes its metrics to the meter provider of telemetry")
+	require.InDelta(t, 1, snap.Get(t, "biz_verification_password_reset_requested_total", "result", "ok").Value, 0,
+		"the verification domain writes its metrics to the meter provider of telemetry")
+}
+
+// Стрим домена-публикатора — условие старта: без него строки его outbox копились бы, не получая PubAck.
+func TestIdentity_PublisherStreamRequired(t *testing.T) {
+	serviceEnv(t)
+	t.Setenv("NATS_JS_STREAM_NAMES", "user")
+	app := fx.New(service)
+	require.NoError(t, app.Err())
+
+	err := app.Start(t.Context())
+	require.ErrorIs(t, err, natskit.ErrNoStream)
+	require.ErrorContains(t, err, "instance verification")
+}
+
+// storedLeaks — секреты, которые встречаются в строках таблицы table (строка целиком, как текст).
+func storedLeaks(t *testing.T, db *pgxpool.Pool, table string, secrets []string) []string {
+	t.Helper()
+	rows, err := db.Query(t.Context(), "SELECT t::text FROM "+table+" t")
+	require.NoError(t, err)
+	stored, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+	require.NotEmpty(t, stored, "%s is empty: nothing to check", table)
+	var found []string
+	for _, secret := range secrets {
+		if slices.ContainsFunc(stored, func(row string) bool { return strings.Contains(row, secret) }) {
+			found = append(found, secret)
+		}
+	}
+	return found
+}
 
 // sessionAPI — клиент без cookie jar: cookie сессии тест держит сам и предъявляет их повторно.
 type sessionAPI struct {

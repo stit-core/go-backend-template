@@ -1,9 +1,7 @@
 # База — как у образов релиза (Dockerfile): стек проверяет бинари без shell и не от root.
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 # Context = repo root (см. compose.yml: build.context: ../..).
-COPY test/stack/bin/api          /usr/local/bin/api
-COPY test/stack/bin/migrate      /usr/local/bin/migrate
-COPY test/stack/bin/seed-admin   /usr/local/bin/seed-admin
+COPY test/stack/bin/             /usr/local/bin/
 COPY migrations                  /migrations
 EXPOSE 8080
 USER 65532:65532

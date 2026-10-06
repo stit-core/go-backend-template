@@ -36,29 +36,26 @@ project-infra-template-compose (<org>/infra)   ← хаб проекта: пла
 `<org>/infra`. Как сюда приходят агенты и что репо отдаёт и берёт —
 [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
 
-## Использовать как шаблон
+## Как начать
 
-В Gitea помечен `template: true`. **Полный путь** от форка к своему проекту —
-[`docs/getting-started.md`](docs/getting-started.md): форк → `/init-service` →
-проектирование стека (`docs/stack/`; домены — в соседнем strategy-репо) →
-`/de-template` → свои домены → проект, который ничего не помнит про шаблон.
-
-Быстрый старт (чтобы собралось):
+В Gitea помечен `template: true`. Путь от форка к своему проекту ведёт `/init-service` — планом с
+этапами: проектирование стека (`docs/stack/`; домены — в соседнем strategy-репо, без него — по
+описанию) → `/de-template` (module path, README, платформа) → свои домены → домены идентичности
+(`auth`, `user`, `verification`: остаются, если учётные записи живут в сервисе, иначе их удаляет prune)
+→ проект, который ничего не помнит про шаблон.
 
 ```bash
 # 1. Use this template → <org>/<service>, склонировать
-# 2. (один раз на машину) доступ к приватным модулям той же Gitea:
+# 2. (один раз на машину) доступ к приватным модулям той же Gitea (хост — тот же, что в module path):
 git config --global url.git@git.stit.tech:.insteadOf https://git.stit.tech/
-# 3. зелёный gate (make setup выводит хост из go.mod):
+# 3. pinned dev-tools, git-хуки и зелёный gate (make setup выводит хост из go.mod и предупреждает,
+#    если insteadOf не настроен):
 make setup && make check
-# 4. запустить онбординг:
-cp .env.example .env   # заполнить
+# 4. онбординг:
 claude                 # → /init-service
 ```
 
-Module path, README, фундамент и удаление reference-доменов делает флоу
-`/init-service` → `/de-template` по заполненным `docs/`. Не правьте фундамент
-руками до этого.
+Не правьте фундамент руками до этого: docs первичны, код разворачивается по ним.
 
 ## Что внутри
 
@@ -89,7 +86,7 @@ make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /r
 ## Документация
 
 Карта — [`docs/README.md`](docs/README.md):
-- Потребителю — [`getting-started.md`](docs/getting-started.md); контрибьютору —
+- Потребителю — раздел «Как начать» и `/init-service`; контрибьютору —
   [`contributing.md`](docs/contributing.md).
 - Reference — [architecture](docs/reference/architecture.md) ·
   [release](docs/reference/release.md) · [ecosystem](docs/reference/ecosystem.md).

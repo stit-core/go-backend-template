@@ -22,4 +22,4 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 python_version = "3.12"
 strict = true
 warn_unused_configs = true
-files = ["client", "scenarios", "conftest.py"]
+files = ["."]
