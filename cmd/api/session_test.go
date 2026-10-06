@@ -207,10 +207,15 @@ func TestSessions(t *testing.T) {
 		c := api.login(frank, sessionPassword)
 		_, err := db.Exec(t.Context(), `ALTER TABLE authn_sessions RENAME TO authn_sessions_offline`)
 		require.NoError(t, err)
+		// Имя возвращает и упавший тест: иначе следующие подтесты упали бы без таблицы сессий.
+		restore := func() {
+			_, err := db.Exec(context.Background(), `ALTER TABLE IF EXISTS authn_sessions_offline RENAME TO authn_sessions`)
+			require.NoError(t, err)
+		}
+		t.Cleanup(restore)
 		status, _, _ := api.call(http.MethodPost, "/api/auth/change-password",
 			`{"user_id":"`+frankID+`","old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, c)
-		_, err = db.Exec(t.Context(), `ALTER TABLE authn_sessions_offline RENAME TO authn_sessions`)
-		require.NoError(t, err)
+		restore()
 		require.Equal(t, http.StatusInternalServerError, status)
 
 		require.Equal(t, 1, openSessions(t, db, frankID), "the session outlives the failed change")

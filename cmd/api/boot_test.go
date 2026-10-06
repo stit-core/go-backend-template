@@ -224,14 +224,15 @@ func TestBoot(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, call(anon, http.MethodPost, "/api/auth/password-reset/request",
 		`{"email":"`+email+`"}`), "password reset request")
 	// Ключ антибрутфорса — адрес соединения: без HTTP_TRUST_PROXY_HOPS X-Forwarded-For его не меняет, и
-	// клиент, подставляющий свой адрес в каждый запрос, получает блокировку, как все.
+	// клиент, подставляющий в каждый запрос свою цепочку адресов (как за одним, двумя или тремя прокси),
+	// получает блокировку, как все.
 	status := 0
 	for i := range 6 {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/api/auth/login",
 			strings.NewReader(`{"email":"`+email+`","password":"`+wrongPassword+`"}`))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d", i+1))
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d, 203.0.113.%d, 192.0.2.%d", i+1, i+1, i+1))
 		resp, err := anon.Do(req)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
