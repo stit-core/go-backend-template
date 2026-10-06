@@ -263,7 +263,9 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   рядом с `delivery/http/` — равноправные «входы» в usecase (`natskit.SubscribeOnStart` +
   `natskit.SubscribeStreamJSON`: стрим+durable, подписка в OnStart, `Drain` в OnStop; ошибка
   подписки и выключенный JetStream валят старт). Объявляют
-  **локальный** payload-DTO (archtest запрещает импорт домена-источника). Регистрируются в
+  **локальный** payload-DTO (archtest запрещает импорт домена-источника); что он сходится со
+  схемой поставщика, держит контракт-тест consumer'а (`delivery/nats/contract_test.go`: событие
+  usecase поставщика в JSON outbox → подписки consumer'а). Регистрируются в
   `module/module.go` consumer'а.
 - **Idempotency.** JetStream = at-least-once → subscriber обязан быть идемпотентен (unique-индекс
   + `ON CONFLICT`, `UPDATE … WHERE status='pending'`, idempotency-key). Не «вряд ли задвоится».

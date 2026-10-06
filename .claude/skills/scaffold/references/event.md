@@ -192,8 +192,9 @@ JetStream доставляет at-least-once, поэтому идемпотен�
 
 ### 7. Тесты
 
-- В домене-публикаторе: `usecase_test.go` с фейком `golibinfra/testkit/outboxtest.Recorder` в `UsecaseDeps.Events` и `pgtest.Identity{}` (`golibinfra/testkit/pgtest`) в `Tx` — проверяй subject и payload в `Recorder.All()`. Публикация мимо транзакции даёт `outboxkit.ErrNoTx`, как в проде.
+- В домене-публикаторе: `usecase_test.go` с фейком `golibinfra/testkit/outboxtest.Recorder` в `UsecaseDeps.Events` и `pgtest.Identity{}` (`golibinfra/testkit/pgtest`) в `Tx` — payload по subject — `Recorder.Last(subject)`, лишних событий нет — `Count()`. Публикация мимо транзакции даёт `outboxkit.ErrNoTx`, как в проде.
 - Subscriber: unit-тест на handler-метод с моком `Usecase`-порта (добавь `delivery/nats` в `.mockery.yml` → `make gen`): happy path, error path (usecase вернул err → handler вернул err, сообщение уйдёт на redelivery) и дубль-доставка.
+- Контракт (у потребителя, `delivery/nats/contract_test.go`): событие, которое публикует настоящий usecase поставщика, — в JSON, как его отдаёт outbox, — доставь подпискам `Register` через `natstest` и жди вызов usecase-порта с нужным ID. Переименование поля или subject на одной стороне роняет его, даже если каждая сторона поправила свои тесты. Образец — `internal/domain/verification/delivery/nats/contract_test.go`.
 - Integration: если есть end-to-end — отдельный тест под `//go:build integration` с реальным NATS через testcontainers.
 
 ### 8. Верификация

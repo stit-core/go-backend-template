@@ -44,7 +44,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `entity.go` (конструкторы/методы) | unit; +fuzz (`entity_fuzz_test.go`) при строковых валидациях |
 | `usecase.go` | unit через строгие моки портов и настоящую policy, fixture `newUC(t, …)` |
 | `delivery/http` | handler-тест через `golibinfra/testkit/handlertest`: happy path каждой операции — точный вход usecase и тело ответа; `errors_test.go` (white-box): таблица операции объявляет ошибки её usecase (список — по коду usecase); без 500 и без таблицы операции вне `Declare` — archtest `TestDomainErrorTables` |
-| `delivery/nats` | unit handler-функции (мок Usecase-порта) — включая дубль-доставку |
+| `delivery/nats` | unit handler-функции (мок Usecase-порта) — включая дубль-доставку; контракт с поставщиком — `contract_test.go` (rule `events-and-messaging`) |
 | `module/adapters.go` | unit (white-box) поверх `Trusted` поставщика: маппинг полей, ctx вызывающего до `Trusted` (запись — в его транзакции) и каждая ошибка `TrustedErrors` → sentinel потребителя |
 | `infra/<kit>/` | unit на настоящем ките или фейке из `testkit` |
 | `trusted.go` | unit через моки портов; методы отдают только ошибки `TrustedErrors` (`return` в `trusted.go` — archtest) |

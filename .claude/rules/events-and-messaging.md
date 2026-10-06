@@ -40,7 +40,9 @@ paths:
   `natskit.StreamBus`. Кит подписывает в OnStart и дренит подписку в OnStop раньше остановки
   её зависимостей; ошибка подписки, в том числе выключенный JetStream, валит старт.
 - Объявляют **локальный** payload-DTO (`delivery/nats/dto.go`) — прямой импорт домена-
-  источника запрещён archtest. Регистрируются в `module/module.go` потребителя.
+  источника запрещён archtest. Регистрируются в `module/module.go` потребителя. Схему с поставщиком
+  сверяет контракт-тест потребителя `delivery/nats/contract_test.go`: событие настоящего usecase
+  поставщика в JSON (как его отдаёт outbox) доставляется подпискам `Register` — subject и поля сходятся.
 - **Идемпотентность обязательна** (at-least-once), и она — свойство **схемы, не удачи**:
   unique-индекс под natural key (`INSERT … ON CONFLICT`), либо `UPDATE … WHERE
   status='pending'`, либо idempotency-key из payload. **Внешний эффект** (письмо, вебхук) схема
