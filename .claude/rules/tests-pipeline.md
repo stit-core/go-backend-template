@@ -64,7 +64,8 @@ RED→GREEN: падающий тест, воспроизводящий баг �
 ## Моки и фикстуры (mockery v3)
 
 - Конфиг — `.mockery.yml`: интерфейсы из `usecase.go` **и** `delivery/*` (Usecase-порты), кроме
-  policy-порта `Authorizer` — у него мока нет, тесты берут настоящую policy.
+  policy-порта `Authorizer` — у него мока нет, тесты берут настоящую policy, — и портов с
+  рукописным фейком (ниже).
   Файлы: `mocks/<interface_snake>.go` (пакет `mocks`, тип `Mock<Interface>`). Регенерация —
   `make gen`; `make gen-check` ловит дрейф и untracked-моки.
 - **Изоляция (archtest)**: пакет `mocks` любого домена импортируется только из `*_test.go`.
@@ -74,8 +75,10 @@ RED→GREEN: падающий тест, воспроизводящий баг �
   Ожидание побочного эффекта — с точными аргументами и `.Once()`, без `.Maybe()`; запись в
   транзакции — `mock.MatchedBy(pgkit.InTx)`; событие — `Recorder.Last(subject)`, лишних нет —
   `Count()`. Порт кейс передаёт параметром, несколько портов — functional options `withX(...)`.
-- Рукописный stateful-фейк допустим для протокольных портов (цепочки insert/markUsed);
-  тогда интерфейс из `.mockery.yml` убирается — мок и фейк вместе не живут.
+- Рукописный фейк вместо мока — у протокольного порта (stateful: цепочки insert/markUsed) и у
+  чистого порта без эффектов (выпуск access-токена `auth.Tokens`: ответ выводится из входа, вызов не
+  ожидается — строгий мок закрепил бы порядок вызовов, а не поведение); тогда интерфейс из
+  `.mockery.yml` убирается — мок и фейк вместе не живут.
 - Identity-контексты — `internal/testkit/identitytest` (`Admin`/`Client`/`Anon`), не
   inline `identity.With(...)`: это ctx запроса с IP клиента и ID (`identitytest.IP`, `RequestID`),
   с ними тест сверяет аудит, guard входа и лимитер.

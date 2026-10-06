@@ -81,7 +81,8 @@ paths:
 - Файл > ~400 строк → разбей по потокам (`usecase_<flow>.go`, `handler_<op>.go`), порты и
   конструкторы остаются в `usecase.go`.
 - Pure-методы агрегата покрыты `*_test.go`; интерфейсы из `usecase.go` и `delivery/*` →
-  `.mockery.yml` → `make gen`, кроме policy-порта `Authorizer`: тесты берут настоящую policy.
+  `.mockery.yml` → `make gen`, кроме policy-порта `Authorizer` (тесты берут настоящую policy) и
+  порта с рукописным фейком (rule `tests-pipeline`).
 
 Outbox / subscribers / jobs — `.claude/rules/events-and-messaging.md`. Миграции / sqlc —
 `.claude/rules/sqlc-and-migrations.md`. Переиспользуемые примитивы → golibinfra (CLAUDE.md § Стиль кода).

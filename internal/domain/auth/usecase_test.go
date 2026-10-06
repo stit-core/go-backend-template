@@ -16,6 +16,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit/session"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
@@ -27,30 +28,17 @@ import (
 	"git.stit.tech/stit-core/golibinfra/testkit/sessiontest"
 )
 
-// accessTokens выпускает access-токен "access.<id>.<role>": выпуск без побочных эффектов.
-func accessTokens(t *testing.T) *mocks.MockTokens {
-	t.Helper()
-	tk := mocks.NewMockTokens(t)
-	tk.EXPECT().IssueAccess(mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, u *auth.User) (string, error) {
-			return "access." + u.ID + "." + string(u.Role), nil
-		}).Maybe()
-	return tk
-}
-
 var fixedNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
-func defaultPolicy(t *testing.T, allow bool) *mocks.MockAuthorizer {
-	t.Helper()
-	p := mocks.NewMockAuthorizer(t)
-	p.EXPECT().CanChangePassword(mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(context.Context, identity.Identity, string) policy.Decision {
-			if allow {
-				return policy.Allow()
-			}
-			return policy.Deny("test deny")
-		}).Maybe()
-	return p
+// tokens — выпуск access-токена: чистый порт без эффектов, поэтому фейк, а не мок — токен
+// "access.<id>.<role>" выводится из учётной записи, err — сбой подписи.
+type tokens struct{ err error }
+
+func (tk tokens) IssueAccess(_ context.Context, u *auth.User) (string, error) {
+	if tk.err != nil {
+		return "", tk.err
+	}
+	return "access." + u.ID + "." + string(u.Role), nil
 }
 
 // loginGuard ждёт ровно одну попытку входа subject с IP запроса до проверки пароля и, если succeeded, — один
@@ -80,8 +68,10 @@ type ucOpts struct {
 	users    *mocks.MockUserReader
 	verify   *mocks.MockPasswordVerifier
 	setpw    *mocks.MockPasswordSetter
-	policy   *mocks.MockAuthorizer
 	guard    *mocks.MockLoginGuard
+	tokens   auth.Tokens
+	hasher   authnkit.Hasher
+	audit    auditkit.Logger
 	sessions func(session.Store) session.Store
 	metrics  *auth.Metrics
 }
@@ -91,25 +81,30 @@ type ucOption func(*ucOpts)
 func withUsers(u *mocks.MockUserReader) ucOption          { return func(o *ucOpts) { o.users = u } }
 func withVerifier(v *mocks.MockPasswordVerifier) ucOption { return func(o *ucOpts) { o.verify = v } }
 func withSetter(s *mocks.MockPasswordSetter) ucOption     { return func(o *ucOpts) { o.setpw = s } }
-func withPolicy(p *mocks.MockAuthorizer) ucOption         { return func(o *ucOpts) { o.policy = p } }
 func withGuard(g *mocks.MockLoginGuard) ucOption          { return func(o *ucOpts) { o.guard = g } }
-func withMetrics(m *auth.Metrics) ucOption                { return func(o *ucOpts) { o.metrics = m } }
+
+func withTokens(tk auth.Tokens) ucOption    { return func(o *ucOpts) { o.tokens = tk } }
+func withHasher(h authnkit.Hasher) ucOption { return func(o *ucOpts) { o.hasher = h } }
+func withAudit(a auditkit.Logger) ucOption  { return func(o *ucOpts) { o.audit = a } }
+func withMetrics(m *auth.Metrics) ucOption  { return func(o *ucOpts) { o.metrics = m } }
 
 // withSessions оборачивает хранилище сессий фикстуры: сбой одного метода поверх фейка кита.
 func withSessions(wrap func(session.Store) session.Store) ucOption {
 	return func(o *ucOpts) { o.sessions = wrap }
 }
 
-// newUC — usecase на строгих моках портов и фейке хранилища сессий кита (sessiontest) с часами
-// фикстуры: время сессий двигает кейс (f.clock.Advance).
+// newUC — usecase на строгих моках портов без ожиданий (вызов, которого кейс не ждёт, — провал), настоящей
+// policy и фейке хранилища сессий кита (sessiontest) с часами фикстуры: время сессий двигает кейс
+// (f.clock.Advance).
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
 	o := &ucOpts{
 		users:  mocks.NewMockUserReader(t),
 		verify: mocks.NewMockPasswordVerifier(t),
 		setpw:  mocks.NewMockPasswordSetter(t),
-		policy: defaultPolicy(t, false),
 		guard:  mocks.NewMockLoginGuard(t),
+		tokens: tokens{},
+		hasher: authntest.DeterministicHasher{},
 	}
 	for _, fn := range opts {
 		fn(o)
@@ -122,18 +117,21 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		sessions = o.sessions(fake)
 	}
 	aud, log := &audittest.Recorder{}, logtest.Capture()
+	if o.audit == nil {
+		o.audit = aud
+	}
 
 	uc := auth.NewUsecase(auth.UsecaseDeps{
 		Users:          o.users,
 		PasswordVerify: o.verify,
 		PasswordSet:    o.setpw,
-		Hasher:         authntest.DeterministicHasher{},
-		Tokens:         accessTokens(t),
+		Hasher:         o.hasher,
+		Tokens:         o.tokens,
 		Sessions:       issueInTx{Store: sessions, t: t},
 		Tx:             pgtest.Identity{},
-		Policy:         o.policy,
+		Policy:         auth.NewPolicy(),
 		Guard:          o.guard,
-		Audit:          aud,
+		Audit:          o.audit,
 		Log:            log,
 		Clock:          clock,
 		Metrics:        o.metrics,
@@ -183,7 +181,30 @@ func alice() *auth.User {
 	return &auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}
 }
 
-var errStore = errors.New("authn_sessions: connection refused")
+// found — учётная запись u, которую находит поиск по адресу: дальше проверки пароля вход не идёт.
+func found(t *testing.T, u *auth.User) *mocks.MockUserReader {
+	t.Helper()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByEmail(mock.Anything, u.Email).Return(u, nil).Once()
+	return users
+}
+
+var (
+	errStore   = errors.New("authn_sessions: connection refused")
+	errSign    = errors.New("jwt: signer unavailable")
+	errHashing = errors.New("argon2: out of memory")
+	errAudit   = errors.New("audit_log: connection refused")
+)
+
+// brokenHasher — хэшер, у которого сбоит хэширование: у authntest такого фейка нет.
+type brokenHasher struct{ authntest.DeterministicHasher }
+
+func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
+
+// failingAudit — журнал аудита, запись в который не проходит: у audittest такого фейка нет.
+type failingAudit struct{}
+
+func (failingAudit) Log(context.Context, auditkit.Entry) error { return errAudit }
 
 // failingSessions — хранилище сессий, у которого сбоит каждый вызов.
 type failingSessions struct{ session.Store }
@@ -242,38 +263,38 @@ func TestLogin(t *testing.T) {
 
 	t.Run("wrong password", func(t *testing.T) {
 		t.Parallel()
-		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
-			&auth.User{ID: "u1", PasswordHash: "hash:correct", CanLogin: true}, nil,
-		)
-		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", false)))
+		f := newUC(t, withUsers(found(t, alice())), withGuard(loginGuard(t, "a@b.com", false)))
 
-		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "wrong"})
+		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "wrong"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+		require.Nil(t, out)
+		require.Zero(t, f.sessions.Active("u1"))
 		require.Equal(t, audited(auditkit.Entry{
 			Action: "login_failed", Resource: "user", ResourceID: "u1", Metadata: map[string]any{"reason": "invalid_credentials"},
 		}), f.audit.Last("login_failed"), "the audit names the account by ID, not by address")
 	})
 
+	// Заблокированного не пускают и с верным паролем: отказ тот же, что на неверный пароль, причина — в аудите.
 	t.Run("blocked status", func(t *testing.T) {
 		t.Parallel()
-		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(
-			&auth.User{ID: "u1", PasswordHash: "hash:pass1234", CanLogin: false}, nil,
-		)
-		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", false)))
+		blocked := alice()
+		blocked.CanLogin = false
+		f := newUC(t, withUsers(found(t, blocked)), withGuard(loginGuard(t, "a@b.com", false)))
 
 		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 		require.Nil(t, out)
-		require.True(t, f.audit.Has("login_failed"))
+		require.Zero(t, f.sessions.Active("u1"))
+		require.Equal(t, audited(auditkit.Entry{
+			Action: "login_failed", Resource: "user", ResourceID: "u1", Metadata: map[string]any{"reason": "blocked"},
+		}), f.audit.Last("login_failed"))
 		require.False(t, f.audit.Has("login"))
 	})
 
 	t.Run("not found", func(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, auth.ErrUserNotFound)
+		users.EXPECT().GetByEmail(mock.Anything, "x@y.com").Return(nil, auth.ErrUserNotFound).Once()
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "x@y.com", false)))
 
 		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
@@ -284,7 +305,7 @@ func TestLogin(t *testing.T) {
 	t.Run("lookup infra error is not invalid credentials", func(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByEmail(mock.Anything, mock.Anything).Return(nil, errors.New("db down"))
+		users.EXPECT().GetByEmail(mock.Anything, "x@y.com").Return(nil, errors.New("db down")).Once()
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "x@y.com", false)))
 
 		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
@@ -302,6 +323,7 @@ func TestLogin(t *testing.T) {
 
 		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "p"})
 		require.ErrorIs(t, err, auth.ErrAccountLocked)
+		require.EqualError(t, err, auth.ErrAccountLocked.Error())
 		var locked *auth.LockedError
 		require.ErrorAs(t, err, &locked)
 		require.Equal(t, 15*time.Minute, locked.RetryAfter(), "retry when the lock ends")
@@ -342,7 +364,39 @@ func TestLogin(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
 		require.True(t, f.audit.Has("login"))
+		e, logged := f.log.Find(slog.LevelError, "guard record success")
+		require.True(t, logged)
+		require.Contains(t, e.Str("err"), "guard store down")
 	})
+
+	// Сбой записи аудита вход не отменяет: причина — в логе.
+	t.Run("audit not written keeps the login", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withUsers(signIn(t, alice())), withGuard(loginGuard(t, "a@b.com", true)), withAudit(failingAudit{}))
+
+		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		require.NoError(t, err)
+		require.Equal(t, "access.u1.client", out.AccessToken)
+		e, logged := f.log.Find(slog.LevelError, "audit login")
+		require.True(t, logged)
+		require.Contains(t, e.Str("err"), errAudit.Error())
+	})
+}
+
+// Access-токен не подписан — входа нет: ошибка сервиса, а не «неверный пароль», сессии и аудита входа нет.
+func TestLogin_AccessNotIssued(t *testing.T) {
+	t.Parallel()
+	p := metrictest.NewProvider()
+	f := newUC(t, withUsers(found(t, alice())), withGuard(loginGuard(t, "a@b.com", true)), withTokens(tokens{err: errSign}),
+		withMetrics(auth.NewMetrics(p.Meter("test"))))
+
+	out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+	require.ErrorIs(t, err, errSign)
+	require.NotErrorIs(t, err, auth.ErrInvalidCredentials)
+	require.Nil(t, out)
+	require.Zero(t, f.sessions.Active("u1"))
+	require.False(t, f.audit.Has("login"))
+	requireOutcome(t, p, "biz_auth_login_attempts_total", "error")
 }
 
 // Смена пароля, роли или статуса, которая успела между проверкой пароля и открытием сессии, отказывает во
@@ -534,6 +588,16 @@ func TestRefresh_Failure(t *testing.T) {
 		require.ErrorContains(t, err, "db down")
 		require.NotErrorIs(t, err, auth.ErrRefreshInvalid)
 	})
+	t.Run("access token", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withUsers(canLogin(t)), withTokens(tokens{err: errSign}))
+		tok := f.issue(t, "u1")
+
+		out, err := f.uc.Refresh(identitytest.Anon(), tok.Value)
+		require.ErrorIs(t, err, errSign)
+		require.NotErrorIs(t, err, auth.ErrRefreshInvalid)
+		require.Nil(t, out)
+	})
 }
 
 // Выход закрывает сессию токена; неизвестный токен — тоже выход.
@@ -564,31 +628,50 @@ func pwUser(t *testing.T) *mocks.MockUserReader {
 	return users
 }
 
+// oldPassword — проверка старого пароля u1: верен ли "old".
+func oldPassword(t *testing.T, ok bool, err error) *mocks.MockPasswordVerifier {
+	t.Helper()
+	verify := mocks.NewMockPasswordVerifier(t)
+	verify.EXPECT().VerifyPassword(mock.Anything, "u1", "old").Return(ok, err).Once()
+	return verify
+}
+
+// newPassword — запись хэша нового пароля u1 с версией прочитанной учётной записи.
+func newPassword(t *testing.T, err error) *mocks.MockPasswordSetter {
+	t.Helper()
+	setter := mocks.NewMockPasswordSetter(t)
+	setter.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 7).Return(err).Once()
+	return setter
+}
+
 func TestChangePassword(t *testing.T) {
 	t.Parallel()
 
 	t.Run("happy path propagates version", func(t *testing.T) {
 		t.Parallel()
-		verify := mocks.NewMockPasswordVerifier(t)
-		verify.EXPECT().VerifyPassword(mock.Anything, "u1", "old").Return(true, nil).Once()
-		setter := mocks.NewMockPasswordSetter(t)
-		setter.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 7).Return(nil).Once()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(verify),
-			withSetter(setter), withPolicy(defaultPolicy(t, true)))
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)),
+			withSetter(newPassword(t, nil)))
 
 		require.NoError(t, f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123"))
 		require.Equal(t, audited(auditkit.Entry{ActorID: "u1", Action: "change_password", Resource: "user", ResourceID: "u1"}),
 			f.audit.Last("change_password"))
 	})
 
+	// Admin меняет чужой пароль: в аудите он — автор, учётная запись — цель.
+	t.Run("admin changes another user's password", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)),
+			withSetter(newPassword(t, nil)))
+
+		require.NoError(t, f.uc.ChangePassword(identitytest.Admin("a1"), "u1", "old", "newpassword123"))
+		require.Equal(t, audited(auditkit.Entry{ActorID: "a1", Action: "change_password", Resource: "user", ResourceID: "u1"}),
+			f.audit.Last("change_password"))
+	})
+
 	t.Run("concurrent update", func(t *testing.T) {
 		t.Parallel()
-		verify := mocks.NewMockPasswordVerifier(t)
-		verify.EXPECT().VerifyPassword(mock.Anything, "u1", "old").Return(true, nil).Once()
-		setter := mocks.NewMockPasswordSetter(t)
-		setter.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 7).Return(auth.ErrConcurrentUpdate).Once()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(verify),
-			withSetter(setter), withPolicy(defaultPolicy(t, true)))
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)),
+			withSetter(newPassword(t, auth.ErrConcurrentUpdate)))
 
 		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
 		require.ErrorIs(t, err, auth.ErrConcurrentUpdate)
@@ -599,7 +682,7 @@ func TestChangePassword(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
 		users.EXPECT().GetByID(mock.Anything, "u2").Return(nil, auth.ErrUserNotFound).Once()
-		f := newUC(t, withUsers(users), withPolicy(defaultPolicy(t, true)))
+		f := newUC(t, withUsers(users))
 
 		err := f.uc.ChangePassword(identitytest.Admin("a1"), "u2", "old", "newpassword123")
 		require.ErrorIs(t, err, auth.ErrUserNotFound)
@@ -608,29 +691,86 @@ func TestChangePassword(t *testing.T) {
 	// Неверный старый пароль — попытка в счётчике входа учётной записи, успеха guard не видит.
 	t.Run("wrong old", func(t *testing.T) {
 		t.Parallel()
-		verify := mocks.NewMockPasswordVerifier(t)
-		verify.EXPECT().VerifyPassword(mock.Anything, "u1", "old").Return(false, nil).Once()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", false)), withVerifier(verify),
-			withPolicy(defaultPolicy(t, true)))
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", false)), withVerifier(oldPassword(t, false, nil)))
 
 		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
 		require.ErrorIs(t, err, auth.ErrWrongOldPassword)
+		require.False(t, f.audit.Has("change_password"))
 	})
 
 	t.Run("weak new", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t, withPolicy(defaultPolicy(t, true)))
+		f := newUC(t)
 		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "short")
 		require.ErrorIs(t, err, auth.ErrWeakPassword)
 	})
 
-	t.Run("forbidden", func(t *testing.T) {
+	// Policy спрашивают о цели: клиент чужой пароль не меняет, до учётной записи запрос не доходит.
+	t.Run("not self, not admin", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t)
 		err := f.uc.ChangePassword(identitytest.Client("u1"), "u2", "old", "newpassword123")
 		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
+
+	t.Run("no identity", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t)
+		err := f.uc.ChangePassword(identitytest.Anon(), "u1", "old", "newpassword123")
+		var fe *policy.ForbiddenError
+		require.ErrorAs(t, err, &fe)
+	})
+}
+
+// Сбой проверки старого пароля или хэширования нового — ошибка сервиса: пароль не записан, аудита нет.
+func TestChangePassword_Failure(t *testing.T) {
+	t.Parallel()
+	t.Run("old password check", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", false)),
+			withVerifier(oldPassword(t, false, errors.New("db down"))))
+
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
+		require.ErrorContains(t, err, "db down")
+		require.NotErrorIs(t, err, auth.ErrWrongOldPassword)
+		require.False(t, f.audit.Has("change_password"))
+	})
+	t.Run("hashing", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)),
+			withHasher(brokenHasher{}))
+
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
+		require.ErrorIs(t, err, errHashing)
+		require.False(t, f.audit.Has("change_password"))
+	})
+	t.Run("user lookup", func(t *testing.T) {
+		t.Parallel()
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, errors.New("db down")).Once()
+		f := newUC(t, withUsers(users))
+
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
+		require.ErrorContains(t, err, "db down")
+		require.NotErrorIs(t, err, auth.ErrUserNotFound)
+	})
+}
+
+// Несброшенный счётчик guard'а и незаписанный аудит смену пароля не отменяют: причины — в логе.
+func TestChangePassword_SideRecordsFail(t *testing.T) {
+	t.Parallel()
+	g := mocks.NewMockLoginGuard(t)
+	g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, nil).Once()
+	g.EXPECT().RecordSuccess(mock.Anything, "a@b.com", identitytest.IP).Return(errors.New("guard store down")).Once()
+	f := newUC(t, withUsers(pwUser(t)), withGuard(g), withVerifier(oldPassword(t, true, nil)), withSetter(newPassword(t, nil)),
+		withAudit(failingAudit{}))
+
+	require.NoError(t, f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123"))
+	require.True(t, f.log.Has(slog.LevelError, "guard record success"))
+	e, logged := f.log.Find(slog.LevelError, "audit change_password")
+	require.True(t, logged)
+	require.Contains(t, e.Str("err"), errAudit.Error())
 }
 
 // Старый пароль угадывают так же, как при входе: под блокировкой и при сбое guard'а он не проверяется —
@@ -651,7 +791,7 @@ func TestChangePassword_Guarded(t *testing.T) {
 			t.Parallel()
 			g := mocks.NewMockLoginGuard(t)
 			g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(tc.lock, tc.err).Once()
-			f := newUC(t, withUsers(pwUser(t)), withGuard(g), withPolicy(defaultPolicy(t, true)))
+			f := newUC(t, withUsers(pwUser(t)), withGuard(g))
 
 			err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
 			require.Error(t, err)

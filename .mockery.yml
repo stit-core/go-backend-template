@@ -17,8 +17,6 @@ packages:
       UserReader:
       PasswordVerifier:
       PasswordSetter:
-      Tokens:
-      Authorizer:
       LoginGuard:
   git.stit.tech/stit-core/go-backend-template/internal/domain/verification:
     interfaces:
