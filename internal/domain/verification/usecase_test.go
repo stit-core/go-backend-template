@@ -392,10 +392,11 @@ func pendingReset(expiresAt time.Time) *verification.PasswordResetToken {
 	return &verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: expiresAt}
 }
 
-// Погашение, отзыв прочих ссылок сброса и запись пароля — одной транзакцией и в этом порядке.
+// Погашение, отзыв прочих ссылок сброса и запись пароля — одной транзакцией и в этом порядке. Ссылка
+// годна до своего срока включительно: здесь — в последний его миг.
 func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
-	repo := resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)
+	repo := resetToken(t, pendingReset(fixedNow), nil)
 	claim := repo.EXPECT().MarkPasswordResetUsed(mock.MatchedBy(pgkit.InTx), "rid").Return(nil).Once()
 	revoke := repo.EXPECT().RevokePasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(claim)
 	pwSet := mocks.NewMockPasswordSetter(t)
@@ -427,7 +428,7 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 			return []ucOption{withRepo(resetToken(t, pr, nil))}
 		}, verification.ErrTokenUsed},
 		{"expired", "newpassword123", func(t *testing.T) []ucOption {
-			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(-time.Second)), nil))}
+			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(-time.Nanosecond)), nil))}
 		}, verification.ErrInvalidResetToken},
 		{"user deleted after the request", "newpassword123", func(t *testing.T) []ucOption {
 			users := mocks.NewMockUserReader(t)
@@ -496,10 +497,10 @@ func pendingVerification(expiresAt time.Time) *verification.EmailVerificationTok
 	return &verification.EmailVerificationToken{ID: "vid", UserID: "u1", ExpiresAt: expiresAt}
 }
 
-// Погашение и отметка email — одной транзакцией и в этом порядке.
+// Погашение и отметка email — одной транзакцией и в этом порядке; ссылка годна до своего срока включительно.
 func TestConfirmEmail_HappyPath(t *testing.T) {
 	t.Parallel()
-	repo := verifyToken(t, pendingVerification(fixedNow.Add(time.Hour)), nil)
+	repo := verifyToken(t, pendingVerification(fixedNow), nil)
 	claim := repo.EXPECT().MarkEmailVerificationUsed(mock.MatchedBy(pgkit.InTx), "vid").Return(nil).Once()
 	emailSet := mocks.NewMockEmailVerificationSetter(t)
 	emailSet.EXPECT().MarkEmailVerified(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(claim)
@@ -530,7 +531,7 @@ func TestConfirmEmail_Rejected(t *testing.T) {
 			return verifyToken(t, ev, nil)
 		}},
 		{name: "expired", want: verification.ErrInvalidVerificationToken, repo: func(t *testing.T) *mocks.MockRepository {
-			return verifyToken(t, pendingVerification(fixedNow.Add(-time.Second)), nil)
+			return verifyToken(t, pendingVerification(fixedNow.Add(-time.Nanosecond)), nil)
 		}},
 		{name: "claimed in parallel", tx: 1, want: verification.ErrTokenUsed, repo: func(t *testing.T) *mocks.MockRepository {
 			repo := verifyToken(t, pendingVerification(fixedNow.Add(time.Hour)), nil)
