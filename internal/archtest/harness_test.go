@@ -95,6 +95,7 @@ var (
 	goSymbol    = regexp.MustCompile(`\.[A-Z]\w*$`)
 	placeholder = regexp.MustCompile(`[<>{}*$\[\]|…]|NNNN|\.\.\.`)
 	slashName   = regexp.MustCompile(`^/([a-z][a-z0-9-]*)$`)
+	apiPath     = regexp.MustCompile(`^/api/[a-z0-9/_-]+$`)
 	kebabName   = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	// fileName — файл без пути (`Makefile`, `.env.example`, `errors.go`): есть в репо под этим именем.
 	fileName = regexp.MustCompile(`^(Makefile|LICENSE|Dockerfile(\.\w+)?|\.?\w[\w.-]*\.(md|go|sql|ya?ml|json|sh|py|toml|txt|mod|sum|example))$`)
@@ -111,8 +112,8 @@ var (
 // агент идёт по мёртвой ссылке. Репо — то, что отслеживает git: локальное (test/.venv, неотслеживаемый
 // файл) есть не в каждом клоне. Плейсхолдеры (<d>, NNNN, *) — не ссылки; артефакт docs/stack/<kind>.md —
 // по его шаблону; /имя, которое не скилл, — путь контракта openapi.json, встроенная команда или корень
-// файловой системы; правило с именем включённого линтера — его правило. Опечатку в первом сегменте пути и
-// ссылку простым текстом вне кода проверка не видит.
+// файловой системы; путь /api/… — операция openapi.json; правило с именем включённого линтера — его
+// правило. Опечатку в первом сегменте пути и ссылку простым текстом вне кода проверка не видит.
 func TestProseReferencesExist(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -165,19 +166,23 @@ func TestProseReferencesExist(t *testing.T) {
 					dead = append(dead, doc+": make "+m[1])
 				}
 			}
-			kind := ""
+			kind, listed := "", false
 			if m := namedBy.FindStringSubmatch(text[max(0, loc[0]-64):loc[0]]); m != nil {
 				kind = "skill"
 				if word := strings.ToLower(m[2]); strings.HasPrefix(word, "rule") || strings.HasPrefix(word, "правил") {
 					kind = "rule"
 				}
 			} else if listKind != "" && listSep.MatchString(text[prevEnd:loc[0]]) {
-				kind = listKind
+				kind, listed = listKind, true
 			}
 			listKind, prevEnd = "", loc[1]
 			if kind != "" && kebabName.MatchString(span) {
 				listKind = kind
-				if kind == "rule" && !repo[".claude/rules/"+span+".md"] && !linters[span] || kind == "skill" && !skill(span) {
+				missing := kind == "rule" && !repo[".claude/rules/"+span+".md"] && !linters[span] || kind == "skill" && !skill(span)
+				// Имя дальше по перечню, которое называет каталог или файл репо, — не правило и не скилл:
+				// «правило `comments` и `migrations`», «скилл `scaffold`, `field`».
+				other := listed && (repo[span+"/"] || names[span] || names[span+".md"])
+				if missing && !other {
 					dead = append(dead, doc+": "+kind+" "+span)
 				}
 			}
@@ -190,6 +195,14 @@ func TestProseReferencesExist(t *testing.T) {
 				}
 				if m := slashName.FindStringSubmatch(ref); m != nil {
 					if !skill(m[1]) && !api[ref] && !slices.Contains(fsRoots, m[1]) {
+						dead = append(dead, doc+": "+ref)
+					}
+					continue
+				}
+				// Путь API — операция openapi.json; у проекта с внешней идентичностью пути её доменов ушли вместе
+				// с ними.
+				if apiPath.MatchString(ref) {
+					if !api[ref] && pruned == nil {
 						dead = append(dead, doc+": "+ref)
 					}
 					continue

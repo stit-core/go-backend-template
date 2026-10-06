@@ -11,8 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGuardBash: хук .claude/hooks/guard-bash.sh не пускает из сессии Claude обходы git-хуков — флаги, и
-// в кавычках, алиасы, переменную и ключ конфига, правку и chmod хуков — и не мешает обычной работе.
+// TestGuardBash: хук .claude/hooks/guard-bash.sh не пускает из сессии Claude удобные обходы git-хуков —
+// флаги (и в кавычках, и через интерпретатор), алиасы и include конфига, SKIP_PREPUSH и hooksPath,
+// send-pack, правку и chmod хуков и .git/config — и не мешает обычной работе.
 func TestGuardBash(t *testing.T) {
 	t.Parallel()
 	guard := filepath.Join(repoRoot(t), ".claude", "hooks", "guard-bash.sh")
@@ -39,7 +40,27 @@ func TestGuardBash(t *testing.T) {
 		{"sed -i 's/make check/true/' scripts/git-hooks/pre-push", true},
 		{"git checkout HEAD~1 -- scripts/git-hooks/pre-push", true},
 		{"mv scripts/git-hooks/pre-push /tmp/", true},
+		{`"git" commit -n -m x`, true},
+		{"'git' commit -n -m x", true},
+		{`\git commit -n -m x`, true},
+		{`g\it commit -n -m x`, true},
+		{"git commit --no-ver'i'fy -m x", true},
+		{"bash -c 'git commit -n -m x'", true},
+		{`sh -c "git commit -n -m x"`, true},
+		{`eval "git commit -n -m x"`, true},
+		{"printf 'git commit -n -m x' | bash", true},
+		{"bash <<'EOF'\ngit commit -n -m x\nEOF", true},
+		{"bash <<'EOF'\nchmod -x scripts/git-hooks/pre-push\nEOF", true},
+		{"sed -i '/hooksPath/d' .git/config", true},
+		{`printf '[core]\n\thooksPath = /dev/null\n' >> .git/config`, true},
+		{"echo x >> .git/config", true},
+		{"git -c include.path=/tmp/x.cfg push", true},
+		{"git config --global include.path /tmp/x.cfg", true},
+		{`git -c core.hooks"P"ath=/dev/null push`, true},
+		{"git send-pack origin HEAD:refs/heads/main", true},
+		{"echo 'export SKIP_PREPUSH=1' >> ~/.bashrc", true},
 		{`git commit -m "fix: -n and --no-verify in a message"`, false},
+		{"python3 - <<'EOF'\nprint('bash -c, SKIP_PREPUSH and hooksPath here are data')\nEOF", false},
 		{"git commit -q -F - <<'EOF'\nfix: x\n\ngit commit -n\nEOF", false},
 		{"git push origin main", false},
 		{"git log --oneline -5", false},
@@ -48,6 +69,13 @@ func TestGuardBash(t *testing.T) {
 		{"bash -n scripts/git-hooks/pre-commit", false},
 		{"git diff scripts/git-hooks/pre-push", false},
 		{"grep -rn alias. README.md", false},
+		{"git log --grep 'alias.'", false},
+		{"find . -name pre-push", false},
+		{"awk 'NR<5' scripts/git-hooks/pre-push", false},
+		{"sort scripts/git-hooks/commit-msg", false},
+		{"cp scripts/git-hooks/pre-push /tmp/pre-push.copy", false},
+		{"cat .git/config", false},
+		{"bash -c 'make check'", false},
 		{"make check", false},
 	} {
 		t.Run(tc.cmd, func(t *testing.T) {

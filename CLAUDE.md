@@ -104,8 +104,8 @@ integration, нужен Docker) + build + gen-check + cover-check (покрыт�
   формат `<type>(<scope>)?: <subject>`, subject ≤72; сообщения самого git (`Revert "…"`,
   `fixup!`/`squash!`) тоже проходят.
 - **Push в `main` разрешён** (прямой или через PR); линейная история; pre-push гонит `make check`
-  каждого пушимого коммита в свежем worktree, обходы хуков из сессии блокирует
-  `.claude/hooks/guard-bash.sh`.
+  каждого пушимого ref'а (его верхнего коммита) в свежем worktree, удобные обходы хуков из сессии
+  блокирует `.claude/hooks/guard-bash.sh`.
 - git-хуки подключает `make setup` (`core.hooksPath=scripts/git-hooks`). Релиз — `/release`.
 
 ## Границы
@@ -130,8 +130,10 @@ integration, нужен Docker) + build + gen-check + cover-check (покрыт�
 
 ### Не делать никогда
 - Обходить хуки и гейт: `--no-verify`, `git commit -n`, `SKIP_PREPUSH`, `core.hooksPath`, алиасы,
-  правка хуков (блокируют `permissions.deny` и хук `guard-bash`; `make check` не запускается с `-i`,
-  `--eval`, вторым makefile и `GOFLAGS`).
+  `send-pack`, правка хуков. Удобные формы блокируют `permissions.deny` и хук `guard-bash` — барьер от
+  случайного обхода, а не песочница; правка хуков инструментами Edit и Write — правка гейта (§ Сначала
+  спросить). `make check` не запускается с флагами make, которые глушат или подменяют шаги, вторым
+  makefile и `GOFLAGS`.
   Коммитить/цитировать `.env`, `.env.local`, `*.pem`, `*.key` (в репо живут только `*.example`-шаблоны).
 - Править сгенерированное руками (`internal/domain/*/infra/postgres/db/*.go`, `**/mocks/*.go`) — только `make gen`.
 - Image-теги `:latest`/`:edge`/lightweight. Deploy-команды (`make bump`, `make ship`, `ssh`,

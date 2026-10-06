@@ -90,7 +90,7 @@ func TestPruneNamesIdentityDependents(t *testing.T) {
 }
 
 // canonicalOrigin — origin канонического репо шаблона.
-var canonicalOrigin = regexp.MustCompile(`[:/]stit-core/go-backend-template(\.git)?/?$`)
+var canonicalOrigin = regexp.MustCompile(`(?i)[:/]stit-core/go-backend-template(\.git)?/?$`)
 
 // TestCanonicalTemplate: в каноническом репо шаблона (origin — stit-core/go-backend-template) module path —
 // шаблона, внешней идентичности нет: de-template и prune разрушили бы шаблон, а с ними гейт красный и

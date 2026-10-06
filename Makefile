@@ -1,4 +1,4 @@
-.PHONY: help test lint build fmt fmt-check check gate-makefiles gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench cover-check tidy
+.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench cover-check tidy
 
 # Release-вычисления (image-path host/org, lockstep tag) self-contained в
 # scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
@@ -52,13 +52,15 @@ fmt-check: ## Проверка форматирования без мутаци�
 # Шаги гейта не видят PKG, VERBOSE и FORMAT ни из окружения, ни из командной строки.
 GATE = $(MAKE) --no-print-directory PKG= VERBOSE= FORMAT=
 
-# make check не запускается там, где сказал бы «clean», не проверив всё: -i глушит ошибки шагов,
-# -n/-q/-t их не выполняют, подмена переменных гейта (и --eval до чтения Makefile) меняет шаги,
-# GOFLAGS (из env или go env -w) — go test и vet, API_TEST_MAIN_ARGS — перезапуск тестов cmd/api в
-# main. override — чтобы guard не выключался своей же переменной.
+# make check не запускается там, где сказал бы «clean», не проверив всё: -i и -k глушат ошибки шагов,
+# -n/-q/-t их не выполняют, -p печатает рецепты, -j пускает чужой рецепт рядом, подмена переменных
+# гейта (и --eval до чтения Makefile) меняет шаги, makefile, прочитанный раньше этого, подменяет
+# рецепт, GOFLAGS (из env или go env -w) — go test и vet, API_TEST_MAIN_ARGS — перезапуск тестов
+# cmd/api в main. override — чтобы guard не выключался своей же переменной.
 ifneq (,$(filter check,$(MAKECMDGOALS)))
-override gate_bad := $(foreach f,i n q t,$(if $(findstring $f,$(firstword -$(MAKEFLAGS))),-$f)) \
-	$(if $(filter --eval=%,$(MAKEFLAGS)),--eval) \
+override gate_bad := $(foreach f,i k n p q t,$(if $(findstring $f,$(firstword -$(MAKEFLAGS))),-$f)) \
+	$(if $(filter -j%,$(MAKEFLAGS)),-j) $(if $(filter --eval=%,$(MAKEFLAGS)),--eval) \
+	$(filter-out $(abspath Makefile),$(abspath $(MAKEFILE_LIST))) \
 	$(foreach v,MAKE SHELL .SHELLFLAGS MAKEFILES GATE DETAIL API_TEST_MAIN_ARGS,$(if $(filter command% environment% override,$(origin $v)),$v=…)) \
 	$(if $(shell go env GOFLAGS),GOFLAGS=$(shell go env GOFLAGS))
 ifneq (,$(strip $(gate_bad)))
@@ -66,14 +68,11 @@ $(error make check не запускается с $(strip $(gate_bad)) — за�
 endif
 endif
 
-# Makefile, прочитанный рядом с этим (make -f Makefile -f extra.mk, MAKEFILES), подменил бы рецепт check:
-# пререквизиты правил одной цели складываются, и список makefile'ов сверяет пререквизит — по полному
-# пути. Makefile, который переопределяет и этот рецепт, — уже правка гейта.
-check: gate-makefiles
-gate-makefiles:
+# Второй makefile (make -f Makefile -f extra.mk, MAKEFILES) подменил бы гейт. Рецепт check — правило «::»:
+# чужое «check:» — ошибка разбора, чужое «check::» идёт после этого, а его первая строка сверяет состав
+# makefile'ов, когда прочитаны все, — до первого шага гейта и при любых флагах make.
+check:: ## Канонический gate (pre-push) по всему дереву; состав — CLAUDE.md § Команды
 	$(if $(filter-out $(abspath Makefile),$(abspath $(MAKEFILE_LIST))),$(error make check не запускается с makefile'ами $(strip $(MAKEFILE_LIST)) — только Makefile этого каталога))
-
-check: ## Канонический gate (pre-push) по всему дереву; состав — CLAUDE.md § Команды
 	@echo "→ make fmt-check"
 	@$(GATE) fmt-check
 	@echo "→ go vet -tags=integration ./..."
