@@ -5,7 +5,7 @@ description: Разбор падения — красный тест, lint, buil
 
 # Skill: triage-failure
 
-Дисциплинированный разбор падения. Цель — найти **корневую причину**, не замазать симптом, и зафиксировать инвариант тестом.
+Дисциплинированный разбор падения. Цель — найти корневую причину, не замазать симптом, и зафиксировать инвариант тестом.
 
 **Red-арм cockpit'а:** `smartdev` переключает сюда, когда `make status`/`make check` дал `ATTENTION:` (build/sqlc-drift/красный тест) или задача — багфикс. Багфикс идёт сюда, а не в `plan`: его ведёт строгая петля RED→GREEN→REFACTOR. Фича-работа тоже дефолтно тест-first (ведёт `smartdev §4`), но её разбор отказов — здесь.
 
@@ -37,7 +37,6 @@ description: Разбор падения — красный тест, lint, buil
 
 Спроси юзера или посмотри сам:
 - Как воспроизводится? Команда?
-- Локально или только в CI?
 - На какой ветке / коммите?
 - Когда последний раз работало?
 
@@ -49,7 +48,7 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 
 ### 2. Прочитать сообщение целиком
 
-Не первую строку — **целиком**. В Go-выводе обычно:
+Не первую строку — целиком. В Go-выводе обычно:
 - Заголовок: что упало
 - Stack trace или diff between expected / got
 - "Tests:" сводка
@@ -69,13 +68,13 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 
 ### 4. TDD для багфиксов (обязательно)
 
-Если это **баг** (а не build/lint/drift):
+Если это баг (а не build/lint/drift):
 
 1. **Напиши падающий тест**, воспроизводящий баг.
    - Имя: `Test<Behavior>` или `Test<Method>_<Scenario>`.
-   - Тест должен падать **по той же причине** что и production-баг — иначе ты тестируешь что-то другое.
+   - Тест должен падать по той же причине что и production-баг — иначе ты тестируешь что-то другое.
 2. `go test -run TestNew ./pkg` → red. Подтверди что red — твой red, не тестовая инфра.
-3. **Только теперь** правь продакшен-код.
+3. Только теперь правь продакшен-код.
 4. `go test -run TestNew ./pkg` → green.
 5. `make test PKG=./pkg` → весь пакет green (не сломал соседние тесты).
 6. Коммит: оба файла одним `fix(<scope>): <one-liner>`; в теле — строка красного прогона из п. 2
@@ -87,18 +86,18 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 |---|---|
 | **Build error** после правки sqlc-запроса | `make gen` — проверь, что сигнатура в `infra/postgres/db/*.sql.go` обновилась. Если нет — посмотри запрос в `queries/*.sql`, синтаксис аннотации `-- name: X :one\|many\|exec\|execrows`. |
 | **Build error** после правки `.mockery.yml` или интерфейса | `make gen` — мок-файл регенерится. |
-| **forbidigo** | замени `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` / запись в `os.Stdout`/`os.Stderr` на `logkit.Logger`. Внутри тестов forbidigo выключен — если падает в тесте, путь не _test.go. |
+| **forbidigo** | замени `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` / запись в `os.Stdout`/`os.Stderr` на `logkit.Logger`. Внутри тестов forbidigo выключен — если падает в тесте, путь не `*_test.go`. |
 | **archtest** (`TestImportBoundaries` и др.) | граница домена или слоя: чужой домен — port + adapter (skill `scaffold`, вариант port); сообщение теста называет правило. |
 | **errcheck** | `_ = unhandledErr` — нет; разбери err-возврат и обработай. `//nolint` — ослабление гейта: только по явной просьбе юзера (CLAUDE.md § Границы). |
 | **gosec G115** | int-конверсия с потенциальным overflow — добавь явную проверку границы. `repository.go` доменов уже исключён в `.golangci.yml` (версия — PG int4); новое исключение — только по явной просьбе юзера. |
 | **Race detector** | прочти оба стека целиком; найди shared state без синхронизации. Минимальный фикс — sync.Mutex или channel; идеальный — устрани shared state. |
-| **mocks drift** (`make gen-check`) | `make gen` локально, закоммить дельту. Если в `_test.go` остались устаревшие EXPECT'ы — обнови. |
+| **mocks drift** (`make gen-check`) | `make gen` локально, закоммить дельту. Если в `*_test.go` остались устаревшие EXPECT'ы — обнови. |
 | **sqlc drift** (`make gen-check`) | `make gen`, проверь дельту в `infra/postgres/db/*`, закоммить. |
 | **openapi drift** (`TestOpenAPISpec`, `make gen-check`) | `make gen`: `openapi.json` — контракт API; дельта показывает, что поменялось в операциях и схемах, закоммить её вместе с кодом. |
 
 ### 6. Если корневая причина в чужом коде
 
-- golibinfra баг → не лечи у себя workaround'ом без обсуждения. Скажи юзеру, предложи временный shim с TODO + reference на baseline issue.
+- golibinfra баг → не лечи у себя workaround'ом: путь — `docs/reference/architecture.md § Граница с golibinfra` (план в golibinfra → тег → bump).
 - Тест чужой библиотеки flaky → не маркируй `t.Skip()`. Проверь, не глобальное ли state'овое загрязнение.
 
 ### 7. Когда застрял

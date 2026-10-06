@@ -6,6 +6,7 @@ import (
 	"flag"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -71,9 +72,12 @@ func unsetHTTPEnv(t *testing.T) {
 	}
 }
 
+// httpkitPaths — пробы, которые регистрирует сам httpkit; пути операций доменов — под /api/.
+var httpkitPaths = []string{"/health", "/ready"}
+
 // TestHTTPOperations: API сервиса проходит проверку старта httpkit (Server.CheckRoutes) — у каждой
-// операции Security или пометка httpkit.Public, METHOD+path не повторяются, — а операция под Security
-// объявляет коды 401 сессии: её регистрирует authgate.Secured.
+// операции Security или пометка httpkit.Public, METHOD+path не повторяются, — пути операций доменов
+// живут под /api/, а операция под Security объявляет коды 401 сессии: её регистрирует authgate.Secured.
 func TestHTTPOperations(t *testing.T) {
 	t.Parallel()
 	var (
@@ -88,6 +92,9 @@ func TestHTTPOperations(t *testing.T) {
 
 	secured := 0
 	for _, op := range ops {
+		if !strings.HasPrefix(op.Path, "/api/") && !slices.Contains(httpkitPaths, op.Path) {
+			t.Errorf("operation %s at %s: domain operations live under /api/", op.OperationID, op.Path)
+		}
 		if len(op.Security) == 0 {
 			continue
 		}

@@ -56,7 +56,8 @@
 
 **Generates содержит**: композиция `cmd/api/main.go`
 (`fx.New(...)` с нужными модулями), регистрация subscribers/jobs,
-shutdown-хуки.
+порядок и бюджет остановки (`fx.StopTimeout`; хуки остановки — в китах,
+канон — `docs/reference/architecture.md § fx`).
 
 **Cross-kind (это роллап)**: читает решения из всех 6 kit-артефактов —
 HTTP из `auth § Authgate`, drain из `messaging § Published`,
@@ -135,7 +136,7 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 
 **Anti-patterns**:
 - Дублирование CREATE TABLE для kit-таблиц (`outbox_<domain>`, `audit_log`,
-  `bruteforce_*`) — должно подключаться как `pgkit.Source` кита (`pgstore.Migrations` /
+  `bruteforce_*`, `authn_sessions`) — должно подключаться как `pgkit.Source` кита (`pgstore.Migrations` /
   `TableMigrations`).
 - Размер пула без обоснования / без метрики.
 
@@ -148,7 +149,7 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
    парные up/down (yes), нумерация (последовательная),
    `cmd/migrate` как init-контейнер (yes/no).
 3. `Kit-owned tables`: какие подключаются источниками китов `pgstore.Migrations` (множественный
-   выбор: outboxkit, auditkit, bruteforcekit).
+   выбор: outboxkit, auditkit, bruteforcekit, authnkit/session).
 4. `Connection pool`: размер (Other — число), timeout acquire (Other),
    нужны ли метрики `pg_pool_*` (yes/no).
 5. `Generates`: пути pgkit-wiring, `sqlc.yaml` каркас, `cmd/migrate`.
@@ -219,8 +220,8 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
    - алгоритм (если JWT): HS256 — authnkit другого не подписывает; иной алгоритм — PR в
      golibinfra, не локально (CLAUDE.md § Стиль кода);
    - где верифицируется: enum `authgate middleware` / `per-domain`.
-2. `Authgate`: что middleware кладёт в context (Other — обычно
-   `Principal{UserID, Role}`), публичные vs защищённые роуты (Other).
+2. `Authgate`: что middleware кладёт в context (Other — в шаблоне
+   `identity.Identity{UserID, Role}`), публичные vs защищённые роуты (Other).
 3. `Roles`: список (Other по каждой), где назначаются (Other), где
    проверяются (enum `policy-слой доменов` / `middleware` / `mixed`).
 4. `Seed-admin`: путь (Other — обычно `cmd/seed-admin`), идемпотентность
@@ -287,11 +288,11 @@ golibinfra-first принцип (generic util → golibinfra, не локаль�
 **Порядок копания**:
 
 1. `golibinfra kits` (таблица): множественный выбор kit'ов golibinfra —
-   в `cmd/api` шаблона wired telemetry, httpkit, pgkit, authnkit, outboxkit,
-   natskit, bruteforcekit, auditkit, clockkit, logkit, healthkit, timerkit,
-   bizmetric; полный набор — пакеты в корне golibinfra
-   нужной версии (storagekit, httpclient, … — Other для редких). Версия
-   golibinfra (Other).
+   в графе `cmd/api` шаблона: telemetry, logkit, pgkit, natskit, httpkit,
+   timerkit, authnkit (с session), bruteforcekit, auditkit, clockkit,
+   outboxkit, healthkit; в коде доменов — ещё bizmetric, idkit, ptrkit;
+   полный набор — README golibinfra § Пакеты нужной версии (storagekit,
+   httpclient, … — Other для редких). Версия golibinfra (Other).
 2. `Что НЕ подключено`: автоматически = (полный набор) − (выбранные
    в 1). Юзер подтверждает «вот эти kit'ы действительно не нужны?» через
    AskUserQuestion (multi-confirm).

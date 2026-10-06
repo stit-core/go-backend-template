@@ -22,11 +22,11 @@ tag (rich changelog — `git tag -a` заранее) → `release-preflight` (в
 → агрегированный INFRA-HANDOFF → STOP.
 
 Оба образа — distroless без shell и `wget`, процесс — UID 65532. Проверка здоровья контейнера api —
-сам бинарь: `/app healthcheck` (`GET /health` по `HTTP_ADDR`, код выхода 0 — здоров); e2e-стек
+сам бинарь, подкоманда `healthcheck` (`GET /health` по `HTTP_ADDR`, код выхода 0 — здоров); e2e-стек
 ждёт `healthy` по ней же.
 
 `<host>`/`<org>` берутся из `git remote get-url origin` — image-path следует за местом
-репо в Gitea, без правок при форке. Build локальный (без gitea-runner'ов).
+репо в Gitea, без правок при форке. Build локальный.
 `docker login <host>` — креды оператора; `make doctor` в preflight ловит их отсутствие
 fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвергаются by design.
 

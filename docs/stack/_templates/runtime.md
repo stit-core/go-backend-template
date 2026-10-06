@@ -24,4 +24,4 @@ fx.Invoke. Какие periodic jobs (`timerkit.Provide` в модуле-влад
 <Что de-template родит:
 - композиция `cmd/api/main.go` (fx.New с нужными модулями)
 - регистрация subscribers/jobs
-- shutdown-хуки>
+- порядок и бюджет остановки (`fx.StopTimeout`; хуки остановки — в китах)>

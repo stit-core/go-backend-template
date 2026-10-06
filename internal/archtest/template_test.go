@@ -190,24 +190,80 @@ func TestTemplateUpdateFirstBase(t *testing.T) {
 	commitAll(t, tmpl)
 	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0")
 
-	for name, root := range map[string]map[string]string{
-		"between tags":     union(legacy, v1, between),
-		"before .template": legacy,
+	for name, tc := range map[string]struct {
+		root map[string]string
+		base string // база в выводе переноса; "" — коммит шаблона по дереву, без имени
+	}{
+		"between tags":     {root: union(legacy, v1, between)},
+		"before .template": {root: legacy},
+		"at the tag":       {root: union(legacy, v1), base: "template/v1.0.0"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			fork := t.TempDir()
-			writeFiles(t, fork, root)
+			writeFiles(t, fork, tc.root)
 			git(t, fork, "init", "-q")
 			commitAll(t, fork)
 			writeFiles(t, fork, map[string]string{"go.mod": "module example.com/fork\n"})
 			commitAll(t, fork)
 			git(t, fork, "remote", "add", "--no-tags", "template", tmpl)
-			bash(t, fork, script, "template/v1.1.0")
+			out := bash(t, fork, script, "template/v1.1.0")
+			if tc.base != "" {
+				require.Contains(t, out, "обвязка: "+tc.base+" → template/v1.1.0")
+			}
 			require.Equal(t, map[string]string{".template/version": "template/v1.1.0\n", "h/l.md": "l2\n", "h/n.md": "n2\n"},
 				readFiles(t, fork, ".template/version", "h/l.md", "h/n.md"))
 		})
 	}
+}
+
+// TestTemplateUpdateBeforeVersionTag: форк, созданный раньше тега своей версии, до этой версии не
+// переносится — она бы не сдвинулась, и следующий перенос повторил бы те же правки; правки до тега
+// приходят переносом до следующего тега.
+func TestTemplateUpdateBeforeVersionTag(t *testing.T) {
+	t.Parallel()
+	script := templateScript(t)
+	tmpl, fork := t.TempDir(), t.TempDir()
+	v1 := map[string]string{
+		".template/paths": ".template\nh\n", ".template/version": "template/v1.0.0\n",
+		"go.mod": "module example.com/tmpl\n", "h/k.md": "k0\n",
+	}
+	release := map[string]string{".template/version": "template/v1.1.0\n"} // коммит выпуска, тег — позже
+	git(t, tmpl, "init", "-q")
+	for _, step := range []struct {
+		files map[string]string
+		tag   string
+	}{
+		{v1, "template/v1.0.0"},
+		{release, ""},
+		{map[string]string{"h/k.md": "k1\n"}, "template/v1.1.0"},
+		{map[string]string{".template/version": "template/v1.2.0\n", "h/q.md": "q1\n"}, "template/v1.2.0"},
+	} {
+		writeFiles(t, tmpl, step.files)
+		commitAll(t, tmpl)
+		if step.tag != "" {
+			git(t, tmpl, "tag", "-a", step.tag, "-m", step.tag)
+		}
+	}
+
+	writeFiles(t, fork, union(v1, release))
+	git(t, fork, "init", "-q")
+	commitAll(t, fork)
+	writeFiles(t, fork, map[string]string{"go.mod": "module example.com/fork\n"})
+	commitAll(t, fork)
+	git(t, fork, "remote", "add", "--no-tags", "template", tmpl)
+
+	preview := bash(t, fork, script)
+	require.NotContains(t, preview, "  template/v1.1.0\n", "the preview offers tags newer than the fork version only")
+	require.Contains(t, preview, "  template/v1.2.0\n")
+	out, err := runIn(t, fork, "bash", script, "template/v1.1.0")
+	require.Error(t, err, out)
+	require.Contains(t, out, "TO=template/v1.1.0 не новее версии форка template/v1.1.0")
+	require.Empty(t, git(t, fork, "status", "--porcelain"), "a refused update leaves the tree as is")
+
+	bash(t, fork, script, "template/v1.2.0")
+	require.Equal(t, map[string]string{".template/version": "template/v1.2.0\n", "h/k.md": "k1\n", "h/q.md": "q1\n"},
+		readFiles(t, fork, ".template/version", "h/k.md", "h/q.md"))
 }
 
 func templateScript(t *testing.T) string {

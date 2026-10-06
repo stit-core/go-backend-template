@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install-tools.sh — поставить pinned-версии dev-инструментов.
-# Все версии должны быть pinned. При добавлении CI — синхронизируй.
+# Все версии должны быть pinned.
 set -euo pipefail
 
 GOFUMPT_VERSION="${GOFUMPT_VERSION:-v0.10.0}"

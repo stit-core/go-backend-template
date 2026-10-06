@@ -33,19 +33,18 @@
   поведение.
 - **PR** — форкни репозиторий, заведи ветку, открой pull request с понятным описанием
   «зачем». Держи PR сфокусированным; не подмешивай несвязанные правки.
-- Тронул инфра-поверхность (новый required env / sensitive-env-секрет; destructive/lock/backfill
-  миграция; cross-service NATS/outbox-subject; breaking API; новая runtime-dep в `go.mod`)
-  — опиши это в PR отдельно (в проекте это оформляется INFRA-HANDOFF-блоком для `<org>/infra`).
+- Тронул инфра-поверхность (`CLAUDE.md` § Границы) — опиши это в PR отдельно (в проекте это
+  INFRA-HANDOFF-блок для `<org>/infra`).
 
 ## Перед PR
 
 ```bash
-make check    # канонический gate: fmt-check + vet + lint + migrations-check + test-int + build + gen-check + cover-check
+make check    # канонический gate (состав — CLAUDE.md § Команды)
 ```
 
 Зелёный `make check` — gate пройден (его же гоняет git-хук `pre-push`).
 
-- После правки `queries/`, `migrations/` или интерфейсов из `.mockery.yml` →
+- После правки `queries/`, `migrations/`, интерфейсов из `.mockery.yml` или HTTP-операций →
   `make gen` (sqlc, mockery, openapi.json). Сгенерированное руками не правим.
 - **Conventional Commits** (хук `commit-msg`): `<type>(<scope>)?: <subject>`,
   subject ≤72. Типы: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `meta`.

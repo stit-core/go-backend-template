@@ -47,12 +47,17 @@ git remote get-url template >/dev/null 2>&1 ||
 git fetch -q --no-tags template 'refs/tags/template/*:refs/tags/template/*'
 [ -z "$TO" ] || { [[ $TO == template/v* ]] && git rev-parse -q --verify "refs/tags/$TO" >/dev/null; } ||
     fail "TO=$TO — не тег шаблона template/vX.Y.Z (список — make template-update)"
+# Перенос до своей же версии её не сдвинул бы: следующий перенос повторил бы те же правки.
+[ -z "$TO" ] || [ -z "$v" ] || newer "$v" "$TO" ||
+    fail "TO=$TO не новее версии форка $v — перенос до тега новее (список — make template-update)"
 
 # До первого переноса (версия та же, что в первом коммите форка) база — коммит шаблона с деревом
 # первого коммита: «Use this template» копирует кончик main, а он обычно новее тега версии.
 root=$(git rev-list --max-parents=0 HEAD | tail -1) tag=${TO:-$(latest)}
 if [ -z "$FROM" ] && [ -n "$tag" ] && [ "$(git show "$root:.template/version" 2>/dev/null || true)" = "$v" ]; then
     FROM=$(git log --format='%H %T' "$tag" | awk -v t="$(git rev-parse "$root^{tree}")" '$2 == t { print $1; exit }')
+    # Форк с коммита тега своей версии: база — сам тег.
+    [ -z "$FROM" ] || [ "$FROM" != "$(git rev-parse -q --verify "$v^{commit}" || true)" ] || FROM=$v
 fi
 FROM=${FROM:-$v}
 [ -n "$FROM" ] || fail "базы нет: ни .template/version, ни коммита шаблона с деревом первого коммита форка — FROM=<коммит шаблона> (skill /upgrade)"
@@ -63,6 +68,7 @@ if [ -z "$TO" ]; then
     [ "$FROM" = "$v" ] || echo "база переноса: $FROM — коммит шаблона, из которого создан форк"
     last=""
     for t in $(git tag -l 'template/v*' --sort=v:refname --no-merged "$FROM"); do
+        [ -z "$v" ] || newer "$v" "$t" || continue
         echo
         git tag -l --format='%(contents)' "$t" | sed 's/^/  /'
         last=$t

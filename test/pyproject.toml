@@ -7,7 +7,7 @@ testpaths = ["."]
 pythonpath = ["."]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
-  "smoke: быстрый boot + критический happy-path, CI-gate",
+  "smoke: быстрый boot + критический happy-path (make e2e-smoke, шаг make release)",
   "e2e: полный сценарий по домену",
 ]
 

@@ -19,8 +19,8 @@ PKGS=()
 for arg in "$@"; do
     case "$arg" in
         --format=*) FORMAT="${arg#--format=}" ;;
-        # Исход integration зависит от Docker, а не только от кода: из кеша go test
-        # вернул бы «ok» прогона, где testkit пропустил тесты без Docker.
+        # Исход integration зависит не только от кода, но и от Docker и образов контейнеров,
+        # которых ключ кеша go test не видит: прогон всегда настоящий.
         --integration) INTEGRATION="-tags=integration -count=1" ;;
         -h | --help)
             sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'

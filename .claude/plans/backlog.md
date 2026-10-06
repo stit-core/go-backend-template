@@ -34,3 +34,7 @@
 - **generated-header-fakes** — рукописный пакет `pkg/` целиком под заголовком «Code generated … DO NOT
   EDIT.» и такой же файл в каталоге вывода sqlc выпадают из покрытия и lint (видно в диффе).
   Триггер: повторный аудит (`repair-harness` S10) или первая такая подделка.
+- **nul-guard-key** — вход с NUL в адресе отвечает 500: `bruteforcekit` (`NormalizeKey`) принимает
+  subject с NUL, и запись попытки падает в Postgres (TEXT). Кит отвергает такой ключ `ErrInvalidKey`,
+  как `session.CheckSubject`, — адаптер входа уже переводит его в 401. Триггер: партия 3 golibinfra
+  (v1.4.0) — bump.

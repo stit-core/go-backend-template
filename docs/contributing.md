@@ -38,7 +38,7 @@ prompt → /smartdev (cockpit: make status, читает активные пла
 | git-хуки | `scripts/git-hooks/` (подключает `make setup` через `core.hooksPath`): commit-msg (Conventional Commits), pre-commit (fmt-check+vet+lint+validate-stack/plan), pre-push (`make check` на чистом дереве, только HEAD) | **детерминированно** |
 | permissions.deny | `.claude/settings.json` | **детерминированно** (блок `--no-verify`, force-push, reset --hard, правка `*.pem`/`*.key`/generated); чтение `.env`/`.env.local` — только для инструмента Read: `cat` и другие команды Bash deny не видит, их держит правило (CLAUDE.md, rule `env-local`) |
 | Хук Claude Code | `.claude/hooks/guard-bash.sh` (PreToolUse, Bash) | **детерминированно** (блок `git commit -n`, `--no-veri…`, `SKIP_PREPUSH`, `core.hooksPath`; команда проверяется построчно) |
-| Самопроверка обвязки | `internal/archtest/harness_test.go`, `internal/archtest/template_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели и пути репо в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`; пути `.template/paths` есть, тег обвязки на HEAD = `.template/version`, `make template-update` переносит обвязку в форк, маркеров конфликта в репо нет) |
+| Самопроверка обвязки | `internal/archtest/harness_test.go`, `internal/archtest/template_test.go`, `cmd/api/main_test.go`, `cmd/api/boot_test.go` (шаг тестов) | **детерминированно** (make-цели, пути и файлы, скиллы и правила в прозе существуют; модуль, HTTP- и NATS-входы каждого домена подключены в `cmd/api`; kit-таблицы графа, в том числе outbox доменов, — источники `cmd/migrate`; required env конфигов — в `.env.example`; пути `.template/paths` есть, тег обвязки на HEAD = `.template/version`, `make template-update` переносит обвязку в форк, маркеров конфликта в репо нет) |
 | Самозащита гейта | `Makefile` (`make check`), pre-push | **детерминированно** (`make check` не запускается с `-i`/`-n`, подменой своих переменных, `GOFLAGS` и `API_TEST_MAIN_ARGS`; pre-push не передаёт гейту флаги make) |
 | Path-scoped rules | `.claude/rules/*.md` | контекстная подсказка |
 | CLAUDE.md | repo root | always-on advisory |
@@ -67,7 +67,8 @@ Push в `main` разрешён (прямой или через PR); gate — `p
   `meta(template): template/vX.Y.Z` → `git tag -a template/vX.Y.Z -F <аннотация>` →
   `git push origin main template/vX.Y.Z` (pre-push гонит `make check` на HEAD с тегом). `main`,
   где `.template/version` называет ещё не выпущенный тег, уходит в origin только с этим тегом на
-  HEAD: иначе форк с `main` оказался бы раньше тега своей версии и перенос потерял бы правки.
+  HEAD: иначе форк с такого `main` создан раньше тега своей версии, и правки до тега придут к нему
+  только переносом до следующего тега.
 
 Аннотация — как у golibinfra, по разделам; пустой раздел не пишется:
 
@@ -112,7 +113,8 @@ string-replace edit.
 | Path-scoped rule не грузится | файл читали через Bash или создали через Write — открой его через Read; frontmatter `paths:` (не `globs:`!) — проверить glob |
 | CLAUDE.md игнорируется | длина >200 строк, либо конфликт инструкций между секциями |
 | Коммит reject'нут | `scripts/git-hooks/commit-msg` — type ∈ {feat,fix,refactor,docs,test,chore,meta} |
-| `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса или HTTP-операции (`openapi.json`) |
+| `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса или HTTP-операции (`openapi.json`) / `untracked mocks` — новый мок не в индексе: `git add` |
+| archtest: `golangci-lint linters --json` не запустился | golangci-lint нет в PATH — `make setup` (pinned-версия) |
 | `make lint` → `FAIL: golangci-lint exit N` | линтер не отработал, причина — в хвосте вывода: 3 — конфиг или неизвестный линтер, 4 — таймаут, 5 — нет Go-файлов, 7 — ошибка в логе (например, пакет не найден) |
 | Замечания lint по файлам, которых нет | кеш анализа своего дерева — `.cache/golangci-lint`; удалить каталог |
 | `validate-plan` / `validate-stack` падает | структура артефакта — см. соответствующий `README`/skill |

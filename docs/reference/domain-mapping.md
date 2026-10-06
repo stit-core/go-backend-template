@@ -32,7 +32,7 @@
 | Methods (pure) | методы на `*<Name>` без I/O |
 | Method `preconditions` | `if !ok { return Err* }` в начале метода |
 | Method `postconditions` | гарантируется state'ом после return; покрыто entity-test'ом |
-| Method `events emitted` | возвращается из метода или копится в `aggregate.uncommittedEvents` (если используется); use-case кладёт в outbox |
+| Method `events emitted` | use-case публикует событие (`events.go`) в outbox той же транзакцией, что и запись агрегата |
 | Invariants (локальные) | проверяются в методах агрегата + покрыты `entity_test.go` (+ fuzz при наличии валидаций строк) |
 | Lifecycle table | поле-enum (`Status`) + методы перехода (`user.ChangeStatus`); switch по from-state в начале метода, недопустимый переход — sentinel. Мягкое удаление — условная запись репозитория (`user.Repository.Delete`) |
 | Lifecycle `guard` | условие перед сменой состояния → возврат ошибки если не выполнено |
@@ -82,7 +82,7 @@
 | Payload table | поля struct'а |
 | Trigger `source aggregate` | use-case этого aggregate'а кладёт событие в outbox |
 | Trigger `triggering use-case` | конкретный метод `Usecase` |
-| Consumers | `internal/domain/<consumer>/delivery/nats/handler.go` — handler рядом с `delivery/http/`, на равных правах. Регистрируется fx того же `cmd/api`. |
+| Consumers | `internal/domain/<consumer>/delivery/nats/handler.go` — handler рядом с `delivery/http/`, на равных правах; регистрирует его `fx.Invoke(Register)` в `module/module.go` потребителя. |
 | Delivery `idempotency key` | поле в payload; subscriber хранит уже обработанные ID |
 | Delivery `at-least-once` | `outboxkit.Publisher` гарантирует, subscriber обязан быть идемпотентен |
 | Delivery `ordering: per-aggregate` | партиционирования по ключу нет. Порядок очереди на хопе drain → JetStream держит `OUTBOX_PUBLISH_MODE=ordered` (последовательная публикация; дефолт `batch` — best-effort). Если subscriber'у важен per-aggregate order — он сам сериализует обработку по `<Aggregate>ID` (например, очередь in-memory keyed by ID). |
@@ -92,14 +92,14 @@
 | Артефакт | Go-код |
 |---|---|
 | `kind: use-case` файл | метод на `*Usecase` в `usecase.go` |
-| Actor | проверяется на handler-уровне (`delivery/http`) или в первом шаге метода |
+| Actor | policy в usecase: `Can<Verb>(ctx, caller, …)` до чтения и записи (rule `domain-architecture`); хендлер права не проверяет |
 | Inputs | DTO в `dto.go` (доменный) и `delivery/http/dto.go` (huma-теги) |
 | Outputs | `dto.go` или domain entity (mapping в `delivery/http/view.go`) |
 | Dependencies (ports) | интерфейсы рядом в `usecase.go`; реализации — адаптер в своём `module/adapters.go` (поверх `Trusted` другого домена), `infra/postgres/repository.go` или `infra/<kit>/` |
 | Steps | последовательность вызовов внутри метода `Usecase` |
 | Called aggregate methods | вызовы методов на entity внутри метода Usecase |
 | Events emitted | `outboxkit.Publisher` + struct из `events.go`, в одной транзакции с persist |
-| Errors | sentinel-ошибки из `errors.go`; маппинг на HTTP — таблица `httpkit.ErrorMap` операции в `delivery/http/handler.go` (architecture.md § Контракт ошибок API) |
+| Errors | sentinel-ошибки из `errors.go`; на HTTP их переводит таблица домена `<домен>Errors`, коды операции объявляет её таблица (`Declare`) — `delivery/http/handler.go` (architecture.md § Контракт ошибок API) |
 | Side effects beyond aggregate | external clients (email, billing) — через отдельные ports, инжектируются |
 
 ## Policy
@@ -160,6 +160,6 @@
 | Решение без эффектов | policy |
 | Перевод состояния агрегата | aggregate.method (через Lifecycle row) |
 | Выставление `CreatedAt` | репозиторий, не конструктор |
-| Уникальность по полю | use-case (нужен `repo.GetBy*`), не aggregate-invariant |
+| Уникальность по полю | unique-индекс в миграции; репозиторий переводит `pgkit.IsUniqueViolation` в sentinel домена (`user.ErrAlreadyExists`). Проверка `GetBy*` перед вставкой — гонка |
 | Нотификация (email, webhook) | port в use-case + адаптер канала в `infra/<канал>/` (dev-заглушка писем — `verification/infra/logmail`) |
 | Идемпотентность subscriber'а | схема потребителя: unique-индекс под natural key + `ON CONFLICT` (или idempotency-key из payload), у внешнего эффекта — отметка выполнения (`sent_at`) — rule `events-and-messaging` |

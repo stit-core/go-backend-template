@@ -7,10 +7,10 @@
 
 ## Когда применять
 
-- "Добавь FK от sessions к users c cascade delete"
+- "Добавь FK от payments к orders c cascade delete"
 - "Добавь индекс на email"
 - "Добавь колонку `last_login_at` в users"
-- "Создай таблицу `audit_log`"
+- "Создай таблицу `orders`"
 
 ## Когда НЕ применять
 
@@ -32,7 +32,7 @@ ls migrations/ | grep -oE '^[0-9]+' | sort -un | tail -1
 
 Snake_case описывающий что делает:
 - `0007_users_last_login_at` — добавить колонку
-- `0008_sessions_users_fk` — FK
+- `0008_payments_orders_fk` — FK
 - `0009_orders` — новая таблица
 - `0010_email_index` — индекс
 
@@ -47,9 +47,9 @@ ALTER TABLE users ADD COLUMN last_login_at TIMESTAMPTZ;
 CREATE INDEX idx_users_last_login_at ON users(last_login_at);
 
 -- FK
-ALTER TABLE sessions
-    ADD CONSTRAINT sessions_user_id_fk
-    FOREIGN KEY (user_id) REFERENCES users(id)
+ALTER TABLE payments
+    ADD CONSTRAINT payments_order_id_fk
+    FOREIGN KEY (order_id) REFERENCES orders(id)
     ON DELETE CASCADE;
 
 -- Новая таблица
@@ -79,7 +79,7 @@ DROP INDEX IF EXISTS idx_users_last_login_at;
 ALTER TABLE users DROP COLUMN IF EXISTS last_login_at;
 
 -- Откат FK
-ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_user_id_fk;
+ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_fk;
 
 -- Откат таблицы
 DROP INDEX IF EXISTS idx_orders_user_id;
@@ -161,5 +161,8 @@ feat: add NNNN_name migration
 - ❌ Без `down`-файла или с пустым `down` — migrations-check не пропустит. Миграция только данных —
   `down` из `-- noop` + WHY-комментарий.
 - ❌ DDL и DML в одной миграции (например, `ALTER TABLE ... ADD COLUMN` + `UPDATE table SET ...`). Раздели: одна миграция — schema change, следующая — data backfill.
-- ❌ Длинные блокирующие миграции на больших таблицах. Используй `CREATE INDEX CONCURRENTLY`, разбивай на батчи.
+- ❌ Длинные блокирующие миграции на больших таблицах. Индекс — `CREATE INDEX CONCURRENTLY` единственным
+  оператором файла (и `DROP INDEX CONCURRENTLY` — в down): файл миграции идёт одним запросом, несколько
+  операторов Postgres выполняет в одной транзакции, а CONCURRENTLY в транзакции не работает. Данные —
+  батчами.
 - ❌ `make gen` забыли — gen-check в `make check` поймает, но локальный flow ломает.

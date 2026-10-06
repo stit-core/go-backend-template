@@ -25,10 +25,10 @@ paths:
   `migrations/` не дублируется.
 - Drain публикует в JetStream (`natskit.StreamBus`, PubAck + дедуп по `Nats-Msg-Id`). Нужны
   `NATS_JETSTREAM_ENABLED=true` + стрим, покрывающий subject (`NATS_JS_STREAM_NAMES`).
-- Subject `<domain>.events.<event>` — **unexported const `subject<Event>`** в `events.go`
+- Subject `<domain>.events.<event>` — unexported const `subject<Event>` в `events.go`
   источника, рядом с payload (не inline-литерал в usecase, не экспорт). Consumer заводит
   свою const в `delivery/nats/`. Breaking-change payload → новый subject (`….v2`).
-- payload-типы — в `events.go` источника: `<Aggregate><PastEvent>`, поля **без json-тегов**
+- payload-типы — в `events.go` источника: `<Aggregate><PastEvent>`, поля без json-тегов
   (wire = Go-имена; смена формата = `.v2`), timestamp — `At time.Time`. Поля — ID и факты:
   токенов, секретов и PII нет (rule `domain-architecture`).
 
@@ -39,19 +39,19 @@ paths:
   natskit.SubscribeStreamJSON(bus, ctx, <stream>, <subject>, <durable>, handler) })`, `bus` —
   `natskit.StreamBus`. Кит подписывает в OnStart и дренит подписку в OnStop раньше остановки
   её зависимостей; ошибка подписки, в том числе выключенный JetStream, валит старт.
-- Объявляют **локальный** payload-DTO (`delivery/nats/dto.go`) — прямой импорт домена-
+- Объявляют локальный payload-DTO (`delivery/nats/dto.go`) — прямой импорт домена-
   источника запрещён archtest. Регистрируются в `module/module.go` потребителя. Схему с поставщиком
   сверяет контракт-тест потребителя `delivery/nats/contract_test.go`: событие настоящего usecase
   поставщика в JSON (как его отдаёт outbox) доставляется подпискам `Register` — subject и поля сходятся.
-- **Идемпотентность обязательна** (at-least-once), и она — свойство **схемы, не удачи**:
+- **Идемпотентность обязательна** (at-least-once), и она — свойство схемы, не удачи:
   unique-индекс под natural key (`INSERT … ON CONFLICT`), либо `UPDATE … WHERE
-  status='pending'`, либо idempotency-key из payload. **Внешний эффект** (письмо, вебхук) схема
+  status='pending'`, либо idempotency-key из payload. Внешний эффект (письмо, вебхук) схема
   помнит отдельно от записи: отметка «выполнен» (`sent_at`) — после эффекта; повтор доставки
   выполненный эффект пропускает, невыполненный повторяет, сбой эффекта — ошибка обработчика
   (redelivery). Пропуск по одной лишь записи теряет эффект: запись есть, письмо не ушло. Канон —
   `verification.IssueEmailVerification`: upsert по партиал-индексу `email_verifications(user_id)
   WHERE used_at IS NULL` перевыпускает токен неотправленного письма, отправленное не трогает.
-  Redelivery (сбой эффекта, повтор после успеха) покрыт юнит-тестом (rule tests-pipeline).
+  Redelivery (сбой эффекта, повтор после успеха) покрыт юнит-тестом (rule `tests-pipeline`).
   Poison consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - Subscriber — быстрый. Тяжёлое (PDF, batch на 1M) → отдельный job/usecase.
 

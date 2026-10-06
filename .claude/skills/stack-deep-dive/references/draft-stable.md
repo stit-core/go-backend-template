@@ -116,7 +116,7 @@ make validate-stack-docs
 > отдельной секцией (имя env, значение не коммитим); release-checklist для
 > добавления новых env есть?
 
-- ✅ `Required: PG_DSN, JWT_SECRET`;
+- ✅ `Required: APP_ENV, PG_DSN, JWT_SECRET`;
   `Optional: HTTP_ADDR (:8080), LOG_LEVEL (info), PG_MAX_CONNS (10), …`;
   `Secrets: JWT_SECRET, пароль в PG_DSN (env, значение не коммитим)`; release-checklist.
 - ❌ «Берётся envconfig автоматически» — без перечисления.
@@ -152,9 +152,9 @@ make validate-stack-docs
 > идемпотентен; brute-force защищает login?
 
 - ✅ JWT HS256 (authnkit) с секретом из env (`JWT_SECRET`, ≥32 байт); authgate кладёт
-  `Principal{UserID, Role}`; роли `client`/`admin`; seed-admin через
-  `cmd/seed-admin` (env `SEED_ADMIN_*`), идемпотентен; bruteforce-cleanup
-  как job интервалом 5m.
+  `identity.Identity{UserID, Role}`; роли `client`/`admin`; seed-admin через
+  `cmd/seed-admin` (env `SEED_ADMIN_*`), идемпотентен; cleanup попыток —
+  `bruteforcepg.Module` кита (`BRUTEFORCE_CLEANUP_INTERVAL=5m`).
 - ❌ «JWT, есть middleware» — без указания где принципал, без описания
   ролей.
 
@@ -174,9 +174,9 @@ make validate-stack-docs
 > явно (чтобы не было ложных ожиданий «эта env читается»); внешние
 > runtime-deps с режимом отказа; capacity-оценка есть?
 
-- ✅ Kits: httpkit, pgkit, authnkit, outboxkit, auditkit,
+- ✅ Kits: httpkit, pgkit, authnkit, outboxkit, natskit, auditkit,
   bruteforcekit, clockkit, logkit; **не подключено**:
-  natskit, cachekit, storagekit; External: Postgres (req),
+  cachekit, flagkit, storagekit; External: Postgres (req),
   email-провайдер (Postmark, fallback=N/A, timeout=5s); Capacity:
   1 CPU/512MB, 2 replicas, pool=50.
 - ❌ Список без «что НЕ подключено» — env-table из шаблонов читается,

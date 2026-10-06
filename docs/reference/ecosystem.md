@@ -66,9 +66,9 @@ sibling-checkout'ами (`../<name>`).
   `<svc>` и путь к strategy-репо записаны в `docs/stack/service.md § Identity`; по ним `/scaffold`
   (вариант domain) разворачивает код, маппинг — [domain-mapping.md](domain-mapping.md).
   Проектируются домены там (`/domain-deep-dive`); рантайм-образ от strategy-репо не зависит.
-- **Киты — `golibinfra`** (версия в `go.mod`): logging, authn, outbox, brute-force, NATS, audit, clock.
-  Переиспользуемый примитив — PR в `golibinfra`, не локально (`architecture.md § Граница с golibinfra`);
-  новая версия — по аннотации тега, skill `/upgrade`.
+- **Киты — `golibinfra`** (версия в `go.mod`, перечень — README golibinfra § Пакеты). Нужный
+  примитив — в `golibinfra`, не локально (`architecture.md § Граница с golibinfra`); новая версия — по
+  аннотации тега, skill `/upgrade`.
 - **Обвязка — из шаблона `go-backend-template`**: пути из `.template/paths` (CLAUDE.md, `.claude`,
   скрипты, Makefile, lint-конфиг, archtest, доки шаблона). Версия обвязки форка — `.template/version`,
   новые — теги шаблона `template/vX.Y.Z`; перенос — `make template-update` (skill `/upgrade`).

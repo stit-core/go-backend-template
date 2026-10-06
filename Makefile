@@ -5,7 +5,7 @@
 # шаблон работал без правки при форке в `<client-org>/<service>`.
 
 # Один словарь для агента: `make <verb>`. Concise-by-default; FORMAT=detailed
-# или VERBOSE=1 → полный вывод (test/lint/build — см. A3). Passthrough-аргументы
+# или VERBOSE=1 → полный вывод (test/lint/build). Passthrough-аргументы
 # идут через A= (status/plan-check) / Q=,P= (search) / NAME= (new-domain) /
 # VERSION= (release) / TO=,FROM= (template-update).
 
@@ -65,7 +65,7 @@ $(error make check не запускается с $(strip $(gate_bad)) — за�
 endif
 endif
 
-check: ## Канонический gate: fmt-check+vet+lint+migrations+test-int+build+gen-check+cover (pre-push)
+check: ## Канонический gate (pre-push) по всему дереву; состав — CLAUDE.md § Команды
 	@echo "→ make fmt-check"
 	@$(GATE) fmt-check
 	@echo "→ go vet -tags=integration ./..."
@@ -113,7 +113,7 @@ migrate-down: ## Откатить последнюю миграцию (треб�
 	PG_MIGRATIONS_PATH=$${PG_MIGRATIONS_PATH:-./migrations} go run ./cmd/migrate down
 
 ##@ E2E
-e2e: ## Типизированный e2e-харнес (test/): up → pytest → down. Docker + ./.env.local
+e2e: ## Типизированный e2e-харнес (test/): up → pytest → down. Нужен Docker; ./.env.local опционален
 	@bash scripts/tools/e2e.sh --format=detailed
 
 e2e-smoke: ## Только smoke-набор (-m smoke) — быстрый gate

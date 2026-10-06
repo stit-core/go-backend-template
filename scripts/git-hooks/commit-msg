@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SSOT по разрешённым типам — CLAUDE.md §5 "Git workflow".
+# Разрешённые типы описывает CLAUDE.md § Git workflow.
 # При смене списка править оба места одним коммитом.
 set -euo pipefail
 COMMIT_MSG_FILE="$1"

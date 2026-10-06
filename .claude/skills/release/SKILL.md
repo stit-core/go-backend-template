@@ -5,9 +5,9 @@ description: Выпустить версию бэкенда одной кома�
 
 # Skill: release
 
-Канонический release-флоу. **Зона ответственности этого репо: код → image в registry. На STOP — всё.** Build локальный (никаких gitea-runner), push в `<host>/<org>/backend{,-migrate}` под одним lockstep `vX.Y.Z`-тегом. Воркер отдельным образом не собирается — outbox drain, NATS subscribers, jobs живут в `cmd/api/`.
+Канонический release-флоу. **Зона ответственности этого репо: код → image в registry. На STOP — всё.** Build локальный, push в `<host>/<org>/backend{,-migrate}` под одним lockstep `vX.Y.Z`-тегом. Воркер отдельным образом не собирается — outbox drain, NATS subscribers, jobs живут в `cmd/api/`.
 
-Дальше — **handoff** в хаб `<org>/infra`: rollout — `make bump SVC=backend TAG=<v>` там (правит `BACKEND_TAG` в `.env` на VPS + force-recreate). Эти шаги не выполняются здесь — `make release` печатает агрегированный INFRA-HANDOFF-блок, и он уходит в хаб.
+Дальше — handoff в хаб `<org>/infra`: rollout — `make bump SVC=backend TAG=<v>` там (правит `BACKEND_TAG` в `.env` на VPS + force-recreate). Эти шаги не выполняются здесь — `make release` печатает агрегированный INFRA-HANDOFF-блок, и он уходит в хаб.
 
 ## Когда применять
 
@@ -75,7 +75,7 @@ make release VERSION=vX.Y.Z
 - действие инфра-стороны:
   - проект: в `<org>/infra` — `make bump SVC=backend TAG=<v>` (правит `BACKEND_TAG` в `.env` на VPS + force-recreate).
 
-Твоя роль после команды: **отдать этот блок в хаб `<org>/infra`** — пришёл агентом из хаба, блок входит в твой отчёт; прямой заход — покажи юзеру и попроси передать. `make bump`/`make ship`/`ssh` отсюда **не выполняются** — другой репо, другие креды.
+Твоя роль после команды: отдать этот блок в хаб `<org>/infra` — пришёл агентом из хаба, блок входит в твой отчёт; прямой заход — покажи юзеру и попроси передать. `make bump`/`make ship`/`ssh` отсюда не выполняются — другой репо, другие креды.
 
 ### Verify (в infra-репо, не здесь)
 
@@ -83,7 +83,7 @@ make release VERSION=vX.Y.Z
 
 ## Откат
 
-**Полностью в infra-репо** (этот репо не участвует — image в registry):
+Полностью в infra-репо (этот репо не участвует — image в registry):
 `make bump SVC=backend TAG=<предыдущий>`. Релиз с миграцией приложения — сначала `migrate down`
 образом откатываемого релиза, по разу на миграцию, затем `make bump` (`docs/reference/release.md`
 § Откат).

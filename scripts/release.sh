@@ -13,7 +13,7 @@
 # Деплой (make bump SVC=backend TAG=… — BACKEND_TAG в .env VPS) — в <client-org>/infra, НЕ здесь.
 #
 # Неинтерактивный запуск (нет TTY / EOF на prompt) → отмена (exit 1):
-# accidental release невозможен. Для CI-автоматизации: RELEASE_YES=1.
+# accidental release невозможен. Неинтерактивно, с явным согласием: RELEASE_YES=1.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

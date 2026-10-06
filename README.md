@@ -5,9 +5,8 @@
 ### Go HTTP-бэкенд со стандартами из коробки
 
 Шаблон Go-бэкенда экосистемы stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx,
-поверх [`golibinfra`](https://git.stit.tech/stit-core/golibinfra) (authn,
-outbox, brute-force, NATS, audit, logging). Структурные логи, тесты и релиз — встроены;
-вы пишете домены, не обвязку.
+поверх китов [`golibinfra`](https://git.stit.tech/stit-core/golibinfra). Структурные логи,
+тесты и релиз — встроены; вы пишете домены, не обвязку.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2563eb)](LICENSE)
 [![Часть stit](https://img.shields.io/badge/stit-открытые_шаблоны-6366f1)](https://git.stit.tech/stit-core/stit-public)
@@ -67,14 +66,13 @@ Module path, README, фундамент и удаление reference-домен
 - **БД** — pgx/v5 + sqlc (typed queries), golang-migrate.
 - **DI** — uber/fx. Один runtime-бинарь `cmd/api` (HTTP + outbox-drain + NATS-subs
   + jobs); `cmd/migrate` — отдельный image, init-контейнер.
-- **Платформа** — [`golibinfra`](https://git.stit.tech/stit-core/golibinfra):
-  structured logging, JWT/session authn, outbox, brute-force, NATS, audit, clock.
+- **Платформа** — [`golibinfra`](https://git.stit.tech/stit-core/golibinfra): HTTP и контракт
+  ошибок, Postgres и миграции, структурные логи, JWT и сессии, outbox и NATS JetStream, аудит,
+  brute-force, метрики и трейсы (OTLP), health-пробы, jobs, часы.
 - **DDD** — артефакты доменов в соседнем strategy-репо; маппинг в Go —
   [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md).
 - **Тесты** — unit (`-race`), integration (testcontainers), fuzz, mockery v3, e2e (pytest).
-- **Gate** — `make check` = fmt-check + vet + lint + migrations-check + test-int (юнит +
-  integration, нужен Docker) + build + gen-check + cover-check (покрытие юнит + integration ≥95%,
-  функций без тестов нет) (pre-push хук).
+- **Gate** — `make check` (его же гоняет pre-push хук), состав — [`CLAUDE.md`](CLAUDE.md) § Команды.
 
 ## Команды
 
@@ -82,7 +80,7 @@ Module path, README, фундамент и удаление reference-домен
 Полный гайд агента — [`CLAUDE.md`](CLAUDE.md); точка входа в сессию — `/smartdev`.
 
 ```bash
-make check        # полный gate перед push (fmt, vet, lint, тесты с integration, build, gen, миграции, coverage)
+make check        # гейт перед push (состав — CLAUDE.md § Команды)
 make gen          # регенерация sqlc, mockery и openapi.json
 make e2e          # поднять docker-стек → pytest → снести
 make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /release)
@@ -100,8 +98,8 @@ make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /r
 ## E2E
 
 Типизированный pytest-харнес `test/` поверх docker-compose стека
-(postgres/nats/migrate/api). Нужен Docker и `./.env.local`
-(`E2E_ADMIN_*`; шаблон — `.env.local.example`). Детали — `test/README.md`.
+(postgres/nats/migrate/api). Нужен Docker; `./.env.local` (`E2E_ADMIN_*`, шаблон —
+`.env.local.example`) опционален — без него креды seed-admin по умолчанию. Детали — `test/README.md`.
 
 ```bash
 make e2e          # весь набор

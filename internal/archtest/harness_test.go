@@ -74,18 +74,29 @@ var proseAllowlist = allowlist.List{}
 // hubTargets — цели make хаба <org>/infra: проза называет их, чтобы сказать, что здесь их нет.
 var hubTargets = []string{"bump", "ps", "ship"}
 
+// notRepoSkills — /имена прозы, которые не скиллы репо: встроенные команды Claude Code и скилл
+// соседнего <org>/strategy, куда проза отправляет проектировать домены.
+var notRepoSkills = []string{"clear", "code-review", "security-review", "domain-deep-dive"}
+
 var (
 	codeSpan    = regexp.MustCompile("(?s)```.*?```|`[^`\n]+`")
 	makeCall    = regexp.MustCompile(`\bmake\s+([a-z][a-z0-9-]*)`)
 	makeTarget  = regexp.MustCompile(`(?m)^([a-z][a-z0-9-]*):`)
 	goSymbol    = regexp.MustCompile(`\.[A-Z]\w*$`)
 	placeholder = regexp.MustCompile(`[<>{}*$\[\]|…]|NNNN|\.\.\.`)
+	slashName   = regexp.MustCompile(`^/([a-z][a-z0-9-]*)$`)
+	kebabName   = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+	// fileName — файл без пути (`Makefile`, `.env.example`, `errors.go`): есть в репо под этим именем.
+	fileName = regexp.MustCompile(`^(Makefile|LICENSE|Dockerfile(\.\w+)?|\.?\w[\w.-]*\.(md|go|sql|ya?ml|json|sh|py|toml|txt|mod|sum|example))$`)
+	// namedBy — слово перед `имя`: rule или правило — .claude/rules/<имя>.md, skill или скилл — скилл.
+	namedBy = regexp.MustCompile(`(?i)(^|\P{L})(rule|правил\p{L}*|skill|скилл\p{L}*)\s+$`)
 )
 
-// TestProseReferencesExist: make-цели и пути репо в коде прозы (CLAUDE.md, README, docs/,
-// .claude/rules и skills) есть в репо — иначе агент идёт по мёртвой ссылке. Репо — то,
-// что отслеживает git: локальное (test/.venv, неотслеживаемый файл) есть не в каждом клоне.
-// Плейсхолдеры (<d>, NNNN, *) — не ссылки; артефакт docs/stack/<kind>.md — по его шаблону.
+// TestProseReferencesExist: в коде прозы (CLAUDE.md, README, docs/, .claude/rules и skills) есть в репо
+// make-цели, пути и файлы без пути, скиллы (`/имя`, skill `имя`) и правила (rule `имя`) — иначе агент
+// идёт по мёртвой ссылке. Репо — то, что отслеживает git: локальное (test/.venv, неотслеживаемый файл)
+// есть не в каждом клоне. Плейсхолдеры (<d>, NNNN, *) — не ссылки; артефакт docs/stack/<kind>.md — по
+// его шаблону; /имя, которое не скилл, — путь контракта openapi.json или встроенная команда.
 func TestProseReferencesExist(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -96,38 +107,80 @@ func TestProseReferencesExist(t *testing.T) {
 		targets = append(targets, m[1])
 	}
 	files := trackedFiles(t, root)
-	repo := map[string]bool{} // файлы и каталоги (с "/" на конце) репо
+	repo := map[string]bool{}  // файлы и каталоги (с "/" на конце) репо
+	names := map[string]bool{} // имена файлов репо без пути
 	for _, f := range files {
 		repo[f] = true
+		names[path.Base(f)] = true
 		for d := path.Dir(f); d != "."; d = path.Dir(d) {
 			repo[d+"/"] = true
 		}
+	}
+	api := openAPIPaths(t, root)
+	skill := func(name string) bool {
+		return repo[".claude/skills/"+name+"/SKILL.md"] || slices.Contains(notRepoSkills, name)
 	}
 
 	var dead []string
 	for _, doc := range proseFiles(files) {
 		data, err := os.ReadFile(filepath.Join(root, doc))
 		require.NoError(t, err)
-		for _, span := range codeSpan.FindAllString(string(data), -1) {
+		text := string(data)
+		for _, loc := range codeSpan.FindAllStringIndex(text, -1) {
+			span := strings.Trim(text[loc[0]:loc[1]], "`")
 			for _, m := range makeCall.FindAllStringSubmatch(span, -1) {
 				if !slices.Contains(targets, m[1]) && !slices.Contains(hubTargets, m[1]) {
 					dead = append(dead, doc+": make "+m[1])
 				}
 			}
-			for _, word := range strings.Fields(strings.Trim(span, "`")) {
+			if m := namedBy.FindStringSubmatch(text[max(0, loc[0]-64):loc[0]]); m != nil && kebabName.MatchString(span) {
+				rule := strings.EqualFold(m[2], "rule") || strings.HasPrefix(strings.ToLower(m[2]), "правил")
+				if rule && !repo[".claude/rules/"+span+".md"] || !rule && !skill(span) {
+					dead = append(dead, doc+": "+strings.ToLower(m[2])+" "+span)
+				}
+			}
+			for _, word := range strings.Fields(span) {
 				ref := strings.TrimRight(strings.TrimLeft(word, `"'(`), `"'.,;:()`) // точка в начале — .claude
 				ref, _, _ = strings.Cut(ref, ":")
-				top, _, isPath := strings.Cut(ref, "/")
-				if placeholder.MatchString(ref) || !isPath || !repo[top+"/"] {
+				if placeholder.MatchString(ref) {
 					continue
 				}
-				if !inRepo(repo, goSymbol.ReplaceAllString(ref, "")) && !gitIgnored(t, root, ref) {
-					dead = append(dead, doc+": "+ref)
+				if m := slashName.FindStringSubmatch(ref); m != nil {
+					if !skill(m[1]) && !api[ref] {
+						dead = append(dead, doc+": "+ref)
+					}
+					continue
+				}
+				top, _, isPath := strings.Cut(ref, "/")
+				switch {
+				case !isPath && fileName.MatchString(ref):
+					if !names[ref] && !gitIgnored(t, root, ref) {
+						dead = append(dead, doc+": "+ref)
+					}
+				case isPath && repo[top+"/"]:
+					if !inRepo(repo, goSymbol.ReplaceAllString(ref, "")) && !gitIgnored(t, root, ref) {
+						dead = append(dead, doc+": "+ref)
+					}
 				}
 			}
 		}
 	}
-	proseAllowlist.Check(t, dead, "the prose points to a missing make target or to a path git does not track")
+	proseAllowlist.Check(t, dead, "the prose points to a missing make target, path, file, skill or rule")
+}
+
+// openAPIPaths — пути контракта API (openapi.json в корне репо).
+func openAPIPaths(t *testing.T, root string) map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "openapi.json"))
+	require.NoError(t, err)
+	var spec struct{ Paths map[string]json.RawMessage }
+	require.NoError(t, json.Unmarshal(data, &spec))
+	require.NotEmpty(t, spec.Paths, "openapi.json has no paths")
+	paths := map[string]bool{}
+	for p := range spec.Paths {
+		paths[p] = true
+	}
+	return paths
 }
 
 func inRepo(repo map[string]bool, ref string) bool {
@@ -143,13 +196,13 @@ func inRepo(repo map[string]bool, ref string) bool {
 // trackedFiles — файлы индекса git, которые есть в рабочем дереве: удалённый файл — уже не ссылка.
 func trackedFiles(t *testing.T, root string) []string {
 	t.Helper()
-	// --deduplicate: неразрешённый конфликт иначе идёт строкой на каждую стадию индекса.
-	cmd := exec.CommandContext(t.Context(), "git", "ls-files", "-z", "--deduplicate")
+	cmd := exec.CommandContext(t.Context(), "git", "ls-files", "-z")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	require.NoError(t, err, "git ls-files")
 	var files []string
-	for _, f := range strings.FieldsFunc(string(out), func(r rune) bool { return r == 0 }) {
+	// Неразрешённый конфликт идёт строкой на каждую стадию индекса — подряд, git ls-files сортирует пути.
+	for _, f := range slices.Compact(strings.FieldsFunc(string(out), func(r rune) bool { return r == 0 })) {
 		if _, err := os.Stat(filepath.Join(root, f)); err == nil {
 			files = append(files, f)
 		}

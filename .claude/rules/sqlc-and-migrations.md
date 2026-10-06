@@ -19,7 +19,7 @@ paths:
   последовательная четырёхзначная (`0001`…), имя snake_case (`0006_bruteforce_partial_index`).
   Парность+непрерывность enforce'ит `scripts/tools/migrations-check.sh` (шаг `make check`); он
   же не пускает пустой `down` и разрушительный `up` без маркера (ниже).
-- Каждая миграция **обратима** через `down`: он возвращает схему к состоянию до `up` (данные —
+- Каждая миграция обратима через `down`: он возвращает схему к состоянию до `up` (данные —
   нет: drop колонки откатывается её пересозданием). Держит лесенка `testkit.MigrationLadder` по
   источникам `cmd/migrate` в `make check` (`cmd/migrate/migrate_test.go`): up → down → up по каждой
   версии и откат источника до нуля со сверкой схемы. Миграция только данных схему не
@@ -37,7 +37,7 @@ paths:
 ## sqlc
 
 - Запросы пишешь сам в `internal/domain/<name>/infra/postgres/queries/<file>.sql`.
-  Сгенерированный `infra/postgres/db/` — **никогда руками**, только `make gen`.
+  Сгенерированный `infra/postgres/db/` — никогда руками, только `make gen`.
 - Аннотация обязательна: `-- name: <Method> :<one|many|exec|execrows>`.
   - `:one` — одна строка; отсутствие → `pgx.ErrNoRows`, маппь на sentinel (`ErrNotFound`).
   - `:many` — срез; пусто → пустой срез.

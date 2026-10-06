@@ -14,8 +14,8 @@ domain) — иначе теряешь живой образец. Удаляй в
 4. **Миграции** — `migrations/*` этих доменов: `0001_users.*` (таблицы `users`,
    `password_resets`, `email_verifications` — user+verification), `0002_auth.*` и
    `0005_drop_refresh_sessions.*` (`refresh_sessions`), `0003_email_verifications_idempotency.*` и
-   `0004_email_verifications_sent_at.*`. Удаляй и `.up.sql`, и
-   `.down.sql`. Свои миграции перенумеруй подряд с `0001` — `migrations-check` (шаг `make check`)
+   `0004_email_verifications_sent_at.*`. Удаляй и `*.up.sql`, и
+   `*.down.sql`. Свои миграции перенумеруй подряд с `0001` — `migrations-check` (шаг `make check`)
    требует непрерывной нумерации; прод-БД у форка на этом шаге ещё нет. Если свои миграции
    опираются на общие объекты из `0001_users` (`CREATE EXTENSION pgcrypto`, функция
    `set_updated_at()`), перенеси их в первую свою миграцию.

@@ -18,7 +18,7 @@ init-контейнер. Где живут SQL.>
 ## Kit-owned tables
 <Таблицы, схему которых держит golibinfra-kit, а не `migrations/` этого репо:
 `outbox_<domain>` (outboxkit `TableMigrations`), `audit_log` (auditkit), `bruteforce_*`
-(bruteforcekit). Не дублировать CREATE TABLE — источники kit'ов (`pgstore.Migrations`) в
+(bruteforcekit), `authn_sessions` (authnkit/session). Не дублировать CREATE TABLE — источники kit'ов (`pgstore.Migrations`) в
 `cmd/migrate`, таблица версий на источник.>
 
 ## Connection pool

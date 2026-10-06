@@ -38,7 +38,8 @@
 ### 6. runtime → `docs/stack/runtime.md` (последним)
 - композиция `cmd/api/main.go`: `fx.New(...)` с нужными модулями (домены + platform + kit'ы).
 - регистрация subscribers/jobs (то, что messaging/auth подняли).
-- shutdown-хуки (graceful drain outbox, close pool).
+- порядок и бюджет остановки (`fx.StopTimeout`, `checkStopBudget`): хуки остановки — в китах, порядок —
+  `docs/reference/architecture.md § fx`.
 - это роллап: то, что предыдущие kinds объявили, здесь собирается в один бинарь.
 
 ## Принцип

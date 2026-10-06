@@ -1,9 +1,8 @@
 # go-backend-template — гайд для агентов
 
-Шаблон Go HTTP-бэкенда stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + `golibinfra`
-(logging, authn, outbox, brute-force, NATS, audit, clock).
+Шаблон Go HTTP-бэкенда stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx + киты `golibinfra`.
 
-Этот файл — **ядро (always-on) + роутер**. Детали — в `docs/`, контекстные правила — в
+Этот файл — ядро (always-on) + роутер. Детали — в `docs/`, контекстные правила — в
 `.claude/rules/`, процедуры — в `.claude/skills/`. Карта документации — `docs/README.md`.
 Правило грузится, когда файл под его `paths:` прочитан инструментом Read; чтение через Bash и
 запись через Write его не грузят — перед правкой открой файл или само правило через Read.
@@ -41,9 +40,9 @@ Claim «готово» и коммит — только когда:
 
 ## Проектирование первично, код вторичен
 
-DDD-артефакты доменов — в **соседнем strategy-репо** (`../strategy`, форк
+DDD-артефакты доменов — в соседнем strategy-репо (`../strategy`, форк
 `business-strategy-template`): `docs/projects/<slug>/services/<svc>/domains/<ctx>/`; артефакты
-стека — `docs/stack/`. Это **source of truth**: код пишется по ним, не наоборот.
+стека — `docs/stack/`. Это source of truth: код пишется по ним, не наоборот.
 `auth`/`user`/`verification` — code-only референс-примеры (изучить, потом удалить под свой проект).
 
 ## Команды
@@ -60,7 +59,7 @@ integration, нужен Docker) + build + gen-check + cover-check (покрыт�
 | Тема | Где |
 |---|---|
 | Архитектура, слои, ports/adapters, события, non-goals | `docs/reference/architecture.md` + rule `domain-architecture` |
-| Логирование (структурные логи в stdout, `logkit.Logger`) | CLAUDE.md § Стиль кода + артефакт `docs/stack/observability.md` (форма — `docs/stack/_templates/observability.md`) |
+| Логирование (`logkit.Logger`, без токенов и PII) | CLAUDE.md § Стиль кода + rule `domain-architecture`; артефакт стека — `docs/stack/_templates/observability.md` |
 | Release (образы, handoff, откат) | `docs/reference/release.md` + skill `/release` |
 | Обновления: golibinfra, обвязка шаблона (`.template/`) | skill `/upgrade` + `docs/contributing.md § Версия обвязки` |
 | Экосистема, контракт с `<org>/infra` | `docs/reference/ecosystem.md` |
@@ -92,9 +91,8 @@ integration, нужен Docker) + build + gen-check + cover-check (покрыт�
 - Комментарии — только WHY (rule `comments`).
 - **Не городить велосипеды**: нужен примитив — сначала `README.md` golibinfra § Пакеты версии из
   `go.mod` (каталог — `go list -m -f '{{.Dir}}' git.stit.tech/stit-core/golibinfra`), затем README
-  кита. Generic util, HTTP-клиент, middleware, любой «kit» — в `golibinfra`; нет нужного — PR туда и
-  строка в `.claude/plans/backlog.md`, временный shim — только с явным OK юзера
-  (`docs/reference/architecture.md § Граница с golibinfra`).
+  кита. Generic util, HTTP-клиент, middleware, любой «kit» — в `golibinfra`; нет нужного — план в
+  golibinfra → тег → bump (`docs/reference/architecture.md § Граница с golibinfra`).
 
 ## Git workflow
 
@@ -110,7 +108,7 @@ integration, нужен Docker) + build + gen-check + cover-check (покрыт�
 ### Делать всегда
 - **Тронул инфра-поверхность** (required env или секрет; миграция с эффектом — destructive, lock,
   backfill, extension; cross-service subject; breaking API; новый сетевой порт; runtime-dep в
-  `go.mod`) → до коммита **INFRA-HANDOFF**-блок: в отчёт хабу (прямой заход — юзеру, чтобы
+  `go.mod`) → до коммита INFRA-HANDOFF-блок: в отчёт хабу (прямой заход — юзеру, чтобы
   передал) и тем же коммитом в накопитель `.claude/plans/handoff.md` (rule `infra-impact`, skill
   `/infra-handoff`).
 - `make gen` после правки `queries/`, `migrations/`, интерфейсов из `.mockery.yml` или HTTP-операций.
@@ -137,5 +135,5 @@ integration, нужен Docker) + build + gen-check + cover-check (покрыт�
 
 ## Forward-only
 
-Любой текст в репо описывает **только текущее состояние** — не «было/стало». История — в
+Любой текст в репо описывает только текущее состояние — не «было/стало». История — в
 `git log` + Conventional Commits. Полное правило — `.claude/rules/forward-only.md`.

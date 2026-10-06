@@ -8,10 +8,10 @@ status: draft
 # Dependencies — зависимости и ёмкость
 
 ## golibinfra kits
-<Какие kit'ы golibinfra подключены и зачем (таблица `| Kit | Зачем |`). В `cmd/api` шаблона wired: telemetry, httpkit, pgkit, authnkit, outboxkit, natskit, bruteforcekit, auditkit, clockkit, logkit, healthkit, timerkit, bizmetric; полный набор — пакеты в корне golibinfra нужной версии (storagekit, httpclient, …). Версия golibinfra.>
+<Какие kit'ы golibinfra подключены и зачем (таблица `| Kit | Зачем |`). В графе `cmd/api` шаблона: telemetry, logkit, pgkit, natskit, httpkit, timerkit, authnkit (с session), bruteforcekit, auditkit, clockkit, outboxkit, healthkit; в коде доменов — ещё bizmetric, idkit, ptrkit; полный набор — README golibinfra § Пакеты нужной версии (storagekit, httpclient, …). Версия golibinfra.>
 
 ## Что НЕ подключено
-<Kit'ы, доступные в golibinfra, но НЕ wired в `cmd/api/main.go` — их env'ы runtime игнорирует, de-template их prune'ит. Перечисли (напр. natskit/outboxkit/cachekit/httpclient/flagkit), чтобы не было ложных ожиданий «эта env читается».>
+<Kit'ы, доступные в golibinfra, но НЕ wired в `cmd/api/main.go` — их env'ы runtime игнорирует, de-template их prune'ит. Перечисли (напр. cachekit/flagkit/storagekit/httpclient), чтобы не было ложных ожиданий «эта env читается».>
 
 ## External runtime deps
 <Внешние runtime-зависимости, каждая — инфра-поверхность (INFRA-HANDOFF). Инфраструктурные: Postgres (обяз.), NATS, Redis, S3/MinIO — что реально используется. Внешние backend'ы/интеграции (геокодеры, платёжки, провайдеры): опиши как интеграцию — что/зачем, env-ключи, режим отказа (какой HTTP-код отдаём), retry/timeout, quota/лимиты, как менять провайдера.>
