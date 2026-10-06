@@ -14,8 +14,8 @@ blocked-by: —
 ## Контекст
 - **Планы фаз.** Шаблон: `fix-reference-code.md` → `repair-harness.md` (в
   `.claude/plans/`). golibinfra (`../golibinfra/.claude/plans/`): партия 2 → v1.3.0 —
-  `harden-gate-defaults.md`, затем `harden-authn-release.md`; партия 3 → v1.4.0 — строки
-  `backlog.md` golibinfra с триггером «партия 3». Сводка базового аудита китов —
+  `harden-gate-defaults.md` (закрыт), затем `harden-authn-release.md`; партия 3 → v1.4.0 —
+  `harden-kits-contracts.md`, затем `harden-tests-archkit-release.md`. Сводка базового аудита китов —
   `kits-audit/summary.md` в материалах.
 - **Материалы** — `/home/mm/.cache/stit-audit-program/`: `audit-report.html` (копия отчёта аудита;
   оригинал — https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE), `fx-audit.md` и `fxexp/`,
