@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -201,6 +202,20 @@ type brokenHasher struct{ authntest.DeterministicHasher }
 
 func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
 
+// countingHasher — детерминированный хэшер, который считает проверки пароля, настоящие и холостые: у authntest
+// такого фейка нет.
+type countingHasher struct {
+	authntest.DeterministicHasher
+	verified, dummies atomic.Int32
+}
+
+func (h *countingHasher) Verify(ctx context.Context, plain, encoded string) (bool, error) {
+	h.verified.Add(1)
+	return h.DeterministicHasher.Verify(ctx, plain, encoded)
+}
+
+func (h *countingHasher) VerifyDummy(context.Context) { h.dummies.Add(1) }
+
 // failingAudit — журнал аудита, запись в который не проходит: у audittest такого фейка нет.
 type failingAudit struct{}
 
@@ -383,6 +398,43 @@ func TestLogin(t *testing.T) {
 	})
 }
 
+// Каждая учтённая попытка входа стоит одной проверки пароля: у неизвестного адреса и заблокированного —
+// холостой, поэтому время ответа не выдаёт, есть ли учётная запись.
+func TestLogin_OnePasswordCheckPerAttempt(t *testing.T) {
+	t.Parallel()
+	blocked := alice()
+	blocked.CanLogin = false
+	unknown := func(t *testing.T) *mocks.MockUserReader {
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(nil, auth.ErrUserNotFound).Once()
+		return users
+	}
+	tests := []struct {
+		name              string
+		users             func(t *testing.T) *mocks.MockUserReader
+		password          string
+		succeeded         bool
+		verified, dummies int32
+	}{
+		{"unknown address", unknown, "pass1234", false, 0, 1},
+		{"blocked", func(t *testing.T) *mocks.MockUserReader { return found(t, blocked) }, "pass1234", false, 0, 1},
+		{"wrong password", func(t *testing.T) *mocks.MockUserReader { return found(t, alice()) }, "wrong", false, 1, 0},
+		{"right password", func(t *testing.T) *mocks.MockUserReader { return signIn(t, alice()) }, "pass1234", true, 1, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := &countingHasher{}
+			f := newUC(t, withUsers(tc.users(t)), withGuard(loginGuard(t, "a@b.com", tc.succeeded)), withHasher(h))
+
+			_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: tc.password})
+			require.Equal(t, tc.succeeded, err == nil, "login error: %v", err)
+			require.Equal(t, tc.verified, h.verified.Load(), "password checks")
+			require.Equal(t, tc.dummies, h.dummies.Load(), "dummy password checks")
+		})
+	}
+}
+
 // Access-токен не подписан — входа нет: ошибка сервиса, а не «неверный пароль», сессии и аудита входа нет.
 func TestLogin_AccessNotIssued(t *testing.T) {
 	t.Parallel()
@@ -454,20 +506,28 @@ func TestLogin_LockFailure(t *testing.T) {
 	require.Zero(t, f.sessions.Active("u1"))
 }
 
-// Обновление ротирует токен в той же сессии: прежний токен погашен, новый — следующий в цепочке.
+// Обновление ротирует токен в той же сессии: прежний токен погашен, новый — следующий в цепочке; access-токен
+// несёт роль из учётной записи, а не роль по умолчанию.
 func TestRefresh(t *testing.T) {
 	t.Parallel()
-	f := newUC(t, withUsers(canLogin(t)))
-	first := f.issue(t, "u1")
+	for _, role := range []identity.Role{identity.RoleClient, identity.RoleAdmin} {
+		t.Run(string(role), func(t *testing.T) {
+			t.Parallel()
+			users := mocks.NewMockUserReader(t)
+			users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", Email: "a@b.com", CanLogin: true, Role: role}, nil).Once()
+			f := newUC(t, withUsers(users))
+			first := f.issue(t, "u1")
 
-	out, err := f.uc.Refresh(identitytest.Anon(), first.Value)
-	require.NoError(t, err)
-	require.Equal(t, "access.u1.client", out.AccessToken)
-	require.NotEqual(t, first.Value, out.RefreshToken)
-	next, err := f.sessions.Rotate(context.Background(), out.RefreshToken)
-	require.NoError(t, err, "the new refresh token continues the session")
-	require.Equal(t, first.SessionID, next.SessionID)
-	require.Empty(t, f.audit.Entries())
+			out, err := f.uc.Refresh(identitytest.Anon(), first.Value)
+			require.NoError(t, err)
+			require.Equal(t, "access.u1."+string(role), out.AccessToken)
+			require.NotEqual(t, first.Value, out.RefreshToken)
+			next, err := f.sessions.Rotate(context.Background(), out.RefreshToken)
+			require.NoError(t, err, "the new refresh token continues the session")
+			require.Equal(t, first.SessionID, next.SessionID)
+			require.Empty(t, f.audit.Entries())
+		})
+	}
 }
 
 // Повтор погашенного токена — его предъявил клиент или укравший: сессия закрыта целиком, вместе со
