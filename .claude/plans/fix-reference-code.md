@@ -260,19 +260,20 @@ prod-дефолты, понятный контракт ошибок API, тес�
     Dockerfile нет — интервалы задаёт деплой.
 - S9 (подробно — тела коммитов): auth берёт `session.Store` кита напрямую (`rootLibs`), тесты — фейк
   `sessiontest`; user — свой порт `Sessions` (`RevokeAll`, строгий мок с `pgkit.InTx`). Отзыв — смена и сброс
-  пароля (`user.Trusted.UpdatePassword`), блокировка (`Update`), удаление, `seed-admin`; смены роли в API нет.
-  Вход открывает сессию под `FOR SHARE` строки пользователя и сверяет пароль, роль и статус (B1 валидатора
-  E). Refresh — `Rotate`, затем пользователь: удалённый или заблокированный — 401, токен закрыт. Выход без
-  аудита — бэклог `logout-audit`. Гард вне dev — `JWT_AUDIENCE`, бюджет остановки — `checkStopBudget`; IP в
-  тестах — `identitytest` (бэклог `clientip-test-setter`); лесенка — `testkit.MigrationLadder`.
+  пароля (`user.Trusted.UpdatePassword`), блокировка (`Update`), удаление, `seed-admin`; вход открывает сессию
+  под `FOR SHARE` строки пользователя и сверяет пароль, роль и статус (B1 валидатора E); refresh — `Rotate`,
+  затем пользователь (удалённый или заблокированный — 401, токен закрыт). Выход без аудита — бэклог
+  `logout-audit`; гард вне dev — `JWT_AUDIENCE`, бюджет остановки — `checkStopBudget`; IP в тестах — `identitytest`.
 - S13: policy в тестах usecase — настоящая (мока `Authorizer` нет), порты — строгие моки, выпуск access-токена
-  — фейк чистого порта (строгий мок закрепил бы порядок вызовов); контракт события — у потребителя (событие
+  — фейк чистого порта (токен в результате, а не факт вызова); контракт события — у потребителя (событие
   поставщика в JSON → `Register`); `main()` — перезапуск тест-бинаря с пустой командной строкой, гейт не идёт
   с `API_TEST_MAIN_ARGS`; путь писем держит `TestBoot` (TST-08); сессии кита через `user.Sessions` — откат смены.
 - S15 — мутации аудита на текущем коде: M04, M05 — `pkg/policy.PasswordStrong`; M09 — `Guard.Attempt`; M10 —
   refresh ищет пользователя по `next.Subject` (владельца отдаёт хранилище кита); M11 — `Logout` без `Revoke`;
-  M15 — `mapUserErr`; M20 — 403 `authgate.ForbiddenRule`; M27 — `ParseAccess`; M29 — XFF разбирает httpkit, в
-  шаблоне — граф с `TrustProxyHops > 0`; M30 — `CanLogin` адаптера; M31 — блокировка адаптера guard.
+  M15 — `mapUserErr`; M18 — `%w` в usecase auth (`rotate session`, `open session`, `load user`); M20 — 403
+  `authgate.ForbiddenRule`; M27 — `ParseAccess`; M28 — `tokenFromRequest`; M29 — XFF разбирает httpkit, в
+  шаблоне — граф с `TrustProxyHops` 1–3; M30 — `CanLogin` адаптера; M31 — блокировка адаптера guard; M32 —
+  `SameSite` в `authCookie`, `expiredCookie`.
 
 ## Handoff
 - API reference-доменов меняется (префиксы DTO, `data`, problem+json с `code`, коды и ошибки в OpenAPI) —
@@ -295,5 +296,5 @@ prod-дефолты, понятный контракт ошибок API, тес�
   (`HTTP_SHUTDOWN_*`, `stop_grace_period` ≥ 35s), стримы публикаторов, дефолты китов, образы, `.v2`, OTel.
 
 ## Где мы сейчас
-S1–S12 и часть 1 S13 приняты (отчёты A–E); часть 2 S13 (auth, authgate) и S14 (покрытие) сделаны. Дальше —
-валидатор этапа (часть 2 S13 и S14), затем S15 (повтор 34 мутаций и D02) отдельным агентом; AC9 закрывает S15.
+S1–S14 приняты (отчёты A–F); остатки валидатора F закрыты (`30b00ab`…). Дальше — S15 (повтор 34 мутаций и D02)
+отдельным агентом; AC9 закрывает S15.

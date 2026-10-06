@@ -99,8 +99,8 @@ git. Границы домена держит `internal/archtest` без пра�
 Модуль растёт провайдерами: адаптеры портов (`new<Provider>Adapter` из `adapters.go`, `infra/<kit>` —
 для китов), `<name>.NewTrusted` — когда домен нужен другим, `outbox.Providers` домена-публикатора,
 NATS-handler. Порт в графе — тип результата провайдера, `fx.As` не нужен (architecture.md § fx).
-Новый интерфейс из `usecase.go` или `delivery/*` — в `.mockery.yml`, затем `make gen`; policy-порт
-`Authorizer` мока не получает — тесты берут настоящую policy.
+Новый интерфейс из `usecase.go` или `delivery/*` — в `.mockery.yml`, затем `make gen`; мока не получают
+policy-порт `Authorizer` (тесты берут настоящую policy) и порт с рукописным фейком (rule `tests-pipeline`).
 
 ### 5. Готово и коммит
 
