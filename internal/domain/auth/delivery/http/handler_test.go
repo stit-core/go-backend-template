@@ -1,10 +1,13 @@
 package http_test
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -23,52 +26,83 @@ import (
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
 )
 
+// setup — API auth с cookie по COOKIE_SECURE=true, как вне dev.
 func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
-		authhttp.Register(api, authhttp.NewHandler(uc, authgate.CookieConfig{Secure: false}))
+		authhttp.Register(api, authhttp.NewHandler(uc, authgate.CookieConfig{Secure: true}))
 	}, handlertest.WithAuth(identitytest.Extract))
 }
 
-func setCookieNames(resp http.Header) []string {
-	out := []string{}
-	for _, line := range resp.Values("Set-Cookie") {
-		if i := strings.Index(line, "="); i > 0 {
-			out = append(out, line[:i])
-		}
+// callerIs — ctx usecase несёт identity вызывающего: по ней решает policy.
+func callerIs(userID string) any {
+	return mock.MatchedBy(func(ctx context.Context) bool {
+		id, ok := identity.From(ctx)
+		return ok && id.UserID == userID
+	})
+}
+
+// cookies — cookie из Set-Cookie ответа по имени.
+func cookies(resp *httptest.ResponseRecorder) map[string]*http.Cookie {
+	out := map[string]*http.Cookie{}
+	for _, c := range (&http.Response{Header: resp.Header()}).Cookies() {
+		out[c.Name] = c
 	}
 	return out
+}
+
+// requireSession — ответ выдал cookie сессии с этими токенами и Secure по конфигу.
+func requireSession(t *testing.T, resp *httptest.ResponseRecorder, access, refresh string) {
+	t.Helper()
+	got := cookies(resp)
+	require.Len(t, got, 2)
+	for name, value := range map[string]string{authgate.CookieAccess: access, authgate.CookieRefresh: refresh} {
+		require.Contains(t, got, name)
+		require.Equal(t, value, got[name].Value, name)
+		require.True(t, got[name].Secure, "%s follows COOKIE_SECURE", name)
+	}
+}
+
+// userView — пользователь в ответе входа глазами клиента; поле вне него — провал разбора (хэш пароля).
+type userView struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+	Role  string `json:"role"`
+}
+
+func data(t *testing.T, resp *httptest.ResponseRecorder) userView {
+	t.Helper()
+	var body struct {
+		Data json.RawMessage `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	dec := json.NewDecoder(bytes.NewReader(body.Data))
+	dec.DisallowUnknownFields()
+	var v userView
+	require.NoError(t, dec.Decode(&v))
+	return v
 }
 
 func TestLogin_HappyPath(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Login(mock.Anything, mock.Anything).
-		Return(&auth.LoginOutput{AccessToken: "a", RefreshToken: "r", User: &auth.User{ID: "u1", Email: "a@b.com", Name: "Alice", Role: identity.RoleClient}}, nil)
+	uc.EXPECT().Login(mock.Anything, &auth.LoginInput{Email: "a@b.com", Password: "pass1234"}).Return(&auth.LoginOutput{
+		AccessToken: "access-token", RefreshToken: "refresh-token",
+		User: &auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", Name: "Alice", CanLogin: true, Role: identity.RoleClient, Version: 3},
+	}, nil).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/login", strings.NewReader(`{"email":"a@b.com","password":"pass1234"}`))
 	handlertest.AssertStatus(t, resp, http.StatusOK)
-	require.ElementsMatch(t, []string{authgate.CookieAccess, authgate.CookieRefresh}, setCookieNames(resp.Header()))
-	var body struct {
-		Data struct {
-			ID    string `json:"id"`
-			Email string `json:"email"`
-			Name  string `json:"name"`
-			Role  string `json:"role"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
-	require.Equal(t, "u1", body.Data.ID, "the user goes in the data envelope")
-	require.Equal(t, "a@b.com", body.Data.Email)
-	require.Equal(t, "Alice", body.Data.Name)
-	require.Equal(t, "client", body.Data.Role)
+	require.Equal(t, userView{ID: "u1", Email: "a@b.com", Name: "Alice", Role: "client"}, data(t, resp), "the user goes in the data envelope")
+	requireSession(t, resp, "access-token", "refresh-token")
 }
 
 func TestLogin_InvalidCredentials(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Login(mock.Anything, mock.Anything).Return(nil, auth.ErrInvalidCredentials)
+	uc.EXPECT().Login(mock.Anything, mock.Anything).Return(nil, auth.ErrInvalidCredentials).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/login", strings.NewReader(`{"email":"a@b.com","password":"x"}`))
@@ -79,7 +113,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 func TestLogin_AccountLocked(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Login(mock.Anything, mock.Anything).Return(nil, &auth.LockedError{Wait: 90 * time.Second})
+	uc.EXPECT().Login(mock.Anything, mock.Anything).Return(nil, &auth.LockedError{Wait: 90 * time.Second}).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/login", strings.NewReader(`{"email":"a@b.com","password":"x"}`))
@@ -90,19 +124,19 @@ func TestLogin_AccountLocked(t *testing.T) {
 func TestRefresh_HappyPath(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Refresh(mock.Anything, "old.refresh.jwt").
-		Return(&auth.LoginOutput{AccessToken: "new.a", RefreshToken: "new.r", User: &auth.User{ID: "u1"}}, nil)
+	uc.EXPECT().Refresh(mock.Anything, "old-refresh").
+		Return(&auth.LoginOutput{AccessToken: "new-access", RefreshToken: "new-refresh", User: &auth.User{ID: "u1"}}, nil).Once()
 	api := setup(t, uc)
 
-	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=old.refresh.jwt")
+	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=old-refresh")
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
-	require.ElementsMatch(t, []string{authgate.CookieAccess, authgate.CookieRefresh}, setCookieNames(resp.Header()))
+	require.Empty(t, resp.Body.String())
+	requireSession(t, resp, "new-access", "new-refresh")
 }
 
 func TestRefresh_NoCookie(t *testing.T) {
 	t.Parallel()
-	uc := mocks.NewMockUsecase(t) // uc.Refresh не должен вызываться
-	api := setup(t, uc)
+	api := setup(t, mocks.NewMockUsecase(t))
 
 	resp := api.Post("/api/auth/refresh", strings.NewReader(""))
 	handlertest.AssertAPIError(t, resp, http.StatusUnauthorized, "AUTH_REFRESH_EXPIRED")
@@ -111,10 +145,10 @@ func TestRefresh_NoCookie(t *testing.T) {
 func TestRefresh_Expired(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Refresh(mock.Anything, mock.Anything).Return(nil, auth.ErrRefreshExpired)
+	uc.EXPECT().Refresh(mock.Anything, "expired").Return(nil, auth.ErrRefreshExpired).Once()
 	api := setup(t, uc)
 
-	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=expired.jwt")
+	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=expired")
 	handlertest.AssertAPIError(t, resp, http.StatusUnauthorized, "AUTH_REFRESH_EXPIRED")
 }
 
@@ -122,7 +156,7 @@ func TestRefresh_Expired(t *testing.T) {
 func TestRefresh_Invalid(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Refresh(mock.Anything, "broken").Return(nil, auth.ErrRefreshInvalid)
+	uc.EXPECT().Refresh(mock.Anything, "broken").Return(nil, auth.ErrRefreshInvalid).Once()
 	api := setup(t, uc)
 
 	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=broken")
@@ -132,47 +166,78 @@ func TestRefresh_Invalid(t *testing.T) {
 func TestRefresh_Reused(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Refresh(mock.Anything, mock.Anything).Return(nil, auth.ErrRefreshReused)
+	uc.EXPECT().Refresh(mock.Anything, "reused").Return(nil, auth.ErrRefreshReused).Once()
 	api := setup(t, uc)
 
-	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=reused.jwt")
+	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=reused")
 	handlertest.AssertAPIError(t, resp, http.StatusUnauthorized, "AUTH_REFRESH_REUSED")
+}
+
+// requireLoggedOut — ответ стирает обе cookie сессии в браузере.
+func requireLoggedOut(t *testing.T, resp *httptest.ResponseRecorder) {
+	t.Helper()
+	got := cookies(resp)
+	require.Len(t, got, 2)
+	for _, name := range []string{authgate.CookieAccess, authgate.CookieRefresh} {
+		require.Contains(t, got, name)
+		require.Empty(t, got[name].Value, name)
+		require.Negative(t, got[name].MaxAge, "%s is dropped by the browser", name)
+		require.True(t, got[name].Secure, "%s follows COOKIE_SECURE", name)
+	}
 }
 
 func TestLogout_WithCookie(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Logout(mock.Anything, "refresh.jwt").Return(nil)
+	uc.EXPECT().Logout(mock.Anything, "refresh-token").Return(nil).Once()
 	api := setup(t, uc)
 
-	resp := api.Do(http.MethodPost, "/api/auth/logout", "Cookie: refresh_token=refresh.jwt")
+	resp := api.Do(http.MethodPost, "/api/auth/logout", "Cookie: refresh_token=refresh-token")
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
-
-	cookies := setCookieNames(resp.Header())
-	require.Contains(t, cookies, authgate.CookieAccess)
-	require.Contains(t, cookies, authgate.CookieRefresh)
+	requireLoggedOut(t, resp)
 }
 
+// Выход без cookie — тоже выход: usecase не зовётся (строгий мок), cookie стираются.
 func TestLogout_NoCookie(t *testing.T) {
 	t.Parallel()
-	uc := mocks.NewMockUsecase(t) // uc.Logout не должен вызываться
-	api := setup(t, uc)
+	api := setup(t, mocks.NewMockUsecase(t))
 
 	resp := api.Post("/api/auth/logout", strings.NewReader(""))
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
+	requireLoggedOut(t, resp)
 }
 
 // 5xx — без причины: клиенту код и request_id, причина — в лог сервера с тем же request_id.
 func TestLogout_StoreFailure(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Logout(mock.Anything, "refresh.jwt").Return(errors.New("get refresh session: connection refused"))
+	uc.EXPECT().Logout(mock.Anything, "refresh-token").Return(errors.New("revoke session: connection refused")).Once()
 	api := setup(t, uc)
 
-	resp := api.Do(http.MethodPost, "/api/auth/logout", "Cookie: refresh_token=refresh.jwt")
+	resp := api.Do(http.MethodPost, "/api/auth/logout", "Cookie: refresh_token=refresh-token")
 	handlertest.AssertAPIError(t, resp, http.StatusInternalServerError, "INTERNAL")
 	require.Empty(t, handlertest.DecodeAPIError(t, resp).Detail)
 	require.NotContains(t, resp.Body.String(), "connection refused")
+}
+
+func TestChangePassword_HappyPath(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().ChangePassword(callerIs("u1"), "u1", "old-password", "new-password1").Return(nil).Once()
+	api := setup(t, uc)
+
+	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password", strings.NewReader(changePasswordBody("new-password1")))
+	handlertest.AssertStatus(t, resp, http.StatusNoContent)
+	require.Empty(t, resp.Body.String())
+}
+
+// Операция под Security: запрос без сессии отвечает 401 до usecase — строгий мок без ожиданий.
+func TestChangePassword_Unauthenticated(t *testing.T) {
+	t.Parallel()
+	api := setup(t, mocks.NewMockUsecase(t))
+
+	resp := api.Post("/api/auth/change-password", strings.NewReader(changePasswordBody("new-password1")))
+	handlertest.AssertAPIError(t, resp, http.StatusUnauthorized, "UNAUTHORIZED")
 }
 
 func TestChangePassword_Errors(t *testing.T) {
@@ -191,7 +256,7 @@ func TestChangePassword_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			uc := mocks.NewMockUsecase(t)
-			uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", mock.Anything).Return(tc.err).Once()
+			uc.EXPECT().ChangePassword(callerIs("u1"), "u1", "old-password", mock.Anything).Return(tc.err).Once()
 			api := setup(t, uc)
 
 			resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",
@@ -219,7 +284,7 @@ func TestChangePassword_WrongOldPassword(t *testing.T) {
 func TestChangePassword_WeakPassword(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", mock.Anything).Return(auth.ErrWeakPassword)
+	uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", mock.Anything).Return(auth.ErrWeakPassword).Once()
 	api := setup(t, uc)
 
 	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",
