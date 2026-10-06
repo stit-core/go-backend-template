@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -197,7 +198,27 @@ func TestSessions(t *testing.T) {
 		require.Zero(t, openSessions(t, db, erinID), "the reuse closed the session, the winner's token included")
 	})
 
+	// Пароль и закрытие сессий — одна транзакция: user закрывает их своим портом Sessions на хранилище кита,
+	// и сбой закрытия откатывает смену — прежний пароль и сессия живы.
 	const newPassword = "new-password123"
+	t.Run("a failed revocation rolls back the password change", func(t *testing.T) {
+		const frank = "frank@example.com"
+		frankID := api.register(frank)
+		c := api.login(frank, sessionPassword)
+		_, err := db.Exec(t.Context(), `ALTER TABLE authn_sessions RENAME TO authn_sessions_offline`)
+		require.NoError(t, err)
+		status, _, _ := api.call(http.MethodPost, "/api/auth/change-password",
+			`{"user_id":"`+frankID+`","old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, c)
+		_, err = db.Exec(t.Context(), `ALTER TABLE authn_sessions_offline RENAME TO authn_sessions`)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusInternalServerError, status)
+
+		require.Equal(t, 1, openSessions(t, db, frankID), "the session outlives the failed change")
+		status, _ = api.refresh(c)
+		require.Equal(t, http.StatusNoContent, status)
+		api.login(frank, sessionPassword)
+	})
+
 	t.Run("password change closes every session", func(t *testing.T) {
 		first, second := api.login(alice, sessionPassword), api.login(alice, sessionPassword)
 		status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
@@ -283,10 +304,11 @@ func loginCookie(ctx context.Context, api sessionAPI, email, password string) (i
 }
 
 // Вход старым паролем, который идёт в момент смены пароля, сессии не получает: проверка пароля долгая
-// (Argon2id), и сессия, открытая после RevokeAll смены, пережила бы её. Входы крутятся до и после смены;
-// каждый, ответивший 200 после смены, обязан получить уже закрытую сессию.
+// (Argon2id), и сессия, открытая после RevokeAll смены, пережила бы её. Входы крутятся до и после смены:
+// гонка случилась (вход начался до ответа смены и кончился после него), 5xx нет, ни один вход, ответивший
+// 200 после смены, не держит живую сессию, и открытых сессий пользователя после смены нет.
 func TestSessions_LoginDuringPasswordChange(t *testing.T) {
-	serviceEnv(t)
+	pg := serviceEnv(t)
 	// Все запросы теста — с одного IP: лимитер httpkit не должен глушить гонку.
 	t.Setenv("HTTP_RATE_LIMIT_RPS", "100000")
 	t.Setenv("HTTP_RATE_LIMIT_BURST", "100000")
@@ -302,6 +324,7 @@ func TestSessions_LoginDuringPasswordChange(t *testing.T) {
 
 	var (
 		stop, changed atomic.Bool
+		straddled     atomic.Int64 // входы, начатые до ответа смены и законченные после него
 		mu            sync.Mutex
 		late          []string // refresh-cookie входов старым паролем, ответивших 200 после смены
 		errs          []error
@@ -310,12 +333,19 @@ func TestSessions_LoginDuringPasswordChange(t *testing.T) {
 	for range 4 {
 		wg.Go(func() {
 			for !stop.Load() {
+				before := !changed.Load()
 				status, refresh, err := loginCookie(t.Context(), api, email, sessionPassword)
+				after := changed.Load()
+				if before && after {
+					straddled.Add(1)
+				}
 				mu.Lock()
 				switch {
 				case err != nil:
 					errs = append(errs, err)
-				case status == http.StatusOK && changed.Load():
+				case status >= http.StatusInternalServerError:
+					errs = append(errs, fmt.Errorf("login answered %d", status))
+				case status == http.StatusOK && after:
 					late = append(late, refresh)
 				}
 				mu.Unlock()
@@ -332,6 +362,8 @@ func TestSessions_LoginDuringPasswordChange(t *testing.T) {
 	wg.Wait()
 
 	require.NoError(t, errors.Join(errs...))
+	require.Positive(t, straddled.Load(), "the race happened: old-password logins in flight across the change")
+	require.Zero(t, openSessions(t, pg.Pool(t), id), "no session of the old password outlives the change")
 	for _, refresh := range late {
 		code, err := refreshCode(t, api, refresh)
 		require.NoError(t, err)

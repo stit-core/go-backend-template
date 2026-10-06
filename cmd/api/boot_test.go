@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -222,11 +223,21 @@ func TestBoot(t *testing.T) {
 	require.Equal(t, http.StatusOK, call(user, http.MethodGet, "/api/users/me", ""), "/me with the session cookie")
 	require.Equal(t, http.StatusNoContent, call(anon, http.MethodPost, "/api/auth/password-reset/request",
 		`{"email":"`+email+`"}`), "password reset request")
+	// Ключ антибрутфорса — адрес соединения: без HTTP_TRUST_PROXY_HOPS X-Forwarded-For его не меняет, и
+	// клиент, подставляющий свой адрес в каждый запрос, получает блокировку, как все.
 	status := 0
-	for range 6 {
-		status = call(anon, http.MethodPost, "/api/auth/login", `{"email":"`+email+`","password":"`+wrongPassword+`"}`)
+	for i := range 6 {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/api/auth/login",
+			strings.NewReader(`{"email":"`+email+`","password":"`+wrongPassword+`"}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d", i+1))
+		resp, err := anon.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		status = resp.StatusCode
 	}
-	require.Equal(t, http.StatusTooManyRequests, status, "the brute-force guard locks the account after repeated failures")
+	require.Equal(t, http.StatusTooManyRequests, status, "the brute-force guard locks the account after repeated failures, whatever X-Forwarded-For says")
 
 	db := pg.Pool(t)
 	require.Eventually(t, func() bool {
