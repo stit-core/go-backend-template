@@ -21,6 +21,10 @@
 - **commit-msg-pick-continue** — `git cherry-pick --continue` и `git rebase --continue` после конфликта
   зовут `commit-msg` с сообщением переносимого коммита: давний коммит не по Conventional Commits хук
   отклоняет. Триггер: первый такой перенос в форке или повторный аудит (`repair-harness` S10).
+- **release-build-private-module** — сборка образа в `make release` (`docker buildx build`) на холодном
+  кеше buildkit не достаёт приватный golibinfra: `Dockerfile` ждёт `--mount=type=ssh` или секрет
+  `netrc`, а `scripts/release.sh` их не передаёт — `go mod download` падает на «could not read Username».
+  Триггер: первый `make release` после смены версии golibinfra.
 - **generated-header-fakes** — рукописный пакет `pkg/` целиком под заголовком «Code generated … DO NOT
   EDIT.» и такой же файл в каталоге вывода sqlc выпадают из покрытия и lint (видно в диффе).
   Триггер: повторный аудит (`repair-harness` S10) или первая такая подделка.
