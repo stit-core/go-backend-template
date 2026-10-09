@@ -18,9 +18,6 @@
   (не компилируется), инициализмы (`api_key` — замечания линтера), существующая таблица
   (`password_reset` — `make gen` падает, дерево в полусостоянии). Триггер: повторный аудит
   (`repair-harness` S10) или первая жалоба.
-- **clientip-test-setter** — `identitytest.Anon` кладёт IP клиента прогоном запроса через
-  `httpkit.ClientIP`: сеттера IP в ctx у httpkit нет. Триггер: сеттер в httpkit (партия 3 golibinfra) —
-  взять его.
 - **commit-msg-pick-continue** — `git cherry-pick --continue` и `git rebase --continue` после конфликта
   зовут `commit-msg` с сообщением переносимого коммита: давний коммит не по Conventional Commits хук
   отклоняет. Триггер: первый такой перенос в форке или повторный аудит (`repair-harness` S10).

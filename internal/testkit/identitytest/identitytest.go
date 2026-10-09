@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
-	"git.stit.tech/stit-core/golibinfra/logkit"
+	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
 )
 
 // IP и RequestID — запрос, из которого приходят контексты пакета: тесты сверяют с ними аудит, guard
@@ -18,14 +17,9 @@ const (
 	RequestID = "req-identitytest"
 )
 
-// Anon — ctx запроса без личности: IP клиента и request id в нём кладёт цепочка httpkit, как у сервиса.
+// Anon — ctx запроса без личности: IP клиента и request id лежат в нём под ключами httpkit, как у сервиса.
 func Anon() context.Context {
-	var ctx context.Context
-	h := httpkit.ClientIP(0, logkit.Nop())(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { ctx = r.Context() }))
-	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", http.NoBody)
-	r.RemoteAddr = IP + ":51234"
-	h.ServeHTTP(httptest.NewRecorder(), r)
-	return httpkit.ContextWithRequestID(ctx, RequestID)
+	return httpkit.ContextWithRequestID(handlertest.ContextWithClientIP(context.Background(), IP), RequestID)
 }
 
 func With(id identity.Identity) context.Context {
