@@ -11,6 +11,7 @@ var (
 	ErrRefreshReused      = errors.New("auth: refresh token reused")
 	ErrAccountLocked      = errors.New("auth: account temporarily locked")
 	ErrWeakPassword       = errors.New("auth: password too weak")
+	ErrPasswordTooLong    = errors.New("auth: password too long")
 	ErrUserNotFound       = errors.New("auth: user not found")
 	ErrConcurrentUpdate   = errors.New("auth: concurrent update")
 	ErrWrongOldPassword   = errors.New("auth: old password does not match")

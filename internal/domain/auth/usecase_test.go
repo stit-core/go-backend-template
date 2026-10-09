@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -741,6 +742,16 @@ func TestChangePassword(t *testing.T) {
 		f := newUC(t)
 		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "short")
 		require.ErrorIs(t, err, auth.ErrWeakPassword)
+	})
+
+	// Предел хэшера — в байтах: 1024 символа не из ASCII схема пропускает, это ошибка ввода, а не сбой.
+	t.Run("new over the hasher limit", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)))
+
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", strings.Repeat("я", authnkit.MaxPasswordLen))
+		require.ErrorIs(t, err, auth.ErrPasswordTooLong)
+		require.False(t, f.audit.Has("change_password"))
 	})
 
 	// Policy спрашивают о цели: клиент чужой пароль не меняет, до учётной записи запрос не доходит.

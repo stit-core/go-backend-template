@@ -166,14 +166,15 @@ var (
 	invalidNameRule      = httpkit.ErrorRule{Err: user.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_NAME", Detail: "name must not contain NUL", Field: "body.name"}
 	invalidRoleRule      = httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_ROLE", Detail: "invalid role"}
 	weakPasswordRule     = httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"}
+	passwordTooLongRule  = httpkit.ErrorRule{Err: user.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "USER_PASSWORD_TOO_LONG", Detail: "password too long", Field: "body.password"}
 	concurrentUpdateRule = httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"}
 	noUpdateFieldsRule   = httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"}
 	statusTransitionRule = httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "status transition is not allowed"}
 
 	userErrors = httpkit.NewErrorMap(notFoundRule, alreadyExistsRule, invalidEmailRule, invalidNameRule, invalidRoleRule,
-		weakPasswordRule, concurrentUpdateRule, noUpdateFieldsRule, statusTransitionRule, authgate.ForbiddenRule)
+		weakPasswordRule, passwordTooLongRule, concurrentUpdateRule, noUpdateFieldsRule, statusTransitionRule, authgate.ForbiddenRule)
 
-	registerErrors = httpkit.NewErrorMap(weakPasswordRule, invalidEmailRule, invalidNameRule, alreadyExistsRule)
+	registerErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidEmailRule, invalidNameRule, alreadyExistsRule)
 	meErrors       = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
 	listErrors     = httpkit.NewErrorMap(authgate.ForbiddenRule)
 	getErrors      = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)

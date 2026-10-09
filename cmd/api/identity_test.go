@@ -359,6 +359,14 @@ func refreshCode(t *testing.T, api sessionAPI, refresh string) (string, error) {
 
 const sessionPassword = "password123"
 
+// errorCode — code ответа-ошибки.
+func errorCode(t *testing.T, body []byte) string {
+	t.Helper()
+	var apiErr httpkit.APIError
+	require.NoError(t, json.Unmarshal(body, &apiErr), "error body: %s", body)
+	return apiErr.Code
+}
+
 // openSessions — незакрытые сессии пользователя в хранилище кита.
 func openSessions(t *testing.T, db *pgxpool.Pool, userID string) int {
 	t.Helper()
@@ -477,6 +485,36 @@ func TestSessions(t *testing.T) {
 		api.login(frank, sessionPassword)
 	})
 
+	// Предел пароля у хэшера — в байтах, maxLength схемы — в символах: 1024 символа не из ASCII схему
+	// проходят и получают отказ ввода, а не сбой; на входе и в старом пароле такой пароль — неверный.
+	overLimit := strings.Repeat("я", 1024)
+	t.Run("a password over the hasher limit is an input error", func(t *testing.T) {
+		status, body, _ := api.call(http.MethodPost, "/api/auth/register", `{"email":"long@example.com","password":"`+overLimit+`","name":"L"}`, nil)
+		require.Equal(t, http.StatusUnprocessableEntity, status, "register: %s", body)
+		require.Equal(t, "USER_PASSWORD_TOO_LONG", errorCode(t, body))
+		status, body, _ = api.call(http.MethodPost, "/api/auth/register", `{"email":"long@example.com","password":"`+overLimit+`я","name":"L"}`, nil)
+		require.Equal(t, http.StatusUnprocessableEntity, status, "register over maxLength: %s", body)
+		require.Equal(t, "VALIDATION_FAILED", errorCode(t, body), "the schema refuses 1025 characters before the usecase")
+
+		c := api.login(alice, sessionPassword)
+		before := openSessions(t, db, aliceID)
+		change := func(oldPassword, newPassword string) (int, string) {
+			status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
+				`{"user_id":"`+aliceID+`","old_password":"`+oldPassword+`","new_password":"`+newPassword+`"}`, c)
+			return status, errorCode(t, body)
+		}
+		status, code := change(sessionPassword, overLimit)
+		require.Equal(t, http.StatusUnprocessableEntity, status)
+		require.Equal(t, "AUTH_PASSWORD_TOO_LONG", code)
+		status, code = change(overLimit, newPassword)
+		require.Equal(t, http.StatusUnprocessableEntity, status)
+		require.Equal(t, "AUTH_INVALID_OLD_PASSWORD", code, "an old password over the limit is a wrong one")
+
+		status, body, _ = api.call(http.MethodPost, "/api/auth/login", `{"email":"`+alice+`","password":"`+overLimit+`"}`, nil)
+		require.Equal(t, http.StatusUnauthorized, status, "login: %s", body)
+		require.Equal(t, before, openSessions(t, db, aliceID), "the refusals neither closed nor opened a session")
+	})
+
 	t.Run("password change closes every session", func(t *testing.T) {
 		first, second := api.login(alice, sessionPassword), api.login(alice, sessionPassword)
 		status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
@@ -496,8 +534,11 @@ func TestSessions(t *testing.T) {
 		require.Equal(t, http.StatusNoContent, status)
 		resets, _ := mail.sent()
 		require.Len(t, resets, 1, "the reset is mailed")
-		status, body, _ := api.call(http.MethodPost, "/api/auth/password-reset/confirm", `{"token":"`+resets[0]+`","password":"reset-password123"}`, nil)
-		require.Equal(t, http.StatusNoContent, status, "confirm reset: %s", body)
+		status, body, _ := api.call(http.MethodPost, "/api/auth/password-reset/confirm", `{"token":"`+resets[0]+`","password":"`+overLimit+`"}`, nil)
+		require.Equal(t, http.StatusUnprocessableEntity, status, "confirm reset over the hasher limit: %s", body)
+		require.Equal(t, "VERIFICATION_PASSWORD_TOO_LONG", errorCode(t, body))
+		status, body, _ = api.call(http.MethodPost, "/api/auth/password-reset/confirm", `{"token":"`+resets[0]+`","password":"reset-password123"}`, nil)
+		require.Equal(t, http.StatusNoContent, status, "the refused password did not spend the token: %s", body)
 
 		status, _ = api.refresh(c)
 		require.Equal(t, http.StatusUnauthorized, status)

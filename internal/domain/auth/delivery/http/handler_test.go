@@ -23,6 +23,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
 )
 
@@ -306,6 +307,43 @@ func TestChangePassword_ShortPassword(t *testing.T) {
 	errs := handlertest.DecodeAPIError(t, resp).Errors
 	require.Len(t, errs, 1)
 	require.Equal(t, "body.new_password", errs[0].Location)
+}
+
+// Предел хэшера — в байтах, maxLength схемы — в символах: 1024 символа не из ASCII доходят до usecase, и
+// его отказ — ошибка поля; 1025 символов схема отклоняет сама — и в новом, и в старом пароле.
+func TestChangePassword_PasswordTooLong(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("я", authnkit.MaxPasswordLen)
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", long).Return(auth.ErrPasswordTooLong).Once()
+	api := setup(t, uc)
+
+	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password", strings.NewReader(changePasswordBody(long)))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "AUTH_PASSWORD_TOO_LONG")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.new_password", errs[0].Location)
+
+	for field, body := range map[string]string{
+		"body.new_password": changePasswordBody(long + "я"),
+		"body.old_password": fmt.Sprintf(`{"user_id":"u1","old_password":%q,"new_password":"new-password"}`, long+"я"),
+	} {
+		resp = api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password", strings.NewReader(body))
+		handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+		errs = handlertest.DecodeAPIError(t, resp).Errors
+		require.Len(t, errs, 1)
+		require.Equal(t, field, errs[0].Location)
+	}
+}
+
+// Пароль длиннее maxLength схемы до входа не доходит: попытка не тратит хэширование.
+func TestLogin_PasswordOverSchemaLimit(t *testing.T) {
+	t.Parallel()
+	api := setup(t, mocks.NewMockUsecase(t))
+
+	body := fmt.Sprintf(`{"email":"a@b.com","password":%q}`, strings.Repeat("я", authnkit.MaxPasswordLen+1))
+	resp := api.Post("/api/auth/login", strings.NewReader(body))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 }
 
 func changePasswordBody(newPassword string) string {

@@ -198,7 +198,10 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 	}
 
 	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
-	if err != nil {
+	switch {
+	case errors.Is(err, authnkit.ErrPasswordTooLong):
+		return ErrPasswordTooLong
+	case err != nil:
 		return fmt.Errorf("hash new password: %w", err)
 	}
 

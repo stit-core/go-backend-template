@@ -9,6 +9,7 @@ var (
 	ErrInvalidName             = errors.New("user: invalid name")
 	ErrInvalidRole             = errors.New("user: invalid role")
 	ErrWeakPassword            = errors.New("user: password too weak")
+	ErrPasswordTooLong         = errors.New("user: password too long")
 	ErrConcurrentUpdate        = errors.New("user: concurrent update")
 	ErrNoUpdateFields          = errors.New("user: no update fields")
 	ErrInvalidStatusTransition = errors.New("user: invalid status transition")

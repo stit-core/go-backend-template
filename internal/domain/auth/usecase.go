@@ -258,7 +258,10 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 	}
 
 	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
-	if err != nil {
+	switch {
+	case errors.Is(err, authnkit.ErrPasswordTooLong):
+		return ErrPasswordTooLong
+	case err != nil:
 		return fmt.Errorf("hash new password: %w", err)
 	}
 	if err := uc.d.PasswordSet.UpdatePassword(ctx, userID, hash, current.Version); err != nil {

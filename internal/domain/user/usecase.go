@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.uber.org/fx"
@@ -77,7 +78,10 @@ func (uc *Usecase) Register(ctx context.Context, in *CreateInput) (*User, error)
 		return nil, ErrWeakPassword
 	}
 	hash, err := uc.d.Hasher.Hash(ctx, in.Password)
-	if err != nil {
+	switch {
+	case errors.Is(err, authnkit.ErrPasswordTooLong):
+		return nil, ErrPasswordTooLong
+	case err != nil:
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 	u, err := NewUser(in.Email, hash, in.Name, identity.RoleClient)

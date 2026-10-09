@@ -122,16 +122,17 @@ var (
 	refreshReusedRule      = httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "refresh token reused: log in again"}
 	refreshInvalidRule     = httpkit.ErrorRule{Err: auth.ErrRefreshInvalid, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_INVALID", Detail: "refresh token invalid: log in again"}
 	weakPasswordRule       = httpkit.ErrorRule{Err: auth.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_WEAK_PASSWORD", Detail: "password too weak", Field: "body.new_password"}
+	passwordTooLongRule    = httpkit.ErrorRule{Err: auth.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "AUTH_PASSWORD_TOO_LONG", Detail: "password too long", Field: "body.new_password"}
 	wrongOldPasswordRule   = httpkit.ErrorRule{Err: auth.ErrWrongOldPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_INVALID_OLD_PASSWORD", Detail: "old password does not match", Field: "body.old_password"}
 	userNotFoundRule       = httpkit.ErrorRule{Err: auth.ErrUserNotFound, Status: http.StatusNotFound, Code: "AUTH_USER_NOT_FOUND", Detail: "user not found"}
 	concurrentUpdateRule   = httpkit.ErrorRule{Err: auth.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "AUTH_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"}
 
 	authErrors = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, refreshExpiredRule, refreshReusedRule,
-		refreshInvalidRule, weakPasswordRule, wrongOldPasswordRule, userNotFoundRule, concurrentUpdateRule,
+		refreshInvalidRule, weakPasswordRule, passwordTooLongRule, wrongOldPasswordRule, userNotFoundRule, concurrentUpdateRule,
 		authgate.ForbiddenRule)
 
 	loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule)
 	refreshErrors        = httpkit.NewErrorMap(refreshExpiredRule, refreshReusedRule, refreshInvalidRule)
-	changePasswordErrors = httpkit.NewErrorMap(weakPasswordRule, wrongOldPasswordRule, accountLockedRule, userNotFoundRule,
-		concurrentUpdateRule, authgate.ForbiddenRule)
+	changePasswordErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, wrongOldPasswordRule, accountLockedRule,
+		userNotFoundRule, concurrentUpdateRule, authgate.ForbiddenRule)
 )

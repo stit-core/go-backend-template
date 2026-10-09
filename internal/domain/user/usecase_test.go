@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -177,6 +178,12 @@ func TestRegister_Rejected(t *testing.T) {
 		want   error
 	}{
 		{name: "weak password", in: user.CreateInput{Email: "a@b.com", Password: "short", Name: "Alice"}, want: user.ErrWeakPassword},
+		{
+			// Предел хэшера — в байтах: 1024 символа не из ASCII схема пропускает, это ошибка ввода, а не сбой.
+			name: "password over the hasher limit",
+			in:   user.CreateInput{Email: "a@b.com", Password: strings.Repeat("я", authnkit.MaxPasswordLen), Name: "Alice"},
+			want: user.ErrPasswordTooLong,
+		},
 		{
 			name: "password not hashed", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
 			hasher: &authntest.DeterministicHasher{HashErr: errHashing}, want: errHashing,

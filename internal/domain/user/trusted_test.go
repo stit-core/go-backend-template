@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -11,6 +12,7 @@ import (
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user/mocks"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
@@ -56,6 +58,7 @@ func TestTrusted_VerifyPassword(t *testing.T) {
 	}{
 		{"match", "secret-1", withHash, nil, true},
 		{"mismatch", "other", withHash, nil, false},
+		{"over the hasher limit: a wrong password, not a failure", strings.Repeat("я", authnkit.MaxPasswordLen), withHash, nil, false},
 		{"unknown user", "secret-1", nil, user.ErrNotFound, false},
 	}
 	for _, tc := range tests {

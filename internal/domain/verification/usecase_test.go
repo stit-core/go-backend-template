@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -432,6 +433,10 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 		want     error
 	}{
 		{"weak password", "short", func(*testing.T) []ucOption { return nil }, verification.ErrWeakPassword},
+		// Предел хэшера — в байтах: 1024 символа не из ASCII схема пропускает; токен не гасится.
+		{"new password over the hasher limit", strings.Repeat("я", authnkit.MaxPasswordLen), func(t *testing.T) []ucOption {
+			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil))}
+		}, verification.ErrPasswordTooLong},
 		{"unknown token", "newpassword123", func(t *testing.T) []ucOption {
 			return []ucOption{withRepo(resetToken(t, nil, verification.ErrInvalidResetToken))}
 		}, verification.ErrInvalidResetToken},

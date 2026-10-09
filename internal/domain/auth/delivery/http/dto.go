@@ -5,7 +5,7 @@ import "net/http"
 type AuthLoginInput struct {
 	Body struct {
 		Email    string `json:"email"    required:"true"`
-		Password string `json:"password" required:"true"`
+		Password string `json:"password" maxLength:"1024" required:"true"`
 	}
 }
 
@@ -35,7 +35,7 @@ type AuthLogoutOutput struct {
 type AuthChangePasswordInput struct {
 	Body struct {
 		UserID      string `json:"user_id"      required:"true"`
-		OldPassword string `json:"old_password" required:"true"`
-		NewPassword string `json:"new_password" minLength:"8"   required:"true"`
+		OldPassword string `json:"old_password" maxLength:"1024" required:"true"`
+		NewPassword string `json:"new_password" maxLength:"1024" minLength:"8"   required:"true"`
 	}
 }

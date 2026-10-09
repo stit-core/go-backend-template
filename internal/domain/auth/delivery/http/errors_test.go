@@ -23,8 +23,8 @@ func TestErrorMaps(t *testing.T) {
 		{"loginUser", loginErrors, []error{auth.ErrInvalidCredentials, &auth.LockedError{}}},
 		{"refreshToken", refreshErrors, []error{auth.ErrRefreshExpired, auth.ErrRefreshReused, auth.ErrRefreshInvalid}},
 		{"changePassword", changePasswordErrors, []error{
-			auth.ErrWeakPassword, auth.ErrWrongOldPassword, &auth.LockedError{}, auth.ErrUserNotFound, auth.ErrConcurrentUpdate,
-			&policy.ForbiddenError{Reason: "test"},
+			auth.ErrWeakPassword, auth.ErrPasswordTooLong, auth.ErrWrongOldPassword, &auth.LockedError{}, auth.ErrUserNotFound,
+			auth.ErrConcurrentUpdate, &policy.ForbiddenError{Reason: "test"},
 		}},
 	}
 	for _, tc := range tests {

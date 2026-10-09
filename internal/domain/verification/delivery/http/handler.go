@@ -78,15 +78,16 @@ func (h *Handler) confirmEmail(ctx context.Context, in *VerificationEmailVerifyI
 // уходит 500 — archtest), таблица операции объявляет в OpenAPI те, что отдаёт её usecase.
 var (
 	weakPasswordRule     = httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"}
+	passwordTooLongRule  = httpkit.ErrorRule{Err: verification.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_PASSWORD_TOO_LONG", Detail: "password too long", Field: "body.password"}
 	invalidResetRule     = httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "invalid or expired reset token"}
 	invalidVerifyRule    = httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "invalid or expired verification token"}
 	tokenUsedRule        = httpkit.ErrorRule{Err: verification.ErrTokenUsed, Status: http.StatusConflict, Code: "VERIFICATION_TOKEN_USED", Detail: "token already used"}
 	concurrentUpdateRule = httpkit.ErrorRule{Err: verification.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "VERIFICATION_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"}
 	userNotFoundRule     = httpkit.ErrorRule{Err: verification.ErrUserNotFound, Status: http.StatusNotFound, Code: "VERIFICATION_USER_NOT_FOUND", Detail: "user not found"}
 
-	verificationErrors = httpkit.NewErrorMap(weakPasswordRule, invalidResetRule, invalidVerifyRule, tokenUsedRule,
+	verificationErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidResetRule, invalidVerifyRule, tokenUsedRule,
 		concurrentUpdateRule, userNotFoundRule)
 
-	confirmPasswordResetErrors = httpkit.NewErrorMap(weakPasswordRule, invalidResetRule, tokenUsedRule, concurrentUpdateRule)
+	confirmPasswordResetErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidResetRule, tokenUsedRule, concurrentUpdateRule)
 	confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule, tokenUsedRule)
 )

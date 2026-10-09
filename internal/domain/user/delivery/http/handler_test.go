@@ -23,6 +23,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/ptrkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
 )
@@ -153,6 +154,25 @@ func TestRegister_ShortPassword(t *testing.T) {
 	errs := handlertest.DecodeAPIError(t, resp).Errors
 	require.Len(t, errs, 1)
 	require.Equal(t, "body.password", errs[0].Location)
+}
+
+// Предел хэшера — в байтах, maxLength схемы — в символах: 1024 символа не из ASCII доходят до usecase, и
+// его отказ — ошибка поля; 1025 символов схема отклоняет сама.
+func TestRegister_PasswordTooLong(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("я", authnkit.MaxPasswordLen)
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().Register(mock.Anything, &user.CreateInput{Email: "a@b.com", Password: long, Name: "A"}).Return(nil, user.ErrPasswordTooLong).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/register", strings.NewReader(registerBody(long)))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "USER_PASSWORD_TOO_LONG")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.password", errs[0].Location)
+
+	resp = api.Post("/api/auth/register", strings.NewReader(registerBody(long+"я")))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 }
 
 func registerBody(password string) string {

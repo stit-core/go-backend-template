@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 
 	"go.uber.org/fx"
 
@@ -50,7 +51,12 @@ func (t *Trusted) VerifyPassword(ctx context.Context, userID, plain string) (boo
 	if err != nil {
 		return false, err
 	}
-	return t.d.Hasher.Verify(ctx, plain, u.PasswordHash)
+	ok, err := t.d.Hasher.Verify(ctx, plain, u.PasswordHash)
+	// Пароль длиннее предела хэшера ни с одним хэшем не совпадает: это неверный пароль, а не сбой.
+	if errors.Is(err, authnkit.ErrPasswordTooLong) {
+		return false, nil
+	}
+	return ok, err
 }
 
 // UpdatePassword меняет пароль и той же транзакцией закрывает все сессии пользователя: сессии старого

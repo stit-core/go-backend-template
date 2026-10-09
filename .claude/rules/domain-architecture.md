@@ -35,7 +35,10 @@ paths:
   несуществующий (видимость — параметр запроса репозитория); 403 — отказ, который не зависит от
   того, есть ли ресурс (роль, свой id).
 - **Вход — проверка поля.** Предел длины строки — в символах (`utf8.RuneCountInString`, как
-  `minLength`/`maxLength` huma), в байтах — только предел протокола (адрес — 254 байта, RFC 5321).
+  `minLength`/`maxLength` huma), в байтах — только предел протокола (адрес — 254 байта, RFC 5321) и
+  кита: пароль — `authnkit.MaxPasswordLen` байт, `maxLength` поля — ранний отказ схемы, а
+  `authnkit.ErrPasswordTooLong` хэшера usecase переводит в sentinel поля (422, `user.Register`), при
+  проверке старого пароля — в «не совпал» (`user.Trusted.VerifyPassword`).
   NUL Postgres в TEXT не хранит: поле с ним отвергает сущность (sentinel поля → 422, `user.Rename`),
   ключ поиска с ним репозиторий отдаёт как «нет такого» (`GetByEmail`): ошибка драйвера ушла бы 500.
 - **Cross-domain — только порты + адаптеры.** archtest (`internal/archtest`) держит импорты

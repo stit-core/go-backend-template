@@ -9,7 +9,7 @@ type VerificationPasswordResetRequestInput struct {
 type VerificationPasswordResetConfirmInput struct {
 	Body struct {
 		Token    string `json:"token"    required:"true"`
-		Password string `json:"password" minLength:"8"   required:"true"`
+		Password string `json:"password" maxLength:"1024" minLength:"8" required:"true"`
 	}
 }
 

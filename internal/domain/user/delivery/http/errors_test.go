@@ -21,7 +21,7 @@ func TestErrorMaps(t *testing.T) {
 		m    httpkit.ErrorMap
 		errs []error
 	}{
-		{"registerUser", registerErrors, []error{user.ErrWeakPassword, user.ErrInvalidEmail, user.ErrInvalidName, user.ErrAlreadyExists}},
+		{"registerUser", registerErrors, []error{user.ErrWeakPassword, user.ErrPasswordTooLong, user.ErrInvalidEmail, user.ErrInvalidName, user.ErrAlreadyExists}},
 		{"getMe", meErrors, []error{user.ErrNotFound, forbidden}},
 		{"listUsers", listErrors, []error{forbidden}},
 		{"getUser", getErrors, []error{user.ErrNotFound, forbidden}},

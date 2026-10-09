@@ -15,6 +15,7 @@ import (
 	verifhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/http"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/http/mocks"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
 )
 
@@ -142,6 +143,25 @@ func TestPasswordResetConfirm_ShortPassword(t *testing.T) {
 	errs := handlertest.DecodeAPIError(t, resp).Errors
 	require.Len(t, errs, 1)
 	require.Equal(t, "body.password", errs[0].Location)
+}
+
+// Предел хэшера — в байтах, maxLength схемы — в символах: 1024 символа не из ASCII доходят до usecase, и
+// его отказ — ошибка поля; 1025 символов схема отклоняет сама.
+func TestPasswordResetConfirm_PasswordTooLong(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("я", authnkit.MaxPasswordLen)
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().ConfirmPasswordReset(mock.Anything, "x", long).Return(verification.ErrPasswordTooLong).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/password-reset/confirm", strings.NewReader(resetConfirmBody(long)))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VERIFICATION_PASSWORD_TOO_LONG")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.password", errs[0].Location)
+
+	resp = api.Post("/api/auth/password-reset/confirm", strings.NewReader(resetConfirmBody(long+"я")))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 }
 
 func resetConfirmBody(password string) string {
