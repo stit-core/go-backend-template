@@ -154,7 +154,7 @@ Identity-closure (`func(uc *<provider>.Usecase) <consumer>.<Port> { return uc }`
 make test PKG=./internal/archtest/...
 ```
 
-`TestImportBoundaries` красный — провайдер импортирован не из `module/` или не корневым пакетом.
+`TestLayout` красный строкой `archkit:` — провайдер импортирован не из `module/` или не корневым пакетом.
 Перенеси код. Новый домен покрыт автоматически.
 
 ### 8. Тесты

@@ -50,7 +50,7 @@ func TestFrom_EmptyContext(t *testing.T) {
 func TestIPFrom(t *testing.T) {
 	t.Parallel()
 	var got string
-	h := httpkit.ClientIP(logkit.Nop(), 0)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	h := httpkit.ClientIP(0, logkit.Nop())(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		got = identity.IPFrom(r.Context())
 	}))
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)

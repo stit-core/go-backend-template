@@ -45,7 +45,7 @@ var kitConfigs = []any{
 	pgkit.NewReplicaConfig,
 	httpkit.NewConfig,
 	natskit.NewConfig,
-	authnkit.NewArgon2idParams,
+	authnkit.NewArgon2idConfig,
 	authnkit.NewJWTConfig,
 	session.NewConfig,
 	bruteforcekit.NewConfig,
@@ -77,8 +77,8 @@ var (
 		clockkit.Module,
 		appevents.Module,
 		// /ready отвечает 503, пока хоть одна зависимость не отвечает.
-		healthkit.Provide(pgkit.Probe),
-		healthkit.Provide(natskit.Probe),
+		healthkit.ProvideProbe(pgkit.Probe),
+		natskit.ProvideProbe(""),
 	)
 
 	domainModules = fx.Options(

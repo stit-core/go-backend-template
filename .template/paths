@@ -16,5 +16,6 @@ docs/reference
 docs/stack/README.md
 docs/stack/_templates
 internal/archtest
+:(exclude)internal/archtest/layout_settings_test.go
 internal/testkit/allowlist
 test/stack

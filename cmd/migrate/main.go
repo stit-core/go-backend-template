@@ -49,7 +49,7 @@ func run(ctx context.Context, log logkit.Logger) int {
 	// конфиг, что у pgkit.MigrateModule: одна семантика на оба способа прогона.
 	cfg, err := pgkit.NewMigrateRunnerConfig()
 	if err != nil {
-		log.Error(ctx, "migrate config", "err", err)
+		log.Error(ctx, "migrate config", "error", err)
 		return 1
 	}
 	app := pgkit.DirSource(pgkit.AppSourceName, cfg.Path)
@@ -60,16 +60,16 @@ func run(ctx context.Context, log logkit.Logger) int {
 
 	switch os.Args[1] {
 	case "up":
-		if err := pgkit.MigrateUpAll(ctx, dsn, all...); err != nil {
-			log.Error(ctx, "migrate up failed", "err", err)
+		if err := pgkit.MigrateUpAll(ctx, dsn, cfg.LockTimeout, all...); err != nil {
+			log.Error(ctx, "migrate up failed", "error", err)
 			return 1
 		}
 		log.Info(ctx, "migrate up: ok")
 
 	case "down":
 		// Откат — одна миграция приложения: схему китов ведёт golibinfra.
-		if err := pgkit.MigrateDown(ctx, dsn, app); err != nil {
-			log.Error(ctx, "migrate down failed", "err", err)
+		if err := pgkit.MigrateDown(ctx, dsn, cfg.LockTimeout, app); err != nil {
+			log.Error(ctx, "migrate down failed", "error", err)
 			return 1
 		}
 		log.Info(ctx, "migrate down: ok")
@@ -78,7 +78,7 @@ func run(ctx context.Context, log logkit.Logger) int {
 		for _, src := range all {
 			v, dirty, err := pgkit.MigrateVersion(ctx, dsn, src)
 			if err != nil {
-				log.Error(ctx, "migrate version failed", "source", src.Name, "version", v, "dirty", dirty, "err", err)
+				log.Error(ctx, "migrate version failed", "source", src.Name, "version", v, "dirty", dirty, "error", err)
 				return 1
 			}
 			log.Info(ctx, "migrate version", "source", src.Name, "version", v)

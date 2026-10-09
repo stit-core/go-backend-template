@@ -8,11 +8,11 @@ status: draft
 # Config — конфигурация и секреты
 
 Этот артефакт — материализованная таблица всех env (тип, default, sensitive) и
-release-checklist. Конфиг = app-сторона (`internal/platform/config`: структура `App`, envconfig) +
+release-checklist. Конфиг = app-сторона (`internal/platform/config`: структура `App`, `config.Load`) +
 golibinfra-сторона (envconfig-теги kit-структур, `<kit>.NewConfig`). Новый `envconfig:"..."` дописывается сюда тем же PR.
 
 ## Required env
-<Без них приложение не стартует (envconfig fail-fast при сборке графа). Таблица `| Env | Тип | Назначение | Где живёт |`. Эти переменные едут в INFRA-HANDOFF.>
+<Без них приложение не стартует (fail-fast при сборке графа). Таблица `| Env | Тип | Назначение | Где живёт |`. Эти переменные едут в INFRA-HANDOFF.>
 
 ## Optional env
 <С code-default в kit-структурах; переопределяй только когда дефолт не подходит. Группируй по префиксу подсекциями `### <Группа>` с таблицей `| Env | Default | Назначение |` по подключённым kit'ам (напр. Postgres `PG_*`, HTTP `HTTP_*`, Auth `JWT_*`/`ARGON2_*`, Log `LOG_*`).>

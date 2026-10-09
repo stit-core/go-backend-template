@@ -2,6 +2,7 @@ package user_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"testing"
@@ -61,7 +62,7 @@ func withAudit(a auditkit.Logger) ucOption        { return func(o *ucOpts) { o.a
 // кейса, вызов порта, которого кейс не ждёт, — провал; порт с ожиданиями кейс передаёт опцией.
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
-	o := &ucOpts{repo: mocks.NewMockRepository(t), sessions: mocks.NewMockSessions(t), hasher: authntest.DeterministicHasher{}}
+	o := &ucOpts{repo: mocks.NewMockRepository(t), sessions: mocks.NewMockSessions(t), hasher: &authntest.DeterministicHasher{}}
 	for _, fn := range opts {
 		fn(o)
 	}
@@ -81,6 +82,14 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Clock:    clockkit.NewFixed(fixedNow),
 	})
 	return ucFixture{uc: uc, bus: bus, audit: aud, log: log}
+}
+
+// event — последнее событие subject в своём типе: outbox хранит JSON.
+func event[T any](t *testing.T, f ucFixture, subject string) T {
+	t.Helper()
+	var e T
+	require.NoError(t, json.Unmarshal(f.bus.Last(subject), &e))
+	return e
 }
 
 // revoked ждёт ровно одно закрытие всех сессий пользователя id в транзакции записи и отвечает err.
@@ -107,16 +116,6 @@ var (
 	errAudit   = errors.New("audit_log: connection refused")
 )
 
-// brokenHasher — хэшер, у которого сбоит хэширование: у authntest такого фейка нет.
-type brokenHasher struct{ authntest.DeterministicHasher }
-
-func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
-
-// failingAudit — журнал аудита, запись в который не проходит: у audittest такого фейка нет.
-type failingAudit struct{}
-
-func (failingAudit) Log(context.Context, auditkit.Entry) error { return errAudit }
-
 func requireForbidden(t *testing.T, err error) {
 	t.Helper()
 	var fe *policy.ForbiddenError
@@ -142,7 +141,7 @@ func TestRegister(t *testing.T) {
 	got, err := f.uc.Register(identitytest.Anon(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
 	require.NoError(t, err)
 	require.Equal(t, "id-1", got.ID)
-	require.Equal(t, user.UserRegistered{ID: "id-1", At: fixedNow}, f.bus.Last(subjectRegistered),
+	require.Equal(t, user.UserRegistered{ID: "id-1", At: fixedNow}, event[user.UserRegistered](t, f, subjectRegistered),
 		"the event carries the ID only: consumers read the address by ID")
 	require.Equal(t, 1, f.bus.Count())
 	require.Equal(t, audited("id-1", "register", "id-1"), f.audit.Last("register"))
@@ -156,7 +155,7 @@ func TestRegister_AuditNotWritten(t *testing.T) {
 		u.ID = "id-1"
 		return nil
 	}).Once()
-	f := newUC(t, withRepo(repo), withAudit(failingAudit{}))
+	f := newUC(t, withRepo(repo), withAudit(&audittest.Recorder{LogErr: errAudit}))
 
 	got, err := f.uc.Register(identitytest.Anon(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
 	require.NoError(t, err)
@@ -164,7 +163,7 @@ func TestRegister_AuditNotWritten(t *testing.T) {
 	require.Equal(t, 1, f.bus.Count())
 	e, logged := f.log.Find(slog.LevelError, "audit register")
 	require.True(t, logged)
-	require.Contains(t, e.Str("err"), errAudit.Error())
+	require.Contains(t, e.Str("error"), errAudit.Error())
 }
 
 // Отказ регистрации ничего не пишет: ни пользователя, ни события, ни аудита.
@@ -180,7 +179,7 @@ func TestRegister_Rejected(t *testing.T) {
 		{name: "weak password", in: user.CreateInput{Email: "a@b.com", Password: "short", Name: "Alice"}, want: user.ErrWeakPassword},
 		{
 			name: "password not hashed", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
-			hasher: brokenHasher{}, want: errHashing,
+			hasher: &authntest.DeterministicHasher{HashErr: errHashing}, want: errHashing,
 		},
 		{name: "invalid email", in: user.CreateInput{Email: "a.b.com", Password: "longenough", Name: "Alice"}, want: user.ErrInvalidEmail},
 		{name: "name with NUL", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "A\x00B"}, want: user.ErrInvalidName},
@@ -380,7 +379,7 @@ func TestUpdate(t *testing.T) {
 			got, err := f.uc.Update(tc.ctx, "u1", tc.in)
 			require.NoError(t, err)
 			require.Equal(t, saved, got)
-			require.Equal(t, user.UserUpdated{ID: "u1", At: fixedNow}, f.bus.Last(subjectUpdated))
+			require.Equal(t, user.UserUpdated{ID: "u1", At: fixedNow}, event[user.UserUpdated](t, f, subjectUpdated))
 			require.Equal(t, 1, f.bus.Count())
 			require.Equal(t, audited(tc.actor, "update", "u1"), f.audit.Last("update"))
 		})
@@ -507,7 +506,7 @@ func TestDelete(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, user.UserDeleted{ID: "u1", At: fixedNow}, f.bus.Last(subjectDeleted))
+			require.Equal(t, user.UserDeleted{ID: "u1", At: fixedNow}, event[user.UserDeleted](t, f, subjectDeleted))
 			require.Equal(t, 1, f.bus.Count())
 			require.Equal(t, audited(tc.actor, "delete", "u1"), f.audit.Last("delete"))
 		})

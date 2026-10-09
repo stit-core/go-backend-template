@@ -20,10 +20,16 @@ import (
 
 var signedAt = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
+// accessTTL и leeway — срок access-токена и допуск часов у signer.
+const (
+	accessTTL = 15 * time.Minute
+	leeway    = time.Minute
+)
+
 // signer — HS256-JWT кита на секрете secret с часами теста: подписывает и разбирает токены, как сервис.
 func signer(t *testing.T, secret string, clock clockkit.Clock) *authnkit.HS256JWT {
 	t.Helper()
-	j, err := authnkit.NewHS256JWT(authnkit.JWTConfig{Secret: secret}, authnkit.WithClock(clock))
+	j, err := authnkit.NewHS256JWT(authnkit.JWTConfig{Secret: secret, AccessTTL: accessTTL, Leeway: leeway}, authnkit.WithClock(clock))
 	require.NoError(t, err)
 	return j
 }
@@ -144,7 +150,7 @@ func TestExtract_AccessExpired(t *testing.T) {
 	j := signer(t, secret, clock)
 	token, err := j.SignAccess(context.Background(), map[string]any{"sub": "u1", "role": "client"})
 	require.NoError(t, err)
-	clock.Advance(authnkit.DefaultAccessTTL + authnkit.DefaultLeeway + time.Second)
+	clock.Advance(accessTTL + leeway + time.Second)
 
 	_, err = extract(t, j, &http.Cookie{Name: authgate.CookieAccess, Value: token})
 	var apiErr *httpkit.APIError

@@ -113,7 +113,7 @@ make validate-stack-docs
 
 ### config
 
-> Required env перечислены полностью (валидатор `envconfig` падает без
+> Required env перечислены полностью (старт падает без
 > них); Optional env с дефолтами по подключённым kit'ам; секреты —
 > отдельной секцией (имя env, значение не коммитим); release-checklist для
 > добавления новых env есть?

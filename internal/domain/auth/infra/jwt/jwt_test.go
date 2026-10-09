@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -15,7 +16,7 @@ import (
 
 func TestTokens_AccessCarriesRole(t *testing.T) {
 	t.Parallel()
-	j, err := authnkit.NewHS256JWT(authnkit.JWTConfig{Secret: strings.Repeat("s", authnkit.MinSecretLen)})
+	j, err := authnkit.NewHS256JWT(authnkit.JWTConfig{Secret: strings.Repeat("s", authnkit.MinSecretLen), AccessTTL: 15 * time.Minute})
 	require.NoError(t, err)
 
 	token, err := authjwt.NewTokens(j).IssueAccess(context.Background(), &auth.User{ID: "u1", Role: identity.RoleAdmin})

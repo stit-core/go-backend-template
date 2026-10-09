@@ -26,7 +26,7 @@ func (callerTx) WithTx(ctx context.Context, fn func(context.Context) error) erro
 func newAdapter(t *testing.T) (*userAdapter, *usermocks.MockRepository, *usermocks.MockSessions) {
 	t.Helper()
 	repo, sessions := usermocks.NewMockRepository(t), usermocks.NewMockSessions(t)
-	a := newUserAdapter(user.NewTrusted(user.TrustedDeps{Repo: repo, Hasher: authntest.DeterministicHasher{}, Tx: callerTx{}, Sessions: sessions}))
+	a := newUserAdapter(user.NewTrusted(user.TrustedDeps{Repo: repo, Hasher: &authntest.DeterministicHasher{}, Tx: callerTx{}, Sessions: sessions}))
 	return a, repo, sessions
 }
 

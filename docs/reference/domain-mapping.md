@@ -30,7 +30,7 @@ Strategy-репо у проекта нет — вход домена тот же
 | Секция `kind: worker` | Go-код |
 |---|---|
 | Trigger `topic:<topic>` | подписчик `delivery/nats/` модуля-владельца, `fx.Invoke(Register)` (rule `events-and-messaging`) |
-| Trigger schedule | джоб `timerkit.Provide` в `module/module.go` владельца; интервал — env (runtime) |
+| Trigger schedule | джоб `timerkit.ProvideJob` в `module/module.go` владельца; интервал — env (runtime) |
 | Handles | вызовы методов `Usecase` из обработчика |
 | Semantics: idempotency, retry, ordering | идемпотентность — схема потребителя (unique-индекс, `ON CONFLICT`); повтор и DLQ — natskit (`NATS_JS_MAX_DELIVER`), порядок — § Events |
 | On failure | DLQ JetStream / dead outbox — сигнал в лог `ERROR` |
@@ -96,7 +96,7 @@ Strategy-репо у проекта нет — вход домена тот же
 
 Общего пакета VO у доменов нет: пакет, который импортируют несколько доменов, стал бы мостом в обход
 портов, а чистые слои домена (`entity.go`, `policy.go`, `dto.go`, `errors.go`, `events.go`) видят
-только stdlib, `internal/platform/identity` и `pkg/policy` (archtest `TestPureLayersHaveNoIO`).
+только stdlib, `internal/platform/identity` и `pkg/policy` (archtest `TestLayout`).
 Каждый контекст-потребитель держит свою копию:
 
 | Артефакт | Go-код |

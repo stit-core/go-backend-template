@@ -1,13 +1,15 @@
-// Package archtest машинно держит раскладку internal/, границы и слоевые инварианты доменов (rule
-// domain-architecture) для любого каталога internal/domain/*: импорты между доменами и
-// слоями, чистоту корня домена, адаптеры, Trusted и таблицы между доменами, привязку портов без fx.As,
-// префикс, уникальность и envelope HTTP-типов, таблицу ошибок домена в HTTP-контракте, владение
-// subject-литералами, запрет настенных часов и тестов без утверждений, заголовок сгенерированного только
-// в выводе генераторов; а ещё подключение доменов в cmd/api, ссылки прозы на make-цели и пути, //nolint
-// только включённых линтеров, пути и версию обвязки шаблона (.template), её перенос в форк (make
-// template-update), маркеры конфликтов, пути доменов идентичности и процедуру их prune, канонический
-// репо шаблона, валидатор stack-артефактов, хуки guard-bash и commit-msg и самозащиту make check. На
-// archtest //nolint не действует.
+// Package archtest машинно держит обвязку и канон доменов (rule domain-architecture) для любого
+// каталога internal/domain/*. Раскладку — каталоги internal/, импорты между доменами и слоями, чистоту
+// корня домена и чистых слоёв, настенные часы, порты между доменами без identity-closure, свои таблицы —
+// держит archkit (golibinfra) вызовом TestLayout: правила едут версией кита, настройки сервиса — в
+// layout_settings_test.go. Здесь — правила шаблона: Trusted и таблицы ошибок между доменами, привязка
+// портов без fx.As, префикс, уникальность и envelope HTTP-типов, таблица ошибок домена в HTTP-контракте,
+// владение subject-литералами, тесты без утверждений, заголовок сгенерированного только в выводе
+// генераторов; а ещё подключение доменов в cmd/api, ссылки прозы на make-цели и пути, //nolint только
+// включённых линтеров, пути и версия обвязки шаблона (.template), её перенос в форк (make
+// template-update), маркеры конфликтов, пути доменов идентичности и процедура их prune, канонический
+// репо шаблона, валидатор stack-артефактов, хуки guard-bash и commit-msg и самозащита make check. На
+// archtest и archkit //nolint не действует.
 package archtest
 
 import (
@@ -20,7 +22,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -455,35 +456,6 @@ func TestNoExportedSubjectInDomainRoot(t *testing.T) {
 				}
 			}
 		}
-	}
-}
-
-// wallClock — функции time, которые читают или ждут настенные часы.
-var wallClock = []string{"Now", "Since", "Until", "After", "AfterFunc", "Tick", "NewTimer", "NewTicker", "Sleep"}
-
-// TestNoWallClockInDomains: детерминизм — clockkit.Clock вместо настенных часов во всём
-// internal/domain (кроме тестов). Имя пакета берётся из импортов файла: алиас не прячет вызов.
-func TestNoWallClockInDomains(t *testing.T) {
-	t.Parallel()
-	for _, f := range goFiles(t) {
-		if _, _, ok := splitDomain(f.pkg); !ok || f.test {
-			continue
-		}
-		file := parseGo(t, f.path)
-		byName := importsByName(file)
-		if byName["."] == "time" {
-			t.Errorf("%s dot-imports time: the wall clock would hide behind it", f.path)
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectorExpr)
-			if !ok || !slices.Contains(wallClock, sel.Sel.Name) {
-				return true
-			}
-			if id, ok := sel.X.(*ast.Ident); ok && byName[id.Name] == "time" {
-				t.Errorf("%s calls time.%s: the domain reads time through an injected clockkit.Clock (rule domain-architecture)", f.path, sel.Sel.Name)
-			}
-			return true
-		})
 	}
 }
 

@@ -116,7 +116,7 @@ func TestModule(t *testing.T) {
 	}
 }
 
-// APP_ENV= (задан, но пуст) — не dev: гард строг, как к любому окружению, кроме dev.
+// APP_ENV= (задан, но пуст) — не dev, а незаданное окружение: сервис не собирается.
 func TestModule_EmptyEnvIsNotDev(t *testing.T) {
 	t.Setenv("APP_ENV", "")
 	setenv(t, "COOKIE_SECURE", "")
@@ -124,7 +124,7 @@ func TestModule_EmptyEnvIsNotDev(t *testing.T) {
 	app := fx.New(fx.NopLogger, appconfig.Module,
 		fx.Supply(logkit.RedactConfig{}, httpkit.Config{DocsEnabled: true}, authnkit.JWTConfig{Audience: []string{"backend"}}))
 
-	require.ErrorIs(t, app.Err(), appconfig.ErrUnsafe)
+	require.ErrorContains(t, app.Err(), "APP_ENV is required")
 }
 
 // Модуль отдаёт Env окружения — его берут платформа и модули доменов.

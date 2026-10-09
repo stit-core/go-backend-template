@@ -2,11 +2,12 @@ module git.stit.tech/stit-core/go-backend-template
 
 go 1.26.6
 
+toolchain go1.26.9
+
 require (
-	git.stit.tech/stit-core/golibinfra v1.3.0
+	git.stit.tech/stit-core/golibinfra v1.4.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/metric v1.46.0
@@ -91,7 +92,7 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect

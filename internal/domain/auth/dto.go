@@ -13,6 +13,7 @@ type LoginOutput struct {
 	User         *User
 }
 
+// LockState — блокировка входа guard'ом; RetryAfter — её остаток по часам хранилища guard'а.
 type LockState struct {
-	Until time.Time
+	RetryAfter time.Duration
 }

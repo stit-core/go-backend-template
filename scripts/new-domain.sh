@@ -650,6 +650,7 @@ import (
 	"$MODULE_PATH/internal/domain/$NAME"
 	${FLAT}http "$MODULE_PATH/internal/domain/$NAME/delivery/http"
 	"$MODULE_PATH/internal/domain/$NAME/delivery/http/mocks"
+	"$MODULE_PATH/internal/platform/authgate"
 	"$MODULE_PATH/internal/testkit/identitytest"
 	"$MODULE_PATH/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
@@ -659,7 +660,7 @@ func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
 		${FLAT}http.Register(api, ${FLAT}http.NewHandler(uc))
-	}, handlertest.WithAuth(identitytest.Extract))
+	}, handlertest.WithSecuritySchemes(authgate.CookieScheme(identitytest.Extract)))
 }
 
 var created = &$NAME.$TITLE{ID: "id-1", Name: "first", CreatedAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}

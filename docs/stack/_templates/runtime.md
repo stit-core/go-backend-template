@@ -14,7 +14,7 @@ fx.Lifecycle.>
 
 ## Lifecycle
 <fx-композиция: какие модули провайдятся, порядок старта, что регистрируется через
-fx.Invoke. Какие periodic jobs (`timerkit.Provide` в модуле-владельце; kit-job'ы — из
+fx.Invoke. Какие periodic jobs (`timerkit.ProvideJob` в модуле-владельце; kit-job'ы — из
 модулей китов) и на каком интервале.>
 
 ## Shutdown

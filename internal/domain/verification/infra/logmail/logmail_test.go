@@ -2,7 +2,6 @@ package logmail_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,13 +31,12 @@ func TestMailer_LogsNoAddressOrToken(t *testing.T) {
 	require.NoError(t, m.SendPasswordReset(context.Background(), email, token))
 	require.NoError(t, m.SendEmailVerification(context.Background(), email, token))
 
+	// Поля записи сверяются целиком: logtest маскирует секреты, как боевой логгер, и поиск токена
+	// подстрокой лишнее поле с ним пропустил бы.
 	entries := log.Entries()
 	require.Len(t, entries, 2)
-	require.Equal(t, "password_reset", entries[0].Str("mail"))
-	require.Equal(t, "email_verification", entries[1].Str("mail"))
-	for _, e := range entries {
-		record := fmt.Sprint(e.Msg, e.KV)
-		require.NotContains(t, record, email)
-		require.NotContains(t, record, token)
+	for i, mail := range []string{"password_reset", "email_verification"} {
+		require.Equal(t, "mail not sent: dev log mailer", entries[i].Msg)
+		require.Equal(t, map[string]any{"component": "logmail", "mail": mail}, entries[i].KV)
 	}
 }

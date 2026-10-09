@@ -226,6 +226,6 @@ func (uc *Usecase) Delete(ctx context.Context, id string) error {
 func (uc *Usecase) audit(ctx context.Context, e auditkit.Entry) {
 	e.At = uc.d.Clock.Now()
 	if err := uc.d.Audit.Log(ctx, e); err != nil {
-		uc.d.Log.Error(ctx, "audit "+e.Action, "err", err)
+		uc.d.Log.Error(ctx, "audit "+e.Action, "error", err)
 	}
 }

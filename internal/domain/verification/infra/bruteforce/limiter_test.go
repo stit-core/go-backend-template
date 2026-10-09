@@ -20,7 +20,8 @@ const ip = "203.0.113.7"
 func TestResetLimiter_Allow(t *testing.T) {
 	t.Parallel()
 	guard, err := bruteforcetest.NewCounting(bruteforcekit.Config{
-		MaxFailures: 2, LockDuration: time.Minute, CleanupInterval: time.Minute, IPv6Prefix: bruteforcekit.FullIPv6Prefix,
+		MaxFailures: 2, LockDuration: time.Minute, SubjectMaxFailures: bruteforcekit.SubjectBudgetOff, SubjectLockDuration: time.Minute,
+		CleanupRetention: time.Minute, CleanupInterval: time.Minute, IPv6Prefix: bruteforcekit.FullIPv6Prefix,
 	}, clockkit.NewFixed(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)))
 	require.NoError(t, err)
 	l := bruteforce.NewResetLimiter(guard)

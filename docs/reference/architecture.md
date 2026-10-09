@@ -15,7 +15,7 @@
 | `internal/testkit/`, `internal/archtest/` | тестовая обвязка и машинные правила раскладки | — |
 
 Generic-примитив, нужный не только этому сервису (HTTP-клиент, middleware, «kit»), — в golibinfra
-(§ Граница с golibinfra). Других каталогов в `internal/` нет (archtest `TestInternalLayout`).
+(§ Граница с golibinfra). Других каталогов в `internal/` нет (archtest `TestLayout`).
 
 ## Слои домена
 
@@ -129,7 +129,7 @@ Generic-примитив, нужный не только этому сервис
   из usecase одним хелпером домена (`uc.audit`: время; IP клиента и ID запроса auditkit берёт из
   ctx) — в записи ID учётной записи, не
   адрес; попытка входа на неизвестный адрес и блокировка guard'а — только исход в метрике; выход
-  аудита не пишет — чью сессию он закрыл, хранилище сессий не отдаёт.
+  аудита не пишет.
   След таких отказов по клиенту (IP, частота) — access-лог прокси перед сервисом.
   Техническая запись канала (факт доставки письма) — в его адаптере.
 - Изменение, после которого прежняя сессия жить не должна (блокировка, удаление, смена роли или
@@ -144,7 +144,7 @@ Generic-примитив, нужный не только этому сервис
 
 ## Ports & adapters (cross-domain)
 
-`internal/archtest` (`TestImportBoundaries`, шаг тестов) строго изолирует бизнес-домены: для
+`internal/archtest` (`TestLayout` — вызов `archkit`, шаг тестов) строго изолирует бизнес-домены: для
 любого каталога `internal/domain/*`, включая ещё не созданные, импорт чужого домена запрещён —
 без перечисления доменов в конфигах. Исключения: `module/` (адаптеры; чужой домен — только
 корневым пакетом) и `*_test.go`. Там же держатся слои: `delivery` не импортирует `infra`,
@@ -167,7 +167,7 @@ DTO в порте — локальные (не re-export из B).
   `trusted.go`), что каждая переводится — тест адаптера.
 - **Identity-closure** (`func(u *user.Usecase) userhttp.Usecase { return u }`) — только внутри
   домена: delivery-порт своего usecase. Порт между доменами closure не реализует — чужие
-  sentinel'ы уйдут потребителю без маппинга (archtest `TestNoCrossDomainIdentityClosure`).
+  sentinel'ы уйдут потребителю без маппинга (archtest `TestLayout`).
 - **Типовой адаптер** — тип **и его конструктор** в `adapters.go` (не расщеплять между
   module.go/adapters.go); один тип на домен-поставщика реализует все порты потребителя к нему.
 - **Sentinel-маппинг исчерпывающий:** каждая ошибка из `TrustedErrors` поставщика → sentinel
@@ -205,14 +205,16 @@ DTO в порте — локальные (не re-export из B).
   дообработка запросов `HTTP_SHUTDOWN_TIMEOUT` — берёт не больше ⅔ (httpkit), хуки после него — остаток,
   в нём `NATS_DRAIN_TIMEOUT`. Env, который в бюджет не помещается (HTTP больше 20s, дренаж NATS
   больше 10s), — ошибка старта (`checkStopBudget`); поднимаете их — поднимите и `stopTimeout`.
-- **События fx** — в лог через `logkit.FxLogger` (порядок хуков `TestBoot` читает из лога
-  сервиса); паника конструктора или Invoke — ошибка старта (`fx.RecoverFromPanics`).
+- **События fx** — в лог сервиса через `logkit.FxLogger` (sink — из `logkit.Config`); паника
+  конструктора или Invoke — ошибка старта (`fx.RecoverFromPanics`).
 - **Группы** — `httpkit.security_scheme`, `healthkit.probes`, `timerkit.jobs` (через
-  `timerkit.Provide`), `pgkit.migrations`; свои middleware и правки huma — одним значением
+  `timerkit.ProvideJob`), `pgkit.migrations`; свои middleware и правки huma — одним значением
   `httpkit.Middlewares` и `httpkit.HumaConfigs` (порядок задаёт приложение). Per-domain outbox
   (`events.OutboxFor`) включается внутрь доменного `fx.Module`: `fx.Private` скоупит publisher.
-- Кит без потребителя в граф не подключается: его конструкторы не выполняются, конфиг не
-  проверяется, а env молча ничего не меняет.
+- Кит без потребителя в граф не подключается: flagkit, natskit, cachekit, tzkit и storagekit
+  проверяют конфиг на старте и без потребителя (natskit и cachekit — ещё и связь) — сервис требовал
+  бы рабочий конфиг и живой бэкенд ни для кого; у остальных китов конструкторы не выполняются, конфиг
+  не проверяется, а env молча ничего не меняет.
 
 ## HTTP DTO naming (huma)
 
@@ -284,7 +286,7 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   пропускает, невыполненный повторяет — канон `verification.IssueEmailVerification`. Poison у
   consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - **Jobs.** Периодические задачи без события-триггера — `timerkit.Job`, регистрируются
-  `timerkit.Provide` в модуле-владельце и гоняются `timerkit.Module` той же fx.Lifecycle.
+  `timerkit.ProvideJob` в модуле-владельце и гоняются `timerkit.Module` той же fx.Lifecycle.
   Обслуживание kit-таблиц приходит с модулями китов (`bruteforcepg.Module` и `sessionpg.Module` —
   cleanup, `outboxkit.Instance` — drain/партиции/retention); свой job поверх kit-таблицы не пишется.
 - **JetStream-стримы.** drain и subscriber'ы требуют включённого JetStream

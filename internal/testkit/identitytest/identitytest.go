@@ -21,7 +21,7 @@ const (
 // Anon — ctx запроса без личности: IP клиента и request id в нём кладёт цепочка httpkit, как у сервиса.
 func Anon() context.Context {
 	var ctx context.Context
-	h := httpkit.ClientIP(logkit.Nop(), 0)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { ctx = r.Context() }))
+	h := httpkit.ClientIP(0, logkit.Nop())(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { ctx = r.Context() }))
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", http.NoBody)
 	r.RemoteAddr = IP + ":51234"
 	h.ServeHTTP(httptest.NewRecorder(), r)
@@ -44,8 +44,8 @@ func Unknown(userID string) context.Context {
 	return With(identity.Identity{UserID: userID, Role: identity.RoleUnknown})
 }
 
-// Extract — экстрактор handler-тестов (handlertest.WithAuth): личность — из ctx запроса (PostCtx,
-// GetCtx с контекстом пакета); запрос без неё — 401, как без cookie.
+// Extract — экстрактор схемы Cookie в handler-тестах (handlertest.WithSecuritySchemes): личность — из
+// ctx запроса (PostCtx, GetCtx с контекстом пакета); запрос без неё — 401, как без cookie.
 func Extract(r *http.Request) (context.Context, error) {
 	if _, ok := identity.From(r.Context()); !ok {
 		return r.Context(), errors.New("identitytest: no identity in the request context")

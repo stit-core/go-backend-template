@@ -2,6 +2,7 @@ package verification_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"testing"
@@ -84,7 +85,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		emailSet: mocks.NewMockEmailVerificationSetter(t),
 		mailer:   mocks.NewMockMailer(t),
 		limiter:  mocks.NewMockResetLimiter(t),
-		hasher:   authntest.DeterministicHasher{},
+		hasher:   &authntest.DeterministicHasher{},
 	}
 	for _, fn := range opts {
 		fn(o)
@@ -115,21 +116,19 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	return ucFixture{uc: uc, bus: bus, audit: aud, tx: tx, log: log}
 }
 
+// event — последнее событие subject в своём типе: outbox хранит JSON.
+func event[T any](t *testing.T, f ucFixture, subject string) T {
+	t.Helper()
+	var e T
+	require.NoError(t, json.Unmarshal(f.bus.Last(subject), &e))
+	return e
+}
+
 var (
 	errHashing = errors.New("argon2: out of memory")
 	errDown    = errors.New("db down")
 	errAudit   = errors.New("audit_log: connection refused")
 )
-
-// brokenHasher — хэшер, у которого сбоит хэширование: у authntest такого фейка нет.
-type brokenHasher struct{ authntest.DeterministicHasher }
-
-func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
-
-// failingAudit — журнал аудита, запись в который не проходит: у audittest такого фейка нет.
-type failingAudit struct{}
-
-func (failingAudit) Log(context.Context, auditkit.Entry) error { return errAudit }
 
 // audited — запись аудита запроса identitytest: пользователь u1 сделал action над своей учётной записью;
 // IP клиента и ID запроса auditkit берёт из ctx.
@@ -190,7 +189,7 @@ func TestIssueEmailVerification_HappyPath(t *testing.T) {
 	require.NoError(t, f.uc.IssueEmailVerification(context.Background(), "u1"))
 	require.Equal(t, authnkit.HashToken(sentToken), storedHash, "the mailed token is the one stored by hash")
 	require.Equal(t, verification.EmailVerificationRequested{TokenID: "vid", UserID: "u1", At: fixedNow},
-		f.bus.Last(subjectEmailVerificationRequested), "TokenID is the id of the stored token, not the token")
+		event[verification.EmailVerificationRequested](t, f, subjectEmailVerificationRequested), "TokenID is the id of the stored token, not the token")
 	require.Equal(t, 1, f.bus.Count())
 }
 
@@ -298,7 +297,7 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 	require.NoError(t, f.uc.RequestPasswordReset(identitytest.Anon(), "a@b.com"))
 	require.Equal(t, authnkit.HashToken(sentToken), capturedHash)
 	require.Equal(t, verification.PasswordResetRequested{TokenID: "rid", UserID: "u1", At: fixedNow},
-		f.bus.Last(subjectPasswordResetRequested))
+		event[verification.PasswordResetRequested](t, f, subjectPasswordResetRequested))
 	require.Equal(t, 1, f.bus.Count())
 }
 
@@ -365,7 +364,7 @@ func TestRequestPasswordReset_SameAnswer(t *testing.T) {
 			require.Equal(t, tc.failed != "", logged, "a failure after the lookup is logged, not answered")
 			if logged {
 				require.Equal(t, "u1", e.Str("user_id"))
-				require.Contains(t, e.Str("err"), tc.failed)
+				require.Contains(t, e.Str("error"), tc.failed)
 			}
 			requireOutcome(t, p, "biz_verification_password_reset_requested_total", tc.result)
 		})
@@ -445,7 +444,7 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(-time.Nanosecond)), nil))}
 		}, verification.ErrInvalidResetToken},
 		{"new password not hashed", "newpassword123", func(t *testing.T) []ucOption {
-			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withHasher(brokenHasher{})}
+			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withHasher(&authntest.DeterministicHasher{HashErr: errHashing})}
 		}, errHashing},
 		{"user deleted after the request", "newpassword123", func(t *testing.T) []ucOption {
 			users := mocks.NewMockUserReader(t)
@@ -539,12 +538,12 @@ func TestConfirmEmail_AuditNotWritten(t *testing.T) {
 	repo.EXPECT().MarkEmailVerificationUsed(mock.MatchedBy(pgkit.InTx), "vid").Return(nil).Once()
 	emailSet := mocks.NewMockEmailVerificationSetter(t)
 	emailSet.EXPECT().MarkEmailVerified(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
-	f := newUC(t, withRepo(repo), withEmailSet(emailSet), withAudit(failingAudit{}))
+	f := newUC(t, withRepo(repo), withEmailSet(emailSet), withAudit(&audittest.Recorder{LogErr: errAudit}))
 
 	require.NoError(t, f.uc.ConfirmEmail(identitytest.Anon(), "tok"))
 	e, logged := f.log.Find(slog.LevelError, "audit email_confirmed")
 	require.True(t, logged)
-	require.Contains(t, e.Str("err"), errAudit.Error())
+	require.Contains(t, e.Str("error"), errAudit.Error())
 }
 
 // Отказ подтверждения: email не отмечен, аудита нет; до транзакции доходит только годный токен.

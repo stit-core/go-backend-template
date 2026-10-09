@@ -23,7 +23,8 @@ func registerIdentityLogAttr() {
 	logkit.RegisterAttr("user_id", userIDAttr)
 }
 
-func newCookieSecurityScheme() httpkit.SecuritySchemeEntry {
+// CookieScheme — схема Cookie в OpenAPI с extractor'ом её credentials; nil — только описание схемы.
+func CookieScheme(extract httpkit.AuthExtractor) httpkit.SecuritySchemeEntry {
 	return httpkit.SecuritySchemeEntry{
 		Name: SecuritySchemeName,
 		Scheme: &huma.SecurityScheme{
@@ -32,21 +33,18 @@ func newCookieSecurityScheme() httpkit.SecuritySchemeEntry {
 			Name:        CookieAccess,
 			Description: "httpOnly cookie выставляется через POST /api/auth/login и автоматически прикладывается браузером.",
 		},
+		Extract: extract,
 	}
 }
 
-// SecurityScheme — схема Cookie в OpenAPI; входит в Module, а без него собирает API без JWT и БД.
-var SecurityScheme = fx.Provide(
-	fx.Annotate(newCookieSecurityScheme, fx.ResultTags(`group:"`+httpkit.SecuritySchemeGroup+`"`)),
-)
+// SecurityScheme — схема Cookie без extractor'а: собирает API без JWT и БД (спецификация, проверка
+// маршрутов); сервис с ней не стартует — extractor схеме даёт Module.
+var SecurityScheme = httpkit.ProvideSecurityScheme(func() httpkit.SecuritySchemeEntry { return CookieScheme(nil) })
 
 var Module = fx.Module(
 	"internal/platform/authgate",
 	authnProviders,
-	SecurityScheme,
-	fx.Provide(
-		NewExtractor,
-		func(e *Extractor) httpkit.AuthExtractor { return e.Extract },
-	),
+	fx.Provide(NewExtractor),
+	httpkit.ProvideSecurityScheme(func(e *Extractor) httpkit.SecuritySchemeEntry { return CookieScheme(e.Extract) }),
 	fx.Invoke(registerIdentityLogAttr),
 )

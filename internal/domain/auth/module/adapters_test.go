@@ -23,7 +23,7 @@ func newAdapter(t *testing.T) (*userAdapter, *usermocks.MockRepository) {
 	t.Helper()
 	repo := usermocks.NewMockRepository(t)
 	return newUserAdapter(user.NewTrusted(user.TrustedDeps{
-		Repo: repo, Hasher: authntest.DeterministicHasher{}, Tx: pgtest.Identity{}, Sessions: usermocks.NewMockSessions(t),
+		Repo: repo, Hasher: &authntest.DeterministicHasher{}, Tx: pgtest.Identity{}, Sessions: usermocks.NewMockSessions(t),
 	})), repo
 }
 

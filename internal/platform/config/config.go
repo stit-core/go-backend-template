@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kelseyhightower/envconfig"
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	kitconfig "git.stit.tech/stit-core/golibinfra/config"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 )
@@ -38,10 +38,10 @@ var Module = fx.Module(
 	fx.Invoke(Guard),
 )
 
-// Load читает App из ENV тем же envconfig, что и конфиги китов.
+// Load читает App из ENV тем же ридером, что и конфиги китов.
 func Load() (*App, error) {
 	var cfg App
-	if err := envconfig.Process("", &cfg); err != nil {
+	if err := kitconfig.Load(&cfg, kitconfig.Env()); err != nil {
 		return nil, fmt.Errorf("app config: %w", err)
 	}
 	return &cfg, nil

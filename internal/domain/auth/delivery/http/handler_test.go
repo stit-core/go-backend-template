@@ -31,7 +31,7 @@ func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
 		authhttp.Register(api, authhttp.NewHandler(uc, authgate.CookieConfig{Secure: true}))
-	}, handlertest.WithAuth(identitytest.Extract))
+	}, handlertest.WithSecuritySchemes(authgate.CookieScheme(identitytest.Extract)))
 }
 
 // callerIs — ctx usecase несёт identity вызывающего: по ней решает policy.

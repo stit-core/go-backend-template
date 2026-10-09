@@ -123,3 +123,57 @@ WHO    проект (compose env, NATS)
 DECIDE —
 RISK   без стрима verification или user сервис не стартует
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   env golibinfra v1.4.0. Новые optional: HTTP_REQUEST_TIMEOUT (default 25s), HTTP_TRUST_TRACE_CONTEXT
+       (false), BRUTEFORCE_SUBJECT_MAX_FAILURES (20) и BRUTEFORCE_SUBJECT_LOCK_DURATION (1m) — блокировка
+       учётной записи со всех адресов, PG_MIGRATE_LOCK_TIMEOUT (5s, образ migrate),
+       OTEL_ALLOW_INSECURE_TOKEN (false). `KEY=` (задана пустой) — как незаданная: default, у required —
+       отказ старта (APP_ENV=); пустое значение и пустой список — `-`. Старт падает, если:
+       HTTP_REQUEST_TIMEOUT не меньше HTTP_WRITE_TIMEOUT (30s) или HTTP_IDEMPOTENCY_RESERVE_TTL (60s);
+       BRUTEFORCE_CLEANUP_RETENTION (24h) меньше BRUTEFORCE_LOCK_DURATION (15m) или
+       BRUTEFORCE_SUBJECT_LOCK_DURATION; OUTBOX_TICK_TIMEOUT (30s) не меньше PG_IDLE_IN_TX_SESSION_TIMEOUT
+       (60s; 0 — без лимита, сверки нет); в NATS_URL или OTEL_EXPORTER_OTLP_ENDPOINT неэкранированный `@`
+       после хоста; OTEL_TOKEN уходит на http:// не на loopback (и при OTEL_SDK_DISABLED=true).
+       HTTP_CORS_HEADERS — default с Idempotency-Key. Киты сняли STORAGE_S3_USE_SSL — сервис её не читал.
+       Сборка: toolchain go1.26.9 в go.mod, образ сборки golang:1.26.9-alpine по digest — действий нет
+WHY    repair-harness S7 — bump golibinfra v1.4.0: дедлайн запроса, бюджет попыток учётной записи, ридер
+       ENV китов
+ACTION compose `environment:` каждого окружения сверить с условиями: required — со значением (не `KEY=`),
+       пустое значение — `-`; свои HTTP_WRITE_TIMEOUT, HTTP_IDEMPOTENCY_RESERVE_TTL, BRUTEFORCE_* и
+       PG_IDLE_IN_TX_SESSION_TIMEOUT — по условиям выше; в URL `/` пароля — `%2F`, `@` пути — `%40`; свой
+       HTTP_CORS_HEADERS — дописать Idempotency-Key; коллектор с токеном — https или
+       OTEL_ALLOW_INSECURE_TOKEN=true в доверенной сети
+WHO    проект (compose env)
+DECIDE дефолты ок: 25s на запрос, 20 попыток и 1m блокировки учётной записи?
+RISK   с нарушенным условием сервис не стартует; запрос дольше HTTP_REQUEST_TIMEOUT получает 503
+       REQUEST_TIMEOUT — долгие операции клиента оборвутся
+===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   миграция outbox кита 0003 (источники outbox_user и outbox_verification в cmd/migrate): ALTER TABLE
+       … ADD COLUMN IF NOT EXISTS trace_context JSONB, down — no-op; api сверяет схему kit-таблиц на
+       старте (pgkit.ErrSchema)
+WHY    repair-harness S7 — golibinfra v1.4.0: трасса запроса продолжается через outbox
+ACTION образ migrate (`migrate up`) до замены api. Блокировку таблицы оператор ждёт не дольше
+       PG_MIGRATE_LOCK_TIMEOUT (5s): отказ оставляет версию источника dirty (`migrate version` её
+       называет) — снять флаг в таблице версий источника (schema_migrations_outbox_<домен>) и повторить
+       `migrate up` в окно без долгих транзакций по outbox. Откат на прежний тег миграций не требует:
+       колонка остаётся, прежний api с ней работает
+WHO    проект (порядок выкатки)
+DECIDE —
+RISK   api этого релиза на схеме без колонки не стартует
+===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   сигналы golibinfra v1.4.0: ключ ошибки в логах сервиса и китов — `error` вместо `err`; метрики
+       outbox — без label subject; bruteforce_locks_total — с label scope; новый ответ 503
+       REQUEST_TIMEOUT; спан otelpgx — `query <имя запроса>` (текст SQL — в db.query.text); 429, preflight
+       и 405 — под маршрутом пути, unmatched — только путь без маршрута
+WHY    repair-harness S7 — bump golibinfra v1.4.0
+ACTION запросы логов, панели и алерты по полю err, label subject метрик outbox и имени спана otelpgx —
+       переписать; завести алерт на долю 503 REQUEST_TIMEOUT
+WHO    проект (наблюдаемость)
+DECIDE —
+RISK   панели и алерты по прежним полям молча пустеют
+===

@@ -26,7 +26,7 @@ func (g *loginGuard) Attempt(ctx context.Context, subject, ip string) (*auth.Loc
 	case err != nil || lock == nil:
 		return nil, err
 	}
-	return &auth.LockState{Until: lock.Until}, nil
+	return &auth.LockState{RetryAfter: lock.RetryAfter}, nil
 }
 
 func (g *loginGuard) RecordSuccess(ctx context.Context, subject, ip string) error {

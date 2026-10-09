@@ -18,10 +18,6 @@
   (не компилируется), инициализмы (`api_key` — замечания линтера), существующая таблица
   (`password_reset` — `make gen` падает, дерево в полусостоянии). Триггер: повторный аудит
   (`repair-harness` S10) или первая жалоба.
-- **testkit-failing-fakes** — тесты держат свои фейки поверх `authntest.DeterministicHasher`: `brokenHasher`
-  (сбой хэширования — auth, user, verification) и `countingHasher` (счёт проверок пароля, холостых тоже —
-  auth), и свой `failingAudit` (сбой записи аудита): таких нет в authntest и audittest. Триггер: партия 3
-  golibinfra (v1.4.0) — фейки в testkit, локальные снять.
 - **logout-audit** — выход (`auth.Logout`) не пишет аудит: `session.Store.Revoke` не отдаёт, чью
   сессию закрыл, а запись без учётной записи на любой токен — шум. Триггер: golibinfra отдаёт subject
   закрытой сессии (партия 3) — аудит `logout` с учётной записью.

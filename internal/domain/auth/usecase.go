@@ -43,7 +43,7 @@ type Authorizer interface {
 }
 
 // LoginGuard: Attempt учитывает попытку до проверки пароля — неудача отдельной записи не требует;
-// ключ, который guard не учитывает (пустой или длиннее предела email), — ErrInvalidCredentials.
+// ключ, который guard не учитывает (пустой, с NUL или не в UTF-8), — ErrInvalidCredentials.
 type LoginGuard interface {
 	Attempt(ctx context.Context, subject, ip string) (*LockState, error)
 	RecordSuccess(ctx context.Context, subject, ip string) error
@@ -94,7 +94,7 @@ func (uc *Usecase) login(ctx context.Context, in *LoginInput) (*LoginOutput, out
 		// снимал бы защиту от перебора.
 		return nil, outcome.Error, fmt.Errorf("login guard: %w", err)
 	case lock != nil:
-		return nil, resultLocked, &LockedError{Wait: lock.Until.Sub(uc.d.Clock.Now())}
+		return nil, resultLocked, &LockedError{Wait: lock.RetryAfter}
 	}
 
 	u, err := uc.d.Users.GetByEmail(ctx, in.Email)
@@ -118,7 +118,7 @@ func (uc *Usecase) login(ctx context.Context, in *LoginInput) (*LoginOutput, out
 
 	// Пароль уже проверен: несброшенный счётчик лишь раньше заблокирует пару, если она снова ошибётся.
 	if err := uc.d.Guard.RecordSuccess(ctx, in.Email, ip); err != nil {
-		uc.d.Log.Error(ctx, "guard record success", "err", err)
+		uc.d.Log.Error(ctx, "guard record success", "error", err)
 	}
 
 	access, err := uc.d.Tokens.IssueAccess(ctx, u)
@@ -196,8 +196,8 @@ func (uc *Usecase) refresh(ctx context.Context, refreshToken string) (*LoginOutp
 		return nil, outcome.Error, fmt.Errorf("lookup user: %w", err)
 	case err != nil || !u.CanLogin:
 		// Удалённый или заблокированный сессию не продлевает: токен Rotate клиенту не уходит, сессия закрыта.
-		if err := uc.d.Sessions.Revoke(ctx, next.Value); err != nil {
-			uc.d.Log.Error(ctx, "revoke session", "user_id", next.Subject, "err", err)
+		if _, err := uc.d.Sessions.Revoke(ctx, next.Value); err != nil {
+			uc.d.Log.Error(ctx, "revoke session", "user_id", next.Subject, "error", err)
 		}
 		return nil, outcome.Invalid, ErrRefreshInvalid
 	}
@@ -208,9 +208,9 @@ func (uc *Usecase) refresh(ctx context.Context, refreshToken string) (*LoginOutp
 	return &LoginOutput{AccessToken: access, RefreshToken: next.Value, User: u}, outcome.OK, nil
 }
 
-// Logout: неизвестный токен и закрытая сессия — тоже выход; аудита нет — чья сессия, хранилище не отдаёт.
+// Logout: неизвестный токен и закрытая сессия — тоже выход; аудита выход не пишет.
 func (uc *Usecase) Logout(ctx context.Context, refreshToken string) error {
-	if err := uc.d.Sessions.Revoke(ctx, refreshToken); err != nil {
+	if _, err := uc.d.Sessions.Revoke(ctx, refreshToken); err != nil {
 		return fmt.Errorf("revoke session: %w", err)
 	}
 	return nil
@@ -239,7 +239,7 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 	case err != nil:
 		return fmt.Errorf("password guard: %w", err)
 	case lock != nil:
-		return &LockedError{Wait: lock.Until.Sub(uc.d.Clock.Now())}
+		return &LockedError{Wait: lock.RetryAfter}
 	}
 	verified, err := uc.d.PasswordVerify.VerifyPassword(ctx, userID, oldPassword)
 	if err != nil {
@@ -249,7 +249,7 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 		return ErrWrongOldPassword
 	}
 	if err := uc.d.Guard.RecordSuccess(ctx, current.Email, ip); err != nil {
-		uc.d.Log.Error(ctx, "guard record success", "err", err)
+		uc.d.Log.Error(ctx, "guard record success", "error", err)
 	}
 
 	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
@@ -268,6 +268,6 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 func (uc *Usecase) audit(ctx context.Context, e auditkit.Entry) {
 	e.At = uc.d.Clock.Now()
 	if err := uc.d.Audit.Log(ctx, e); err != nil {
-		uc.d.Log.Error(ctx, "audit "+e.Action, "err", err)
+		uc.d.Log.Error(ctx, "audit "+e.Action, "error", err)
 	}
 }

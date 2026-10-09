@@ -37,7 +37,7 @@ func TestRun_PromotionClosesSessions(t *testing.T) {
 		t.Context(),
 		`INSERT INTO users (email, password_hash, name, status, role) VALUES ('admin@example.com', 'x', 'Early', 'active', 'client') RETURNING id`,
 	).Scan(&id))
-	store, err := sessionpg.NewStore(db, session.Config{IdleTTL: time.Hour, AbsoluteTTL: time.Hour, CleanupInterval: time.Hour})
+	store, err := sessionpg.NewStore(session.Config{IdleTTL: time.Hour, AbsoluteTTL: time.Hour, CleanupInterval: time.Hour}, db)
 	require.NoError(t, err)
 	tok, err := store.Issue(t.Context(), id)
 	require.NoError(t, err)

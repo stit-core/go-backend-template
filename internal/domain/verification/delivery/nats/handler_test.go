@@ -87,7 +87,7 @@ func (b *streamSubs) SubscribeStream(ctx context.Context, stream, subject, durab
 // консьюмер, — тем же обработчиком: строка outbox, записанная до выкатки, и недоставленное письма не теряют.
 func TestRegister(t *testing.T) {
 	t.Parallel()
-	bus := &streamSubs{Recorder: natstest.New(), durables: map[string]string{}}
+	bus := &streamSubs{Recorder: natstest.New(natstest.WithStream("user")), durables: map[string]string{}}
 	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().IssueEmailVerification(mock.Anything, "u-v2").Return(nil).Once()
 	uc.EXPECT().IssueEmailVerification(mock.Anything, "u-v1").Return(nil).Once()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -105,7 +104,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		setpw:  mocks.NewMockPasswordSetter(t),
 		guard:  mocks.NewMockLoginGuard(t),
 		tokens: tokens{},
-		hasher: authntest.DeterministicHasher{},
+		hasher: &authntest.DeterministicHasher{},
 	}
 	for _, fn := range opts {
 		fn(o)
@@ -197,30 +196,6 @@ var (
 	errAudit   = errors.New("audit_log: connection refused")
 )
 
-// brokenHasher — хэшер, у которого сбоит хэширование: у authntest такого фейка нет.
-type brokenHasher struct{ authntest.DeterministicHasher }
-
-func (brokenHasher) Hash(context.Context, string) (string, error) { return "", errHashing }
-
-// countingHasher — детерминированный хэшер, который считает проверки пароля, настоящие и холостые: у authntest
-// такого фейка нет.
-type countingHasher struct {
-	authntest.DeterministicHasher
-	verified, dummies atomic.Int32
-}
-
-func (h *countingHasher) Verify(ctx context.Context, plain, encoded string) (bool, error) {
-	h.verified.Add(1)
-	return h.DeterministicHasher.Verify(ctx, plain, encoded)
-}
-
-func (h *countingHasher) VerifyDummy(context.Context) { h.dummies.Add(1) }
-
-// failingAudit — журнал аудита, запись в который не проходит: у audittest такого фейка нет.
-type failingAudit struct{}
-
-func (failingAudit) Log(context.Context, auditkit.Entry) error { return errAudit }
-
 // failingSessions — хранилище сессий, у которого сбоит каждый вызов.
 type failingSessions struct{ session.Store }
 
@@ -232,12 +207,12 @@ func (failingSessions) Rotate(context.Context, string) (session.Token, error) {
 	return session.Token{}, errStore
 }
 
-func (failingSessions) Revoke(context.Context, string) error { return errStore }
+func (failingSessions) Revoke(context.Context, string) (string, error) { return "", errStore }
 
 // revokeFails — хранилище сессий, у которого сбоит только закрытие сессии.
 type revokeFails struct{ session.Store }
 
-func (revokeFails) Revoke(context.Context, string) error { return errStore }
+func (revokeFails) Revoke(context.Context, string) (string, error) { return "", errStore }
 
 // canLogin — пользователь u1, которого пускают: его отдаёт поиск по ID ровно один раз.
 func canLogin(t *testing.T) *mocks.MockUserReader {
@@ -333,7 +308,7 @@ func TestLogin(t *testing.T) {
 		t.Parallel()
 		g := mocks.NewMockLoginGuard(t)
 		g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).
-			Return(&auth.LockState{Until: fixedNow.Add(15 * time.Minute)}, nil).Once()
+			Return(&auth.LockState{RetryAfter: 15 * time.Minute}, nil).Once()
 		f := newUC(t, withGuard(g))
 
 		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "p"})
@@ -381,20 +356,20 @@ func TestLogin(t *testing.T) {
 		require.True(t, f.audit.Has("login"))
 		e, logged := f.log.Find(slog.LevelError, "guard record success")
 		require.True(t, logged)
-		require.Contains(t, e.Str("err"), "guard store down")
+		require.Contains(t, e.Str("error"), "guard store down")
 	})
 
 	// Сбой записи аудита вход не отменяет: причина — в логе.
 	t.Run("audit not written keeps the login", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t, withUsers(signIn(t, alice())), withGuard(loginGuard(t, "a@b.com", true)), withAudit(failingAudit{}))
+		f := newUC(t, withUsers(signIn(t, alice())), withGuard(loginGuard(t, "a@b.com", true)), withAudit(&audittest.Recorder{LogErr: errAudit}))
 
 		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
 		e, logged := f.log.Find(slog.LevelError, "audit login")
 		require.True(t, logged)
-		require.Contains(t, e.Str("err"), errAudit.Error())
+		require.Contains(t, e.Str("error"), errAudit.Error())
 	})
 }
 
@@ -414,7 +389,7 @@ func TestLogin_OnePasswordCheckPerAttempt(t *testing.T) {
 		users             func(t *testing.T) *mocks.MockUserReader
 		password          string
 		succeeded         bool
-		verified, dummies int32
+		verified, dummies int
 	}{
 		{"unknown address", unknown, "pass1234", false, 0, 1},
 		{"blocked", func(t *testing.T) *mocks.MockUserReader { return found(t, blocked) }, "pass1234", false, 0, 1},
@@ -424,13 +399,13 @@ func TestLogin_OnePasswordCheckPerAttempt(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			h := &countingHasher{}
+			h := &authntest.DeterministicHasher{}
 			f := newUC(t, withUsers(tc.users(t)), withGuard(loginGuard(t, "a@b.com", tc.succeeded)), withHasher(h))
 
 			_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: tc.password})
 			require.Equal(t, tc.succeeded, err == nil, "login error: %v", err)
-			require.Equal(t, tc.verified, h.verified.Load(), "password checks")
-			require.Equal(t, tc.dummies, h.dummies.Load(), "dummy password checks")
+			require.Equal(t, tc.verified, h.VerifyCalls(), "password checks")
+			require.Equal(t, tc.dummies, h.VerifyDummyCalls(), "dummy password checks")
 		})
 	}
 }
@@ -625,7 +600,7 @@ func TestRefresh_BlockedSessionNotClosed(t *testing.T) {
 	e, logged := f.log.Find(slog.LevelError, "revoke session")
 	require.True(t, logged)
 	require.Equal(t, "u1", e.Str("user_id"))
-	require.Contains(t, e.Str("err"), errStore.Error())
+	require.Contains(t, e.Str("error"), errStore.Error())
 }
 
 // Сбой хранилища или поиска пользователя — не «войти заново», а ошибка сервиса.
@@ -671,7 +646,7 @@ func TestLogout(t *testing.T) {
 	_, err := f.sessions.Rotate(context.Background(), tok.Value)
 	require.ErrorIs(t, err, session.ErrInvalid, "the token of a closed session does not refresh")
 	require.NoError(t, f.uc.Logout(identitytest.Anon(), "unknown"))
-	require.Empty(t, f.audit.Entries(), "the store does not say whose session it closed")
+	require.Empty(t, f.audit.Entries(), "logout writes no audit")
 }
 
 func TestLogout_StoreFailure(t *testing.T) {
@@ -799,7 +774,7 @@ func TestChangePassword_Failure(t *testing.T) {
 	t.Run("hashing", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)),
-			withHasher(brokenHasher{}))
+			withHasher(&authntest.DeterministicHasher{HashErr: errHashing}))
 
 		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
 		require.ErrorIs(t, err, errHashing)
@@ -824,13 +799,13 @@ func TestChangePassword_SideRecordsFail(t *testing.T) {
 	g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, nil).Once()
 	g.EXPECT().RecordSuccess(mock.Anything, "a@b.com", identitytest.IP).Return(errors.New("guard store down")).Once()
 	f := newUC(t, withUsers(pwUser(t)), withGuard(g), withVerifier(oldPassword(t, true, nil)), withSetter(newPassword(t, nil)),
-		withAudit(failingAudit{}))
+		withAudit(&audittest.Recorder{LogErr: errAudit}))
 
 	require.NoError(t, f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123"))
 	require.True(t, f.log.Has(slog.LevelError, "guard record success"))
 	e, logged := f.log.Find(slog.LevelError, "audit change_password")
 	require.True(t, logged)
-	require.Contains(t, e.Str("err"), errAudit.Error())
+	require.Contains(t, e.Str("error"), errAudit.Error())
 }
 
 // Старый пароль угадывают так же, как при входе: под блокировкой и при сбое guard'а он не проверяется —
@@ -843,7 +818,7 @@ func TestChangePassword_Guarded(t *testing.T) {
 		err     error
 		wantErr error
 	}{
-		{name: "locked", lock: &auth.LockState{Until: fixedNow.Add(time.Minute)}, wantErr: auth.ErrAccountLocked},
+		{name: "locked", lock: &auth.LockState{RetryAfter: time.Minute}, wantErr: auth.ErrAccountLocked},
 		{name: "guard failure", err: errors.New("guard store down")},
 	}
 	for _, tc := range tests {
@@ -874,7 +849,7 @@ func TestLogin_RecordsOutcome(t *testing.T) {
 		return withUsers(users)
 	}
 	locked := mocks.NewMockLoginGuard(t)
-	locked.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(&auth.LockState{Until: fixedNow.Add(time.Minute)}, nil).Once()
+	locked.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(&auth.LockState{RetryAfter: time.Minute}, nil).Once()
 	failing := mocks.NewMockLoginGuard(t)
 	failing.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, errors.New("guard store down")).Once()
 	unkeyable := mocks.NewMockLoginGuard(t)

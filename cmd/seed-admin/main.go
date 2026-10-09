@@ -13,7 +13,6 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/kelseyhightower/envconfig"
 
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit/session"
@@ -53,41 +52,41 @@ func run(ctx context.Context, log logkit.Logger) int {
 	}
 	poolCfg, err := pgkit.NewPoolConfig()
 	if err != nil {
-		log.Error(ctx, "pg config", "err", err)
+		log.Error(ctx, "pg config", "error", err)
 		return 1
 	}
 	sessionCfg, err := session.NewConfig()
 	if err != nil {
-		log.Error(ctx, "session config", "err", err)
+		log.Error(ctx, "session config", "error", err)
 		return 1
 	}
 
-	var p authnkit.Argon2idParams
-	if err := envconfig.Process("", &p); err != nil {
-		log.Error(ctx, "argon params", "err", err)
+	p, err := authnkit.NewArgon2idConfig()
+	if err != nil {
+		log.Error(ctx, "argon params", "error", err)
 		return 1
 	}
 	hasher, err := authnkit.NewArgon2idHasher(p)
 	if err != nil {
-		log.Error(ctx, "argon params", "err", err)
+		log.Error(ctx, "argon params", "error", err)
 		return 1
 	}
 	hash, err := hasher.Hash(ctx, password)
 	if err != nil {
-		log.Error(ctx, "hash password", "err", err)
+		log.Error(ctx, "hash password", "error", err)
 		return 1
 	}
 
 	pool, err := pgkit.NewPool(ctx, poolCfg)
 	if err != nil {
-		log.Error(ctx, "pg connect", "err", err)
+		log.Error(ctx, "pg connect", "error", err)
 		return 1
 	}
 	defer pool.Close()
 	db := pgkit.NewDB(pool)
-	sessions, err := sessionpg.NewStore(db, sessionCfg)
+	sessions, err := sessionpg.NewStore(sessionCfg, db)
 	if err != nil {
-		log.Error(ctx, "session store", "err", err)
+		log.Error(ctx, "session store", "error", err)
 		return 1
 	}
 
@@ -100,7 +99,7 @@ func run(ctx context.Context, log logkit.Logger) int {
 		// Права и пароль сменились: прежние сессии учётной записи не получают ни того, ни другого.
 		return sessions.RevokeAll(txCtx, id)
 	}); err != nil {
-		log.Error(ctx, "seed admin failed", "err", err)
+		log.Error(ctx, "seed admin failed", "error", err)
 		return 1
 	}
 	log.Info(ctx, "seed admin: ok", "user_id", id)

@@ -28,7 +28,11 @@
 5. **Окружение** — `.env.example`: в `NATS_JS_STREAM_NAMES` — стримы своих доменов-публикаторов (без
    `user` и `verification`; публикаторов нет — `NATS_JS_STREAM_NAMES=`), комментарий над ним — про них;
    у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*` удали.
-6. `make gen` → `make check` → `✓ check clean`.
+6. **Раскладка** — `internal/archtest/layout_settings_test.go`: запись
+   `archkit.WithUncheckedPackages("internal/platform/identity")` убери, если корень ни одного своего
+   домена не берёт `internal/platform/identity` (сам или через `pkg/`): лишняя запись — `TestLayout`
+   красный с подсказкой `remove it`.
+7. `make gen` → `make check` → `✓ check clean`.
 
 ## Что остаётся
 

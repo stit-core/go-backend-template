@@ -22,7 +22,7 @@ func newTrusted(t *testing.T, repo *mocks.MockRepository, sessions *mocks.MockSe
 	if sessions == nil {
 		sessions = mocks.NewMockSessions(t)
 	}
-	return user.NewTrusted(user.TrustedDeps{Repo: repo, Hasher: authntest.DeterministicHasher{}, Tx: pgtest.Identity{}, Sessions: sessions})
+	return user.NewTrusted(user.TrustedDeps{Repo: repo, Hasher: &authntest.DeterministicHasher{}, Tx: pgtest.Identity{}, Sessions: sessions})
 }
 
 func TestTrusted_Lookup(t *testing.T) {
@@ -80,7 +80,7 @@ func TestTrusted_UpdatePassword(t *testing.T) {
 	sessions := mocks.NewMockSessions(t)
 	sessions.EXPECT().RevokeAll(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(write)
 	tx := &pgtest.Recorder{}
-	tr := user.NewTrusted(user.TrustedDeps{Repo: repo, Hasher: authntest.DeterministicHasher{}, Tx: tx, Sessions: sessions})
+	tr := user.NewTrusted(user.TrustedDeps{Repo: repo, Hasher: &authntest.DeterministicHasher{}, Tx: tx, Sessions: sessions})
 
 	require.NoError(t, tr.UpdatePassword(context.Background(), "u1", "hash:new", 3))
 	require.Equal(t, 1, tx.Calls(), "the password and the sessions change in one transaction")

@@ -18,6 +18,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	userhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/user/delivery/http"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user/delivery/http/mocks"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
@@ -30,7 +31,7 @@ func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	t.Helper()
 	return handlertest.NewAPI(t, func(api huma.API) {
 		userhttp.Register(api, userhttp.NewHandler(uc))
-	}, handlertest.WithAuth(identitytest.Extract))
+	}, handlertest.WithSecuritySchemes(authgate.CookieScheme(identitytest.Extract)))
 }
 
 // callerIs — ctx usecase несёт identity вызывающего: по ней решает policy.

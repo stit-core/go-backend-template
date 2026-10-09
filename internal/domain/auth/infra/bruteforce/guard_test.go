@@ -2,7 +2,6 @@ package bruteforce_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +16,7 @@ import (
 
 func TestLoginGuard_Attempt(t *testing.T) {
 	t.Parallel()
-	until := time.Date(2026, 1, 1, 12, 15, 0, 0, time.UTC)
+	const wait = 15 * time.Minute
 
 	rec := &bruteforcetest.Recorder{}
 	lock, err := authbruteforce.NewLoginGuard(rec).Attempt(context.Background(), "a@b.com", "10.0.0.1")
@@ -25,9 +24,10 @@ func TestLoginGuard_Attempt(t *testing.T) {
 	require.Nil(t, lock, "an allowed attempt carries no lock")
 	require.Equal(t, []bruteforcetest.Attempt{{Subject: "a@b.com", IP: "10.0.0.1"}}, rec.Attempts(), "the attempt is counted with the key of the client")
 
-	lock, err = authbruteforce.NewLoginGuard(bruteforcetest.Locked{Until: until}).Attempt(context.Background(), "a@b.com", "10.0.0.1")
+	lock, err = authbruteforce.NewLoginGuard(bruteforcetest.Locked{Until: time.Now().Add(wait)}).Attempt(context.Background(), "a@b.com", "10.0.0.1")
 	require.NoError(t, err)
-	require.Equal(t, &auth.LockState{Until: until}, lock)
+	require.NotNil(t, lock)
+	require.InDelta(t, wait, lock.RetryAfter, float64(time.Minute), "the wait is the one the guard reports")
 
 	_, err = authbruteforce.NewLoginGuard(bruteforcetest.Permissive{}).Attempt(pgkit.WithTestTx(context.Background()), "a@b.com", "10.0.0.1")
 	require.ErrorIs(t, err, bruteforcekit.ErrInTx, "the guard's failure reaches the usecase as is")
@@ -37,7 +37,7 @@ func TestLoginGuard_Attempt(t *testing.T) {
 // Ключ, который guard не учитывает, — не вход: неверные учётные данные, а не сбой.
 func TestLoginGuard_UnkeyableAttempt(t *testing.T) {
 	t.Parallel()
-	for name, subject := range map[string]string{"empty email": " ", "email over the key limit": strings.Repeat("a", 250) + "@b.com"} {
+	for name, subject := range map[string]string{"empty email": " ", "email with NUL": "a\x00@b.com"} {
 		_, err := authbruteforce.NewLoginGuard(bruteforcetest.Permissive{}).Attempt(context.Background(), subject, "10.0.0.1")
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials, name)
 		require.ErrorIs(t, err, bruteforcekit.ErrInvalidKey, name)

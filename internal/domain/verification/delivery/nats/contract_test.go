@@ -2,7 +2,6 @@ package nats_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -36,7 +35,7 @@ func TestUserRegisteredContract(t *testing.T) {
 	published := &outboxtest.Recorder{}
 	registration := user.NewUsecase(user.UsecaseDeps{
 		Repo:   repo,
-		Hasher: authntest.DeterministicHasher{},
+		Hasher: &authntest.DeterministicHasher{},
 		Policy: user.NewPolicy(),
 		Tx:     pgtest.Identity{},
 		Events: published,
@@ -49,7 +48,7 @@ func TestUserRegisteredContract(t *testing.T) {
 
 	verification := mocks.NewMockUsecase(t)
 	verification.EXPECT().IssueEmailVerification(mock.Anything, "u1").Return(nil).Once()
-	bus := natstest.New()
+	bus := natstest.New(natstest.WithStream("user"))
 	lc := fxtest.NewLifecycle(t)
 	verifnats.Register(lc, bus, verifnats.NewHandler(verification, logkit.Nop()))
 	lc.RequireStart()
@@ -58,8 +57,6 @@ func TestUserRegisteredContract(t *testing.T) {
 	events := published.All()
 	require.NotEmpty(t, events)
 	for _, e := range events {
-		payload, err := json.Marshal(e.Payload)
-		require.NoError(t, err)
-		require.NoError(t, bus.Deliver(context.Background(), e.Subject, payload), e.Subject)
+		require.NoError(t, bus.Deliver(context.Background(), e.Subject, e.Payload), e.Subject)
 	}
 }

@@ -150,7 +150,7 @@ func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outc
 	// сбой уходит в лог и метрику, ответ тот же; повтор — новым запросом.
 	result, err := uc.issuePasswordReset(ctx, u)
 	if err != nil {
-		uc.d.Log.Error(ctx, "password reset request", "user_id", u.ID, "err", err)
+		uc.d.Log.Error(ctx, "password reset request", "user_id", u.ID, "error", err)
 	}
 	return result, nil
 }
@@ -261,6 +261,6 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 func (uc *Usecase) audit(ctx context.Context, e auditkit.Entry) {
 	e.At = uc.d.Clock.Now()
 	if err := uc.d.Audit.Log(ctx, e); err != nil {
-		uc.d.Log.Error(ctx, "audit "+e.Action, "err", err)
+		uc.d.Log.Error(ctx, "audit "+e.Action, "error", err)
 	}
 }

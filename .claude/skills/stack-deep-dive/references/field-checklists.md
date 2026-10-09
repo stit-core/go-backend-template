@@ -94,7 +94,7 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 `Validation`, `Generates`.
 
 **Generates содержит**: `internal/platform/config` (структура `App`
-конфигов приложения, загрузка из env через envconfig), `.env.example`
+конфигов приложения, загрузка из env ридером китов — `config.Load`), `.env.example`
 (required+optional с дефолтами), seed для INFRA-HANDOFF (required + секреты).
 
 **Cross-kind (это роллап)**: читает решения kit-артефактов —
@@ -117,7 +117,7 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
    kit'ов.
 3. `Secrets` — секреты-класс с таблицей `Env | Тип | Назначение`.
    **Значение не коммитим** — только имя env.
-4. `Validation`: как fail-fast (envconfig); release-checklist
+4. `Validation`: как fail-fast (ридер ENV китов); release-checklist
    подсекцией.
 5. `Generates`: пути файлов (`internal/platform/config`,
    `.env.example`).

@@ -19,7 +19,7 @@ import (
 // repo — хранилище outbox теста: помнит subject'ы вставок.
 type repo struct{ inserted []string }
 
-func (r *repo) Insert(_ context.Context, subject string, _ json.RawMessage) error {
+func (r *repo) Insert(_ context.Context, subject string, _ json.RawMessage, _ int) error {
 	r.inserted = append(r.inserted, subject)
 	return nil
 }
@@ -46,7 +46,7 @@ func kit(f factory) fx.Option {
 		func() outboxkit.RepositoryFactory { return f },
 		func() natskit.StreamBus { return nil },
 		func() pgkit.Transactor { return nil },
-		func() outboxkit.Config { return outboxkit.Config{} },
+		outboxkit.NewConfig,
 		logkit.Nop,
 	))
 }

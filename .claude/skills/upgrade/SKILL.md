@@ -68,7 +68,12 @@ git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-templat
      `TestNoConflictMarkers`);
    - **нет в форке — не тронуты**: файл, который форк удалил, а шаблон правил; правка нужна — верни
      файл (`git show template/vX.Y.Z:<путь>`, в Go-файле — module path форка);
-   - **шаблон удалил, форк менял**: `git rm` или оставь как файл форка.
+   - **шаблон удалил, форк менял**: `git rm` или оставь как файл форка;
+   - **`internal/archtest/layout_settings_test.go`** — настройки `archkit` форка, перенос его не
+     трогает: без него пакет `internal/archtest` не собирается — возьми образец
+     (`git show template/vX.Y.Z:internal/archtest/layout_settings_test.go`) и сведи со своей раскладкой.
+     Нарушения, которые `TestLayout` нашёл в коде форка, — правкой кода или записью
+     `archkit.WithKnownViolations` с ID находки (перечень проверок — README `archkit`).
 3. Шаги `Breaking` и `Гейт` из аннотаций всех тегов до `TO`; правки раздела `Платформа` — по нужде.
 4. `make gen`, затем готово по CLAUDE.md § Готово.
 5. Коммит `chore(template): обвязка template/vX.Y.Z`, в теле — что форк правил руками.

@@ -43,7 +43,7 @@ func TestModule_Hasher(t *testing.T) {
 	t.Parallel()
 	var hasher authnkit.Hasher
 	app := fx.New(fx.NopLogger, authgate.Module,
-		fx.Supply(authnkit.Argon2idParams{Time: 1, Memory: 8 * 1024, Threads: 1, KeyLen: 32, SaltLen: 16}),
+		fx.Supply(authnkit.Argon2idConfig{Time: 1, Memory: 8 * 1024, Threads: 1, KeyLen: 32, SaltLen: 16}),
 		fx.Populate(&hasher))
 	require.NoError(t, app.Err())
 

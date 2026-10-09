@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 	"go.uber.org/fx/fxtest"
 
 	"git.stit.tech/stit-core/golibinfra/httpkit"
@@ -33,8 +34,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
 )
 
-// hookLog — порядок хуков старта и остановки сервиса: кто добавил хук (caller) — по событиям fx, которые
-// logkit.FxLogger пишет уровнем DEBUG.
+// hookLog — порядок хуков старта и остановки сервиса: кто добавил хук (caller) — по событиям fx.
 type hookLog struct {
 	mu          sync.Mutex
 	start, stop []string
@@ -71,6 +71,12 @@ func attr(r slog.Record, key string) string {
 		return v == ""
 	})
 	return v
+}
+
+// hookEvents отдаёт события fx обработчику h. Логгер событий service (logkit.FxLogger) берёт sink из
+// logkit.Config, а не из графа, и тройник teeLog его не видит; опция его подменяет.
+func hookEvents(h slog.Handler) fx.Option {
+	return fx.WithLogger(func() fxevent.Logger { return &fxevent.SlogLogger{Logger: slog.New(h)} })
 }
 
 // teeLog — тройник лога сервиса: записи доходят до h, только если service пишет их в logkit.
@@ -124,7 +130,7 @@ func TestBoot(t *testing.T) {
 		telemetryMP *sdkmetric.MeterProvider
 	)
 	app := fxtest.New(t, service,
-		teeLog(hooks),
+		hookEvents(hooks),
 		fx.Decorate(func(p *telemetry.Providers) *telemetry.Providers { telemetryMP = p.MeterProvider; return p }),
 		fx.Populate(&srv),
 		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
@@ -186,7 +192,7 @@ func TestBoot(t *testing.T) {
 	}
 
 	app.RequireStop()
-	const noHookEvents = "no %q events in the service log: service does not set logkit.FxLogger, or fx renamed this fxevent.SlogLogger message"
+	const noHookEvents = "no %q events of the service hooks: fx renamed this fxevent.SlogLogger message"
 	require.NotEmpty(t, hooks.start, noHookEvents, onStartExecuting)
 	require.NotEmpty(t, hooks.stop, noHookEvents, onStopExecuting)
 	// Запросы в полёте держат всё, что стартовало раньше HTTP: сервер слушает последним и гасится первым.
