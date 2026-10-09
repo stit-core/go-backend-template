@@ -74,15 +74,10 @@ func attr(r slog.Record, key string) string {
 }
 
 // hookEvents отдаёт события fx обработчику h. Логгер событий service (logkit.FxLogger) берёт sink из
-// logkit.Config, а не из графа, и тройник teeLog его не видит; опция подменяет его — что service его
-// ставит, держит TestMainLogsStartFailure.
+// logkit.Config, а не из графа, и декоратор *slog.Logger его не видит; опция подменяет его — что service
+// его ставит, держит TestMainLogsStartFailure.
 func hookEvents(h slog.Handler) fx.Option {
 	return fx.WithLogger(func() fxevent.Logger { return &fxevent.SlogLogger{Logger: slog.New(h)} })
-}
-
-// teeLog — тройник лога сервиса: записи доходят до h, только если service пишет их в logkit.
-func teeLog(h slog.Handler) fx.Option {
-	return fx.Decorate(func(l *slog.Logger) *slog.Logger { return slog.New(slog.NewMultiHandler(l.Handler(), h)) })
 }
 
 // serviceEnv поднимает Postgres и NATS в контейнерах и выставляет env сервиса: .env.example, направленный на

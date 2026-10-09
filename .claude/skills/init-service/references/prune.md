@@ -27,7 +27,8 @@
    из `0001_users` уходят с ней: своя миграция, которой они нужны, заводит их сама.
 5. **Окружение** — `.env.example`: в `NATS_JS_STREAM_NAMES` — стримы своих доменов-публикаторов (без
    `user` и `verification`; публикаторов нет — `NATS_JS_STREAM_NAMES=`), комментарий над ним — про них;
-   у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*` удали.
+   у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*` и
+   `BRUTEFORCE_SUBJECT_*` с их комментариями удали.
 6. **Раскладка** — `internal/archtest/layout_settings_test.go`: запись
    `archkit.WithUncheckedPackages("internal/platform/identity")` убери, если корень ни одного своего
    домена не берёт `internal/platform/identity` (сам или через `pkg/`): лишняя запись — `TestLayout`

@@ -90,6 +90,11 @@ func (h *requestLog) leaked(secrets []string) []string {
 	return found
 }
 
+// teeLog — тройник лога сервиса: записи доходят до h, только если service пишет их в logkit.
+func teeLog(h slog.Handler) fx.Option {
+	return fx.Decorate(func(l *slog.Logger) *slog.Logger { return slog.New(slog.NewMultiHandler(l.Handler(), h)) })
+}
+
 // mailTap — токены писем сервиса: тест гасит их, как получатель письма, и ищет в логе и таблицах.
 type mailTap struct {
 	verification.Mailer
