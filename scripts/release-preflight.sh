@@ -19,7 +19,7 @@ check_private_modules() {
         fail "в ssh-agent нет ключей (SSH_AUTH_SOCK) — сборка образа берёт приватные модули по SSH ключом агента: ssh-add <ключ с доступом к git-хосту модулей>"
     hosts=$(sed -nE 's/^ENV GOPRIVATE=//p' Dockerfile | tr ',' '\n' | sed -nE 's#^([^/*]+)/\*$#\1#p')
     for host in $hosts; do
-        repos=$(grep -oE "${host//./\\.}/[^[:space:]]+[[:space:]]+v[0-9]" go.mod |
+        repos=$({ grep -oE "${host//./\\.}/[^[:space:]]+[[:space:]]+v[0-9]" go.mod || true; } |
             sed -E "s#^${host//./\\.}/([^/[:space:]]+/[^/[:space:]]+).*#\1#" | sort -u)
         for repo in $repos; do
             out=$(GIT_SSH_COMMAND='ssh -F /dev/null -o BatchMode=yes -o IdentityFile=none -o ConnectTimeout=15' \

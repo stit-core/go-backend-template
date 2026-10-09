@@ -172,17 +172,30 @@ func TestReleaseStopsWithoutModuleAccess(t *testing.T) {
 	require.Empty(t, git(t, s.repo, "tag", "-l"), "a release that cannot build its images must leave no tag")
 }
 
-// TestReleasePreflight: фазы release-preflight.sh — окружение (ветка) до гейта и тег на HEAD после него:
-// annotated, формата vX.Y.Z и тот, что запрошен.
+// TestReleasePreflight: фазы release-preflight.sh. env — окружение релиза до гейта: ветка, чистое дерево,
+// ключи ssh-agent читают приватные модули go.mod (хосты — GOPRIVATE из Dockerfile); tag — тег на HEAD
+// после гейта: annotated, формата vX.Y.Z и тот, что запрошен. ssh-add, ssh и docker здесь — заглушки в PATH.
 func TestReleasePreflight(t *testing.T) {
 	t.Parallel()
 	script := readFiles(t, repoRoot(t), "scripts/release-preflight.sh")
+	env := func(require string) map[string]string {
+		return map[string]string{
+			"Dockerfile":              "ENV GOPRIVATE=git.example.org/*\n",
+			"go.mod":                  "module git.example.org/acme/backend\n\nrequire " + require + "\n",
+			"scripts/tools/doctor.sh": "echo DOCTOR\n",
+		}
+	}
+	private, public := env("git.example.org/acme/kit v1.2.3"), env("github.com/acme/kit v1.2.3")
 	for _, tc := range []struct {
 		name   string
 		branch string
+		files  map[string]string
 		tag    []string // аргументы git tag
+		dirty  bool
+		sshAdd string // программа на месте ssh-add: false — в агенте нет ключей
 		args   []string
-		want   string // подстрока вывода; у успеха — «OK»
+		want   string
+		ssh    bool // preflight идёт по ssh за приватным модулем
 		ok     bool
 	}{
 		{name: "annotated semver tag", tag: []string{"-a", "v1.2.3", "-m", "release"}, args: []string{"tag", "v1.2.3"}, want: "OK (tag=v1.2.3)", ok: true},
@@ -192,12 +205,30 @@ func TestReleasePreflight(t *testing.T) {
 		{name: "not semver", tag: []string{"-a", "v1.2", "-m", "release"}, args: []string{"tag", "v1.2"}, want: "не соответствует формату vX.Y.Z"},
 		{name: "tag phase without a version", args: []string{"tag"}, want: "usage"},
 		{name: "no phase", want: "usage"},
-		{name: "not main", branch: "feature", args: []string{"env"}, want: "branch=feature, релиз только с main"},
+		{name: "not main", branch: "feature", files: public, args: []string{"env"}, want: "branch=feature, релиз только с main"},
+		{name: "dirty tree", files: public, dirty: true, args: []string{"env"}, want: "working tree dirty"},
+		{name: "no key in the ssh-agent", files: private, sshAdd: "false", args: []string{"env"}, want: "в ssh-agent нет ключей"},
+		{
+			name: "a private module is closed to the key", files: private, args: []string{"env"},
+			want: "git@git.example.org:acme/kit.git не читается ключами ssh-agent", ssh: true,
+		},
+		{name: "no private modules", files: public, args: []string{"env"}, want: "release-preflight: OK (окружение)", ok: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			repo := t.TempDir()
-			writeFiles(t, repo, script)
+			repo, bin := t.TempDir(), t.TempDir()
+			for tool, program := range map[string]string{"ssh-add": tc.sshAdd, "docker": "true"} {
+				if program == "" {
+					program = "true"
+				}
+				path, err := exec.LookPath(program)
+				require.NoError(t, err)
+				require.NoError(t, os.Symlink(path, filepath.Join(bin, tool)))
+			}
+			// ssh-заглушка записывает свои аргументы и отказывает: хост ключу не открывается.
+			sshArgs := filepath.Join(bin, "ssh.args")
+			require.NoError(t, os.WriteFile(filepath.Join(bin, "ssh"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >\"$0.args\"\nexit 1\n"), 0o700))
+			writeFiles(t, repo, union(script, tc.files))
 			branch := tc.branch
 			if branch == "" {
 				branch = "main"
@@ -207,9 +238,30 @@ func TestReleasePreflight(t *testing.T) {
 			if tc.tag != nil {
 				git(t, repo, append([]string{"tag"}, tc.tag...)...)
 			}
+			if tc.dirty {
+				writeFiles(t, repo, map[string]string{"untracked.txt": "x\n"})
+			}
 
-			out, err := runIn(t, repo, "bash", append([]string{"scripts/release-preflight.sh"}, tc.args...)...)
+			cmd := exec.CommandContext(t.Context(), "bash", append([]string{"scripts/release-preflight.sh"}, tc.args...)...)
+			cmd.Dir = repo
+			for _, kv := range os.Environ() {
+				if key, _, _ := strings.Cut(kv, "="); !strings.HasPrefix(key, "GIT_") && key != "PATH" {
+					cmd.Env = append(cmd.Env, kv)
+				}
+			}
+			cmd.Env = append(cmd.Env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+				"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			data, err := cmd.CombinedOutput()
+			out := string(data)
 			require.Contains(t, out, tc.want)
+			if called, readErr := os.ReadFile(sshArgs); tc.ssh {
+				require.NoError(t, readErr, "the preflight reads the private module over ssh: %s", out)
+				require.Contains(t, string(called), "-F /dev/null -o BatchMode=yes -o IdentityFile=none",
+					"the check sees what the image build will: the ssh-agent alone, no ~/.ssh/config and no key files")
+				require.Contains(t, string(called), "git@git.example.org")
+			} else {
+				require.ErrorIs(t, readErr, os.ErrNotExist, "nothing to read over ssh here: %s", called)
+			}
 			if tc.ok {
 				require.NoError(t, err, out)
 				return
