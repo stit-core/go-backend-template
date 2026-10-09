@@ -30,7 +30,3 @@
 - **strategy-schema** — у артефактов strategy нет версии схемы: `docs/reference/domain-mapping.md`
   сверен с текущим `business-strategy-template` (паспорт, worker, integration-client) вручную.
   Триггер: правка схемы артефактов в strategy — версия во frontmatter там и строка соответствия здесь.
-- **nul-guard-key** — вход с NUL в адресе отвечает 500: `bruteforcekit` (`NormalizeKey`) принимает
-  subject с NUL, и запись попытки падает в Postgres (TEXT). Кит отвергает такой ключ `ErrInvalidKey`,
-  как `session.CheckSubject`, — адаптер входа уже переводит его в 401. Триггер: партия 3 golibinfra
-  (v1.4.0) — bump.

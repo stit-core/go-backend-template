@@ -485,6 +485,14 @@ func TestSessions(t *testing.T) {
 		api.login(frank, sessionPassword)
 	})
 
+	// NUL Postgres в TEXT не хранит: guard такой адрес ключом не берёт, и вход с ним — неверные учётные
+	// данные, а не сбой записи попытки.
+	t.Run("login with NUL in the address is a wrong login", func(t *testing.T) {
+		status, body, _ := api.call(http.MethodPost, "/api/auth/login", `{"email":"a\u0000@example.com","password":"`+sessionPassword+`"}`, nil)
+		require.Equal(t, http.StatusUnauthorized, status, "login: %s", body)
+		require.Equal(t, "AUTH_INVALID_CREDENTIALS", errorCode(t, body))
+	})
+
 	// Предел пароля у хэшера — в байтах, maxLength схемы — в символах: 1024 символа не из ASCII схему
 	// проходят и получают отказ ввода, а не сбой; на входе и в старом пароле такой пароль — неверный.
 	overLimit := strings.Repeat("я", 1024)
