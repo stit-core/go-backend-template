@@ -119,6 +119,13 @@ B git push 2>&1 --no-veri
 B git --attr-source HEAD commit -n -m x
 B git --config-env user.name=N commit -n -m x
 B git --attr-source HEAD send-pack origin main
+B git commit -m "$(date)" -n
+B git commit -m $(date +%F) -n
+B git commit -m "$(<.msg)" -n
+B git commit --date=`date -I` -n -m x
+B git commit -F <(echo msg) -n
+B git commit -m $(echo $(date)) -n
+B echo $(git commit -n -m x)
 
 # --- отказ: запись и запуск через «читателей»: cp, sort, find, awk, sed, git, rg, bash -n
 B sed -i 's/make check/true/' scripts/git-hooks/pre-push
@@ -626,3 +633,6 @@ A git commit -m "fix: x" 2>&1 | tail -3
 A git log 2>&1 -n 5
 A git commit -m x 2>&1
 A git --attr-source HEAD diff -- scripts/git-hooks
+A git log --format=%s $(git merge-base main HEAD)..HEAD -n 5
+A diff <(git show main:go.mod) go.mod
+A echo "$(git log -1 --format=%s)" -n
