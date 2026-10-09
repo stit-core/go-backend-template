@@ -6,12 +6,13 @@
 # pre-push); алиасы и include конфига git (-c alias.…, git config include.path …); снятие секции core
 # (git config --remove-section или --rename-section core — с ней уходит hooksPath); SKIP_PREPUSH и ключ
 # hooksPath в любой команде (прочитать — git config --list, поиск — инструментом Grep, сообщение
-# коммита — heredoc); по путям scripts/git-hooks, хуков (pre-push, pre-commit, commit-msg) и
-# .git/config — всё, кроме чтения, и запись перенаправлением. Слово с кавычками ($'…' тоже) или `\`
-# внутри — как без них ("git", $'git', --no-ver'i'fy).
+# коммита — heredoc); команду с путём scripts/git-hooks, хука (pre-push, pre-commit, commit-msg) или
+# .git/config, в которой не узнал чтение, и запись туда перенаправлением. Слово с кавычками ($'…'
+# тоже) или `\` внутри — как без них ("git", $'git', --no-ver'i'fy).
 # Команда проверяется построчно; тела heredoc и строки в кавычках с пробелом — данные (сообщение
 # коммита может упоминать флаги), но у интерпретатора (bash -c, sh -s, eval, | bash, bash <<EOF) — код.
-# Это барьер от случайного обхода, а не песочница: чего он не видит — docs/contributing.md § Кто что
+# Это барьер от случайного обхода, а не песочница: формы, которые он держит, — TestGuardBash
+# (internal/archtest/testdata/guard-cases.txt), чего не видит — docs/contributing.md § Кто что
 # enforce'ит. Ослабить сам гейт не даёт make check.
 set -uo pipefail
 
@@ -36,78 +37,205 @@ sep='(^|[;&|(`[:space:]])'
 re_interp="${sep}((ba|da|z)?sh)[[:space:]]+(-[[:alnum:]]*[cs])([[:space:]]|\$)|${sep}eval([[:space:]]|\$)|\\|[[:space:]]*((ba|da|z)?sh)[[:space:]]*(\$|[;&|)])|${sep}((ba|da|z)?sh)[[:space:]]*<<"
 [[ $text =~ $re_interp ]] && text=$(printf '%s' "$cmd" | tr -d "\"'")
 # Кавычки без пробела внутри ($'…', $"…" тоже) и `\` перед буквой слово не меняют: $'git' и \git — git.
-text=$(printf '%s' "$text" | sed -E -e "s/\\\$?'([^' ]*)'/\\1/g" -e 's/\$?"([^" \\]*)"/\1/g' -e 's/\\([[:alnum:]_.-])/\1/g')
+norm=$(printf '%s' "$text" | sed -E -e "s/\\\$?'([^' ]*)'/\\1/g" -e 's/\$?"([^" \\]*)"/\1/g' -e 's/\\([[:alnum:]_.-])/\1/g')
 
-lower=$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')
+lower=$(printf '%s' "$norm" | tr '[:upper:]' '[:lower:]')
 [[ $lower == *skip_prepush* ]] && block "SKIP_PREPUSH"
 [[ $lower == *hookspath* ]] && block "hooksPath"
 # Алиас и подключаемый конфиг прячут флаг или hooksPath от проверок ниже: git -c alias.c='commit -n' c.
 re_git='(^|[^[:alnum:]_.-])git([[:space:]]|$)'
 re_cfg='(-c[[:space:]]*|config[^;&|]*)(alias|include(if)?)\.'
-[[ $text =~ $re_git && $lower =~ $re_cfg ]] && block "алиас или include конфига git"
+[[ $norm =~ $re_git && $lower =~ $re_cfg ]] && block "алиас или include конфига git"
 
-# Разделители команд внутри кавычек — часть аргумента (`-m "fix(gate): …"`), а не граница.
-quoted_seps() {
-    awk '{
-        out = ""; q = ""
-        for (i = 1; i <= length($0); i++) {
-            c = substr($0, i, 1)
-            if (q == "" && (c == "\"" || c == "\047")) q = c
-            else if (c == q) q = ""
-            else if (q == "\"" && c == "\\") { out = out c; i++; c = substr($0, i, 1) }
-            else if (q != "" && index(";&|()`", c)) c = " "
-            out = out c
-        }
-        print out
-    }'
+# Слова команды с учётом кавычек. Вне кавычек `\x` — буква, пробел — граница слова (код 037); в
+# кавычках и после `\` разделители команд прячутся в коды 001–006 и возвращаются, когда строка уже
+# разрезана на команды: слово в кавычках остаётся одним словом, и его текст виден целиком. Перед
+# тем, что оболочка раскроет сама (`$…`, обратная кавычка, вне кавычек — и `{`, `*`, `?`, `[`),
+# встаёт код 007: что получится из такого слова, guard не знает. Перенаправление, приклеенное к
+# слову (`хук>/dev/null`), — отдельное слово; номер дескриптора остаётся при нём (`2>…`). Кавычка,
+# не закрытая до конца строки, кончается вместе со строкой: следующая строка — снова код.
+split_words() {
+    awk '
+        function hide(c,    k) { k = index(";&|()`", c); return k ? substr("\001\002\003\004\005\006", k, 1) : c }
+        {
+            out = ""; q = ""; n = length($0); word = ""
+            for (i = 1; i <= n; i++) {
+                c = substr($0, i, 1)
+                if (q == "") {
+                    if (c == "\\") { out = out c; word = word c; i++; c = hide(substr($0, i, 1)) }
+                    else if (c == "\"") q = c
+                    else if (c == "\047") q = (i > 1 && substr($0, i - 1, 1) == "$") ? "$" : c
+                    else if (c == " " || c == "\t") { c = "\037"; word = "" }
+                    else if (index("$`{*?[", c)) out = out "\007"
+                    else if ((c == "<" || c == ">") && word ~ /[^0-9<>]/) { out = out "\037"; word = "" }
+                    if (c != "\037") word = word c
+                } else if (q == "\047") {
+                    if (c == q) q = ""; else c = hide(c)
+                } else if (c == "\\") { out = out c; i++; c = hide(substr($0, i, 1)) }
+                else if (c == (q == "$" ? "\047" : q)) q = ""
+                else { if (q == "\"" && index("$`", c)) out = out "\007"; c = hide(c) }
+                out = out c
+            }
+            print out
+        }'
 }
 
 # Изменённый, неисполняемый или удалённый хук git молча пропускает, а .git/config задаёт, откуда хуки
-# берутся. Сегмент с таким путём проходит, только если это чтение: readers, git без правки дерева, sed
-# и awk без -i, find без -exec и -delete, cp из него, bash -n, запуск самого хука — и без записи туда
-# перенаправлением; cd туда — нет, дальше путь в команде не виден.
-hook='(^|[[:space:]/"'\''=])(git-hooks|pre-push|pre-commit|commit-msg|\.git/config)([[:space:]/"'\'']|$)'
+# берутся. Команда с таким путём проходит, только если в ней узнано чтение: readers, git без правки
+# дерева, bash -n, запуск самого хука (и bash <хук>) и «читатели», которые умеют писать и запускать, —
+# без таких опций и программ; остальное — отказ, как и запись туда перенаправлением. cd туда — отказ:
+# дальше путь в команде не виден.
+hook='((^|[[:space:]/"'\''=])(git-hooks|pre-push|pre-commit|commit-msg)|\.git/config)([[:space:]/"'\''},]|$)'
 run_hook='^([.[:alnum:]_~-]*/)*(pre-push|pre-commit|commit-msg)$'
-readers='cat|head|tail|less|more|grep|egrep|fgrep|rg|ls|stat|file|wc|diff|cmp|sort|md5sum|sha256sum|shellcheck|test|\[|echo|printf'
+readers='cat|head|tail|less|more|grep|egrep|fgrep|ls|stat|file|wc|diff|cmp|md5sum|sha256sum|shellcheck|test|\[|echo|printf'
 git_readers='add|blame|cat-file|commit|diff|grep|log|ls-files|ls-tree|push|rev-parse|show|status|tag'
+bel=$'\007'
+re_redirect='^[0-9]*[<>]'
+re_no_target='[<>]$'
+re_path='^[[:alnum:]_./~-]+$'
+re_awk_opts='^(-F.*|-v.*|--field-separator(=.*)?|--assign(=.*)?|--)$'
+re_awk_io='[>|@]|system'
+re_cp_opts='^(-[adfHLnPpRrsuvx]+|--(archive|recursive|force|verbose|parents|dereference|no-dereference|update|no-clobber|preserve(=.*)?)|--)$'
+
+# parse <regex опций с отдельным аргументом> — слова команды: opts — опции, optargs — их аргументы,
+# ops — операнды; все — без кавычек и `\` ("-delete" и --out""put — те же опции). Перенаправления с
+# целями и хвост-комментарий — не слова команды.
+parse() {
+    opts=() optargs=() ops=()
+    local j skip=0 arg=0 w b
+    for ((j = i + 1; j < ${#words[@]}; j++)); do
+        w=${words[j]} b=${bare[j]}
+        if ((skip)); then
+            skip=0
+            continue
+        fi
+        [[ $w == \#* ]] && break
+        if [[ $w =~ $re_redirect ]]; then
+            [[ $w =~ $re_no_target ]] && skip=1
+            continue
+        fi
+        if ((arg)); then
+            arg=0
+            optargs+=("$b")
+        elif [[ $b == -?* ]]; then
+            opts+=("$b")
+            [[ -n $1 && $b =~ $1 ]] && arg=1
+        else
+            ops+=("$b")
+        fi
+    done
+}
+has() { # has <regex> — среди опций команды есть такая
+    local o
+    for o in ${opts[@]+"${opts[@]}"}; do [[ $o =~ $1 ]] && return 0; done
+    return 1
+}
+only() { # only <regex> — все опции команды такие
+    local o
+    for o in ${opts[@]+"${opts[@]}"}; do [[ $o =~ $1 ]] || return 1; done
+    return 0
+}
+
 while IFS= read -r seg; do
-    [[ $seg =~ $hook ]] || continue
+    plain=${seg//$'\037'/ }
+    plain=${plain//$bel/}
+    flat=${plain//[\"\'\\]/} # кавычки и `\` внутри пути его не прячут: git-ho""oks
+    [[ $plain =~ $hook || $flat =~ $hook ]] || continue
     while IFS= read -r target; do
         [[ $target =~ $hook ]] && block "запись в scripts/git-hooks или .git/config"
-    done <<<"$(printf '%s' "$seg" | grep -oE '>[>|]?[[:space:]]*[^[:space:]>]+' | sed -E 's/^>[>|]?[[:space:]]*//')"
-    read -r -a words <<<"$seg"
+    done <<<"$(printf '%s\n%s' "$plain" "$flat" | grep -oE '>>?[[:space:]]*[^[:space:]>]+' | sed -E 's/^>>?[[:space:]]*//')"
+    IFS=$'\037' read -r -a raw <<<"$seg"
+    words=() bare=()
+    for w in ${raw[@]+"${raw[@]}"}; do
+        [ -n "$w" ] || continue
+        words+=("$w")
+        w=${w//$bel/}
+        bare+=("${w//[\"\'\\\$]/}")
+    done
+    # cp, sort, find и awk проходят только в виде, который guard разобрал целиком: без подстановок.
+    expands=0
+    [[ $seg == *$bel* ]] && expands=1
     i=0
-    while ((i < ${#words[@]})) && [[ ${words[i]} == *=* || ${words[i]} =~ ^(sudo|env|command)$ ]]; do
+    while ((i < ${#words[@]})) && [[ ${words[i]} == *=* || ${bare[i]} =~ ^(sudo|env|command)$ ]]; do
+        # Значение переменной команда может исполнить (GIT_PAGER, GIT_SSH_COMMAND): путь хука в нём — не чтение.
+        [[ ${words[i]} == *=* && ${bare[i]#*=} =~ $hook ]] && block "переменная с путём scripts/git-hooks или .git/config"
         i=$((i + 1))
     done
-    name=${words[i]-}
-    base=${name##*/}
-    args=" ${words[*]:i+1} "
-    case "$base" in
+    cmd=${bare[i]-}
+    name=${cmd##*/}
+    case "$name" in
         git)
-            sub="" skip=0
-            for w in "${words[@]:i+1}"; do # подкоманда — первое слово не-флаг, кроме значений -C/-c…
+            sub="" skip=0 cfg=""
+            for w in "${bare[@]:i+1}"; do # подкоманда — первое слово не-флаг, кроме значений -C/-c…
                 case "$w" in
-                    -C | -c | --git-dir | --work-tree | --namespace) skip=1 ;;
+                    -c) skip=2 ;;
+                    -C | --git-dir | --work-tree | --namespace) skip=1 ;;
                     -*) ;;
-                    *) if [ "$skip" = 1 ]; then skip=0; else sub=$w && break; fi ;;
+                    *)
+                        [[ $skip == 2 && $w =~ $hook ]] && cfg=$w
+                        if ((skip)); then skip=0; else sub=$w && break; fi
+                        ;;
                 esac
             done
-            [[ $sub =~ ^($git_readers)$ ]] && continue ;;
-        sed) [[ $args =~ [[:space:]](-[a-zA-Z]*i|--in-place) ]] || continue ;;
-        awk | gawk) [[ $args =~ [[:space:]](-i|--in-place)[[:space:]] ]] || continue ;;
-        find) [[ $args =~ [[:space:]]-(exec|execdir|ok|okdir|delete)[[:space:]] ]] || continue ;;
-        cp) [[ ${words[${#words[@]} - 1]} =~ $hook ]] || continue ;;
-        bash | sh) [[ ${words[i + 1]-} == -n || ${words[i + 1]-} =~ $run_hook ]] && continue ;;
-        *) [[ $base =~ ^($readers)$ || $name =~ $run_hook ]] && continue ;;
+            parse ''
+            # --output пишет вывод в файл, add --chmod=-x снимает право на запуск, grep -O запускает команду,
+            # значение -c git исполняет (core.pager, core.sshCommand) — путь хука в нём не чтение.
+            [[ -z $cfg && $sub =~ ^($git_readers)$ ]] && ! has '^(--ou|--chmod=-)' &&
+                ! { [ "$sub" = grep ] && has '^(-O|--open-files-in-pager)'; } && continue
+            ;;
+        sed)
+            # -i правит файл на месте; команды w и e скрипта пишут в файл и запускают команду — скрипт
+            # (-e или первый операнд) не называет каталог хуков и .git/config.
+            parse '^(-[a-zA-Z]*[efl]|--(e[a-z]*|fi[a-z]*|l[a-z-]*))$'
+            scripts=("${ops[0]-}")
+            has '^(-[a-zA-Z]*e|--e)' && scripts=(${opts[@]+"${opts[@]}"} ${optargs[@]+"${optargs[@]}"})
+            has '^(-[a-zA-Z]*i|--i)' || [[ "${scripts[*]}" == *git-hooks* || "${scripts[*]}" == *.git/config* ]] || continue
+            ;;
+        awk | gawk)
+            # Программа awk пишет и запускает через `>`, `|` и system, а файл-операнд знает как FILENAME;
+            # опции — только разделитель и переменные: остальные читают программу из файла или пишут.
+            parse '^(-F|-v|--field-separator|--assign)$'
+            prog=${ops[0]-}
+            ((!expands)) && only "$re_awk_opts" && [[ -n $prog && ! $prog =~ $re_awk_io ]] && continue
+            ;;
+        sort)
+            parse ''
+            ((expands)) || has '^(-[a-zA-Z]*o|--o|--co)' || continue # вывод в файл и --compress-program
+            ;;
+        find)
+            parse ''
+            ((expands)) || has '^-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$' || continue
+            ;;
+        rg)
+            parse ''
+            has '^--pre' || continue # --pre запускает команду на каждом файле
+            ;;
+        cp)
+            # Копия из хука — чтение. Назначение — последний операнд; опции — только без аргумента:
+            # иначе последним словом встал бы аргумент опции (-S x, -t каталог).
+            parse ''
+            ((!expands && ${#ops[@]} > 1)) && only "$re_cp_opts" && ! [[ ${ops[${#ops[@]} - 1]} =~ $hook ]] && continue
+            ;;
+        bash | sh)
+            # bash -n только разбирает скрипт; с другими опциями (+n, -c) он исполняет.
+            parse ''
+            if [[ ${bare[i + 1]-} == -n ]]; then
+                plain_ops=1
+                for o in ${ops[@]+"${ops[@]}"}; do [[ $o =~ $re_path ]] || plain_ops=0; done
+                ((${#opts[@]} == 1 && plain_ops)) && continue
+            elif [[ ${bare[i + 1]-} =~ $run_hook ]]; then
+                continue
+            fi
+            ;;
+        *) [[ $name =~ ^($readers)$ || $cmd =~ $run_hook ]] && continue ;;
     esac
-    block "${base:-команда} по scripts/git-hooks или .git/config"
-done <<<"$(printf '%s' "$text" | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | quoted_seps | sed 's/>|/>/g' |
-    tr ';&|()`' '\n\n\n\n\n\n')"
+    block "${name:-команда} по scripts/git-hooks или .git/config"
+done <<<"$(printf '%s' "$text" | tr -d '\001-\007\037' | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | split_words |
+    sed -e 's/>|/>/g' -e 's/>&/>/g' | tr ';&|()`' '\n\n\n\n\n\n' | tr '\001\002\003\004\005\006' ';&|()`')"
 
 # Флаги git ищем вне кавычек, по сегментам: строки (с учётом `\` в конце) и части между
 # ; & | ( ) и обратными кавычками.
-segments=$(printf '%s' "$text" | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | tr '\n' ';' |
+segments=$(printf '%s' "$norm" | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | tr '\n' ';' |
     sed -E -e 's/"([^"\\]|\\.)*"//g' -e "s/'[^']*'//g" | tr ';&|()`' '\n\n\n\n\n\n')
 while read -r -a words; do
     git=0 sub="" skip=0 prev=""
@@ -126,8 +254,8 @@ while read -r -a words; do
         else
             case "$w" in
                 --no-veri*) block "git $sub $w" ;;
-                # -n в кластере коротких флагов до первого флага со значением: -an, -nm.
-                -[a-zA-Z]*) [[ $sub == commit && ${w%%[mFcCtS]*} == *n* ]] && block "git commit $w" ;;
+                # -n в кластере коротких флагов до первого флага со значением: -an, -nm; -uno — значение -u.
+                -[a-zA-Z]*) [[ $sub == commit && ${w%%[mFcCtSu]*} == *n* ]] && block "git commit $w" ;;
             esac
             # Имя секции git не различает по регистру.
             [[ $sub == config && $prev =~ ^(--)?(remove|rename)-section$ && $w == [Cc][Oo][Rr][Ee] ]] &&
