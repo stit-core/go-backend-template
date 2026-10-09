@@ -212,10 +212,12 @@ DTO в порте — локальные (не re-export из B).
   `timerkit.ProvideJob`), `pgkit.migrations`; свои middleware и правки huma — одним значением
   `httpkit.Middlewares` и `httpkit.HumaConfigs` (порядок задаёт приложение). Per-domain outbox
   (`events.OutboxFor`) включается внутрь доменного `fx.Module`: `fx.Private` скоупит publisher.
-- Кит без потребителя в граф не подключается: flagkit, natskit, cachekit, tzkit и storagekit
-  проверяют конфиг на старте и без потребителя (natskit и cachekit — ещё и связь) — сервис требовал
-  бы рабочий конфиг и живой бэкенд ни для кого; у остальных китов конструкторы не выполняются, конфиг
-  не проверяется, а env молча ничего не меняет.
+- Кит без потребителя в граф не подключается: модуль без него либо работает на старте ни для кого,
+  либо молчит. flagkit, natskit, cachekit, tzkit и storagekit проверяют конфиг (natskit и cachekit —
+  ещё и связь); хранилище кита (`<kit>/pgstore`) сверяет свою схему (`pgkit.ErrSchema`), а его job
+  (cleanup сессий и антибрутфорса, outbox) через `timerkit.jobs` строит хранилище с конфигом — сервис
+  требует рабочий конфиг, живой бэкенд и миграции ни для кого. У кита из одних провайдеров конструктор
+  без потребителя не выполняется: его env молча ничего не меняет.
 
 ## HTTP DTO naming (huma)
 
