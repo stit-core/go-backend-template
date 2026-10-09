@@ -11,11 +11,11 @@
 make release VERSION=vX.Y.Z
 ```
 
-`scripts/release.sh` одним проходом: confirm-промпт → чистое дерево, `make check`, `make e2e-smoke` и
-`govulncheck` (уязвимость, которую вызывает код, — стоп до тега) → annotated
-tag (rich changelog — `git tag -a` заранее) → `release-preflight` (ветка/clean/semver/buildx +
-`make doctor`) →
-`docker buildx --push` двух образов lockstep:
+`scripts/release.sh` одним проходом: confirm-промпт → `release-preflight env` — окружение релиза: ветка
+`main`, чистое дерево, доступ сборки к приватным модулям, buildx и `make doctor` → `make check`,
+`make e2e-smoke` и `govulncheck` (уязвимость, которую вызывает код, — стоп до тега) → annotated
+tag (rich changelog — `git tag -a` заранее) → `release-preflight tag` (на HEAD annotated semver-тег, и
+он — запрошенный) → `docker buildx --push --ssh default` двух образов lockstep:
 - `<host>/<org>/backend:vX.Y.Z` — `cmd/api` (runtime)
 - `<host>/<org>/backend-migrate:vX.Y.Z` — `cmd/migrate` + вшитые SQL (init-контейнер)
 
@@ -29,6 +29,14 @@ tag (rich changelog — `git tag -a` заранее) → `release-preflight` (в
 репо в Gitea, без правок при форке. Build локальный.
 `docker login <host>` — креды оператора; `make doctor` в preflight ловит их отсутствие
 fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвергаются by design.
+
+Приватные модули `go.mod` (golibinfra) сборка образа берёт по SSH ключом ssh-agent оператора — тем
+же путём, что `go` на его машине (README § Как начать): `docker buildx build --ssh default`, в
+`Dockerfile` и `Dockerfile.migrate` — `RUN --mount=type=ssh` у `go mod download`. Сокет агента виден
+только этому шагу: ни в слои образа, ни в его историю ключ не попадает. Ключ с доступом к git-хосту
+модулей — в агенте (`ssh-add`): `release-preflight env` читает им каждый приватный модуль `go.mod` —
+только агентом, без `~/.ssh/config` и файлов ключей, как увидит сборка, — и без доступа останавливает
+релиз до гейта и тега. Пробная сборка образа — с тем же флагом: `docker buildx build --ssh default`.
 
 ## INFRA-HANDOFF
 

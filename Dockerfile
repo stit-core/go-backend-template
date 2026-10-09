@@ -20,11 +20,15 @@ ENV GOPRIVATE=git.stit.tech/*
 # --mount=type=cache: между билдами api/migrate, между коммитами
 # без изменения go.mod — переиспользуются. Эффект: первый билд тот же,
 # повторные ~5-15s вместо ~60-90s.
+# Приватные модули GOPRIVATE git берёт по SSH ключом ssh-agent хоста (docker buildx build --ssh default):
+# сокет агента виден только этому RUN, в слои образа ключ не попадает. Ключ хоста принимается при первом
+# соединении (accept-new): чужой сервер под этим именем модуль не подменит — содержимое сверяет go.sum.
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=ssh \
-    --mount=type=secret,id=netrc,target=/root/.netrc \
+    --mount=type=ssh,required=true \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.git@git.stit.tech:.insteadOf GIT_CONFIG_VALUE_0=https://git.stit.tech/ \
+    GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new' \
     go mod download
 
 COPY . ./

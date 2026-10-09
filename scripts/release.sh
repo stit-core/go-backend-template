@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# scripts/release.sh — релиз одной командой: confirm → чистое дерево + make check + e2e-smoke →
-# govulncheck → annotated tag → release-preflight (ветка/clean/semver/buildx + doctor) → buildx
-# api+migrate push lockstep → агрегированный INFRA-HANDOFF → STOP.
+# scripts/release.sh — релиз одной командой: confirm → release-preflight env (ветка/clean/доступ сборки к
+# приватным модулям/buildx + doctor) → чистое дерево + make check + e2e-smoke → govulncheck → annotated
+# tag → release-preflight tag (annotated semver на HEAD) → buildx api+migrate push lockstep →
+# агрегированный INFRA-HANDOFF → STOP.
 #
 #   make release VERSION=vX.Y.Z
 #   make release VERSION=vX.Y.Z DRY_RUN=1   только handoff: без проверок, тега и образов
@@ -67,6 +68,10 @@ else
     esac
 fi
 
+# --- окружение релиза до гейта и тега: без ветки main, registry-логина или ключа ssh-agent с доступом к
+# приватным модулям релиз останавливается сразу и тега не оставляет ---
+bash scripts/release-preflight.sh env
+
 # --- гейт до тега: тег и образы — только у чистого HEAD, прошедшего make check, smoke и govulncheck ---
 [ -z "$(git status --porcelain)" ] || { echo "release: working tree dirty — закоммить или stash" >&2; exit 2; }
 # -f Makefile: свой GNUmakefile make прочёл бы первым, а игнорируемый git оставляет дерево «чистым».
@@ -89,17 +94,18 @@ elif [ "$existing" != "$VERSION" ]; then
     exit 2
 fi
 
-# --- preflight (ветка=main / clean / annotated semver / buildx / doctor) ---
-bash scripts/release-preflight.sh "$VERSION"
+# --- тег на HEAD — annotated semver, и он — запрошенный ---
+bash scripts/release-preflight.sh tag "$VERSION"
 
-# --- build + push lockstep (api + migrate одним тегом) ---
-docker buildx build --platform linux/amd64 --push \
+# --- build + push lockstep (api + migrate одним тегом); приватные модули go mod download берёт по SSH
+# ключом ssh-agent: в слои образа ключ не попадает ---
+docker buildx build --platform linux/amd64 --push --ssh default \
     --build-arg TARGET=api \
     --build-arg VERSION="$VERSION" \
     --build-arg GIT_SHA="$SHA" \
     -t "$IMAGE_BASE:$VERSION" .
 
-docker buildx build --platform linux/amd64 --push -f Dockerfile.migrate \
+docker buildx build --platform linux/amd64 --push --ssh default -f Dockerfile.migrate \
     --build-arg VERSION="$VERSION" \
     --build-arg GIT_SHA="$SHA" \
     -t "$IMAGE_BASE-migrate:$VERSION" .
