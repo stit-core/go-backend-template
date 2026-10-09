@@ -155,14 +155,19 @@ WHAT   миграция outbox кита 0003 (источники outbox_user и 
        … ADD COLUMN IF NOT EXISTS trace_context JSONB, down — no-op; api сверяет схему kit-таблиц на
        старте (pgkit.ErrSchema)
 WHY    repair-harness S7 — golibinfra v1.4.0: трасса запроса продолжается через outbox
-ACTION образ migrate (`migrate up`) до замены api. Блокировку таблицы оператор ждёт не дольше
-       PG_MIGRATE_LOCK_TIMEOUT (5s): отказ оставляет версию источника dirty (`migrate version` её
-       называет) — снять флаг в таблице версий источника (schema_migrations_outbox_<домен>) и повторить
-       `migrate up` в окно без долгих транзакций по outbox. Откат на прежний тег миграций не требует:
-       колонка остаётся, прежний api с ней работает
+ACTION образ migrate (`migrate up`) до замены api. Блокировку таблицы миграция ждёт не дольше
+       PG_MIGRATE_LOCK_TIMEOUT (5s): отказ оставляет источник на версии 3 с флагом dirty и без колонки
+       (`migrate version` называет источник). Ремонт — в таблице версий этого источника вернуть версию 2
+       и снять флаг: `UPDATE schema_migrations_outbox_<домен> SET version = 2, dirty = false`, затем
+       `migrate up` в окно без долгих транзакций по outbox. Откат на прежний тег: колонка остаётся,
+       прежний api с ней работает, а migrate прежнего тега на версии 3 падает (no migration found for
+       version 3) — до `make bump` вернуть версию 2 в обеих таблицах версий (`UPDATE
+       schema_migrations_outbox_user SET version = 2`, то же — schema_migrations_outbox_verification;
+       выкатка вперёд применит 0003 заново) или поднять прежний api без прогона его migrate
 WHO    проект (порядок выкатки)
 DECIDE —
-RISK   api этого релиза на схеме без колонки не стартует
+RISK   api этого релиза на схеме без колонки не стартует; снять только флаг dirty — `migrate up` пройдёт
+       без колонки, api стартует и отвечает 500 на операции с событием (регистрация)
 ===
 
 === INFRA HANDOFF · передай инфра-админу ===
