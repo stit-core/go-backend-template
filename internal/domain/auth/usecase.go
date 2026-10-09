@@ -208,10 +208,15 @@ func (uc *Usecase) refresh(ctx context.Context, refreshToken string) (*LoginOutp
 	return &LoginOutput{AccessToken: access, RefreshToken: next.Value, User: u}, outcome.OK, nil
 }
 
-// Logout: неизвестный токен и закрытая сессия — тоже выход; аудита выход не пишет.
+// Logout: неизвестный токен и закрытая раньше сессия — тоже выход; аудит — у сессии, которую закрыл
+// этот вызов: её владельца отдаёт хранилище.
 func (uc *Usecase) Logout(ctx context.Context, refreshToken string) error {
-	if _, err := uc.d.Sessions.Revoke(ctx, refreshToken); err != nil {
+	subject, err := uc.d.Sessions.Revoke(ctx, refreshToken)
+	if err != nil {
 		return fmt.Errorf("revoke session: %w", err)
+	}
+	if subject != "" {
+		uc.audit(ctx, auditkit.Entry{ActorID: subject, Action: "logout", Resource: "user", ResourceID: subject})
 	}
 	return nil
 }

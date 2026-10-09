@@ -410,6 +410,12 @@ func TestSessions(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, status)
 		status, _ = api.refresh(other)
 		require.Equal(t, http.StatusNoContent, status, "the other session lives on")
+
+		status, _, _ = api.call(http.MethodPost, "/api/auth/logout", "", current)
+		require.Equal(t, http.StatusNoContent, status, "a closed session logs out as well")
+		var logouts int
+		require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE action = 'logout' AND actor_id = $1 AND resource_id = $1`, aliceID).Scan(&logouts))
+		require.Equal(t, 1, logouts, "the audit names the owner of the session the logout closed, once")
 	})
 
 	// Погашение токена атомарно: из параллельных обновлений одним cookie успешно одно, остальные — повтор, и

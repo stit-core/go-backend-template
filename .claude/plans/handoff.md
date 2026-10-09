@@ -169,7 +169,8 @@ RISK   api этого релиза на схеме без колонки не с
 WHAT   сигналы golibinfra v1.4.0: ключ ошибки в логах сервиса и китов — `error` вместо `err`; метрики
        outbox — без label subject; bruteforce_locks_total — с label scope; новый ответ 503
        REQUEST_TIMEOUT; спан otelpgx — `query <имя запроса>` (текст SQL — в db.query.text); 429, preflight
-       и 405 — под маршрутом пути, unmatched — только путь без маршрута
+       и 405 — под маршрутом пути, unmatched — только путь без маршрута; новое действие аудита `logout`
+       (audit_log: actor_id и resource_id — владелец закрытой сессии)
 WHY    repair-harness S7 — bump golibinfra v1.4.0
 ACTION запросы логов, панели и алерты по полю err, label subject метрик outbox и имени спана otelpgx —
        переписать; завести алерт на долю 503 REQUEST_TIMEOUT

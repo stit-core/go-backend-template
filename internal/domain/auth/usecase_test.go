@@ -635,7 +635,8 @@ func TestRefresh_Failure(t *testing.T) {
 	})
 }
 
-// Выход закрывает сессию токена; неизвестный токен — тоже выход.
+// Выход закрывает сессию токена и пишет аудит с её владельцем; неизвестный токен и закрытая раньше
+// сессия — тоже выход, без записи.
 func TestLogout(t *testing.T) {
 	t.Parallel()
 	f := newUC(t)
@@ -646,7 +647,9 @@ func TestLogout(t *testing.T) {
 	_, err := f.sessions.Rotate(context.Background(), tok.Value)
 	require.ErrorIs(t, err, session.ErrInvalid, "the token of a closed session does not refresh")
 	require.NoError(t, f.uc.Logout(identitytest.Anon(), "unknown"))
-	require.Empty(t, f.audit.Entries(), "logout writes no audit")
+	require.NoError(t, f.uc.Logout(identitytest.Anon(), tok.Value))
+	require.Equal(t, []auditkit.Entry{*audited(auditkit.Entry{ActorID: "u1", Action: "logout", Resource: "user", ResourceID: "u1"})},
+		f.audit.Entries(), "one record, with the owner of the session this call closed")
 }
 
 func TestLogout_StoreFailure(t *testing.T) {
