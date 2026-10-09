@@ -6,6 +6,8 @@
 - **Гейт перед «готово»:** CLAUDE.md § Готово (`make check` и ревью).
 - **Проверка планов:** `make plan-check`; pre-commit проверяет, когда меняется `.claude/plans/`.
 - **Сводка планов:** `make status` → `== Plan ==` (или `make plan-check A=--summary`).
+- **Коммит плана без кода:** `meta(plan): …` — типы коммитов держит хук `commit-msg`
+  (CLAUDE.md § Git workflow).
 - **Типовые проверки шагов:** `make test PKG=./internal/domain/<d>/...` → PASS · `make gen-check` →
   без дрейфа · `make migrate-up` и `make migrate-down` → применяется и откатывается · `make e2e` →
   PASS · `curl` к ручке → ожидаемый код · `make check` → зелёный.
