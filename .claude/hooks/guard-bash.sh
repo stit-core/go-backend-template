@@ -3,14 +3,16 @@
 # exit 2 блокирует вызов, stderr уходит Claude.
 #
 # Блокирует: git commit с -n; git с --no-veri… (любая подкоманда); git send-pack и http-push (push без
-# pre-push); алиасы и include конфига git (-c alias.…, git config include.path …); снятие секции core
-# (git config --remove-section или --rename-section core — с ней уходит hooksPath); SKIP_PREPUSH и ключ
-# hooksPath в любой команде (прочитать — git config --list, поиск — инструментом Grep, сообщение
-# коммита — heredoc); команду с путём scripts/git-hooks, хука (pre-push, pre-commit, commit-msg) или
-# .git/config, в которой не узнал чтение, и запись туда перенаправлением. Слово с кавычками ($'…'
-# тоже) или `\` внутри — как без них ("git", $'git', --no-ver'i'fy).
+# pre-push); алиасы и include конфига git в команде (-c alias.…, git config include.path …, и значением
+# в кавычках: -c 'alias.c=commit -n'); снятие секции core (git config --remove-section или
+# --rename-section core — с ней уходит hooksPath); SKIP_PREPUSH и ключ hooksPath в любой команде
+# (прочитать — git config --list, поиск — инструментом Grep, сообщение коммита — heredoc); команду с
+# путём scripts/git-hooks, хука (pre-push, pre-commit, commit-msg) или .git/config, в которой не узнал
+# чтение, и запись туда перенаправлением. Слово с кавычками ($'…' тоже) или `\` внутри — как без них
+# ("git", $'git', --no-ver'i'fy).
 # Команда проверяется построчно; тела heredoc и строки в кавычках с пробелом — данные (сообщение
-# коммита может упоминать флаги), но у интерпретатора (bash -c, sh -s, eval, | bash, bash <<EOF) — код.
+# коммита может упоминать флаги), но у оболочки-интерпретатора (bash -e -c, sh -s, eval, | bash -x,
+# bash <<EOF, sh<<<'…') — код, как и текст echo и printf рядом с ней.
 # Это барьер от случайного обхода, а не песочница: формы, которые он держит, — TestGuardBash
 # (internal/archtest/testdata/guard-cases.txt), чего не видит — docs/contributing.md § Кто что
 # enforce'ит. Ослабить сам гейт не даёт make check.
@@ -32,20 +34,40 @@ text=$(printf '%s\n' "$cmd" | awk '
     match($0, /(^|[^<])<<-?[ \t]*["'\'']?[A-Za-z_][A-Za-z0-9_]*/) {
         body = substr($0, RSTART, RLENGTH); sub(/^[^<]*<<-?[ \t]*["'\'']?/, "", body)
     }')
-# Интерпретатор вне тел heredoc исполняет строку в кавычках или тело heredoc — это код, а не данные.
-sep='(^|[;&|(`[:space:]])'
-re_interp="${sep}((ba|da|z)?sh)[[:space:]]+(-[[:alnum:]]*[cs])([[:space:]]|\$)|${sep}eval([[:space:]]|\$)|\\|[[:space:]]*((ba|da|z)?sh)[[:space:]]*(\$|[;&|)])|${sep}((ba|da|z)?sh)[[:space:]]*<<"
-[[ $text =~ $re_interp ]] && text=$(printf '%s' "$cmd" | tr -d "\"'")
 # Кавычки без пробела внутри ($'…', $"…" тоже) и `\` перед буквой слово не меняют: $'git' и \git — git.
-norm=$(printf '%s' "$text" | sed -E -e "s/\\\$?'([^' ]*)'/\\1/g" -e 's/\$?"([^" \\]*)"/\1/g' -e 's/\\([[:alnum:]_.-])/\1/g')
+unquote() { sed -E -e "s/\\\$?'([^' ]*)'/\\1/g" -e 's/\$?"([^" \\]*)"/\1/g' -e 's/\\([[:alnum:]_.-])/\1/g'; }
+# Строка с `\` в конце и следующая — одна команда.
+join_lines() { sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}'; }
+
+# Интерпретатор вне тел heredoc исполняет строку в кавычках или тело heredoc — это код, а не данные.
+# Оболочку узнаём по имени (и с каталогом, и в кавычках): с кластером -c или -s среди слов своей команды
+# (bash -e -c, env bash -euc), справа от `|` (| bash -x, | sudo bash) и с `<<` (bash -e <<EOF, sh<<<'…').
+nl=$'\n'
+shell='(ba|da|z|k|a|mk|c|tc|fi)?sh'
+before='(^|[;&|(`[:space:]/])'
+rest="([[:space:]]+[^;&|${nl}]*)?"
+re_interp="${before}(${shell})${rest}[[:space:]]+-[[:alnum:]]*[cs][[:alnum:]]*([[:space:]]|\$)"
+re_interp+="|${before}eval([[:space:]]|\$)"
+re_interp+="|\\|&?([^;&|)${nl}]*[[:space:]/(])?(${shell})([[:space:];&|)<>]|\$)"
+re_interp+="|${before}(${shell})${rest}[[:space:]]*<<"
+norm=$(printf '%s' "$text" | join_lines | unquote)
+interp=0
+if [[ $norm =~ $re_interp ]]; then
+    interp=1
+    text=$(printf '%s' "$cmd" | tr -d "\"'")
+    norm=$(printf '%s' "$text" | join_lines | unquote)
+fi
 
 lower=$(printf '%s' "$norm" | tr '[:upper:]' '[:lower:]')
-[[ $lower == *skip_prepush* ]] && block "SKIP_PREPUSH"
-[[ $lower == *hookspath* ]] && block "hooksPath"
+# Ключевые слова ищем без кавычек вовсе: кавычка с пробелом внутри слово не прячет
+# (core.hooksP'ath=/tmp/a b', -c 'alias.c=commit -n').
+keys=$(printf '%s' "$lower" | sed -E "s/\\\$?[\"']//g")
+[[ $keys == *skip_prepush* ]] && block "SKIP_PREPUSH"
+[[ $keys == *hookspath* ]] && block "hooksPath"
 # Алиас и подключаемый конфиг прячут флаг или hooksPath от проверок ниже: git -c alias.c='commit -n' c.
 re_git='(^|[^[:alnum:]_.-])git([[:space:]]|$)'
 re_cfg='(-c[[:space:]]*|config[^;&|]*)(alias|include(if)?)\.'
-[[ $norm =~ $re_git && $lower =~ $re_cfg ]] && block "алиас или include конфига git"
+[[ $norm =~ $re_git && $keys =~ $re_cfg ]] && block "алиас или include конфига git"
 
 # Слова команды с учётом кавычек. Вне кавычек `\x` — буква, пробел — граница слова (код 037); в
 # кавычках и после `\` разделители команд прячутся в коды 001–006 и возвращаются, когда строка уже
@@ -227,16 +249,20 @@ while IFS= read -r seg; do
                 continue
             fi
             ;;
-        *) [[ $name =~ ^($readers)$ || $cmd =~ $run_hook ]] && continue ;;
+        *)
+            [[ $cmd =~ $run_hook ]] && continue
+            # Текст echo и printf рядом с интерпретатором — его код (echo '…' | bash), а не чтение.
+            [[ $name =~ ^($readers)$ ]] && ! { ((interp)) && [[ $name =~ ^(echo|printf)$ ]]; } && continue
+            ;;
     esac
     block "${name:-команда} по scripts/git-hooks или .git/config"
-done <<<"$(printf '%s' "$text" | tr -d '\001-\007\037' | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | split_words |
+done <<<"$(printf '%s' "$text" | tr -d '\001-\007\037' | join_lines | split_words |
     sed -e 's/>|/>/g' -e 's/>&/>/g' | tr ';&|()`' '\n\n\n\n\n\n' | tr '\001\002\003\004\005\006' ';&|()`')"
 
 # Флаги git ищем вне кавычек, по сегментам: строки (с учётом `\` в конце) и части между
-# ; & | ( ) и обратными кавычками.
-segments=$(printf '%s' "$norm" | sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}' | tr '\n' ';' |
-    sed -E -e 's/"([^"\\]|\\.)*"//g' -e "s/'[^']*'//g" | tr ';&|()`' '\n\n\n\n\n\n')
+# ; & | ( ) и обратными кавычками. Перенаправление, приклеенное к слову, — не его часть (bash<<<git).
+segments=$(printf '%s' "$norm" | tr '\n' ';' |
+    sed -E -e 's/"([^"\\]|\\.)*"//g' -e "s/'[^']*'//g" | tr ';&|()`<>' '\n\n\n\n\n\n  ')
 while read -r -a words; do
     git=0 sub="" skip=0 prev=""
     for w in ${words[@]+"${words[@]}"}; do

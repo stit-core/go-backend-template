@@ -253,6 +253,65 @@ B bash <<'EOF'⏎chmod -x scripts/git-hooks/pre-push⏎EOF
 B bash -c "x\|chmod -x scripts/git-hooks/pre-push"
 B eval "echo a\|b; chmod -x scripts/git-hooks/pre-push"
 
+# --- отказ: код для оболочки — опции перед -c, имя с каталогом и в кавычках, pipe с опциями и обёрткой, here-string
+B bash -e -c 'git commit -n -m x'
+B bash -euo pipefail -c 'git add -A && git commit -n -m x'
+B bash --norc -c 'git commit -n -m x'
+B bash -o pipefail -c 'git send-pack origin main'
+B bash --rcfile 'my rc' -c 'git commit -n -m x'
+B bash -cx 'git commit -n -m x'
+B bash -e \⏎  -c 'git commit -n -m x'
+B bash \⏎  -e -c 'git commit -n -m x'
+B bash -c 'git commit \⏎  -n -m x'
+B echo start⏎bash -e -c 'git commit -n -m x'⏎echo done
+B "bash" -c 'git commit -n -m x'
+B ba""sh -c 'git commit -n -m x'
+B \bash -c 'git commit -n -m x'
+B $'bash' -c 'git commit -n -m x'
+B bash "-c" 'git commit -n -m x'
+B /bin/bash -c 'git commit -n -m x'
+B /usr/bin/env bash -euc 'git commit -n -m x'
+B ksh -c 'git commit -n -m x'
+B ash -c 'git commit -n -m x'
+B mksh -c 'git commit -n -m x'
+B csh -c 'git commit -n -m x'
+B tcsh -c 'git commit -n -m x'
+B fish -c 'git commit -n -m x'
+B "eval" 'git commit -n -m x'
+B e\val 'git commit -n -m x'
+B printf 'git commit -n -m x' | bash -x
+B printf 'git commit -n -m x' | sh -e
+B printf 'git commit -n -m x' | bash -
+B printf 'git commit -n -m x' | bash /dev/stdin
+B echo 'git commit -n -m x' | sudo bash
+B echo 'git commit -n -m x' | sudo bash -x
+B echo 'git commit -n -m x' | sudo -u root bash
+B echo 'git commit -n -m x' | env X=1 bash -x
+B echo 'git commit -n -m x' | /bin/bash
+B echo 'git commit -n -m x' | "bash"
+B echo 'git commit -n -m x' |& bash
+B echo 'git commit -n -m x' | (bash)
+B echo 'git commit -n -m x' | { bash; }
+B echo 'git commit -n -m x' | bash⏎echo done
+B echo 'git commit -n -m x' | bash >/dev/null
+B echo 'git commit -n -m x' | bash>/dev/null
+B echo 'git send-pack origin main' | bash -x
+B cat <<'EOF' | bash -x⏎git commit -n -m x⏎EOF
+B bash -e <<'EOF'⏎git commit -n -m x⏎EOF
+B sh -x <<EOF⏎git send-pack origin main⏎EOF
+B bash --norc <<EOF⏎git commit -n -m x⏎EOF
+B /bin/sh <<'EOF'⏎git commit -n -m x⏎EOF
+B bash<<<'git commit -n -m x'
+B sh<<<'git send-pack origin main'
+B bash <<<'git commit -n -m x'
+B bash -x<<<'git commit -n -m x'
+B bash /dev/stdin <<< 'git commit -n -m x'
+B bash -e -c 'chmod -x scripts/git-hooks/pre-push'
+B echo 'chmod -x scripts/git-hooks/pre-push' | bash
+B echo 'chmod -x scripts/git-hooks/pre-push' | bash -x
+B printf 'rm scripts/git-hooks/commit-msg\n' | sh
+B echo 'sed -i d .git/config' | sh
+
 # --- отказ: алиасы и include конфига git, секция core, send-pack; SKIP_PREPUSH и hooksPath в любой команде
 B git -c alias.c='commit -n' c -m x
 B git config alias.p 'push --no-verify'
@@ -270,6 +329,26 @@ B git -c core.hooks"P"ath=/dev/null push
 B grep -rn core.hooksPath scripts/
 B sed -i '/hooksPath/d' .git/config
 B printf '[core]\n\thooksPath = /dev/null\n' >> .git/config
+B git -c 'alias.c=commit -n' c -m x
+B git -c "alias.c=commit -n" c -m x
+B git -c $'alias.c=commit -n' c -m x
+B git -c 'alias.c=!git commit -n' c -m x
+B git -c 'alias.sp=send-pack origin' sp main
+B git  -c  'alias.c=commit -n'  c -m x
+B git -c'alias.c=commit -n' c -m x
+B git -c "al"'ias.c=commit -n' c -m x
+B git -c \⏎  'alias.c=commit -n' c -m x
+B git -C . -c 'alias.c=commit -n' c -m x
+B git -c 'include.path=/tmp/my cfg' push
+B git -c "includeIf.gitdir:/.path=/tmp/my cfg" push
+B git --config-env=alias.c=X c -m x
+B GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.c GIT_CONFIG_VALUE_0='commit -n' git c -m x
+B GIT_CONFIG_PARAMETERS="'alias.c=commit -n'" git c -m x
+B git -c core.hooksP'ath=/tmp/empty dir' push
+B git -c "core.hooksP"'ath=/tmp/empty dir' push
+B git -c core.hooks\⏎Path=/dev/null push
+B SKIP_PRE\⏎PUSH=1 git push
+B g\⏎it -c 'alias.c=commit -n' c -m x
 
 # --- отказ: pre-commit и .git/config — те же формы записи
 B cp /bin/true scripts/git-hooks/pre-commit
@@ -334,6 +413,8 @@ B X=scripts/git-hooks/pre-push; chmod -x "$X"
 
 # --- отказ по замыслу, цена правил: интерпретатор в команде снимает кавычки со всей строки
 B git commit -m "fix: -n flag" && bash -c 'make check'
+B echo "pre-push ok" && bash -c 'make check'
+B grep -n "x | sh -e" scripts/git-hooks/pre-push
 
 # --- пропуск: чтение хуков, текст о них и обычная работа
 A git push origin main
@@ -511,3 +592,18 @@ A grep -rn "make setup\|install pre-push" docs/
 A grep -n "x\;rm pre-commit" README.md
 A echo {pre-push,commit-msg}
 A bash -c 'make check'
+A bash -e -c 'make check'
+A echo 'refs/heads/main abc refs/heads/main 000' | bash scripts/git-hooks/pre-push
+A bash scripts/git-hooks/pre-push <<< 'refs/heads/main abc refs/heads/main 000'
+A cat scripts/git-hooks/pre-push | grep -n bash
+A grep -nE "set|sh" scripts/git-hooks/pre-push
+A ps aux | grep bash
+A git log --oneline | grep -c sh
+A ssh -c aes256-ctr host uptime
+A docker exec -i pg psql -U app -c 'select 1'
+A git commit -m "docs: bash -e -c в примере"
+A git commit -q -F - <<'EOF'⏎fix: x⏎⏎bash -e -c, | bash -x и git commit -n в теле⏎EOF
+A bash /tmp/probe.sh⏎git commit -q -F - <<'EOF'⏎fix: x⏎⏎git commit -n в теле⏎EOF
+A git -c user.name='A B' commit -m x
+A git -c 'user.name=A B' commit -m "feat: x"
+A git config --list | grep alias.

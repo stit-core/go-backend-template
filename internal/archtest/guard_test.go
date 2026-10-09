@@ -50,5 +50,5 @@ func TestGuardBash(t *testing.T) {
 				"guard-cases.txt:%d: the guard lets a bypass of the git hooks through (err %v): %s", n+1, err, out)
 		})
 	}
-	require.GreaterOrEqual(t, cases, 400, "guard-cases.txt: the list is cut")
+	require.GreaterOrEqual(t, cases, 550, "guard-cases.txt: the list is cut")
 }
