@@ -426,9 +426,11 @@ func TestSessions(t *testing.T) {
 
 		status, _, _ = api.call(http.MethodPost, "/api/auth/logout", "", current)
 		require.Equal(t, http.StatusNoContent, status, "a closed session logs out as well")
-		var logouts int
-		require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE action = 'logout' AND actor_id = $1 AND resource_id = $1`, aliceID).Scan(&logouts))
-		require.Equal(t, 1, logouts, "the audit names the owner of the session the logout closed, once")
+		var logouts, owned int
+		require.NoError(t, db.QueryRow(t.Context(),
+			`SELECT count(*), count(*) FILTER (WHERE actor_id = $1 AND resource_id = $1) FROM audit_log WHERE action = 'logout'`, aliceID).Scan(&logouts, &owned))
+		require.Equal(t, 1, logouts, "a logout that closed no session leaves no audit record")
+		require.Equal(t, 1, owned, "the audit names the owner of the session the logout closed")
 	})
 
 	// Погашение токена атомарно: из параллельных обновлений одним cookie успешно одно, остальные — повтор, и

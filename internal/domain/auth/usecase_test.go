@@ -657,6 +657,8 @@ func TestLogout_StoreFailure(t *testing.T) {
 	t.Parallel()
 	f := newUC(t, withSessions(func(s session.Store) session.Store { return failingSessions{s} }))
 	require.ErrorIs(t, f.uc.Logout(identitytest.Anon(), "tok"), errStore)
+	require.Empty(t, f.audit.Entries(), "a logout that failed closed no session: nothing to audit")
+	require.Empty(t, f.log.Entries(), "the failure goes to the caller: neither a log record nor a refused audit entry")
 }
 
 // pwUser отдаёт учётную запись u1 для смены пароля ровно один раз.
@@ -847,6 +849,11 @@ func TestChangePassword_Guarded(t *testing.T) {
 			require.NotErrorIs(t, err, auth.ErrWrongOldPassword)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
+			}
+			if tc.lock != nil {
+				var locked *auth.LockedError
+				require.ErrorAs(t, err, &locked)
+				require.Equal(t, tc.lock.RetryAfter, locked.RetryAfter(), "retry when the lock ends")
 			}
 		})
 	}

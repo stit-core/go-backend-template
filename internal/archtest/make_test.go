@@ -75,38 +75,62 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 }
 
 // TestReleaseGateIgnoresGNUmakefile: make читает GNUmakefile раньше Makefile, а -f в под-make не
-// переходит — свой GNUmakefile (и игнорируемый git: дерево «чистое») подменил бы make check релиза или
-// его шаги. Релиз зовёт make с -f Makefile, шаги гейта — тоже. Настоящий гейт здесь падает на первом
-// шаге: gofumpt в PATH — false.
+// переходит — свой GNUmakefile (и игнорируемый git: дерево «чистое») подменил бы make check релиза, его
+// шаги или smoke. Релиз зовёт make с -f Makefile, шаги гейта — тоже. Гейт здесь — Makefile репо на
+// заглушках инструментов: с gofumpt-false падает его первый шаг, с зелёными шагами — smoke.
 func TestReleaseGateIgnoresGNUmakefile(t *testing.T) {
 	t.Parallel()
-	root, repo, bin := repoRoot(t), t.TempDir(), t.TempDir()
-	fail, err := exec.LookPath("false")
+	root := repoRoot(t)
+	tools, err := os.ReadDir(filepath.Join(root, "scripts", "tools"))
 	require.NoError(t, err)
-	require.NoError(t, os.Symlink(fail, filepath.Join(bin, "gofumpt")))
-	writeFiles(t, repo, readFiles(t, root, "Makefile", "scripts/release.sh"))
-	git(t, repo, "init", "-q")
-	git(t, repo, "remote", "add", "origin", "git@git.example.org:acme/backend.git")
-	commitAll(t, repo)
-	writeFiles(t, repo, map[string]string{
-		"GNUmakefile":       "check e2e-smoke fmt-check lint test-int build gen-check:\n\t@echo \"FORGED $@\"\n",
-		".git/info/exclude": "GNUmakefile\n",
-	})
-
-	cmd := exec.CommandContext(t.Context(), "bash", "scripts/release.sh", "v9.9.9")
-	cmd.Dir = repo
-	// Без окружения вызывающего make и git: тест идёт и внутри make check.
-	for _, kv := range os.Environ() {
-		key, _, _ := strings.Cut(kv, "=")
-		if !strings.HasPrefix(key, "GIT_") && !strings.HasPrefix(key, "MAKE") && key != "MFLAGS" && key != "GNUMAKEFLAGS" && key != "PATH" {
-			cmd.Env = append(cmd.Env, kv)
-		}
+	stubs := map[string]string{}
+	for _, tool := range tools {
+		stubs["scripts/tools/"+tool.Name()] = "exit 0\n"
 	}
-	cmd.Env = append(cmd.Env, "RELEASE_YES=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	out, err := cmd.CombinedOutput()
-	require.Error(t, err, "the release must stop at the failing gate:\n%s", out)
-	require.NotContains(t, string(out), "FORGED", "a GNUmakefile replaces the gate of the release")
-	require.Contains(t, string(out), "FAIL: gofumpt", "the release must run fmt-check of the Makefile")
-	require.Empty(t, git(t, repo, "tag", "-l"), "a failed gate must leave no tag")
+	stubs["scripts/tools/e2e.sh"] = "echo \"SMOKE of the Makefile: $*\"\nexit 1\n"
+	for _, tc := range []struct {
+		name    string
+		gofumpt string // программа на месте gofumpt: false роняет первый шаг гейта
+		want    []string
+	}{
+		{name: "gate", gofumpt: "false", want: []string{"FAIL: gofumpt"}},
+		{name: "smoke after a green gate", gofumpt: "true", want: []string{"✓ check clean", "SMOKE of the Makefile: --smoke"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo, bin := t.TempDir(), t.TempDir()
+			for tool, program := range map[string]string{"gofumpt": tc.gofumpt, "go": "true", "sqlc": "true", "mockery": "true"} {
+				path, err := exec.LookPath(program)
+				require.NoError(t, err)
+				require.NoError(t, os.Symlink(path, filepath.Join(bin, tool)))
+			}
+			writeFiles(t, repo, union(stubs, readFiles(t, root, "Makefile", "scripts/release.sh")))
+			git(t, repo, "init", "-q")
+			git(t, repo, "remote", "add", "origin", "git@git.example.org:acme/backend.git")
+			commitAll(t, repo)
+			writeFiles(t, repo, map[string]string{
+				"GNUmakefile":       "check e2e-smoke fmt-check lint test-int build gen-check:\n\t@echo \"FORGED $@\"\n",
+				".git/info/exclude": "GNUmakefile\n",
+			})
+
+			cmd := exec.CommandContext(t.Context(), "bash", "scripts/release.sh", "v9.9.9")
+			cmd.Dir = repo
+			// Без окружения вызывающего make и git: тест идёт и внутри make check.
+			for _, kv := range os.Environ() {
+				key, _, _ := strings.Cut(kv, "=")
+				if !strings.HasPrefix(key, "GIT_") && !strings.HasPrefix(key, "MAKE") && key != "MFLAGS" && key != "GNUMAKEFLAGS" && key != "PATH" {
+					cmd.Env = append(cmd.Env, kv)
+				}
+			}
+			cmd.Env = append(cmd.Env, "RELEASE_YES=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+				"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			out, err := cmd.CombinedOutput()
+			require.Error(t, err, "the release must stop here:\n%s", out)
+			require.NotContains(t, string(out), "FORGED", "a GNUmakefile replaces a step of the release")
+			for _, want := range tc.want {
+				require.Contains(t, string(out), want, "the release must run the steps of the Makefile")
+			}
+			require.Empty(t, git(t, repo, "tag", "-l"), "a failed step must leave no tag")
+		})
+	}
 }

@@ -223,6 +223,10 @@ B cp /bin/true scripts/git-hooks/commit-msg
 B awk 'BEGIN{print "exit 0" > "scripts/git-hooks/pre-push"}'
 B git update-index --chmod=-x scripts/git-hooks/commit-msg
 B sed -i '2i exit 0' scripts/git-hooks/pre-push
+B cp -t scripts/git-hooks /tmp/fixed
+B chmod -x scripts/git-ho""oks/pre-pu""sh
+B awk 'NR<5' scripts/git-hooks/pre-*
+B chmod -x \⏎scripts/git-hooks/pre-push
 
 # --- отказ: экранированная кавычка не прячет следующую команду
 B echo don\'t; chmod -x scripts/git-hooks/pre-push

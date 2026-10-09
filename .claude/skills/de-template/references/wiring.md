@@ -19,7 +19,8 @@
   доменами (п. 4), сейчас их ещё берут домены.
 - `timerkit.Module` и пробы healthkit (`healthkit.ProvideProbe(<kit>.Probe)`, у NATS —
   `natskit.ProvideProbe("")`) — потребители групп китов: без первого не идут джобы (дренаж outbox,
-  cleanup — `TestFxGraphValidates` красный), без проб `/ready` не видит зависимость. Их не убирают,
+  cleanup — `TestFxGraphValidates` красный), без проб `/ready` не видит зависимость (список проб сверяет
+  `TestBoot`). Их не убирают,
   пока в графе есть кит с джобом или пробой.
 - wiring внешних runtime-deps (Redis/NATS/…), если стек их объявил.
 - golibinfra-first: generic-примитив → golibinfra, не локально (CLAUDE.md § Стиль; обоснование — `docs/reference/architecture.md § Граница с golibinfra`).

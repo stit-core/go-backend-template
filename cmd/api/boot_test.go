@@ -142,13 +142,33 @@ func TestBoot(t *testing.T) {
 
 	base := "http://" + srv.Addr().String()
 	anon := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/ready", nil)
+	require.NoError(t, err)
+	resp, err := anon.Do(req)
+	require.NoError(t, err)
+	var ready struct {
+		Probes []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"probes"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&ready))
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusOK, resp.StatusCode, "/ready of the started service")
+	probes := map[string]string{}
+	for _, p := range ready.Probes {
+		probes[p.Name] = p.Status
+	}
+	require.Equal(t, map[string]string{"pgkit": "ok", "natskit": "ok"}, probes,
+		"/ready polls every dependency of the service: without its probe an instance that lost it stays in rotation")
+
 	humaAPI, ok := srv.API().(interface{ Config() huma.Config })
 	require.True(t, ok, "the huma API exposes its Config")
 	humaCfg := humaAPI.Config()
 	require.NotEmpty(t, humaCfg.OpenAPIPath, "the service serves its OpenAPI spec")
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+humaCfg.OpenAPIPath+".json", nil)
+	req, err = http.NewRequestWithContext(t.Context(), http.MethodGet, base+humaCfg.OpenAPIPath+".json", nil)
 	require.NoError(t, err)
-	resp, err := anon.Do(req)
+	resp, err = anon.Do(req)
 	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
