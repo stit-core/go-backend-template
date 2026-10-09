@@ -44,10 +44,11 @@ join_lines() { sed -e ':a' -e '/\\$/{N;s/\\\n//;ba' -e '}'; }
 # (bash -e -c, env bash -euc), справа от `|` (| bash -x, | sudo bash) и с `<<` (bash -e <<EOF, sh<<<'…').
 nl=$'\n'
 shell='(ba|da|z|k|a|mk|c|tc|fi)?sh'
+start='(^|[;&|(`[:space:]])'
 before='(^|[;&|(`[:space:]/])'
 rest="([[:space:]]+[^;&|${nl}]*)?"
 re_interp="${before}(${shell})${rest}[[:space:]]+-[[:alnum:]]*[cs][[:alnum:]]*([[:space:]]|\$)"
-re_interp+="|${before}eval([[:space:]]|\$)"
+re_interp+="|${start}eval([[:space:]]|\$)"
 re_interp+="|\\|&?([^;&|)${nl}]*[[:space:]/(])?(${shell})([[:space:];&|)<>]|\$)"
 re_interp+="|${before}(${shell})${rest}[[:space:]]*<<"
 norm=$(printf '%s' "$text" | join_lines | unquote)

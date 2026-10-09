@@ -611,3 +611,4 @@ A bash /tmp/probe.sh⏎git commit -q -F - <<'EOF'⏎fix: x⏎⏎git commit -n в
 A git -c user.name='A B' commit -m x
 A git -c 'user.name=A B' commit -m "feat: x"
 A git config --list | grep alias.
+A grep -c pre-push docs/eval && echo "pre-push ok"
