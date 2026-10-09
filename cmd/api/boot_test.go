@@ -74,7 +74,8 @@ func attr(r slog.Record, key string) string {
 }
 
 // hookEvents отдаёт события fx обработчику h. Логгер событий service (logkit.FxLogger) берёт sink из
-// logkit.Config, а не из графа, и тройник teeLog его не видит; опция его подменяет.
+// logkit.Config, а не из графа, и тройник teeLog его не видит; опция подменяет его — что service его
+// ставит, держит TestMainLogsStartFailure.
 func hookEvents(h slog.Handler) fx.Option {
 	return fx.WithLogger(func() fxevent.Logger { return &fxevent.SlogLogger{Logger: slog.New(h)} })
 }

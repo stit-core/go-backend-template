@@ -205,8 +205,9 @@ DTO в порте — локальные (не re-export из B).
   дообработка запросов `HTTP_SHUTDOWN_TIMEOUT` — берёт не больше ⅔ (httpkit), хуки после него — остаток,
   в нём `NATS_DRAIN_TIMEOUT`. Env, который в бюджет не помещается (HTTP больше 20s, дренаж NATS
   больше 10s), — ошибка старта (`checkStopBudget`); поднимаете их — поднимите и `stopTimeout`.
-- **События fx** — в лог сервиса через `logkit.FxLogger` (sink — из `logkit.Config`); паника
-  конструктора или Invoke — ошибка старта (`fx.RecoverFromPanics`).
+- **События fx** — в лог сервиса через `logkit.FxLogger` (sink — из `logkit.Config`): отказ старта —
+  JSON-запись ERROR, а не текст консоли fx (`TestMainLogsStartFailure`); паника конструктора или
+  Invoke — ошибка старта (`fx.RecoverFromPanics`).
 - **Группы** — `httpkit.security_scheme`, `healthkit.probes`, `timerkit.jobs` (через
   `timerkit.ProvideJob`), `pgkit.migrations`; свои middleware и правки huma — одним значением
   `httpkit.Middlewares` и `httpkit.HumaConfigs` (порядок задаёт приложение). Per-domain outbox

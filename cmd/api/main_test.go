@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
+	"os/exec"
 	"reflect"
 	"regexp"
 	"slices"
@@ -33,6 +36,32 @@ func TestMain(m *testing.M) {
 		return
 	}
 	os.Exit(m.Run())
+}
+
+// Отказ старта пишет логгер событий сервиса (logkit.FxLogger): JSON-записи ERROR в stdout с причиной, а не
+// текст консольного логгера fx в stderr. Тест запускает свой бинарь как `api` без окружения (TestMain зовёт
+// main): первым падает конфиг без обязательной переменной.
+func TestMainLogsStartFailure(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0])
+	cmd.Env = []string{mainArgsEnv + "="}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+
+	err := cmd.Run()
+	require.NotNil(t, cmd.ProcessState, "api did not run: %v", err)
+	require.Equal(t, 1, cmd.ProcessState.ExitCode(), "exit code of api without env, stderr:\n%s", stderr.String())
+	require.NotContains(t, stderr.String(), "[Fx]", "start failure goes to the service log, not to the console logger of fx")
+	var failed bool
+	for line := range bytes.SplitSeq(bytes.TrimSpace(stdout.Bytes()), []byte("\n")) {
+		var rec struct{ Level, Msg, Error string }
+		require.NoError(t, json.Unmarshal(line, &rec), "service log line is not JSON: %s", line)
+		require.Equal(t, "ERROR", rec.Level, "service log line: %s", line)
+		failed = failed || rec.Msg == "start failed" && strings.Contains(rec.Error, "is required")
+	}
+	require.True(t, failed, "the service log names the required env behind the failed start:\n%s", stdout.String())
 }
 
 // Граф fx должен быть разрешим (все зависимости предоставлены), включая per-domain
