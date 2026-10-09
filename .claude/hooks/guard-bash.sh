@@ -192,7 +192,7 @@ while IFS= read -r seg; do
             for w in "${bare[@]:i+1}"; do # подкоманда — первое слово не-флаг, кроме значений -C/-c…
                 case "$w" in
                     -c) skip=2 ;;
-                    -C | --git-dir | --work-tree | --namespace) skip=1 ;;
+                    -C | --git-dir | --work-tree | --namespace | --config-env | --attr-source) skip=1 ;;
                     -*) ;;
                     *)
                         [[ $skip == 2 && $w =~ $hook ]] && cfg=$w
@@ -261,9 +261,11 @@ done <<<"$(printf '%s' "$text" | tr -d '\001-\007\037' | join_lines | split_word
     sed -e 's/>|/>/g' -e 's/>&/>/g' | tr ';&|()`' '\n\n\n\n\n\n' | tr '\001\002\003\004\005\006' ';&|()`')"
 
 # Флаги git ищем вне кавычек, по сегментам: строки (с учётом `\` в конце) и части между
-# ; & | ( ) и обратными кавычками. Перенаправление, приклеенное к слову, — не его часть (bash<<<git).
+# ; & | ( ) и обратными кавычками. Перенаправление с целью — не слово команды и не её граница
+# (git commit 2>&1 -n, git 2>/dev/null send-pack); слово после `<<<` — текст для команды (bash<<<git).
 segments=$(printf '%s' "$norm" | tr '\n' ';' |
-    sed -E -e 's/"([^"\\]|\\.)*"//g' -e "s/'[^']*'//g" | tr ';&|()`<>' '\n\n\n\n\n\n  ')
+    sed -E -e 's/"([^"\\]|\\.)*"//g' -e "s/'[^']*'//g" -e 's/<<</ /g' \
+        -e 's/[0-9]*(&>>?|>>?[&|]?|<<?&?)[[:space:]]*[^[:space:];&|()`<>]*/ /g' | tr ';&|()`' '\n\n\n\n\n\n')
 while read -r -a words; do
     git=0 sub="" skip=0 prev=""
     for w in ${words[@]+"${words[@]}"}; do
@@ -271,7 +273,7 @@ while read -r -a words; do
             [[ $w == git || $w == */git ]] && git=1
         elif [ -z "$sub" ]; then # подкоманда — первое слово не-флаг, кроме значений -C/-c/--git-dir…
             case "$w" in
-                -C | -c | --git-dir | --work-tree | --namespace) skip=1 ;;
+                -C | -c | --git-dir | --work-tree | --namespace | --config-env | --attr-source) skip=1 ;;
                 -*) ;;
                 *)
                     if [ "$skip" = 1 ]; then skip=0; else sub=$w; fi

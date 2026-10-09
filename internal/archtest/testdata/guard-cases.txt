@@ -109,6 +109,16 @@ B sudo chmod -x scripts/git-hooks/pre-push
 B cd scripts && chmod -x git-hooks/pre-push
 B git commit \⏎  -n -m x
 B git commit -m "$(cat <<'EOF'⏎feat: x⏎EOF⏎)" -n
+B git commit -m x 2>&1 -n
+B git commit -m x &>/dev/null -n
+B git commit -m x >&2 -n
+B git commit 2>/dev/null -n -m x
+B git 2>/dev/null commit -n -m x
+B git 2>&1 send-pack origin main
+B git push 2>&1 --no-veri
+B git --attr-source HEAD commit -n -m x
+B git --config-env user.name=N commit -n -m x
+B git --attr-source HEAD send-pack origin main
 
 # --- отказ: запись и запуск через «читателей»: cp, sort, find, awk, sed, git, rg, bash -n
 B sed -i 's/make check/true/' scripts/git-hooks/pre-push
@@ -612,3 +622,7 @@ A git -c user.name='A B' commit -m x
 A git -c 'user.name=A B' commit -m "feat: x"
 A git config --list | grep alias.
 A grep -c pre-push docs/eval && echo "pre-push ok"
+A git commit -m "fix: x" 2>&1 | tail -3
+A git log 2>&1 -n 5
+A git commit -m x 2>&1
+A git --attr-source HEAD diff -- scripts/git-hooks
