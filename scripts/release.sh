@@ -69,9 +69,10 @@ fi
 
 # --- гейт до тега: тег и образы — только у чистого HEAD, прошедшего make check, smoke и govulncheck ---
 [ -z "$(git status --porcelain)" ] || { echo "release: working tree dirty — закоммить или stash" >&2; exit 2; }
-make --no-print-directory check
+# -f Makefile: свой GNUmakefile make прочёл бы первым, а игнорируемый git оставляет дерево «чистым».
+make -f Makefile --no-print-directory check
 # Собранный бинарь со стеком в docker (HTTP, Postgres, NATS): то, что юнит и integration не видят.
-make --no-print-directory e2e-smoke
+make -f Makefile --no-print-directory e2e-smoke
 # Уязвимость, которую вызывает код, не уезжает в образ; базе уязвимостей нужна сеть — поэтому здесь, а не
 # в make check, и до тега: отказ не оставляет тега.
 command -v govulncheck >/dev/null 2>&1 || { echo "release: govulncheck не найден — make setup" >&2; exit 2; }

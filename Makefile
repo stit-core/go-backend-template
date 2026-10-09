@@ -49,8 +49,9 @@ fmt-check: ## Проверка форматирования без мутаци�
 		echo "FAIL: fmt — файлы не отформатированы, запусти make fmt"; exit 1; \
 	fi
 
-# Шаги гейта не видят PKG, VERBOSE и FORMAT ни из окружения, ни из командной строки.
-GATE = $(MAKE) --no-print-directory PKG= VERBOSE= FORMAT=
+# Шаги гейта не видят PKG, VERBOSE и FORMAT ни из окружения, ни из командной строки и читают этот же
+# Makefile: -f вызывающего в под-make не переходит, а GNUmakefile make прочёл бы первым.
+GATE = $(MAKE) -f Makefile --no-print-directory PKG= VERBOSE= FORMAT=
 
 # make check не запускается там, где сказал бы «clean», не проверив всё: -i и -k глушат ошибки шагов,
 # -n/-q/-t их не выполняют, -p печатает рецепты, -j пускает чужой рецепт рядом, подмена переменных

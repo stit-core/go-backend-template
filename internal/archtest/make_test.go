@@ -73,3 +73,40 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 		})
 	}
 }
+
+// TestReleaseGateIgnoresGNUmakefile: make читает GNUmakefile раньше Makefile, а -f в под-make не
+// переходит — свой GNUmakefile (и игнорируемый git: дерево «чистое») подменил бы make check релиза или
+// его шаги. Релиз зовёт make с -f Makefile, шаги гейта — тоже. Настоящий гейт здесь падает на первом
+// шаге: gofumpt в PATH — false.
+func TestReleaseGateIgnoresGNUmakefile(t *testing.T) {
+	t.Parallel()
+	root, repo, bin := repoRoot(t), t.TempDir(), t.TempDir()
+	fail, err := exec.LookPath("false")
+	require.NoError(t, err)
+	require.NoError(t, os.Symlink(fail, filepath.Join(bin, "gofumpt")))
+	writeFiles(t, repo, readFiles(t, root, "Makefile", "scripts/release.sh"))
+	git(t, repo, "init", "-q")
+	git(t, repo, "remote", "add", "origin", "git@git.example.org:acme/backend.git")
+	commitAll(t, repo)
+	writeFiles(t, repo, map[string]string{
+		"GNUmakefile":       "check e2e-smoke fmt-check lint test-int build gen-check:\n\t@echo \"FORGED $@\"\n",
+		".git/info/exclude": "GNUmakefile\n",
+	})
+
+	cmd := exec.CommandContext(t.Context(), "bash", "scripts/release.sh", "v9.9.9")
+	cmd.Dir = repo
+	// Без окружения вызывающего make и git: тест идёт и внутри make check.
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if !strings.HasPrefix(key, "GIT_") && !strings.HasPrefix(key, "MAKE") && key != "MFLAGS" && key != "GNUMAKEFLAGS" && key != "PATH" {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
+	cmd.Env = append(cmd.Env, "RELEASE_YES=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, "the release must stop at the failing gate:\n%s", out)
+	require.NotContains(t, string(out), "FORGED", "a GNUmakefile replaces the gate of the release")
+	require.Contains(t, string(out), "FAIL: gofumpt", "the release must run fmt-check of the Makefile")
+	require.Empty(t, git(t, repo, "tag", "-l"), "a failed gate must leave no tag")
+}
