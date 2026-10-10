@@ -39,6 +39,9 @@ paths:
   natskit.SubscribeStreamJSON(bus, ctx, <stream>, <subject>, <durable>, handler) })`, `bus` —
   `natskit.StreamBus`. Кит подписывает в OnStart и дренит подписку в OnStop раньше остановки
   её зависимостей; ошибка подписки, в том числе выключенный JetStream, валит старт.
+- Один durable — один фильтр: второму subject'у — свой durable. Второй фильтр на durable с живой
+  подпиской той же шины кит отвергает на старте (`natskit.ErrConfig`); между репликами фильтр
+  durable меняет тот, кто подписался последним, — смену фильтра выкатывают разом.
 - Объявляют локальный payload-DTO (`delivery/nats/dto.go`) — прямой импорт домена-
   источника запрещён archtest. Регистрируются в `module/module.go` потребителя. Схему с поставщиком
   сверяет контракт-тест потребителя `delivery/nats/contract_test.go`: событие настоящего usecase

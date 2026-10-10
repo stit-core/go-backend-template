@@ -202,9 +202,12 @@ DTO в порте — локальные (не re-export из B).
   (`httpModule`): Invoke модулей fx выполняет раньше корневых. Порядок проверяет `TestBoot`.
 - **Таймауты** — явные `fx.StartTimeout`/`fx.StopTimeout`. `StopTimeout` (`stopTimeout`, 30s) —
   общий бюджет хуков остановки: HTTP — пауза `HTTP_SHUTDOWN_DRAIN_DELAY` (`/ready` уже 503) и
-  дообработка запросов `HTTP_SHUTDOWN_TIMEOUT` — берёт не больше ⅔ (httpkit), хуки после него — остаток,
-  в нём `NATS_DRAIN_TIMEOUT`. Env, который в бюджет не помещается (HTTP больше 20s, дренаж NATS
-  больше 10s), — ошибка старта (`checkStopBudget`); поднимаете их — поднимите и `stopTimeout`.
+  дообработка запросов `HTTP_SHUTDOWN_TIMEOUT` — берёт не больше ⅔ (httpkit), хуки после него — остаток:
+  каждый ждущий хук кита (дренаж подписки NATS, закрытие шины, пул, telemetry) — ⅔ того, что осталось к
+  нему; `NATS_DRAIN_TIMEOUT` — потолок закрытия шины, а не гарантия: после HTTP на все 20s подписке
+  достаётся до 6,7s (обработчикам отменяется ctx, WARN кита). Env, который в бюджет не помещается (HTTP
+  больше 20s, `NATS_DRAIN_TIMEOUT` больше 10s), — ошибка старта (`checkStopBudget`); поднимаете их —
+  поднимите и `stopTimeout`.
 - **События fx** — в лог сервиса через `logkit.FxLogger` (sink — из `logkit.Config`): отказ старта —
   JSON-запись ERROR, а не текст консоли fx (`TestMainLogsStartFailure`); паника конструктора или
   Invoke — ошибка старта (`fx.RecoverFromPanics`).

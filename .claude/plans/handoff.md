@@ -197,3 +197,21 @@ WHO    клиенты API + проект (поддержка)
 DECIDE —
 RISK   пользователь с паролем длиннее 1024 байт после выкатки не входит, пока не сбросит пароль
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   сигналы golibinfra v1.5.0, без новых env, секретов и миграций: сервис с OTEL_SDK_DISABLED=true не
+       шлёт соседям traceparent с sampled=0 (трассу они сэмплируют сами) и пишет trace_id в лог только у
+       работы с доверенным входящим trace-context (сообщение шины; HTTP — при
+       HTTP_TRUST_TRACE_CONTEXT=true); outbox_lag_seconds и outbox_pending_count — снимок прошлого сбора
+       метрик (отстают на OTEL_METRICS_INTERVAL), при занятом пуле БД этих серий нет
+       (outbox_backlog_errors_total), остальные метрики идут; новые WARN остановки — `timerkit: jobs are
+       still running after the stop budget` и `natskit: subscription drain timeout, handlers cancelled`
+WHY    repair-harness S10 — bump golibinfra v1.5.0
+ACTION запросы логов по trace_id у сервиса с выключенной телеметрией — на request_id; алерт «серий
+       outbox нет» — с порогом не короче двух интервалов экспорта; алерты на WARN остановки — по желанию
+WHO    проект (панели и алерты)
+DECIDE —
+RISK   остановка: ждущий хук кита берёт ⅔ остатка бюджета — после HTTP на все 20s подписке NATS
+       достаётся до 6,7s, незавершённым обработчикам отменяется ctx, код выхода 0; stop_grace_period
+       прежний (35s)
+===

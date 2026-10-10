@@ -133,7 +133,7 @@ func requiredEnv(typ reflect.Type) []string {
 	return keys
 }
 
-// Остановка из env укладывается в бюджет fx.StopTimeout: HTTP — в ⅔, дренаж NATS — в треть.
+// Остановка из env укладывается в бюджет fx.StopTimeout: HTTP — в ⅔, NATS_DRAIN_TIMEOUT — не больше трети.
 func TestCheckStopBudget(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
