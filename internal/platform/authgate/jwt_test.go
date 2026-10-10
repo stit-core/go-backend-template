@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
@@ -16,6 +18,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
+	"git.stit.tech/stit-core/golibinfra/logkit"
 )
 
 var signedAt = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -139,6 +142,7 @@ func TestExtract(t *testing.T) {
 			got, ok := identity.From(ctx)
 			require.True(t, ok, "identity must be set on the returned context")
 			require.Equal(t, tc.wantID, got)
+			require.Equal(t, tc.wantID.UserID, httpkit.SubjectFrom(ctx), "the httpkit subject scopes the idempotency key")
 		})
 	}
 }
@@ -157,6 +161,54 @@ func TestExtract_AccessExpired(t *testing.T) {
 	require.ErrorAs(t, err, &apiErr)
 	require.Equal(t, http.StatusUnauthorized, apiErr.Status)
 	require.Equal(t, "AUTH_ACCESS_EXPIRED", apiErr.Code)
+}
+
+// Extractor кладёт субъекта httpkit — личность запроса для идемпотентности: с подключённым
+// IdempotencyStore повтор вошедшего пользователя с тем же ключом получает сохранённый ответ, тот же
+// ключ другого пользователя и открытая операция (субъекта нет) исполняются.
+func TestExtract_SubjectScopesIdempotency(t *testing.T) {
+	t.Parallel()
+	j := signer(t, secret, clockkit.NewFixed(signedAt))
+	cfg, err := httpkit.NewConfig()
+	require.NoError(t, err)
+	srv, err := httpkit.NewServer(cfg, logkit.Nop(),
+		httpkit.WithSecuritySchemes(authgate.CookieScheme(authgate.NewExtractor(j).Extract)),
+		httpkit.WithIdempotencyStore(httpkit.NewMemoryStore()))
+	require.NoError(t, err)
+	type thingInput struct {
+		Body struct {
+			Name string `json:"name"`
+		}
+	}
+	var secured, open atomic.Int32
+	count := func(calls *atomic.Int32) func(context.Context, *thingInput) (*struct{}, error) {
+		return func(context.Context, *thingInput) (*struct{}, error) {
+			calls.Add(1)
+			return nil, nil
+		}
+	}
+	huma.Register(srv.API(), authgate.Secured(huma.Operation{OperationID: "createThing", Method: http.MethodPost, Path: "/api/things"}), count(&secured))
+	huma.Register(srv.API(), httpkit.Public(huma.Operation{OperationID: "createOpenThing", Method: http.MethodPost, Path: "/api/open-things"}), count(&open))
+	require.NoError(t, srv.CheckRoutes())
+	api := humatest.Wrap(t, srv.API())
+	post := func(path, userID string) *httptest.ResponseRecorder {
+		t.Helper()
+		token, err := j.SignAccess(context.Background(), map[string]any{"sub": userID, "role": "client"})
+		require.NoError(t, err)
+		resp := api.Post(path, cfg.Idempotency.Header+": k1", "Cookie: "+authgate.CookieAccess+"="+token, map[string]any{"name": "thing"})
+		require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+		return resp
+	}
+
+	require.Empty(t, post("/api/things", "u1").Header().Get(httpkit.HeaderIdempotentReplayed))
+	require.Equal(t, "true", post("/api/things", "u1").Header().Get(httpkit.HeaderIdempotentReplayed), "the repeat of a signed-in user is replayed")
+	require.EqualValues(t, 1, secured.Load(), "the repeat does not run the operation again")
+	require.Empty(t, post("/api/things", "u2").Header().Get(httpkit.HeaderIdempotentReplayed), "the key of another user is another key")
+	require.EqualValues(t, 2, secured.Load())
+
+	post("/api/open-things", "u1")
+	require.Empty(t, post("/api/open-things", "u1").Header().Get(httpkit.HeaderIdempotentReplayed), "a request without a subject is not deduplicated")
+	require.EqualValues(t, 2, open.Load())
 }
 
 func TestSecured(t *testing.T) {

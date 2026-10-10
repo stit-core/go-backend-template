@@ -8,6 +8,7 @@ import (
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
 type Extractor struct {
@@ -36,7 +37,8 @@ func (e *Extractor) Extract(r *http.Request) (context.Context, error) {
 		UserID: sub,
 		Role:   identity.Role(role),
 	}
-	return identity.With(r.Context(), id), nil
+	// Субъект httpkit — личность запроса для идемпотентности: без него запрос не дедуплицируется.
+	return httpkit.ContextWithSubject(identity.With(r.Context(), id), sub), nil
 }
 
 func tokenFromRequest(r *http.Request) (string, error) {
