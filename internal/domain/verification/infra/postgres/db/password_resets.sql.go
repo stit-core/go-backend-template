@@ -36,23 +36,13 @@ func (q *Queries) GetPasswordReset(ctx context.Context, tokenHash string) (GetPa
 	return i, err
 }
 
-const insertPasswordReset = `-- name: InsertPasswordReset :one
-INSERT INTO password_resets (user_id, token_hash, expires_at)
-VALUES ($1, $2, $3)
-RETURNING id
+const markPasswordResetSent = `-- name: MarkPasswordResetSent :exec
+UPDATE password_resets SET sent_at = NOW() WHERE id = $1
 `
 
-type InsertPasswordResetParams struct {
-	UserID    pgtype.UUID
-	TokenHash string
-	ExpiresAt pgtype.Timestamptz
-}
-
-func (q *Queries) InsertPasswordReset(ctx context.Context, arg InsertPasswordResetParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, insertPasswordReset, arg.UserID, arg.TokenHash, arg.ExpiresAt)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
+func (q *Queries) MarkPasswordResetSent(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markPasswordResetSent, id)
+	return err
 }
 
 const markPasswordResetUsed = `-- name: MarkPasswordResetUsed :execrows
@@ -74,4 +64,35 @@ UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NUL
 func (q *Queries) RevokePasswordResets(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, revokePasswordResets, userID)
 	return err
+}
+
+const upsertPasswordReset = `-- name: UpsertPasswordReset :one
+INSERT INTO password_resets (id, user_id, token_hash, expires_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (id) DO UPDATE
+SET token_hash = EXCLUDED.token_hash
+WHERE password_resets.sent_at IS NULL
+  AND password_resets.used_at IS NULL
+RETURNING id
+`
+
+type UpsertPasswordResetParams struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	TokenHash string
+	ExpiresAt pgtype.Timestamptz
+}
+
+// Ссылка сброса запроса id: новая или новый токен неотправленной; отправленная и погашенная не трогаются —
+// RETURNING пуст.
+func (q *Queries) UpsertPasswordReset(ctx context.Context, arg UpsertPasswordResetParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertPasswordReset,
+		arg.ID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+	)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }

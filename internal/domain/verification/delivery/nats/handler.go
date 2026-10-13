@@ -3,6 +3,7 @@ package nats
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -12,12 +13,16 @@ import (
 
 const (
 	// streamUser — JetStream-стрим, покрывающий user.> (источник user.events.registered.v2).
-	streamUser  = "user"
-	durableName = "verification-user-registered-v2"
+	streamUser            = "user"
+	durableUserRegistered = "verification-user-registered-v2"
+	// streamVerification — свой стрим домена: письмо сброса шлёт подписчик своего события после коммита запроса.
+	streamVerification            = "verification"
+	durablePasswordResetRequested = "verification-password-reset-requested"
 )
 
 type Usecase interface {
 	IssueEmailVerification(ctx context.Context, userID string) error
+	IssuePasswordReset(ctx context.Context, requestID, userID string, requestedAt time.Time) error
 }
 
 type Handler struct {
@@ -38,8 +43,21 @@ func (h *Handler) onUserRegistered(ctx context.Context, e UserRegisteredEvent) e
 	return nil
 }
 
+// onPasswordResetRequested: ошибку логирует natskit вместе с повтором доставки — здесь её только возвращают.
+func (h *Handler) onPasswordResetRequested(ctx context.Context, e PasswordResetRequestedEvent) error {
+	if err := h.uc.IssuePasswordReset(ctx, e.RequestID, e.UserID, e.At); err != nil {
+		return fmt.Errorf("issue password reset %s: %w", e.RequestID, err)
+	}
+	h.log.Info(ctx, "password reset handled", "request_id", e.RequestID)
+	return nil
+}
+
 func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
 	natskit.SubscribeOnStart(lc, func(ctx context.Context) (natskit.Subscription, error) {
-		return natskit.SubscribeStreamJSON(bus, ctx, streamUser, SubjectUserRegistered, durableName, h.onUserRegistered)
+		return natskit.SubscribeStreamJSON(bus, ctx, streamUser, SubjectUserRegistered, durableUserRegistered, h.onUserRegistered)
+	})
+	natskit.SubscribeOnStart(lc, func(ctx context.Context) (natskit.Subscription, error) {
+		return natskit.SubscribeStreamJSON(bus, ctx, streamVerification, SubjectPasswordResetRequested, durablePasswordResetRequested,
+			h.onPasswordResetRequested)
 	})
 }

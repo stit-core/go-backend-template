@@ -616,8 +616,9 @@ func TestSessions(t *testing.T) {
 		c := api.login(alice, newPassword)
 		status, _, _ := api.call(http.MethodPost, "/api/auth/password-reset/request", `{"email":"`+alice+`"}`, nil)
 		require.Equal(t, http.StatusNoContent, status)
-		resets, _ := mail.sent()
-		require.Len(t, resets, 1, "the reset is mailed")
+		var resets []string
+		require.Eventually(t, func() bool { resets, _ = mail.sent(); return len(resets) == 1 },
+			15*time.Second, 100*time.Millisecond, "the subscriber of the request mails the reset")
 		status, body, _ := api.call(http.MethodPost, "/api/auth/password-reset/confirm", `{"token":"`+resets[0]+`","password":"`+overLimit+`"}`, nil)
 		require.Equal(t, http.StatusUnprocessableEntity, status, "confirm reset over the hasher limit: %s", body)
 		require.Equal(t, "VERIFICATION_PASSWORD_TOO_LONG", errorCode(t, body))

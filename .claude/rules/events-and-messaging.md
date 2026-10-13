@@ -56,8 +56,10 @@ paths:
   жизненным циклом (погашенная ссылка) повтор эффекта не открывает. Канон —
   `verification.IssueEmailVerification`: подтверждённый адрес пропускает (порт `UserReader` отдаёт
   `EmailVerified`), upsert по партиал-индексу `email_verifications(user_id) WHERE used_at IS NULL`
-  перевыпускает токен неотправленного письма, отправленное не трогает. Redelivery (сбой эффекта,
-  повтор после успеха и после погашения) покрыт юнит-тестом (rule `tests-pipeline`).
+  перевыпускает токен неотправленного письма, отправленное не трогает. Ключ-событие —
+  `verification.IssuePasswordReset`: письмо запроса сброса шлёт подписчик своего события, ссылка — под
+  id запроса из payload; эффект, время которого выдало бы данные, — в подписчике, не в запросе.
+  Redelivery (сбой эффекта, повтор после успеха и после погашения) покрыт юнит-тестом (rule `tests-pipeline`).
   Poison consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - Subscriber — быстрый. Тяжёлое (PDF, batch на 1M) → отдельный job/usecase.
 

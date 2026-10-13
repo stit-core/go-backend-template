@@ -198,5 +198,5 @@ Strategy-репо у проекта нет — вход домена тот же
 | Перевод состояния агрегата | aggregate.method (через Lifecycle row) |
 | Выставление `CreatedAt` | репозиторий, не конструктор |
 | Уникальность по полю | unique-индекс в миграции; репозиторий переводит `pgkit.IsUniqueViolation` в sentinel домена (`user.ErrAlreadyExists`). Проверка `GetBy*` перед вставкой — гонка |
-| Нотификация (email, webhook) | port в use-case + адаптер канала в `infra/<канал>/` (dev-заглушка писем — `verification/infra/logmail`) |
+| Нотификация (email, webhook) | port в use-case + адаптер канала в `infra/<канал>/` (dev-заглушка писем — `verification/infra/logmail`); зовёт его подписчик события, а не запрос: эффект — после коммита, сбой канала повторяет брокер до отметки `sent_at`, а время ответа не выдаёт данных (`verification.IssueEmailVerification`, `IssuePasswordReset`) |
 | Идемпотентность subscriber'а | схема потребителя: unique-индекс под natural key + `ON CONFLICT` (или idempotency-key из payload), у внешнего эффекта — отметка выполнения (`sent_at`) — rule `events-and-messaging` |

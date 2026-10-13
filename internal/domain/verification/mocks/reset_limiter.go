@@ -38,8 +38,8 @@ func (_m *MockResetLimiter) EXPECT() *MockResetLimiter_Expecter {
 }
 
 // Allow provides a mock function for the type MockResetLimiter
-func (_mock *MockResetLimiter) Allow(ctx context.Context, userID string, ip string) (bool, error) {
-	ret := _mock.Called(ctx, userID, ip)
+func (_mock *MockResetLimiter) Allow(ctx context.Context, subject string, ip string) (bool, error) {
+	ret := _mock.Called(ctx, subject, ip)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Allow")
@@ -48,15 +48,15 @@ func (_mock *MockResetLimiter) Allow(ctx context.Context, userID string, ip stri
 	var r0 bool
 	var r1 error
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (bool, error)); ok {
-		return returnFunc(ctx, userID, ip)
+		return returnFunc(ctx, subject, ip)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) bool); ok {
-		r0 = returnFunc(ctx, userID, ip)
+		r0 = returnFunc(ctx, subject, ip)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, userID, ip)
+		r1 = returnFunc(ctx, subject, ip)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -70,13 +70,13 @@ type MockResetLimiter_Allow_Call struct {
 
 // Allow is a helper method to define mock.On call
 //   - ctx context.Context
-//   - userID string
+//   - subject string
 //   - ip string
-func (_e *MockResetLimiter_Expecter) Allow(ctx interface{}, userID interface{}, ip interface{}) *MockResetLimiter_Allow_Call {
-	return &MockResetLimiter_Allow_Call{Call: _e.mock.On("Allow", ctx, userID, ip)}
+func (_e *MockResetLimiter_Expecter) Allow(ctx interface{}, subject interface{}, ip interface{}) *MockResetLimiter_Allow_Call {
+	return &MockResetLimiter_Allow_Call{Call: _e.mock.On("Allow", ctx, subject, ip)}
 }
 
-func (_c *MockResetLimiter_Allow_Call) Run(run func(ctx context.Context, userID string, ip string)) *MockResetLimiter_Allow_Call {
+func (_c *MockResetLimiter_Allow_Call) Run(run func(ctx context.Context, subject string, ip string)) *MockResetLimiter_Allow_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -104,7 +104,7 @@ func (_c *MockResetLimiter_Allow_Call) Return(b bool, err error) *MockResetLimit
 	return _c
 }
 
-func (_c *MockResetLimiter_Allow_Call) RunAndReturn(run func(ctx context.Context, userID string, ip string) (bool, error)) *MockResetLimiter_Allow_Call {
+func (_c *MockResetLimiter_Allow_Call) RunAndReturn(run func(ctx context.Context, subject string, ip string) (bool, error)) *MockResetLimiter_Allow_Call {
 	_c.Call.Return(run)
 	return _c
 }

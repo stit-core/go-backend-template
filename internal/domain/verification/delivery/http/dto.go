@@ -2,7 +2,7 @@ package http
 
 type VerificationPasswordResetRequestInput struct {
 	Body struct {
-		Email string `json:"email" required:"true"`
+		Email string `json:"email" format:"email" required:"true"`
 	}
 }
 

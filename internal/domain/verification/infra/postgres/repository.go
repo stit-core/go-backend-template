@@ -20,20 +20,39 @@ func NewRepository(database *pgkit.DB) verification.Repository {
 	return &Repository{q: db.New(database)}
 }
 
-func (r *Repository) InsertPasswordReset(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (string, error) {
+func (r *Repository) UpsertPasswordReset(ctx context.Context, id, userID, tokenHash string, expiresAt time.Time) (bool, error) {
+	rid, err := pgkit.ParseUUID(id)
+	if err != nil {
+		return false, fmt.Errorf("verification repo: invalid password reset id: %w", err)
+	}
 	uid, err := pgkit.ParseUUID(userID)
 	if err != nil {
-		return "", fmt.Errorf("verification repo: invalid user id: %w", err)
+		return false, fmt.Errorf("verification repo: invalid user id: %w", err)
 	}
-	id, err := r.q.InsertPasswordReset(ctx, db.InsertPasswordResetParams{
+	_, err = r.q.UpsertPasswordReset(ctx, db.UpsertPasswordResetParams{
+		ID:        rid,
 		UserID:    uid,
 		TokenHash: tokenHash,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
-	if err != nil {
-		return "", fmt.Errorf("verification repo: insert password reset: %w", err)
+	if pgkit.IsNoRows(err) {
+		return false, nil
 	}
-	return pgkit.UUIDString(id), nil
+	if err != nil {
+		return false, fmt.Errorf("verification repo: upsert password reset: %w", err)
+	}
+	return true, nil
+}
+
+func (r *Repository) MarkPasswordResetSent(ctx context.Context, id string) error {
+	rid, err := pgkit.ParseUUID(id)
+	if err != nil {
+		return fmt.Errorf("verification repo: invalid password reset id: %w", err)
+	}
+	if err := r.q.MarkPasswordResetSent(ctx, rid); err != nil {
+		return fmt.Errorf("verification repo: mark password reset sent: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) GetPasswordReset(ctx context.Context, tokenHash string) (*verification.PasswordResetToken, error) {

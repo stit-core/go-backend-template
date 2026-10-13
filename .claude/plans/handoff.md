@@ -287,3 +287,20 @@ DECIDE значения лимита: 5 rps и запас 10 на клиента
 RISK   без HTTP_TRUST_PROXY_HOPS за прокси у всех клиентов один bucket: вход и обновление сессии сверх 5 rps на
        весь сервис — 429; клиенты за одним NAT делят его так же
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   письмо сброса пароля шлёт подписчик события verification.events.password_reset_requested.v3 (durable
+       verification-password-reset-requested, стрим verification): запрос отвечает 204 до письма; событие —
+       на каждый запрос (RequestID, UserID, At; UserID пуст у адреса без учётной записи), .v2 не публикуется;
+       миграция 0006 — password_resets.sent_at (ADD COLUMN, без backfill); POST /api/auth/password-reset/request —
+       адрес по схеме (format email: не адрес — 422 VALIDATION_FAILED), сбой поиска, лимитера или записи
+       события — 500
+WHY    fix-identity-edges S8 — время ответа на запрос сброса выдавало учётную запись, сбой провайдера терял
+       письмо (RCOD-04, SEC-06)
+ACTION образ migrate (`migrate up`) до замены api; внешних потребителей verification.events.password_reset_requested.v2
+       перевести на .v3 (UserID может быть пуст — запрос на адрес без учётной записи)
+WHO    проект + потребители событий
+DECIDE —
+RISK   api этого релиза без колонки sent_at — подписчик сброса падает на записи, письмо ждёт повтора доставки;
+       сбой Mailer'а — повтор до NATS_JS_MAX_DELIVER, затем DLQ: письмо уходит позже, а не теряется молча
+===

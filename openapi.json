@@ -468,6 +468,7 @@
         "additionalProperties": false,
         "properties": {
           "email": {
+            "format": "email",
             "type": "string"
           }
         },

@@ -9,4 +9,15 @@ type UserRegisteredEvent struct {
 	At time.Time `json:"At"`
 }
 
-const SubjectUserRegistered = "user.events.registered.v2"
+// PasswordResetRequestedEvent — payload своего события домена verification.events.password_reset_requested.v3:
+// UserID пуст у адреса без учётной записи.
+type PasswordResetRequestedEvent struct {
+	RequestID string    `json:"RequestID"`
+	UserID    string    `json:"UserID"`
+	At        time.Time `json:"At"`
+}
+
+const (
+	SubjectUserRegistered         = "user.events.registered.v2"
+	SubjectPasswordResetRequested = "verification.events.password_reset_requested.v3"
+)

@@ -14,6 +14,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/idkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
@@ -34,7 +35,10 @@ type EmailVerificationSetter interface {
 
 // Repository: Mark*Used гасит токен, только если он не погашен, иначе — ErrTokenUsed.
 type Repository interface {
-	InsertPasswordReset(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (id string, err error)
+	// UpsertPasswordReset выпускает ссылку сброса запроса id: новую или с новым токеном неотправленной;
+	// отправленную и погашенную не трогает (issued=false).
+	UpsertPasswordReset(ctx context.Context, id, userID, tokenHash string, expiresAt time.Time) (issued bool, err error)
+	MarkPasswordResetSent(ctx context.Context, id string) error
 	GetPasswordReset(ctx context.Context, tokenHash string) (*PasswordResetToken, error)
 	MarkPasswordResetUsed(ctx context.Context, id string) error
 	// RevokePasswordResets гасит все непогашенные токены сброса пользователя.
@@ -52,10 +56,10 @@ type Mailer interface {
 	SendEmailVerification(ctx context.Context, email, token string) error
 }
 
-// ResetLimiter: Allow учитывает запрос сброса пароля пользователя с адреса ip; false — лимит
-// запросов исчерпан, письмо не уходит.
+// ResetLimiter: Allow учитывает запрос сброса пароля субъекта с адреса ip; false — лимит запросов исчерпан,
+// запрос ничего не делает.
 type ResetLimiter interface {
-	Allow(ctx context.Context, userID, ip string) (bool, error)
+	Allow(ctx context.Context, subject, ip string) (bool, error)
 }
 
 type UsecaseDeps struct {
@@ -132,8 +136,9 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) er
 	return nil
 }
 
-// RequestPasswordReset отвечает одинаково, есть ли учётная запись, пускают ли её, исчерпан ли лимит
-// запросов и что сломалось после поиска: по ответу не узнать, чей email зарегистрирован. Исход — в метрику.
+// RequestPasswordReset делает одну и ту же работу для любого адреса — поиск, лимит, событие запроса: ни ответ,
+// ни его время не выдают, есть ли учётная запись и пускают ли её. Письмо шлёт подписчик события
+// (IssuePasswordReset). Исход — в метрику.
 func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error {
 	result, err := uc.requestPasswordReset(ctx, email)
 	uc.d.Metrics.RecordPasswordResetRequested(ctx, result)
@@ -141,49 +146,74 @@ func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error
 }
 
 func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outcome.Result, error) {
+	var userID string
+	result := resultUserNotFound
 	u, err := uc.d.Users.GetByEmail(ctx, email)
 	switch {
-	case errors.Is(err, ErrUserNotFound):
-		return resultUserNotFound, nil
-	case err != nil:
+	case err == nil && u.CanLogin:
+		userID, result = u.ID, outcome.OK
+	case err == nil:
+		userID, result = u.ID, resultInactive
+	case !errors.Is(err, ErrUserNotFound):
 		return outcome.Error, fmt.Errorf("lookup user: %w", err)
-	case !u.CanLogin:
-		return resultInactive, nil
 	}
-	// Дальше путь есть только у учётной записи: 500 на её сбое (лимитер, запись, письмо) выдал бы её —
-	// сбой уходит в лог и метрику, ответ тот же; повтор — новым запросом.
-	result, err := uc.issuePasswordReset(ctx, u)
-	if err != nil {
-		uc.d.Log.Error(ctx, "password reset request", "user_id", u.ID, "error", err)
+	// Лимит считает учётную запись, а без неё — адрес: форма адреса лимит учётной записи не обходит.
+	subject := userID
+	if subject == "" {
+		subject = email
 	}
-	return result, nil
-}
-
-func (uc *Usecase) issuePasswordReset(ctx context.Context, u *User) (outcome.Result, error) {
-	allowed, err := uc.d.Limiter.Allow(ctx, u.ID, identity.IPFrom(ctx))
+	allowed, err := uc.d.Limiter.Allow(ctx, subject, identity.IPFrom(ctx))
 	switch {
 	case err != nil:
 		return outcome.Error, fmt.Errorf("limiter: %w", err)
 	case !allowed:
 		return resultThrottled, nil
 	}
-
-	token := authnkit.NewToken()
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
-		tokenID, err := uc.d.Repo.InsertPasswordReset(txCtx, u.ID, authnkit.HashToken(token), uc.d.Clock.Now().Add(passwordResetTTL))
-		if err != nil {
-			return err
-		}
 		return uc.d.Events.Publish(txCtx, subjectPasswordResetRequested,
-			PasswordResetRequested{TokenID: tokenID, UserID: u.ID, At: uc.d.Clock.Now()})
+			PasswordResetRequested{RequestID: idkit.NewV7(), UserID: userID, At: uc.d.Clock.Now()})
 	}); err != nil {
 		return outcome.Error, err
 	}
+	return result, nil
+}
 
-	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
-		return outcome.Error, fmt.Errorf("send password reset email: %w", err)
+// IssuePasswordReset — идемпотентный обработчик доставки verification.events.password_reset_requested.v3: ключ —
+// запрос (RequestID — id ссылки сброса). Письмо получает учётная запись, которую пускают, пока ссылка запроса
+// не истекла; отправленную ссылку повтор пропускает, неотправленную — отправляет заново с новым токеном.
+func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID string, requestedAt time.Time) error {
+	expiresAt := requestedAt.Add(passwordResetTTL)
+	if userID == "" || uc.d.Clock.Now().After(expiresAt) {
+		return nil
 	}
-	return outcome.OK, nil
+	u, err := uc.d.Users.GetByID(ctx, userID)
+	switch {
+	case errors.Is(err, ErrUserNotFound):
+		uc.d.Log.Info(ctx, "user gone before the password reset, skip", "user_id", userID)
+		return nil
+	case err != nil:
+		return fmt.Errorf("load user: %w", err)
+	case !u.CanLogin:
+		uc.d.Log.Info(ctx, "user blocked before the password reset, skip", "user_id", userID)
+		return nil
+	}
+
+	token := authnkit.NewToken()
+	issued, err := uc.d.Repo.UpsertPasswordReset(ctx, requestID, userID, authnkit.HashToken(token), expiresAt)
+	switch {
+	case err != nil:
+		return err
+	case !issued:
+		uc.d.Log.Info(ctx, "password reset already sent, skip", "user_id", userID)
+		return nil
+	}
+	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
+		return fmt.Errorf("send password reset email: %w", err)
+	}
+	if err := uc.d.Repo.MarkPasswordResetSent(ctx, requestID); err != nil {
+		return fmt.Errorf("mark password reset sent: %w", err)
+	}
+	return nil
 }
 
 func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword string) error {

@@ -37,6 +37,18 @@ func TestPasswordResetRequest_NoContent(t *testing.T) {
 	require.Empty(t, resp.Body.String())
 }
 
+// Сброс — только для адреса: не адрес схема отклоняет до usecase, и лимит запросов его не ключует.
+func TestPasswordResetRequest_NotAnAddress(t *testing.T) {
+	t.Parallel()
+	api := setup(t, mocks.NewMockUsecase(t))
+
+	resp := api.Post("/api/auth/password-reset/request", strings.NewReader(`{"email":"not an address"}`))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.email", errs[0].Location)
+}
+
 // Сбой поиска учётной записи от адреса не зависит и уходит ответом 500, а не тихим 204.
 func TestPasswordResetRequest_Failure(t *testing.T) {
 	t.Parallel()

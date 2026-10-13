@@ -20,9 +20,9 @@ func NewResetLimiter(g bruteforcekit.Guard) verification.ResetLimiter {
 }
 
 // Allow: запрос сброса — попытка guard'а без успеха: после BRUTEFORCE_MAX_FAILURES запросов подряд
-// пара (пользователь, IP) ждёт BRUTEFORCE_LOCK_DURATION.
-func (l *resetLimiter) Allow(ctx context.Context, userID, ip string) (bool, error) {
-	lock, err := l.guard.Attempt(ctx, subjectPrefix+userID, ip)
+// пара (субъект, IP) ждёт BRUTEFORCE_LOCK_DURATION.
+func (l *resetLimiter) Allow(ctx context.Context, subject, ip string) (bool, error) {
+	lock, err := l.guard.Attempt(ctx, subjectPrefix+subject, ip)
 	if err != nil {
 		return false, err
 	}
