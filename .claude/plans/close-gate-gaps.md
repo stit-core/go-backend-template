@@ -80,9 +80,12 @@ blocked-by: —
     OK и стёрта, `MOCKERY_CONFIG` с выводом в `mocks2` при устаревшем моке — OK (`N/gate/s7-base-*.txt`);
     ветка — три пути gen-roundtrip OK, обе подделки FAIL с файлом (`s7-branch-*.txt`);
     `TestGenCheckComparesMocksWithTree` — на Makefile базы 4 из 4 FAIL, на ветке PASS
-- [ ] **AC8** — RENF-08, RENF-09: тест без утверждений в `pkg/` и `cmd/` (N-t-pkg, N-t-cmd, на базе `✓`)
+- [x] **AC8** — RENF-08, RENF-09: тест без утверждений в `pkg/` и `cmd/` (N-t-pkg, N-t-cmd, на базе `✓`)
   ловит `TestTestsAssert`; нарушение extra-правил gofumpt (N-fmt2) ловит `make fmt-check` и чинит
   `make fmt`. Проверка: инъекции
+  - Подтверждено: N-t-pkg, N-t-cmd — база `✓ check clean`, ветка FAIL (S8); N-fmt2 на базе — `fmt-check`
+    OK, `make fmt` не чинит, lint FAIL; на ветке `fmt-check` FAIL, `make fmt` чинит (`a, b string`), lint OK;
+    `TestFmtAppliesLintRules` — на Makefile базы FAIL, на ветке PASS
 - [ ] **AC9** — RCOD-05, RCOD-06: `make new-domain NAME=api_key` → `make check` зелёный (было: lint
   против `TestHTTPTypes`); имена `repo`, `name`, `valid`, `got`, `row`, `id`, `uid` и занятая таблица
   (`password_reset`) — отказ до первой правки, `git status` пуст; сбой после первой правки — откат.
@@ -142,8 +145,10 @@ blocked-by: —
     `testkit.MigrationLadder`); база с N-t-pkg и N-t-cmd — `✓ check clean` (`N/gate/s8-base-nt.log`), ветка —
     FAIL с обоими файлами (`s8-branch-nt.log`); тест домена на одном `t.Fatalf` — по-прежнему отказ;
     правило `tests-pipeline`; `make check` → ✓
-- [ ] **S9** — `make fmt` и `fmt-check` — `gofumpt -extra`
+- [x] **S9** — `make fmt` и `fmt-check` — `gofumpt -extra`
   - Проверка: N-fmt2 → fmt-check FAIL, `make fmt` чинит; `make check` → ✓ · Закрывает: AC8 · Зависит от: —
+  - Сделано: `gofumpt -extra` в `fmt` и `fmt-check` (как extra-rules lint); `TestFmtAppliesLintRules`;
+    `make check` → ✓
 - [ ] **S10** — Имя домена с инициализмом: скелет по правилу revive, archtest сверяет префикс без регистра
   - Проверка: `make new-domain NAME=api_key` → `make check` ✓ (в отдельном worktree) · Закрывает: AC9 · Зависит от: —
 - [ ] **S11** — `make new-domain`: негодное имя и занятая таблица — отказ до первой правки; сбой после — откат
@@ -185,8 +190,8 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S8 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
+S1–S9 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
 линтеров не выводят код из гейта, порог покрытия — 100, migrations-check и gen-check без fail-open. Эксперименты: база —
 worktree `N/wt-gate-x` (e8ea150, снять в S13), срез ветки с незакоммиченным шагом — временный `N/wt-gate-y`
-(раннеры аудитора откатывают дерево к HEAD). Следующее: S9 — `gofumpt -extra` в `make fmt` и `fmt-check`
-(RED — N-fmt2).
+(раннеры аудитора откатывают дерево к HEAD). Следующее: S10 — инициализм в имени домена: скелет по
+правилу revive, archtest без регистра (RED — `make new-domain NAME=api_key` в отдельном worktree).

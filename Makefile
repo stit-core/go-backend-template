@@ -45,12 +45,13 @@ build: ## Сборка всего дерева без тегов, как обр�
 		  || { echo "$$out" | head -20; echo "FAIL: build"; exit 1; }; \
 	fi
 
-fmt: ## gofumpt -w .
-	gofumpt -w .
+# Правила gofumpt — с -extra, как у шага lint (.golangci.yml: extra-rules): make fmt чинит всё, что требует гейт.
+fmt: ## gofumpt -extra -w .
+	gofumpt -extra -w .
 
 fmt-check: ## Проверка форматирования без мутации дерева (gate)
 	@command -v gofumpt >/dev/null || { echo "FAIL: gofumpt не найден — make setup"; exit 1; }
-	@files=$$(gofumpt -l .) || { echo "FAIL: gofumpt не разобрал дерево (ошибка выше)"; exit 1; }; \
+	@files=$$(gofumpt -extra -l .) || { echo "FAIL: gofumpt не разобрал дерево (ошибка выше)"; exit 1; }; \
 	if [ -n "$$files" ]; then \
 		echo "$$files" | sed 's/^/  /'; \
 		echo "FAIL: fmt — файлы не отформатированы, запусти make fmt"; exit 1; \

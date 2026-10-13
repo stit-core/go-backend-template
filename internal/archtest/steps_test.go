@@ -139,6 +139,33 @@ func TestGenCheckComparesMocksWithTree(t *testing.T) {
 	}
 }
 
+// TestFmtAppliesLintRules: lint требует правила gofumpt с extra-rules (.golangci.yml), поэтому fmt-check
+// ловит их нарушение, а make fmt его чинит — иначе отказ lint не снять ни make fmt, ни ничем, кроме //nolint.
+func TestFmtAppliesLintRules(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	require.Contains(t, readFiles(t, root, ".golangci.yml")[".golangci.yml"], "extra-rules: true")
+	repo := t.TempDir()
+	writeFiles(t, repo, union(readFiles(t, root, "Makefile"), map[string]string{
+		"p/p.go": "package p\n\n// Join joins.\nfunc Join(a string, b string) string { return a + b }\n",
+	}))
+	runMake := func(target string) (string, error) {
+		cmd := exec.CommandContext(t.Context(), "make", "--no-print-directory", target)
+		cmd.Dir = repo
+		cmd.Env = callerEnv("PATH=" + os.Getenv("PATH"))
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	out, err := runMake("fmt-check")
+	require.Error(t, err, "fmt-check must refuse what lint refuses:\n%s", out)
+	require.Contains(t, out, "FAIL: fmt")
+	out, err = runMake("fmt")
+	require.NoError(t, err, out)
+	require.Contains(t, readFiles(t, repo, "p/p.go")["p/p.go"], "func Join(a, b string)", "make fmt must apply the rules lint requires")
+	out, err = runMake("fmt-check")
+	require.NoError(t, err, out)
+}
+
 // TestMigrationsCheck: migrations-check пропускает только каталог по конвенции, а up с эффектом для выкатки
 // — разрушительный, правку данных, долгий lock, расширение, код DO — только с маркером
 // `-- infra-handoff:`. Индекс по таблице этого же файла и CONCURRENTLY, действия FK и триггер на UPDATE —
