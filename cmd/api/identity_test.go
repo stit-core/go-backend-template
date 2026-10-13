@@ -453,6 +453,23 @@ func TestSessions(t *testing.T) {
 		require.Equal(t, before+1, openSessions(t, db, aliceID), "the padded address logs into the same account")
 	})
 
+	// Права — из роли claim'а, который выдал вход: сессия клиента получает отказ policy на операциях admin, а не
+	// список всех пользователей и чужую учётную запись.
+	t.Run("a client session is refused admin operations", func(t *testing.T) {
+		const bob = "bob@example.com"
+		api.register(bob)
+		c := api.login(bob, sessionPassword)
+
+		status, body, _ := api.call(http.MethodGet, "/api/users", "", c)
+		require.Equal(t, http.StatusForbidden, status, "list users: %s", body)
+		require.Equal(t, "FORBIDDEN", errorCode(t, body))
+		var version int
+		require.NoError(t, db.QueryRow(t.Context(), `SELECT version FROM users WHERE id = $1`, aliceID).Scan(&version))
+		status, body, _ = api.call(http.MethodPatch, "/api/users/"+aliceID, `{"status":"blocked","version":`+strconv.Itoa(version)+`}`, c)
+		require.Equal(t, http.StatusForbidden, status, "block another user: %s", body)
+		require.Equal(t, "FORBIDDEN", errorCode(t, body))
+	})
+
 	t.Run("logout closes its session", func(t *testing.T) {
 		other := api.login(alice, sessionPassword)
 		current := api.login(alice, sessionPassword)

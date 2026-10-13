@@ -56,9 +56,11 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Подтверждено: `TestLogin_HasherFailure` (дедлайн очереди, нечитаемый хэш: ошибка с причиной, аудита нет,
     исход `error`), `TestLogin_PasswordOverHasherLimit` (401 и `login_failed`), `TestIdentity` (500, причина
     в логе под `request_id` ответа, `login_failed` нет) → PASS; на базе — 401 и ложный аудит
-- [ ] **AC4** — Мутант AI4 «роль в access-токене всегда admin» гейт ловит. На базе он проходит
+- [x] **AC4** — Мутант AI4 «роль в access-токене всегда admin» гейт ловит. На базе он проходит
   `make check`. Проверка: AI4 на ветке → красные `TestTokens_AccessCarriesRole` и `TestSessions` (клиент со
   своим cookie: `GET /api/users` и `PATCH` чужого — 403)
+  - Подтверждено: AI4 на ветке → FAIL `TestTokens_AccessCarriesRole/client` и
+    `TestSessions/a_client_session_is_refused_admin_operations` (`N/identity/s4-ai4-mutant.log`); без мутанта — PASS
 - [ ] **AC5** — Прежнего durable на `user.events.registered` нет, его удаление — блоком в накопителе.
   Проверка: `TestRegister` (`verification/delivery/nats`) → durable только у `.v2`; блок в
   `.claude/plans/handoff.md`
@@ -107,8 +109,11 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Сделано: `login` — `switch` по итогу `Verify`: `ErrPasswordTooLong` и `!ok` — неверный пароль, прочая ошибка —
     `verify password: %w` с исходом `error`; RED на базе — `TestLogin_HasherFailure` и `TestIdentity` (401
     вместо 500, `N/identity/s3-red-*.log`), GREEN; `make check` → `✓ check clean`
-- [ ] **S4** — role-claim-test: таблица ролей выпуска токена и 403 клиенту с настоящим cookie
+- [x] **S4** — role-claim-test: таблица ролей выпуска токена и 403 клиенту с настоящим cookie
   - Проверка: мутант AI4 → оба теста красные, без мутанта — зелёные · Закрывает: AC4
+  - Сделано: таблица ролей client и admin в `TestTokens_AccessCarriesRole`; подтест `TestSessions` — сессия
+    клиента: `GET /api/users` и `PATCH` чужого статуса — 403 `FORBIDDEN`; AI4 → оба красные; `make check` →
+    `✓ check clean`
 - [ ] **S5** — events-v1-reader: снять подписку прежним durable; блок «удалить durable» в накопитель
   - Проверка: `make test PKG=./internal/domain/verification/...` → PASS · Закрывает: AC5
 - [ ] **S6** — subscriber-replay: подписчик пропускает подтверждённый адрес (порт отдаёт состояние), канон
@@ -154,4 +159,4 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 —
 
 ## Где мы сейчас
-S1–S3 закрыты. Следующее: S4 — role-claim-test.
+S1–S4 закрыты. Следующее: S5 — events-v1-reader.
