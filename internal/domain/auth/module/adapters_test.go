@@ -60,6 +60,29 @@ func TestUserAdapter_User(t *testing.T) {
 	}
 }
 
+func TestUserAdapter_VerifyPassword(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		plain string
+		want  bool
+	}{
+		{"match", "pass1234", true},
+		{"mismatch", "wrong-password", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			a, repo := newAdapter(t)
+			repo.EXPECT().GetByID(mock.Anything, "u1").Return(&user.User{ID: "u1", PasswordHash: "hash:pass1234"}, nil).Once()
+
+			ok, err := a.VerifyPassword(context.Background(), "u1", tc.plain)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, ok)
+		})
+	}
+}
+
 // Чтение под блокировкой идёт в транзакции входа: адаптер передаёт её ctx в user.Trusted, и строка
 // пользователя держится до открытия сессии.
 func TestUserAdapter_LocksInCallerTx(t *testing.T) {

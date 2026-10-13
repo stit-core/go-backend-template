@@ -96,9 +96,13 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Подтверждено: `SECURITY.md` § Принятые компромиссы — 409 регистрации, окно access-JWT (Z01: заблокированный
     admin с живым токеном), лимит входа по клиенту; шаблон `auth.md` § Authn — оба решения продукта; grep →
     одна строка, о запросе сброса (`verification/delivery/http/handler.go`)
-- [ ] **AC10** — Выжившие мутанты угла тестов SD1, SD5, SD6, SD7, K01, K04, MI1, A36, UH7 и AD1 (юнитом
+- [x] **AC10** — Выжившие мутанты угла тестов SD1, SD5, SD6, SD7, K01, K04, MI1, A36, UH7 и AD1 (юнитом
   адаптера) гейт убивает; на базе каждый проходит `make check`. Проверка: каждый мутант на ветке → красный
   тест своего пакета
+  - Подтверждено: SD1, SD5, SD6, SD7 (`cmd/seed-admin`), K01, K04 (`cmd/api`), MI1 (`user/infra/postgres`),
+    A36 (`auth`), UH7 (`user/delivery/http`), AD1 (`auth/module`, юнит) → KILLED красным тестом своего пакета
+    (`N/identity/mutants/*.log`); на базе они выжили в гейте (Приложение Б `R/template-tests.md`, AD1 ловил
+    только integration `TestSessions`), A36, UH7, AD1 на тестах до S13 → SURVIVED (`*-base.log`)
 - [ ] **AC11** — Гейт зелёный. Проверка: `flock N/gate.lock make check` → `✓ check clean`
 
 ## Шаги
@@ -180,9 +184,13 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Проверка: мутант MI1 → красный · Закрывает: AC10
   - Сделано: `TestUpdate` и `TestUpdatePassword` — `updated_at` сохранённой строки позже вставленной; MI1 →
     KILLED (`N/identity/mutants/MI1.log`); `make check` → `✓ check clean`
-- [ ] **S13** — RTSTT-06: вход сверяет `out.User`, схема регистрации — формат адреса, адаптер auth —
+- [x] **S13** — RTSTT-06: вход сверяет `out.User`, схема регистрации — формат адреса, адаптер auth —
   `VerifyPassword`
   - Проверка: мутанты A36, UH7, AD1 → красные юнит-тесты · Закрывает: AC10
+  - Сделано: `TestLogin/happy path` сверяет `out.User` с учётной записью (у `alice()` — имя),
+    `TestRegister_NotAnAddress` — не адрес схема отклоняет до usecase (422 `VALIDATION_FAILED`, `body.email`),
+    `TestUserAdapter_VerifyPassword` — совпал и не совпал поверх `user.Trusted`; A36, UH7, AD1 на тестах до шага →
+    SURVIVED, с ними → KILLED (`N/identity/mutants/{A36,UH7,AD1}{,-base}.log`); `make check` → `✓ check clean`
 
 ### Гейт
 - [ ] **S14** — гейт и повтор экспериментов на итоге ветки
@@ -222,4 +230,4 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 —
 
 ## Где мы сейчас
-S1–S12 закрыты. Следующее: S13 — пробелы ядра (RTSTT-06).
+S1–S13 закрыты. Следующее: S14 — гейт и повтор экспериментов E1, E2, E6, E8, B07b, H2 на итоге ветки.

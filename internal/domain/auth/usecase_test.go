@@ -180,7 +180,7 @@ func signIn(t *testing.T, u *auth.User) *mocks.MockUserReader {
 
 // alice — учётная запись входа тестов: пароль pass1234, пускают.
 func alice() *auth.User {
-	return &auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", CanLogin: true, Role: identity.RoleClient}
+	return &auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", Name: "Alice", CanLogin: true, Role: identity.RoleClient}
 }
 
 // found — учётная запись u, которую находит поиск по адресу: дальше проверки пароля вход не идёт.
@@ -234,6 +234,7 @@ func TestLogin(t *testing.T) {
 		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
+		require.Equal(t, alice(), out.User, "the response names the account: address, name and role")
 		require.Equal(t, 1, f.sessions.Active("u1"), "the login opens a session of the user")
 		next, err := f.sessions.Rotate(context.Background(), out.RefreshToken)
 		require.NoError(t, err, "the refresh token is the token of that session")

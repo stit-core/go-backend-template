@@ -130,6 +130,18 @@ func TestRegister_InvalidEmail(t *testing.T) {
 	require.Equal(t, "body.email", errs[0].Location)
 }
 
+// Не адрес схема отклоняет до usecase: отказ — ошибка поля VALIDATION_FAILED, а не доменный код.
+func TestRegister_NotAnAddress(t *testing.T) {
+	t.Parallel()
+	api := setup(t, mocks.NewMockUsecase(t))
+
+	resp := api.Post("/api/auth/register", strings.NewReader(`{"email":"not an address","password":"longenough","name":"A"}`))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.email", errs[0].Location)
+}
+
 // Имя с NUL отвергает домен: та же форма ошибки поля, что у валидации схемы.
 func TestRegister_InvalidName(t *testing.T) {
 	t.Parallel()
