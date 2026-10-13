@@ -13,8 +13,9 @@ import (
 
 // TestHooksVisible: CI нет — хуки git (commit-msg, pre-commit, pre-push) единственная проверка изменения
 // до remote. Клон без make setup, хук без права исполнения и чужой каталог хуков make status называет
-// строкой HOOKS и итогом ATTENTION: hooks, make doctor — отказом; хуки этого дерева — OK. sqlc и docker
-// здесь — заглушки: в песочнице нет ни sqlc.yaml, ни registry, вердикт — только о хуках.
+// строкой HOOKS и итогом ATTENTION: hooks, make doctor — отказом; хуки этого дерева — OK, и файл рядом с
+// ними, чьё имя git хуком не считает, вердикт не меняет. sqlc и docker здесь — заглушки: в песочнице нет
+// ни sqlc.yaml, ни registry, вердикт — только о хуках.
 func TestHooksVisible(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -34,6 +35,10 @@ func TestHooksVisible(t *testing.T) {
 	}{
 		{name: "fresh clone", setup: func(*testing.T, string) {}, want: "нет исполняемого commit-msg"},
 		{name: "make setup", setup: wire},
+		{name: "a readme and a library next to the hooks", setup: func(t *testing.T, repo string) {
+			wire(t, repo)
+			writeFiles(t, repo, map[string]string{"scripts/git-hooks/README.md": "# hooks\n", "scripts/git-hooks/lib.sh": "x=1\n"})
+		}},
 		{name: "pre-push not executable", setup: func(t *testing.T, repo string) {
 			wire(t, repo)
 			require.NoError(t, os.Chmod(filepath.Join(repo, "scripts", "git-hooks", "pre-push"), 0o644))

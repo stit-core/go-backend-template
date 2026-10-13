@@ -2,7 +2,8 @@
 # Pre-flight gate для `make release`, две фазы:
 #   release-preflight.sh env         до гейта и тега — окружение релиза: ветка main, чистое дерево, ключи
 #                                    ssh-agent читают приватные модули go.mod (ими их берёт сборка образа),
-#                                    docker buildx, make doctor (docker-auth/sqlc-drift/непарные миграции)
+#                                    docker buildx, make doctor (docker-auth/sqlc-drift/непарные миграции/
+#                                    git-хуки)
 #   release-preflight.sh tag vX.Y.Z  после тега — на HEAD annotated тег формата vX.Y.Z, и он — переданный
 # Output: внятное сообщение на каждый fail, exit 2 (отличаем от "сбоя shell"=1).
 set -euo pipefail

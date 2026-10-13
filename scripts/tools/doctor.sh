@@ -14,13 +14,22 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # hooks_problem — пусто, когда git запускает хуки этого дерева (make setup): каждый хук scripts/git-hooks
-# есть в каталоге хуков git, исполняемый и тот же; иначе — что не так.
+# есть в каталоге хуков git, исполняемый и тот же; иначе — что не так. Хук — файл с именем хука git
+# (githooks(5)): README или общий скрипт рядом с хуками git не запускает.
 hooks_problem() {
     local dir f h
     dir=$(git rev-parse --git-path hooks 2>/dev/null) || { echo "не git-репо"; return; }
     for f in scripts/git-hooks/*; do
         [ -f "$f" ] || continue
         h=${f##*/}
+        case $h in
+            applypatch-msg | pre-applypatch | post-applypatch | pre-commit | pre-merge-commit | prepare-commit-msg | \
+                commit-msg | post-commit | pre-rebase | post-checkout | post-merge | pre-push | pre-receive | update | \
+                proc-receive | post-receive | post-update | reference-transaction | push-to-checkout | pre-auto-gc | \
+                post-rewrite | sendemail-validate | fsmonitor-watchman | p4-changelist | p4-prepare-changelist | \
+                p4-post-changelist | p4-pre-submit | post-index-change) ;;
+            *) continue ;;
+        esac
         [ -x "$dir/$h" ] || { echo "$dir: нет исполняемого $h"; return; }
         cmp -s "$dir/$h" "$f" || { echo "$dir/$h — не хук этого дерева ($f)"; return; }
     done
