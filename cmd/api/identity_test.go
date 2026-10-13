@@ -208,6 +208,27 @@ func TestIdentity(t *testing.T) {
 	require.NotEmpty(t, internal.RequestID)
 	require.True(t, logs.logged5xx(internal.RequestID), "the cause is in the service log under the request_id of the response")
 
+	// Нечитаемый хэш пароля — сбой сервиса, а не неверный пароль: 500 с причиной в логе, записи login_failed нет.
+	const broken = "broken-hash@example.com"
+	require.Equal(t, http.StatusCreated, call(t, anon, http.MethodPost, base+"/api/auth/register",
+		`{"email":"`+broken+`","password":"`+password+`","name":"Broken"}`), "register")
+	var brokenID string
+	require.NoError(t, db.QueryRow(t.Context(), `UPDATE users SET password_hash = 'not-a-phc-string' WHERE email = $1 RETURNING id`, broken).Scan(&brokenID))
+	req, err = http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/api/auth/login",
+		strings.NewReader(`{"email":"`+broken+`","password":"`+password+`"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = anon.Do(req)
+	require.NoError(t, err)
+	var hashFailure httpkit.APIError
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&hashFailure))
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode, "login over an unreadable hash: %s", hashFailure.Code)
+	require.True(t, logs.logged5xx(hashFailure.RequestID), "the hasher failure is in the service log under the request_id of the response")
+	var loginFailed int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE action = 'login_failed' AND resource_id = $1`, brokenID).Scan(&loginFailed))
+	require.Zero(t, loginFailed, "a failure of the service is not a failed login")
+
 	require.Eventually(t, func() bool { resets, verifies := mail.sent(); return len(resets) == 1 && len(verifies) == 1 },
 		15*time.Second, 100*time.Millisecond, "the service mails the email verification and the password reset")
 	resets, verifies := mail.sent()

@@ -111,7 +111,12 @@ func (uc *Usecase) login(ctx context.Context, in *LoginInput) (*LoginOutput, out
 		uc.auditLoginFailed(ctx, u.ID, resultBlocked)
 		return nil, resultBlocked, ErrInvalidCredentials
 	}
-	if ok, err := uc.d.Hasher.Verify(ctx, in.Password, u.PasswordHash); err != nil || !ok {
+	ok, err := uc.d.Hasher.Verify(ctx, in.Password, u.PasswordHash)
+	switch {
+	// Пароль длиннее предела хэшера ни с одним хэшем не совпадает: неверный, холостой хэш Verify посчитал сам.
+	case err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong):
+		return nil, outcome.Error, fmt.Errorf("verify password: %w", err)
+	case !ok:
 		uc.auditLoginFailed(ctx, u.ID, resultInvalidLogin)
 		return nil, resultInvalidLogin, ErrInvalidCredentials
 	}

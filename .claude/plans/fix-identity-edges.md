@@ -49,10 +49,13 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   422; `make gen-check` → без дрейфа
   - Подтверждено: E6 на ветке → 422 (`N/identity/s2-e6.log`); `openapi.json` — `maxLength: 200` у name
     регистрации и правки; `make gen-check` → без дрейфа
-- [ ] **AC3** — Вход не выдаёт сбой хэшера за неверный пароль: неверный — только `!ok` и пароль длиннее
+- [x] **AC3** — Вход не выдаёт сбой хэшера за неверный пароль: неверный — только `!ok` и пароль длиннее
   предела (401, аудит `login_failed`); дедлайн очереди Argon2id и нечитаемый хэш — ошибка сервера с причиной
   в логе, исход `error`, без записи аудита. На базе (E7) — `invalid credentials`, ложный аудит, лог пуст.
   Проверка: юнит-тест сбоев хэшера и integration «нечитаемый хэш → 500 с причиной в логе» → PASS
+  - Подтверждено: `TestLogin_HasherFailure` (дедлайн очереди, нечитаемый хэш: ошибка с причиной, аудита нет,
+    исход `error`), `TestLogin_PasswordOverHasherLimit` (401 и `login_failed`), `TestIdentity` (500, причина
+    в логе под `request_id` ответа, `login_failed` нет) → PASS; на базе — 401 и ложный аудит
 - [ ] **AC4** — Мутант AI4 «роль в access-токене всегда admin» гейт ловит. На базе он проходит
   `make check`. Проверка: AI4 на ветке → красные `TestTokens_AccessCarriesRole` и `TestSessions` (клиент со
   своим cookie: `GET /api/users` и `PATCH` чужого — 403)
@@ -99,8 +102,11 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     `maxLength:"200"` у name в DTO, `make gen`; RED на базе — кейсы `TestNewUser`, `TestUser_Rename`, сиды
     fuzz, `TestRegister_NameTooLong`, `TestUpdate_InvalidBody`, имя `seed-admin` (`N/identity/s2-red-*.log`),
     GREEN; блок в накопителе; `make check` → `✓ check clean`
-- [ ] **S3** — login-hasher-failure: сбой `Verify` — ошибка сервера, неверный пароль — `!ok` и предел
+- [x] **S3** — login-hasher-failure: сбой `Verify` — ошибка сервера, неверный пароль — `!ok` и предел
   - Проверка: RED → GREEN `TestLogin_HasherFailure`; integration «нечитаемый хэш» → PASS · Закрывает: AC3
+  - Сделано: `login` — `switch` по итогу `Verify`: `ErrPasswordTooLong` и `!ok` — неверный пароль, прочая ошибка —
+    `verify password: %w` с исходом `error`; RED на базе — `TestLogin_HasherFailure` и `TestIdentity` (401
+    вместо 500, `N/identity/s3-red-*.log`), GREEN; `make check` → `✓ check clean`
 - [ ] **S4** — role-claim-test: таблица ролей выпуска токена и 403 клиенту с настоящим cookie
   - Проверка: мутант AI4 → оба теста красные, без мутанта — зелёные · Закрывает: AC4
 - [ ] **S5** — events-v1-reader: снять подписку прежним durable; блок «удалить durable» в накопитель
@@ -148,4 +154,4 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 —
 
 ## Где мы сейчас
-S1–S2 закрыты. Следующее: S3 — login-hasher-failure.
+S1–S3 закрыты. Следующее: S4 — role-claim-test.

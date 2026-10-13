@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -409,6 +410,62 @@ func TestLogin_OnePasswordCheckPerAttempt(t *testing.T) {
 			require.Equal(t, tc.dummies, h.VerifyDummyCalls(), "dummy password checks")
 		})
 	}
+}
+
+// verifyFails — хэшер, у которого проверка пароля сбоит, а не отвечает «не совпал».
+type verifyFails struct {
+	authntest.DeterministicHasher
+	err error
+}
+
+func (h *verifyFails) Verify(context.Context, string, string) (bool, error) { return false, h.err }
+
+// Сбой проверки пароля — ошибка сервиса с причиной, а не «неверный пароль»: ни 401, ни записи login_failed,
+// исход — error; попытка уже учтена guard'ом, успеха нет.
+func TestLogin_HasherFailure(t *testing.T) {
+	t.Parallel()
+	unreadable := alice()
+	unreadable.PasswordHash = "not-a-phc-string"
+	tests := []struct {
+		name   string
+		user   *auth.User
+		hasher authnkit.Hasher
+		want   error
+	}{
+		{"argon2id queue deadline", alice(), &verifyFails{err: fmt.Errorf("authnkit: argon2id: waiting for a slot: %w", context.DeadlineExceeded)}, context.DeadlineExceeded},
+		{"unreadable stored hash", unreadable, &authntest.DeterministicHasher{}, authnkit.ErrInvalidHash},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p := metrictest.NewProvider()
+			f := newUC(t, withUsers(found(t, tc.user)), withGuard(loginGuard(t, "a@b.com", false)), withHasher(tc.hasher),
+				withMetrics(auth.NewMetrics(p.Meter("test"))))
+
+			out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+			require.ErrorIs(t, err, tc.want)
+			require.NotErrorIs(t, err, auth.ErrInvalidCredentials, "a hasher failure is not a wrong password")
+			require.Nil(t, out)
+			require.Zero(t, f.sessions.Active("u1"))
+			require.Empty(t, f.audit.Entries(), "a failure of the service writes no login_failed")
+			requireOutcome(t, p, "biz_auth_login_attempts_total", "error")
+		})
+	}
+}
+
+// Пароль длиннее предела хэшера ни с одним хэшем не совпадает: это неверный пароль — с записью аудита, а
+// холостой хэш вместо него считает сам Verify хэшера.
+func TestLogin_PasswordOverHasherLimit(t *testing.T) {
+	t.Parallel()
+	p := metrictest.NewProvider()
+	f := newUC(t, withUsers(found(t, alice())), withGuard(loginGuard(t, "a@b.com", false)), withMetrics(auth.NewMetrics(p.Meter("test"))))
+
+	_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: strings.Repeat("я", authnkit.MaxPasswordLen)})
+	require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+	require.Equal(t, audited(auditkit.Entry{
+		Action: "login_failed", Resource: "user", ResourceID: "u1", Metadata: map[string]any{"reason": "invalid_credentials"},
+	}), f.audit.Last("login_failed"))
+	requireOutcome(t, p, "biz_auth_login_attempts_total", "invalid_credentials")
 }
 
 // Access-токен не подписан — входа нет: ошибка сервиса, а не «неверный пароль», сессии и аудита входа нет.
