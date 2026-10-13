@@ -177,6 +177,8 @@ func TestUpdate(t *testing.T) {
 	require.Equal(t, "Renamed", stored.Name, "name and status are written together")
 	require.Equal(t, user.StatusBlocked, stored.Status, "name and status are written together")
 	require.Equal(t, got.Version, stored.Version)
+	require.True(t, stored.UpdatedAt.After(u.UpdatedAt), "the trigger moves updated_at: %v, then %v", u.UpdatedAt, stored.UpdatedAt)
+	require.Equal(t, got.UpdatedAt, stored.UpdatedAt, "the update returns the stored row")
 }
 
 func TestUpdate_StaleVersion(t *testing.T) {
@@ -224,6 +226,7 @@ func TestUpdatePassword(t *testing.T) {
 	require.Equal(t, "hash:new", stored.PasswordHash)
 	require.Equal(t, got.Version, stored.Version)
 	require.Equal(t, u.Name, stored.Name, "only the password changes")
+	require.True(t, stored.UpdatedAt.After(u.UpdatedAt), "the trigger moves updated_at: %v, then %v", u.UpdatedAt, stored.UpdatedAt)
 }
 
 // Удаление без версии: повтор — ErrNotFound, из одновременных удалений проходит ровно одно.

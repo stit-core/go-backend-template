@@ -176,8 +176,10 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Проверка: мутанты K01, K04 → красные · Закрывает: AC10
   - Сделано: случай «ровно ⅔» в `TestCheckStopBudget`, `app.StopTimeout() == stopTimeout` в `TestBoot`; K01, K04 →
     KILLED (`N/identity/mutants/K0*.log`); `make check` → `✓ check clean`
-- [ ] **S12** — RTSTT-05: триггер `updated_at` держат тесты репозитория user
+- [x] **S12** — RTSTT-05: триггер `updated_at` держат тесты репозитория user
   - Проверка: мутант MI1 → красный · Закрывает: AC10
+  - Сделано: `TestUpdate` и `TestUpdatePassword` — `updated_at` сохранённой строки позже вставленной; MI1 →
+    KILLED (`N/identity/mutants/MI1.log`); `make check` → `✓ check clean`
 - [ ] **S13** — RTSTT-06: вход сверяет `out.User`, схема регистрации — формат адреса, адаптер auth —
   `VerifyPassword`
   - Проверка: мутанты A36, UH7, AD1 → красные юнит-тесты · Закрывает: AC10
@@ -220,4 +222,4 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 —
 
 ## Где мы сейчас
-S1–S11 закрыты. Следующее: S12 — триггер `updated_at` (RTSTT-05).
+S1–S12 закрыты. Следующее: S13 — пробелы ядра (RTSTT-06).
