@@ -42,6 +42,10 @@ linters:
   settings:
     errcheck:
       check-blank: true # `_ = f()` тоже глотает ошибку
+    gosec:
+      config:
+        global:
+          nosec: true # своя директива gosec ничего не глушит: ослабление — только //nolint:gosec с причиной
     nolintlint:
       require-explanation: true
       require-specific: true

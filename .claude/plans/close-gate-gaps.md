@@ -67,9 +67,12 @@ blocked-by: —
   - Подтверждено: на скрипте базы `TestMigrationsCheck` — 10 из 17 случаев FAIL (нет каталога, три
     формы имён, DELETE, UPDATE, SET NOT NULL, индекс по существующей таблице, расширение, DO;
     `N/gate/s5-red.txt`), на ветке — 17 из 17 PASS; `make check` → `OK: migrations (5 пар…)`
-- [ ] **AC6** — RENF-05, RENF-06: неотслеживаемый слабый `.golangci.toml` больше не заслоняет
+- [x] **AC6** — RENF-05, RENF-06: неотслеживаемый слабый `.golangci.toml` больше не заслоняет
   `.golangci.yml`; `// #nosec` и `//revive:disable` ничего не глушат (N-n-nosec, N-n-revive на базе —
   `✓`). Проверка: инъекции → `make lint` FAIL и archtest FAIL
+  - Подтверждено: база — `make lint` OK со слабым `.golangci.toml` (`gate/altconfig2.sh`), с `// #nosec` у
+    md5 и с `//revive:disable:var-naming` (`N/gate/s6-base-*.txt`); ветка — те же инъекции: `make lint` FAIL
+    (errcheck, forbidigo, gosec), `TestLinterDirectives` называет обе директивы; `TestLintUsesItsConfig` → PASS
 - [ ] **AC7** — RENF-07: после `make gen` без `git add` `make gen-check` → OK (было FAIL «запусти make
   gen»); ручная правка мока в дереве (M04b-unstaged) → FAIL с файлом (было `✓`, правка стёрта молча);
   `MOCKERY_*` из окружения шаг не меняют. Проверка: сценарии `R/tpl-enf/gate/gen-roundtrip.sh` и M04b
@@ -118,8 +121,11 @@ blocked-by: —
     классы эффекта RSECT-07 и `DO`; выпущенные 0001 и 0003 — списком (только разрушительное); rule
     `sqlc-and-migrations`, `infra-impact`, `scaffold/references/migration.md` (пример индекса —
     `CONCURRENTLY` своей миграцией); `make check` → ✓
-- [ ] **S6** — lint: `--config .golangci.yml`, gosec без `#nosec`, директивы revive — отказ archtest
+- [x] **S6** — lint: `--config .golangci.yml`, gosec без `#nosec`, директивы revive — отказ archtest
   - Проверка: N-n-nosec, N-n-revive, слабый `.golangci.toml` — красные; `make check` → ✓ · Закрывает: AC6 · Зависит от: —
+  - Сделано: `lint.sh` и `golangciEnabled` (harness_test.go) — `--config .golangci.yml`, `lint.sh` снимает и
+    `GOLANGCI_LINT_CACHEPROG`; gosec `nosec: true`; `TestLinterDirectives` (директивы revive и gosec) и
+    `TestLintUsesItsConfig`; `make check` → ✓
 - [ ] **S7** — gen-check сверяет моки с деревом до прогона mockery; `MOCKERY_*` окружения — не для шага
   - Проверка: gen-roundtrip и M04b-unstaged; `make check` → ✓ · Закрывает: AC7 · Зависит от: —
 - [ ] **S8** — `TestTestsAssert` — все тесты модуля
@@ -140,6 +146,8 @@ blocked-by: —
 - Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
   у хуков, которые git запускает сам. Хуки перезапускают себя без переменных make и оболочки (без маркера:
   условие — сами переменные), а не чистят окружение каждой проверки.
+- `internal/archtest/harness_test.go` (файл трека harness): `golangciEnabled` — `--config .golangci.yml`,
+  иначе `TestNolintNamesEnabledLinters` судит по чужому конфигу (третий вызов RENF-05).
 - migrations-check: индекс по таблице, созданной в том же файле, — не эффект (иначе маркер у каждой новой
   таблицы); `CONCURRENTLY` — не эффект (рецепт `migration.md`); `DO` — эффект: его код машина не видит.
   Выпущенные 0001 (`CREATE EXTENSION`) и 0003 (индекс по существующей таблице) — списком имён в скрипте:
@@ -160,7 +168,8 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S5 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки не выводят файлы
-из гейта, порог покрытия — 100. Эксперименты: база — worktree `N/wt-gate-x` (e8ea150, снять в S13), срез
-ветки с незакоммиченным шагом — временный `N/wt-gate-y` (раннеры аудитора откатывают дерево к HEAD).
-S5 закрыт (migrations-check). Следующее: S6 — lint: `--config`, gosec без `#nosec`, директивы revive.
+S1–S6 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
+линтеров не выводят код из гейта, порог покрытия — 100, migrations-check без fail-open. Эксперименты: база —
+worktree `N/wt-gate-x` (e8ea150, снять в S13), срез ветки с незакоммиченным шагом — временный `N/wt-gate-y`
+(раннеры аудитора откатывают дерево к HEAD). Следующее: S7 — gen-check сверяет моки с деревом
+(RED — `gate/gen-roundtrip.sh` на базе).

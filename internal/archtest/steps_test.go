@@ -63,6 +63,25 @@ func TestCoverCheck(t *testing.T) {
 	}
 }
 
+// TestLintUsesItsConfig: lint гейта читает только .golangci.yml — слабый .golangci.toml рядом его не
+// заслоняет, — а своя директива gosec ничего не глушит. Модуль игрушечный, конфиг и скрипт — репо.
+func TestLintUsesItsConfig(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	repo := t.TempDir()
+	writeFiles(t, repo, union(readFiles(t, root, ".golangci.yml", "scripts/tools/lint.sh"), map[string]string{
+		"go.mod":         "module example.com/lint\n\ngo 1.26\n",
+		".golangci.toml": "version = \"2\"\n\n[linters]\ndefault = \"none\"\nenable = [\"govet\"]\n",
+		"p/p.go": "package p\n\nimport (\n\t\"crypto/md5\" // #nosec G501\n\t\"os\"\n)\n\n// Close drops an error.\n" +
+			"func Close(f *os.File) {\n\tf.Close()\n}\n\n// Sum hashes weakly.\nfunc Sum(s string) [16]byte {\n\treturn md5.Sum([]byte(s)) // #nosec G401\n}\n",
+	}))
+	git(t, repo, "init", "-q", "-b", "main")
+	out, err := step(t, repo, "scripts/tools/lint.sh")
+	require.Error(t, err, out)
+	require.Contains(t, out, "(errcheck)", ".golangci.toml shadows .golangci.yml")
+	require.Contains(t, out, "(gosec)", "the gosec directive silences gosec")
+}
+
 // TestMigrationsCheck: migrations-check пропускает только каталог по конвенции, а up с эффектом для выкатки
 // — разрушительный, правку данных, долгий lock, расширение, код DO — только с маркером
 // `-- infra-handoff:`. Индекс по таблице этого же файла и CONCURRENTLY, действия FK и триггер на UPDATE —

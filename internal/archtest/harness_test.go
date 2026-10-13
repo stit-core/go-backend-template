@@ -356,7 +356,7 @@ func golangciEnabled(t *testing.T) map[string]bool {
 	t.Helper()
 	enabled := map[string]bool{}
 	for _, kind := range []string{"linters", "formatters"} {
-		cmd := exec.CommandContext(t.Context(), "golangci-lint", kind, "--json")
+		cmd := exec.CommandContext(t.Context(), "golangci-lint", kind, "--json", "--config", ".golangci.yml")
 		cmd.Dir = repoRoot(t)
 		out, err := cmd.Output()
 		require.NoError(t, err, "golangci-lint %s --json (pinned golangci-lint ставит make setup)", kind)

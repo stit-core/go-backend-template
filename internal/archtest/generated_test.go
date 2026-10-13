@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"go/build"
 	"go/build/constraint"
+	"go/parser"
+	"go/token"
 	"os"
 	"path"
 	"path/filepath"
@@ -98,4 +100,27 @@ func buildLines(src []byte) []string {
 		}
 	}
 	return lines
+}
+
+// linterDirective — директива, которой линтер глушит себя мимо //nolint: revive:disable… и своя директива
+// gosec (её gosec не слушает — nosec: true в .golangci.yml, — а читатель примет за действующую).
+var linterDirective = regexp.MustCompile(`^(//|/\*)\s*revive:|#nosec`)
+
+// TestLinterDirectives: ослабление lint — только //nolint с именем включённого линтера и причиной
+// (nolintlint): директива самого линтера глушит его без имени и причины.
+func TestLinterDirectives(t *testing.T) {
+	t.Parallel()
+	for _, f := range goFiles(t) {
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, filepath.Join(repoRoot(t), f.path), nil, parser.ParseComments)
+		require.NoError(t, err)
+		for _, group := range file.Comments {
+			for _, c := range group.List {
+				if linterDirective.MatchString(c.Text) {
+					t.Errorf("%s:%d: %q — a linter directive past //nolint: weaken lint only by //nolint:<linter> // <reason>",
+						f.path, fset.Position(c.Pos()).Line, c.Text)
+				}
+			}
+		}
+	}
 }
