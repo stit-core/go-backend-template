@@ -35,19 +35,21 @@ func TestUserAdapter_User(t *testing.T) {
 	tests := []struct {
 		name     string
 		status   user.Status
+		verified bool
 		canLogin bool
 	}{
-		{"active", user.StatusActive, true},
-		{"blocked", user.StatusBlocked, false},
+		{"active", user.StatusActive, false, true},
+		{"blocked", user.StatusBlocked, false, false},
+		{"verified address", user.StatusActive, true, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			a, repo, _ := newAdapter(t)
-			found := &user.User{ID: "u1", Email: "a@b.com", Status: tc.status, Version: 3}
+			found := &user.User{ID: "u1", Email: "a@b.com", Status: tc.status, Version: 3, EmailVerified: tc.verified}
 			repo.EXPECT().GetByID(mock.Anything, "u1").Return(found, nil).Once()
 			repo.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(found, nil).Once()
-			want := &verification.User{ID: "u1", Email: "a@b.com", CanLogin: tc.canLogin, Version: 3}
+			want := &verification.User{ID: "u1", Email: "a@b.com", CanLogin: tc.canLogin, EmailVerified: tc.verified, Version: 3}
 
 			byID, err := a.GetByID(context.Background(), "u1")
 			require.NoError(t, err)

@@ -131,7 +131,7 @@ func TestUpsertEmailVerification_Redelivery(t *testing.T) {
 	require.NotNil(t, used.UsedAt)
 	next, issued, err := repo.UpsertEmailVerification(ctx, userID, "hash:ev-4", tokenExpiry)
 	require.NoError(t, err)
-	require.True(t, issued, "a used verification no longer blocks a new one")
+	require.True(t, issued, "the key is the pending verification only: a replay after the confirmation is stopped by the subscriber, the address is verified")
 	require.NotEqual(t, id, next)
 }
 

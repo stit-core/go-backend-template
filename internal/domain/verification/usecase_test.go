@@ -228,6 +228,19 @@ func TestIssueEmailVerification_Redelivery(t *testing.T) {
 	require.Len(t, f.bus.Published(subjectEmailVerificationRequested), 2, "one event per issued token")
 }
 
+// Повтор события после погашения ссылки: ожидающей записи уже нет, ключ — состояние пользователя, и
+// подтверждённому адресу второе письмо не уходит (outbox переопубликовал строку, durable пересоздан).
+func TestIssueEmailVerification_ReplayAfterConfirmation(t *testing.T) {
+	t.Parallel()
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true, EmailVerified: true}, nil).Once()
+	f := newUC(t, withUsers(users))
+
+	require.NoError(t, f.uc.IssueEmailVerification(context.Background(), "u1"))
+	require.Zero(t, f.bus.Count(), "no token, no event, no mail for a verified address")
+	require.Zero(t, f.tx.Calls())
+}
+
 // Пользователь удалён до доставки события: письма нет, повтора доставки тоже.
 func TestIssueEmailVerification_UserGone(t *testing.T) {
 	t.Parallel()

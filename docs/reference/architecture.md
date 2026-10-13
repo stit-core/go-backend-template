@@ -289,7 +289,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 - **Idempotency.** JetStream = at-least-once → subscriber обязан быть идемпотентен (unique-индекс
   + `ON CONFLICT`, `UPDATE … WHERE status='pending'`, idempotency-key). Не «вряд ли задвоится».
   Внешний эффект не теряется: схема помнит, выполнен ли он (`sent_at`), повтор выполненный
-  пропускает, невыполненный повторяет — канон `verification.IssueEmailVerification`. Poison у
+  пропускает, невыполненный повторяет; ключ — событие или состояние агрегата, и запись с завершённым
+  жизненным циклом повтор эффекта не открывает — канон `verification.IssueEmailVerification`. Poison у
   consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - **Jobs.** Периодические задачи без события-триггера — `timerkit.Job`, регистрируются
   `timerkit.ProvideJob` в модуле-владельце и гоняются `timerkit.Module` той же fx.Lifecycle.

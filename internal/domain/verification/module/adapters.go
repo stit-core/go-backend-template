@@ -53,9 +53,10 @@ func mapUserErr(err error) error {
 
 func userToVerification(u *user.User) *verification.User {
 	return &verification.User{
-		ID:       u.ID,
-		Email:    u.Email,
-		CanLogin: u.CanLogin(),
-		Version:  u.Version,
+		ID:            u.ID,
+		Email:         u.Email,
+		CanLogin:      u.CanLogin(),
+		EmailVerified: u.EmailVerified,
+		Version:       u.Version,
 	}
 }

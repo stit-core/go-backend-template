@@ -51,10 +51,13 @@ paths:
   status='pending'`, либо idempotency-key из payload. Внешний эффект (письмо, вебхук) схема
   помнит отдельно от записи: отметка «выполнен» (`sent_at`) — после эффекта; повтор доставки
   выполненный эффект пропускает, невыполненный повторяет, сбой эффекта — ошибка обработчика
-  (redelivery). Пропуск по одной лишь записи теряет эффект: запись есть, письмо не ушло. Канон —
-  `verification.IssueEmailVerification`: upsert по партиал-индексу `email_verifications(user_id)
-  WHERE used_at IS NULL` перевыпускает токен неотправленного письма, отправленное не трогает.
-  Redelivery (сбой эффекта, повтор после успеха) покрыт юнит-тестом (rule `tests-pipeline`).
+  (redelivery). Пропуск по одной лишь записи теряет эффект: запись есть, письмо не ушло. Ключ —
+  событие (idempotency-key) или состояние агрегата, а не одна ожидающая запись: запись с завершённым
+  жизненным циклом (погашенная ссылка) повтор эффекта не открывает. Канон —
+  `verification.IssueEmailVerification`: подтверждённый адрес пропускает (порт `UserReader` отдаёт
+  `EmailVerified`), upsert по партиал-индексу `email_verifications(user_id) WHERE used_at IS NULL`
+  перевыпускает токен неотправленного письма, отправленное не трогает. Redelivery (сбой эффекта,
+  повтор после успеха и после погашения) покрыт юнит-тестом (rule `tests-pipeline`).
   Poison consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - Subscriber — быстрый. Тяжёлое (PDF, batch на 1M) → отдельный job/usecase.
 

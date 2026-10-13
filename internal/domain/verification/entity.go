@@ -18,8 +18,9 @@ type EmailVerificationToken struct {
 
 // CanLogin вычисляет домен user: порт переносит решение, а не сырой статус.
 type User struct {
-	ID       string
-	Email    string
-	CanLogin bool
-	Version  int
+	ID            string
+	Email         string
+	CanLogin      bool
+	EmailVerified bool
+	Version       int
 }

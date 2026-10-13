@@ -85,17 +85,21 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 	return &Usecase{d: d}
 }
 
-// IssueEmailVerification — идемпотентный обработчик доставки user.events.registered.v2: отправленное
-// письмо повтор пропускает, неотправленное (сбой mailer) отправляет заново с новым токеном. Адрес
-// берётся у пользователя по ID: в событии его нет.
+// IssueEmailVerification — идемпотентный обработчик доставки user.events.registered.v2. Ключ — состояние
+// пользователя: подтверждённому адресу письмо не нужно, а погашенная ссылка ожидающей записи уже не держит.
+// Отправленное письмо повтор пропускает, неотправленное (сбой mailer) отправляет заново с новым токеном.
+// Адрес берётся у пользователя по ID: в событии его нет.
 func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) error {
 	u, err := uc.d.Users.GetByID(ctx, userID)
-	if errors.Is(err, ErrUserNotFound) {
+	switch {
+	case errors.Is(err, ErrUserNotFound):
 		uc.d.Log.Info(ctx, "user gone before email verification, skip", "user_id", userID)
 		return nil
-	}
-	if err != nil {
+	case err != nil:
 		return fmt.Errorf("load user: %w", err)
+	case u.EmailVerified:
+		uc.d.Log.Info(ctx, "email already verified, skip", "user_id", userID)
+		return nil
 	}
 	t := authnkit.NewToken()
 
