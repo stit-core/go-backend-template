@@ -149,8 +149,13 @@ blocked-by: —
   - Проверка: N-fmt2 → fmt-check FAIL, `make fmt` чинит; `make check` → ✓ · Закрывает: AC8 · Зависит от: —
   - Сделано: `gofumpt -extra` в `fmt` и `fmt-check` (как extra-rules lint); `TestFmtAppliesLintRules`;
     `make check` → ✓
-- [ ] **S10** — Имя домена с инициализмом: скелет по правилу revive, archtest сверяет префикс без регистра
+- [x] **S10** — Имя домена с инициализмом: скелет по правилу revive, archtest сверяет префикс без регистра
   - Проверка: `make new-domain NAME=api_key` → `make check` ✓ (в отдельном worktree) · Закрывает: AC9 · Зависит от: —
+  - Сделано: TITLE и CAMEL скелета — по списку инициализмов revive v1.15 (`api_key` → `APIKey`, `apiKey`;
+    `user_id` → `UserID`, `userID`); `TestHTTPTypes` сверяет префикс без регистра, `TestDomainErrorTables` —
+    имя таблицы. База: срез `api_key` — 8 замечаний var-naming, после переименования — `TestHTTPTypes` FAIL
+    (`N/gate/s10-base-*`); ветка: `api_key` → `make check` ✓ 824/824 (`s10-branch-check-api_key.log`),
+    `user_id` — lint, vet и archtest OK; `make check` → ✓
 - [ ] **S11** — `make new-domain`: негодное имя и занятая таблица — отказ до первой правки; сбой после — откат
   - Проверка: сценарии RCOD-06 → отказ, `git status` пуст · Закрывает: AC9 · Зависит от: S10
 - [ ] **S12** — `make mutate`: раннер в `scripts/tools/`, спецификация аудитора по текущему коду, документ —
@@ -163,6 +168,10 @@ blocked-by: —
 - Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
   у хуков, которые git запускает сам. Хуки перезапускают себя без переменных make и оболочки (без маркера:
   условие — сами переменные), а не чистят окружение каждой проверки.
+- RCOD-05: archtest без регистра (`TestHTTPTypes`, `TestDomainErrorTables` — файл трека boundaries), а не
+  перевод имени со списком инициализмов в archtest: список — один, в `new-domain.sh` (revive v1.15).
+- `.claude/skills/scaffold/references/domain.md` (файл трека harness): строки о `make new-domain` — под
+  инициализмы, отказ и откат (S10, S11).
 - `TestTestsAssert` вне доменов и платформы засчитывает `t.Error*`/`t.Fatal*` и `t`, отданный хелперу:
   так утверждают archtest (все нарушения разом), `archkit.Check` и `testkit.MigrationLadder`; в доменах и
   платформе — прежняя строгость (require и кит, правило `tests-pipeline`), гейт не ослаблен.
@@ -190,8 +199,8 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S9 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
+S1–S10 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
 линтеров не выводят код из гейта, порог покрытия — 100, migrations-check и gen-check без fail-open. Эксперименты: база —
 worktree `N/wt-gate-x` (e8ea150, снять в S13), срез ветки с незакоммиченным шагом — временный `N/wt-gate-y`
-(раннеры аудитора откатывают дерево к HEAD). Следующее: S10 — инициализм в имени домена: скелет по
-правилу revive, archtest без регистра (RED — `make new-domain NAME=api_key` в отдельном worktree).
+(раннеры аудитора откатывают дерево к HEAD). Следующее: S11 — `make new-domain`: отказ до первой правки
+(имена из шаблонов, занятая таблица) и откат после (RED — `repo`, `id`, `password_reset` на базе).

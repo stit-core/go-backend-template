@@ -73,6 +73,7 @@ internal/domain/<name>/
 `httpHandlers` и `registerHTTP` (`cmd/api/http.go`), гонит `make gen` и ставит созданное в индекс
 git. Границы домена держит `internal/archtest` без правки конфигов.
 
+`<Name>` — имя в CamelCase, инициализм — заглавными по правилу revive (`api_key` → `APIKey`).
 `<names>` — множественное число по правилам английского (`status` → `statuses`, `category` →
 `categories`; в пути `_` → `-`), исключения (`person` → `people`) правят руками. Имя, с которым срез не
 собрался бы (ключевое слово или встроенное имя Go, имя из кода среза, алиас импорта другого домена),

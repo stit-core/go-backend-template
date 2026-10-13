@@ -174,7 +174,8 @@ func TestHTTPTypes(t *testing.T) {
 				if !ast.IsExported(name) || name == "Handler" || name == "Usecase" {
 					continue
 				}
-				if !strings.HasPrefix(name, prefix) {
+				// Регистр — не важен: инициализм revive пишет заглавными (api_key → APIKey).
+				if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
 					t.Errorf("%s declares %s: an HTTP type starts with the domain prefix %s", f.path, name, prefix)
 				}
 				if prev, dup := seen[name]; dup {
@@ -261,8 +262,8 @@ func TestDomainErrorTables(t *testing.T) {
 						}
 						if call, ok := vs.Values[j].(*ast.CallExpr); ok && isSelector(call.Fun, byName, httpkitPath, "NewErrorMap") {
 							errorMaps[name.Name] = true
-							if name.Name == table {
-								tableArgs, tableByName = call.Args, byName
+							if strings.EqualFold(name.Name, table) { // инициализм revive: user_id — userIDErrors
+								table, tableArgs, tableByName = name.Name, call.Args, byName
 							}
 						}
 					}

@@ -58,9 +58,19 @@ for tool in sqlc mockery gofumpt; do
 done
 
 # order_item → OrderItem (типы), orderItem (переменные), orderitem (алиасы импортов),
-# ORDER_ITEM (коды ошибок), order_items (таблица), order-items (путь API).
-TITLE=$(echo "$NAME" | sed -E 's/(^|_)([a-z])/\U\2/g')
-CAMEL=$(echo "$TITLE" | sed -E 's/^./\L&/')
+# ORDER_ITEM (коды ошибок), order_items (таблица), order-items (путь API). Инициализм — по правилу
+# revive var-naming (api_key → APIKey и apiKey): иначе lint требует переименовать типы скелета.
+initialisms=" ACL API ASCII CPU CSS DNS EOF GUID HTML HTTP HTTPS ID IDS IP JSON LHS QPS RAM RHS RPC SLA SMTP SQL SSH TCP TLS TTL UDP UI UID UUID URI URL UTF8 VM XML XMPP XSRF XSS "
+TITLE="" CAMEL=""
+for part in ${NAME//_/ }; do
+    word=$(tr '[:lower:]' '[:upper:]' <<<"$part")
+    case "$initialisms" in
+        *" $word "*) [ "$word" != IDS ] || word=IDs ;;
+        *) word=$(tr '[:lower:]' '[:upper:]' <<<"${part:0:1}")${part:1} ;;
+    esac
+    TITLE+=$word
+    if [ -z "$CAMEL" ]; then CAMEL=$part; else CAMEL+=$word; fi
+done
 FLAT=${NAME//_/}
 UPPER=$(echo "$NAME" | tr '[:lower:]' '[:upper:]')
 # Множественное число — по правилам английского (status → statuses, category → categories);
