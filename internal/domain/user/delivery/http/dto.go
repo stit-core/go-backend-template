@@ -9,7 +9,7 @@ type UserRegisterInput struct {
 	Body struct {
 		Email    string `json:"email"    format:"email"   required:"true"`
 		Password string `json:"password" maxLength:"1024" minLength:"8"   required:"true"`
-		Name     string `json:"name"     minLength:"1"    required:"true"`
+		Name     string `json:"name"     maxLength:"200"  minLength:"1"   required:"true"`
 	}
 }
 
@@ -52,7 +52,7 @@ type UserListOutput struct {
 type UserUpdateInput struct {
 	ID   string `path:"id"`
 	Body struct {
-		Name    *string      `json:"name,omitempty"   minLength:"1"`
+		Name    *string      `json:"name,omitempty"   maxLength:"200"       minLength:"1"`
 		Status  *user.Status `json:"status,omitempty" enum:"active,blocked"`
 		Version int          `json:"version"          required:"true"`
 	}

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -71,13 +72,20 @@ func TestRun_RevokeFailureRollsBackPromotion(t *testing.T) {
 	require.Equal(t, "x", hash)
 }
 
-// Адрес admin — по правилу сущности user: учётной записи, которую не завела бы регистрация, seed не
+// Адрес и имя admin — по правилам сущности user: учётной записи, которую не завела бы регистрация, seed не
 // заводит.
-func TestRun_RejectsAddressOutsideUserRules(t *testing.T) {
+func TestRun_RejectsAdminOutsideUserRules(t *testing.T) {
 	pg := seedEnv(t, "admin@example.com")
-	for _, email := range []string{" admin@example.com", "admin@example.com\t", "Admin <admin@example.com>", "not an address"} {
-		t.Run(email, func(t *testing.T) {
-			t.Setenv("SEED_ADMIN_EMAIL", email)
+	for _, tc := range []struct{ name, email, adminName string }{
+		{"space before the address", " admin@example.com", "Admin"},
+		{"tab after the address", "admin@example.com\t", "Admin"},
+		{"address with a display name", "Admin <admin@example.com>", "Admin"},
+		{"not an address", "not an address", "Admin"},
+		{"name over 200 characters", "admin@example.com", strings.Repeat("я", 201)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SEED_ADMIN_EMAIL", tc.email)
+			t.Setenv("SEED_ADMIN_NAME", tc.adminName)
 			require.Equal(t, 1, run(t.Context(), logkit.Nop()))
 		})
 	}

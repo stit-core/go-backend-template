@@ -329,6 +329,7 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 200,
             "minLength": 1,
             "type": "string"
           },
@@ -361,6 +362,7 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "maxLength": 200,
             "minLength": 1,
             "type": "string"
           },

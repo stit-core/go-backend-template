@@ -4,6 +4,7 @@ import (
 	"net/mail"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 
@@ -20,6 +21,8 @@ func FuzzNewUser(f *testing.F) {
 	f.Add(" ok@example.com", "h", "n", "client")
 	f.Add("ok@example.com\t", "h", "n", "client")
 	f.Add("Bob <ok@example.com>", "h", "n", "client")
+	f.Add("ok@example.com", "h", " ", "client")
+	f.Add("ok@example.com", "h", strings.Repeat("я", 201), "client")
 
 	f.Fuzz(func(t *testing.T, email, ph, name, roleStr string) {
 		role := identity.Role(roleStr)
@@ -27,7 +30,7 @@ func FuzzNewUser(f *testing.F) {
 
 		addr, mailErr := mail.ParseAddress(email)
 		validEmail := mailErr == nil && addr.Name == "" && addr.Address == email && len(email) <= 254
-		validName := !strings.ContainsRune(name, 0)
+		validName := strings.TrimSpace(name) != "" && utf8.RuneCountInString(name) <= 200 && !strings.ContainsRune(name, 0)
 		validRole := role == identity.RoleAdmin || role == identity.RoleClient || role == identity.RoleUnknown
 
 		switch {

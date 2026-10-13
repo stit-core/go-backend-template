@@ -175,6 +175,25 @@ func TestRegister_PasswordTooLong(t *testing.T) {
 	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 }
 
+// Предел имени — 200 символов (maxLength считает символы): длиннее схема отклоняет до usecase.
+func TestRegister_NameTooLong(t *testing.T) {
+	t.Parallel()
+	limit := strings.Repeat("я", 200)
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().Register(mock.Anything, &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: limit}).Return(alice(), nil).Once()
+	api := setup(t, uc)
+	body := func(name string) *strings.Reader {
+		return strings.NewReader(fmt.Sprintf(`{"email":"a@b.com","password":"longenough","name":%q}`, name))
+	}
+
+	handlertest.AssertStatus(t, api.Post("/api/auth/register", body(limit)), http.StatusCreated)
+	resp := api.Post("/api/auth/register", body(limit+"я"))
+	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	errs := handlertest.DecodeAPIError(t, resp).Errors
+	require.Len(t, errs, 1)
+	require.Equal(t, "body.name", errs[0].Location)
+}
+
 func registerBody(password string) string {
 	return fmt.Sprintf(`{"email":"a@b.com","password":%q,"name":"A"}`, password)
 }
@@ -375,6 +394,7 @@ func TestUpdate_InvalidBody(t *testing.T) {
 	}{
 		{"unknown status", `{"status":"deleted","version":1}`, "body.status"},
 		{"empty name", `{"name":"","version":1}`, "body.name"},
+		{"name over 200 characters", fmt.Sprintf(`{"name":%q,"version":1}`, strings.Repeat("я", 201)), "body.name"},
 		{"no version", `{"name":"new"}`, "body"},
 	}
 	for _, tc := range tests {

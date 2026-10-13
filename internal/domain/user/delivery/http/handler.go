@@ -163,7 +163,7 @@ var (
 	notFoundRule         = httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"}
 	alreadyExistsRule    = httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"}
 	invalidEmailRule     = httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_EMAIL", Detail: "invalid email", Field: "body.email"}
-	invalidNameRule      = httpkit.ErrorRule{Err: user.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_NAME", Detail: "name must not contain NUL", Field: "body.name"}
+	invalidNameRule      = httpkit.ErrorRule{Err: user.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_NAME", Detail: "name must be 1 to 200 characters, not blank, without NUL", Field: "body.name"}
 	invalidRoleRule      = httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_ROLE", Detail: "invalid role"}
 	weakPasswordRule     = httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"}
 	passwordTooLongRule  = httpkit.ErrorRule{Err: user.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "USER_PASSWORD_TOO_LONG", Detail: "password too long", Field: "body.password"}

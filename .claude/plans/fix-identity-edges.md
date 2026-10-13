@@ -43,10 +43,12 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Подтверждено: E2 на ветке → 201, 422, 422, 422, 409, учётная запись ящика одна, письмо одно, вход адресом с
     пробелом — 200 в ту же учётную запись (`N/identity/s1-e2.log`); `FuzzNewUser`, `FuzzTrusted_LookupByEmail`
     по 15 с → PASS
-- [ ] **AC2** — Имя ограничено: регистрация и правка с именем длиннее 200 символов — 422 `VALIDATION_FAILED`
+- [x] **AC2** — Имя ограничено: регистрация и правка с именем длиннее 200 символов — 422 `VALIDATION_FAILED`
   (`maxLength` в `openapi.json`); сущность отвергает имя длиннее 200 символов, пустое после обрезки пробелов
   и с NUL, как скелет `make new-domain`. На базе (E6) имя в 100 000 символов — 201. Проверка: E6 на ветке →
   422; `make gen-check` → без дрейфа
+  - Подтверждено: E6 на ветке → 422 (`N/identity/s2-e6.log`); `openapi.json` — `maxLength: 200` у name
+    регистрации и правки; `make gen-check` → без дрейфа
 - [ ] **AC3** — Вход не выдаёт сбой хэшера за неверный пароль: неверный — только `!ok` и пароль длиннее
   предела (401, аудит `login_failed`); дедлайн очереди Argon2id и нечитаемый хэш — ошибка сервера с причиной
   в логе, исход `error`, без записи аудита. На базе (E7) — `invalid credentials`, ложный аудит, лог пуст.
@@ -91,8 +93,12 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     `TestNewUser`, fuzz-сиды, `TestSessions/a_padded_address_is_the_same_mailbox`,
     `TestRun_RejectsAddressOutsideUserRules` (`N/identity/s1-red-*.log`), GREEN; блок в накопителе;
     `make check` → `✓ check clean`
-- [ ] **S2** — name-max-length: предел 200 символов в сущности и `maxLength` в DTO, `make gen`; INFRA-HANDOFF
+- [x] **S2** — name-max-length: предел 200 символов в сущности и `maxLength` в DTO, `make gen`; INFRA-HANDOFF
   - Проверка: RED → GREEN тестов `user`; `make gen-check`; E6 → 422 · Закрывает: AC2 · Зависит от: —
+  - Сделано: `validName` — не пустое после обрезки, до 200 символов (`maxNameLen`), без NUL, как скелет;
+    `maxLength:"200"` у name в DTO, `make gen`; RED на базе — кейсы `TestNewUser`, `TestUser_Rename`, сиды
+    fuzz, `TestRegister_NameTooLong`, `TestUpdate_InvalidBody`, имя `seed-admin` (`N/identity/s2-red-*.log`),
+    GREEN; блок в накопителе; `make check` → `✓ check clean`
 - [ ] **S3** — login-hasher-failure: сбой `Verify` — ошибка сервера, неверный пароль — `!ok` и предел
   - Проверка: RED → GREEN `TestLogin_HasherFailure`; integration «нечитаемый хэш» → PASS · Закрывает: AC3
 - [ ] **S4** — role-claim-test: таблица ролей выпуска токена и 403 клиенту с настоящим cookie
@@ -133,6 +139,8 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 - Поиск по адресу обрезает пробелы по краям, а регистрация их отвергает — у guard'а входа и домена один
   субъект: без обрезки попытку с пробелом guard считал бы попыткой на учётную запись, а домен её не видел.
 - `seed-admin` проверяет адрес и имя конструктором `user.NewUser` — одно правило сущности без нового экспорта.
+- Пустое после обрезки имя сущность отвергает, как скелет `make new-domain`: «как в скелете» — один способ
+  проверки строкового поля; `minLength:"1"` схемы пустое имя из пробелов не ловит.
 - Чужой файл: rule `domain-architecture` (трек boundaries, волна 2) — фраза о канонической форме ключа
   уникальности в «Вход — проверка поля»: конвенция, которую копирует следующая сущность.
 
@@ -140,4 +148,4 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 —
 
 ## Где мы сейчас
-S1 закрыт (email-canonical). Следующее: S2 — name-max-length.
+S1–S2 закрыты. Следующее: S3 — login-hasher-failure.

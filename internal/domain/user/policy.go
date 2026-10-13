@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/mail"
 	"strings"
+	"unicode/utf8"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
@@ -23,8 +24,13 @@ func validEmail(email string) bool {
 // emailKey — адрес для поиска: без пробелов по краям, как ключ guard'а входа (bruteforcekit.NormalizeKey).
 func emailKey(email string) string { return strings.TrimSpace(email) }
 
+// maxNameLen — предел имени в символах; его же держит maxLength полей name в delivery/http.
+const maxNameLen = 200
+
 // validName: NUL Postgres в TEXT не хранит — имя с ним упало бы на записи ошибкой драйвера (500).
-func validName(name string) bool { return !strings.ContainsRune(name, 0) }
+func validName(name string) bool {
+	return strings.TrimSpace(name) != "" && utf8.RuneCountInString(name) <= maxNameLen && !strings.ContainsRune(name, 0)
+}
 
 type Policy struct{}
 

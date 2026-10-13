@@ -37,6 +37,11 @@ func TestNewUser(t *testing.T) {
 		{"email of 255 bytes in 131 characters", strings.Repeat("я", 124) + "a@b.com", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"bad role", "a@b.com", "h", "A", identity.Role("hacker"), user.ErrInvalidRole},
 		{"name with NUL", "a@b.com", "h", "A\x00B", identity.RoleClient, user.ErrInvalidName},
+		// Предел имени — в символах: 200 букв не из ASCII — 400 байт и ещё имя.
+		{"name of 200 characters", "a@b.com", "h", strings.Repeat("я", 200), identity.RoleClient, nil},
+		{"name of 201 characters", "a@b.com", "h", strings.Repeat("я", 201), identity.RoleClient, user.ErrInvalidName},
+		{"empty name", "a@b.com", "h", "", identity.RoleClient, user.ErrInvalidName},
+		{"blank name", "a@b.com", "h", " \t ", identity.RoleClient, user.ErrInvalidName},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -81,15 +86,19 @@ func TestUser_ChangeStatus(t *testing.T) {
 	}
 }
 
-// Имя пишется в TEXT: NUL Postgres не хранит — отказ поля, а не ошибка драйвера на записи.
+// Имя пишется в TEXT: NUL Postgres не хранит — отказ поля, а не ошибка драйвера на записи; предел и
+// пустое имя — те же, что у NewUser.
 func TestUser_Rename(t *testing.T) {
 	t.Parallel()
 	u := &user.User{Name: "Alice"}
 	require.NoError(t, u.Rename("Алиса"))
 	require.Equal(t, "Алиса", u.Name)
+	require.NoError(t, u.Rename(strings.Repeat("я", 200)))
 
-	require.ErrorIs(t, u.Rename("A\x00B"), user.ErrInvalidName)
-	require.Equal(t, "Алиса", u.Name, "a rejected name leaves the user as is")
+	for _, name := range []string{"A\x00B", strings.Repeat("я", 201), "  "} {
+		require.ErrorIs(t, u.Rename(name), user.ErrInvalidName, "name %q", name)
+		require.Equal(t, strings.Repeat("я", 200), u.Name, "a rejected name leaves the user as is")
+	}
 }
 
 func TestUserCanLogin(t *testing.T) {
