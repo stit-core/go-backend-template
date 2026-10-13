@@ -1,8 +1,9 @@
 # Профиль репо для /plan — go-backend-template
 
-- **Роль:** сервис — Go-бэкенд (`<org>/backend`). Работа приходит фазой программы из хаба
-  `<org>/infra` (`parent: infra:<slug>`) или прямым заходом. Итог — образы `backend` и
-  `backend-migrate` в registry (`/release`); выкатка тега — только из хаба (`make bump SVC=backend`).
+- **Роль:** сервис — Go-бэкенд (`<org>/<репо>`, первый сервис орги — `backend`). Работа приходит фазой
+  программы из хаба `<org>/infra` (`parent: infra:<slug>`) или прямым заходом. Итог — образы `<репо>` и
+  `<репо>-migrate` в registry (путь из origin, `/release`); выкатка тега — только из хаба
+  (`make bump SVC=<репо>`).
 - **Гейт перед «готово»:** CLAUDE.md § Готово (`make check` и ревью).
 - **Проверка планов:** `make plan-check`; pre-commit проверяет, когда меняется `.claude/plans/`.
 - **Сводка планов:** `make status` → `== Plan ==` (или `make plan-check A=--summary`).

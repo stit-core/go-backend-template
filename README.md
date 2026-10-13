@@ -31,8 +31,8 @@ go-backend-template (<org>/backend)  ← вы здесь   ──► stit-core/g
 project-infra-template-compose (<org>/infra)   ← хаб проекта: план, агенты, выкатка (make bump)
 ```
 
-Образы уходят в container registry Gitea (`git.stit.tech`): хост и орга выводятся из
-`git remote get-url origin`, в коде не зашиты. Конфиг и секреты — обычные env, их задаёт
+Образы уходят в container registry Gitea (`git.stit.tech`): путь `<host>/<org>/<репо>` выводится из
+`git remote get-url origin`, в коде не зашит. Конфиг и секреты — обычные env, их задаёт
 `<org>/infra`. Как сюда приходят агенты и что репо отдаёт и берёт —
 [`docs/reference/ecosystem.md`](docs/reference/ecosystem.md).
 
