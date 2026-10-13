@@ -1,0 +1,108 @@
+---
+status: in-progress
+parent: —
+blocked-by: —
+---
+
+# fix-fork-lifecycle — жизненный цикл форка до девятки
+
+## Цель
+Закрыть пункты трека lifecycle программы `reaudit-to-nine` — RLIF-01…05, RENF-03, RADP-01: на ветке
+эксперименты аудиторов не воспроизводят дефект. Форк узнаёт о новых тегах шаблона и тем же движком
+переносит нужный ему код шаблона; образ релиза не делит путь с другим сервисом орги; онбординг с
+внешней идентичностью проходим как написан; валидатор stack не пропускает заглушки; не подключённые
+хуки видны; адаптер к `user` у проекта со своей идентичностью не красит гейт.
+
+## Контекст
+- Программа — `.claude/plans/reaudit-to-nine.md`: трек lifecycle, волна 1, владение файлами, решения
+  владельца (не пересматриваются).
+- Отчёты (`R` = `/home/mm/.cache/stit-audit-program/reaudit`): `R/template-lifecycle.md` — RLIF-01…05,
+  `R/template-enforcement.md` § RENF-03, `R/template-adapters.md` § RADP-01. Эксперименты: `R/tpl-lif/`
+  (форки `own`, `ext`, `half`, `template.git` с пробными тегами, `bin/vstack.sh`, `bin/tu-paths.sh`, логи),
+  `R/tpl-enf/toy-fresh.sh`, `R/tpl-adp/run.py` (кейсы `fp22`, `fp22c`).
+- Код: `scripts/release.sh` (путь образа), `scripts/tools/{template-update,doctor,status,validate-stack-doc}.sh`,
+  цели `setup`, `template-update`, `release` в `Makefile`, `internal/archtest/{onboarding,template}_test.go`;
+  `TestReleaseBuildForwardsSSHAgent` — в `internal/archtest/make_test.go` (файл трека gate). Проза: skills
+  `init-service` (`references/prune.md`), `de-template` (`references/wiring.md`), `upgrade`, `release`,
+  `smartdev`, `stack-deep-dive` (`references/draft-stable.md`), `scaffold/references/port.md`,
+  `docs/reference/{ecosystem,release}.md`, `docs/contributing.md § Версия обвязки`.
+- Материалы трека — `/home/mm/.cache/stit-audit-program/nine/lifecycle/` (логи, пробные форки); тяжёлые
+  прогоны — под `flock /home/mm/.cache/stit-audit-program/nine/gate.lock`.
+
+## Не входит
+- Minor угла LIF вне трека (RLIF-06…13) — бэклог `minor-lifecycle`; RENF-04…16 — трек gate и бэклог.
+- Хаб `<org>/infra` (периодический `/upgrade`, строка о канале обвязки) — раздел «Handoff».
+- Настоящий релиз, push, теги; golibinfra, `go.mod`.
+- Машинная проверка тела коммита `/upgrade` (перенесено и отклонено) — хук `commit-msg` вне трека.
+
+## Критерии приёмки
+- [ ] **AC1** — RLIF-04: путь образа — из origin: форки `acme/own` и `acme/ext` одной орги выпускают
+  `<host>/acme/own{,-migrate}` и `<host>/acme/ext{,-migrate}` (на базе оба — `<host>/acme/backend`);
+  confirm-промпт `make release` называет полный путь образов, handoff — `<SVC>_TAG` и `make bump SVC=<репо>`.
+  Проверка: `go test ./internal/archtest -run TestReleaseImage` → PASS; пробные форки → промпт с путём
+- [ ] **AC2** — RLIF-04: `TestReleaseBuildForwardsSSHAgent` красный на обоих мутантах `go mod download` —
+  без `insteadOf` https → ssh и без `StrictHostKeyChecking=accept-new` (на базе оба зелёные). Проверка:
+  мутант в копии `Dockerfile` → `go test -run TestReleaseBuildForwardsSSHAgent` → FAIL, без мутанта → PASS
+- [ ] **AC3** — RLIF-02: финал `/init-service` заводит remote `template`; `make doctor` спрашивает его теги
+  (`git ls-remote`): тег новее версии форка — строка с ним и `/upgrade`, сбой сети — не ошибка (на базе
+  doctor о шаблоне молчит). Проверка: тест archtest → PASS; копия форка `own` с remote на
+  `R/tpl-lif/template.git` → `make doctor` называет `template/v1.3.0`; remote недоступен → без FAIL
+- [ ] **AC4** — RLIF-01: `make template-update TO=… PATHS='<пути>'` переносит с обвязкой и код вне
+  `.template/paths` тем же трёхсторонним слиянием (module path форка, конфликты в индексе); формат
+  аннотации — с разделом «Безопасность»; `/upgrade` пишет в тело коммита перенесённое и отклонённое из
+  «Платформа» и «Безопасность»; `Dockerfile*` — решение в «Решениях». Проверка: `TestTemplateUpdate` →
+  PASS (случай `PATHS`); копия форка `half` → перенос до `template/v1.3.0` с `PATHS` → код в индексе,
+  конфликты названы (ср. `R/tpl-lif/logs/half-C-3way.log`)
+- [ ] **AC5** — RLIF-03: онбординг с `identity: external` проходим буквально: A.3 и wiring §2 оставляют
+  стримы и киты доменов идентичности до prune, `prune.md` снимает киты, которых нет в `dependencies.md`
+  (на базе A.3 буквально → красные `TestBoot`, `TestIdentity`; wiring §2 для auditkit → красный
+  `TestFxGraphValidates`). Проверка: пробный форк со стеком `external` без auditkit по новому тексту →
+  `make check` зелёный на этапе 2 и после prune, auditkit вне графа
+- [ ] **AC6** — RLIF-05: `validate-stack-doc.sh --stable` отвергает секцию-заглушку (`TBD`, `_TBD_`, `TODO…`,
+  `—`, `...`, `- <заполнить>`, таблица без строк, одни подзаголовки), содержимое проходит (на базе — `OK`,
+  `R/tpl-lif/logs/v-stack-validator.log`). Проверка: `bash R/tpl-lif/bin/vstack.sh <worktree> <каталог>` →
+  V4–V7, V11, V15, V19, V20 — FAIL, V3 — OK; `TestStackValidator` → PASS
+- [ ] **AC7** — RENF-03: клон без `make setup` — `make status` пишет строку `HOOKS:` о неподключённых хуках и
+  `ATTENTION: hooks`, `make doctor` — FAIL о хуках, `/smartdev` ведёт в `make setup`; `make setup`
+  подключает хуки первой строкой — сбой установки инструментов их не отменяет (на базе — `OK`, о хуках ни
+  строки: `R/tpl-enf/toy-fresh.tsv`). Проверка: тест archtest → PASS; свежий клон ветки → status и doctor
+- [ ] **AC8** — RADP-01: при `identity: own` адаптер нового домена к `user` по `port.md` гейт не красит, без
+  решения и при `external` проверка прежняя; `port.md` об этом говорит (на базе `fp22c` красный).
+  Проверка: тест archtest → PASS; `run.py --no-full <worktree ветки> fp22c-new-consumer-identity-own` →
+  зелёный, `fp22` — красный, как задумано
+
+## Шаги
+- [ ] **S1** — RADP-01: проверка prune молчит при `identity: own`, тест законной формы, строка в `port.md`
+  - Проверка: тест → RED на базе, GREEN после; кейсы `fp22c` и `fp22` · Закрывает: AC8 · Зависит от: —
+- [ ] **S2** — RLIF-05: валидатор stack не считает заглушку содержимым; тест и проза `draft-stable.md`
+  - Проверка: `TestStackValidator` с заглушками → RED, затем PASS; `vstack.sh` · Закрывает: AC6 · Зависит от: —
+- [ ] **S3** — RENF-03: хуки в `make status` и `make doctor`, ATTENTION в `/smartdev`, `make setup` — хуки первыми
+  - Проверка: тест archtest → RED, затем PASS; свежий клон ветки · Закрывает: AC7 · Зависит от: —
+- [ ] **S4** — RLIF-04: путь образа и имя сервиса в handoff — из origin, путь в confirm-промпте; доки и
+  INFRA-HANDOFF о пути образа
+  - Проверка: `TestReleaseImage` → RED, затем PASS; пробные форки · Закрывает: AC1 · Зависит от: —
+- [ ] **S5** — RLIF-04: `TestReleaseBuildForwardsSSHAgent` держит `insteadOf` и `accept-new`
+  - Проверка: два мутанта → FAIL, дерево → PASS · Закрывает: AC2 · Зависит от: —
+- [ ] **S6** — RLIF-02: remote `template` в финале онбординга, теги шаблона в `make doctor`, проза `/upgrade`
+  - Проверка: тест → RED, затем PASS; копия `own` с `template.git` · Закрывает: AC3 · Зависит от: S3
+- [ ] **S7** — RLIF-01: перенос по запросу `PATHS=` в движке `make template-update`
+  - Проверка: `TestTemplateUpdate` с `PATHS` → RED, затем PASS; копия `half` · Закрывает: AC4 · Зависит от: —
+- [ ] **S8** — RLIF-01: раздел «Безопасность» в аннотации, `/upgrade` — перенесено и отклонено в теле
+  коммита, `Dockerfile*` в `.template/paths`
+  - Проверка: `make check` → `✓ check clean`; проза сверена с движком · Закрывает: AC4 · Зависит от: S7
+- [ ] **S9** — RLIF-03: A.3 и wiring §2 — строки и киты доменов идентичности до prune, шаг wiring в `prune.md`
+  - Проверка: пробный форк `external` без auditkit по новому тексту · Закрывает: AC5 · Зависит от: —
+- [ ] **S10** — Гейт и приёмка: эксперименты всех критериев на итоговом дереве
+  - Проверка: `make check` → `✓ check clean`; AC1–AC8 подтверждены · Закрывает: AC1, AC2, AC3, AC4, AC5,
+    AC6, AC7, AC8 · Зависит от: S1, S2, S3, S4, S5, S6, S7, S8, S9
+
+## Решения
+—
+
+## Handoff
+- Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
+  строкой `make doctor`; строка о канале обвязки (`template/vX.Y.Z`, remote `template`) — в его
+  `docs/reference/ecosystem.md`. В хаб не пишем — отчёт дирижёру.
+
+## Где мы сейчас
+План заведён, воспроизведение RLIF-05 на базе — `nine/lifecycle/logs/vstack-base.log`. Следующее: S1.
