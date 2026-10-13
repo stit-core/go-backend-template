@@ -72,11 +72,14 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   → PASS; E1 на ветке → письмо одно, запись одна
   - Подтверждено: E1 на ветке → дубль после подтверждения: писем 1, записей 1, ожидающих 0
     (`N/identity/s6-e1.log`); `TestIssueEmailVerification_ReplayAfterConfirmation` → PASS
-- [ ] **AC7** — Поток входов с одного адреса не ставит вход других в очередь хэша на секунды: строгий лимит
+- [x] **AC7** — Поток входов с одного адреса не ставит вход других в очередь хэша на секунды: строгий лимит
   клиента на `/api/auth/*` поверх общего, требование лимита — в шаблоне `auth.md`. На базе (H2,
   GOMAXPROCS=4, 90 rps) вход жертвы с другого адреса — 13–22 с. Проверка: H2
   (`R/tplsec-probes/cmd-api/raprobe_dos_test.go`) на ветке → вход жертвы быстрее 1 с, атакующему —
   429 `RATE_LIMITED`; integration-тест лимита → PASS
+  - Подтверждено: H2 на ветке, GOMAXPROCS=4, 90 rps → вход жертвы 40, 80, 60 мс (без атаки — 42 мс),
+    атакующему 429 — 346 из 376; GOMAXPROCS=20, 95 rps → 50, 50, 40 мс (`N/identity/s7-h2-*.log`);
+    `TestBoot_AuthRateLimit`, `TestAuthRateLimit`, `TestLoad_AuthRateLimit` → PASS
 - [ ] **AC8** — Время ответа на запрос сброса не зависит от того, есть ли учётная запись; письмо сброса
   шлёт подписчик своего события с `sent_at`, токен выпускает он, сбой провайдера письмо не теряет. На базе
   E8 (mailer 300 мс): 0–2 мс против 304–308 мс; B07b: z = 7,68. Проверка: E8 и B07b на ветке → медианы
@@ -129,9 +132,14 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     адрес до записи; канон «ключ — событие или состояние агрегата» — rule `events-and-messaging`, `event.md`
     § 6, `architecture.md` § Idempotency; RED на базе — юнит и маппинг адаптера (`N/identity/s6-red.log`),
     GREEN; `make check` → `✓ check clean`
-- [ ] **S7** — login-hash-queue: лимит клиента на `/api/auth/*` (env `HTTP_AUTH_RATE_LIMIT_*`), требование в
+- [x] **S7** — login-hash-queue: лимит клиента на `/api/auth/*` (env `HTTP_AUTH_RATE_LIMIT_*`), требование в
   шаблоне `auth.md`; INFRA-HANDOFF
   - Проверка: RED → GREEN тестов лимита; H2 → вход жертвы быстрее 1 с · Закрывает: AC7
+  - Сделано: `App.AuthRateLimit` (`HTTP_AUTH_RATE_LIMIT_RPS` 5, `_BURST` 10, отрицательное — отказ старта),
+    `authRateLimit` в `cmd/api/http.go` — `httpkit.RateLimit` на префиксе `/api/auth/` через
+    `httpkit.Middlewares`; потоки идентичности в тестах лимит выключают, 429 brute-force сверяется по коду
+    `AUTH_ACCOUNT_LOCKED`; `.env.example`, требование в шаблоне `auth.md` § Brute-force, блок в накопителе; RED на
+    базе — `TestBoot_AuthRateLimit` (401 вместо 429), GREEN; `make check` → `✓ check clean`
 - [ ] **S8** — reset-timing: запрос сброса делает одну и ту же работу для любого адреса, письмо — подписчик
   события (`sent_at`, миграция `0006`), строка о гарантии доставки в `domain-mapping.md`; INFRA-HANDOFF
   - Проверка: RED → GREEN тестов `verification`; E8 и B07b → |z| < 3 · Закрывает: AC8 · Зависит от: S7
@@ -168,6 +176,11 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   параллельное подтверждение может закоммититься, остаётся: закрыть его — блокировка строки пользователя в
   подписчике и в подтверждении, то есть смена канона «погашение — первым»; цена окна — лишнее письмо уже
   подтверждённому адресу.
+- Лимит `/api/auth/*` — путь-префикс в `cmd/api` поверх `httpkit.RateLimit`, конфиг — в `App` платформы:
+  одно значение `httpkit.Middlewares` на граф задаёт приложение; refresh под тем же лимитом — клиент обновляет
+  сессию раз в `JWT_ACCESS_TTL`. Дефолт 5 rps и запас 10: при одном слоте Argon2id (~25 хэшей/с) клиент
+  занимает не больше пятой части очереди.
+- Чужие файлы: `internal/platform/config` (ничей в таблице программы) — `App.AuthRateLimit` и проверка в `Load`.
 - Чужие файлы: `docs/reference/architecture.md` (трек boundaries, волна 2) — фраза о ключе в § Idempotency.
 - Чужой файл: rule `domain-architecture` (трек boundaries, волна 2) — фраза о канонической форме ключа
   уникальности в «Вход — проверка поля»: конвенция, которую копирует следующая сущность.
@@ -176,4 +189,4 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 —
 
 ## Где мы сейчас
-S1–S6 закрыты. Следующее: S7 — login-hash-queue.
+S1–S7 закрыты. Следующее: S8 — reset-timing.

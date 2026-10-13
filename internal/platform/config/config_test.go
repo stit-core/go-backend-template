@@ -54,6 +54,38 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+// Лимит /api/auth/* по умолчанию — 5 запросов в секунду и запас 10 на клиента; отрицательное значение — отказ
+// старта, а не молча выключенный лимит.
+func TestLoad_AuthRateLimit(t *testing.T) {
+	cases := []struct {
+		name, rps, burst string
+		want             appconfig.AuthRateLimit
+		wantErr          bool
+	}{
+		{name: "defaults", want: appconfig.AuthRateLimit{RPS: 5, Burst: 10}},
+		{name: "from env", rps: "2", burst: "4", want: appconfig.AuthRateLimit{RPS: 2, Burst: 4}},
+		{name: "off", rps: "0", want: appconfig.AuthRateLimit{RPS: 0, Burst: 10}},
+		{name: "negative rate", rps: "-1", wantErr: true},
+		{name: "negative burst", burst: "-1", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setenv(t, "APP_ENV", "dev")
+			setenv(t, "COOKIE_SECURE", "")
+			setenv(t, "HTTP_AUTH_RATE_LIMIT_RPS", tc.rps)
+			setenv(t, "HTTP_AUTH_RATE_LIMIT_BURST", tc.burst)
+
+			got, err := appconfig.Load()
+			if tc.wantErr {
+				require.ErrorContains(t, err, "HTTP_AUTH_RATE_LIMIT_RPS and HTTP_AUTH_RATE_LIMIT_BURST must be >= 0")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got.AuthRateLimit)
+		})
+	}
+}
+
 func TestGuard(t *testing.T) {
 	t.Parallel()
 	app := func(env appconfig.Env, secure bool) *appconfig.App {

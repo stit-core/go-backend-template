@@ -272,3 +272,18 @@ DECIDE —
 RISK   событие user.events.registered, не дочитанное до выкатки, письма подтверждения адреса не получит;
        неудалённый durable остаётся в стриме user без читателя
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   лимит клиента на /api/auth/* поверх общего: optional HTTP_AUTH_RATE_LIMIT_RPS (default 5) и
+       HTTP_AUTH_RATE_LIMIT_BURST (default 10), 0 — выключен, отрицательное — отказ старта; сверх лимита —
+       429 RATE_LIMITED; клиент — IP по HTTP_TRUST_PROXY_HOPS, как у общего лимитера
+WHY    fix-identity-edges S7 — поток входов с одного адреса в пределах общего лимита занимал общую очередь
+       Argon2id процесса: вход остальных ждал секунды (RSECT-01)
+ACTION compose api за прокси — проверить HTTP_TRUST_PROXY_HOPS (число прокси, которые дописывают
+       X-Forwarded-For); значения лимита — по ёмкости хэша (слотов GOMAXPROCS/ARGON2_THREADS) и числу клиентов
+       за одним NAT; поток с многих адресов — лимит на краю (прокси, WAF)
+WHO    проект (compose env, край)
+DECIDE значения лимита: 5 rps и запас 10 на клиента ок? клиенты за общим NAT?
+RISK   без HTTP_TRUST_PROXY_HOPS за прокси у всех клиентов один bucket: вход и обновление сессии сверх 5 rps на
+       весь сервис — 429; клиенты за одним NAT делят его так же
+===

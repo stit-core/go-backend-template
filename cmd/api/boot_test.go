@@ -228,6 +228,43 @@ func TestBoot_StopBudgetRequired(t *testing.T) {
 	require.ErrorIs(t, fx.New(service).Err(), errStopBudget)
 }
 
+// Строгий лимит клиента на /api/auth/* стоит в графе service: поток одного клиента получает 429, а не
+// место в общей очереди Argon2id процесса; клиент — IP из цепочки прокси, прочие пути лимит не делят.
+func TestBoot_AuthRateLimit(t *testing.T) {
+	serviceEnv(t)
+	t.Setenv("HTTP_TRUST_PROXY_HOPS", "1")
+	t.Setenv("HTTP_AUTH_RATE_LIMIT_RPS", "1")
+	t.Setenv("HTTP_AUTH_RATE_LIMIT_BURST", "2")
+	var srv *httpkit.Server
+	app := fxtest.New(t, service, fx.Populate(&srv))
+	app.RequireStart()
+	defer app.RequireStop()
+	client := &http.Client{Timeout: 10 * time.Second}
+	send := func(method, path, ip string) (int, string) {
+		req, err := http.NewRequestWithContext(t.Context(), method, "http://"+srv.Addr().String()+path, http.NoBody)
+		require.NoError(t, err)
+		req.Header.Set("X-Forwarded-For", ip)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		var apiErr httpkit.APIError
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&apiErr))
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode, apiErr.Code
+	}
+
+	for range 2 {
+		status, code := send(http.MethodPost, "/api/auth/refresh", "198.51.100.1")
+		require.NotEqual(t, http.StatusTooManyRequests, status, "within the burst: %s", code)
+	}
+	status, code := send(http.MethodPost, "/api/auth/refresh", "198.51.100.1")
+	require.Equal(t, http.StatusTooManyRequests, status)
+	require.Equal(t, "RATE_LIMITED", code)
+	status, code = send(http.MethodPost, "/api/auth/refresh", "198.51.100.2")
+	require.NotEqual(t, http.StatusTooManyRequests, status, "another client has its own bucket: %s", code)
+	status, code = send(http.MethodGet, "/api/users/me", "198.51.100.1")
+	require.Equal(t, http.StatusUnauthorized, status, "a path outside /api/auth/ is not limited: %s", code)
+}
+
 func sourceNames(srcs []pgkit.Source) []string {
 	names := make([]string, len(srcs))
 	for i, s := range srcs {

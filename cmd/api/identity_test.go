@@ -128,6 +128,7 @@ func (m *mailTap) sent() ([]string, []string) {
 // таблиц, метрики доменов.
 func TestIdentity(t *testing.T) {
 	pg := serviceEnv(t)
+	noAuthRateLimit(t)
 
 	logs, mail, metrics := &requestLog{}, &mailTap{}, metrictest.NewProvider()
 	var srv *httpkit.Server
@@ -162,7 +163,7 @@ func TestIdentity(t *testing.T) {
 	// Ключ антибрутфорса — адрес соединения: без HTTP_TRUST_PROXY_HOPS X-Forwarded-For его не меняет, и
 	// клиент, подставляющий в каждый запрос свою цепочку адресов (длиннее любого разумного числа прокси),
 	// получает блокировку, как все.
-	status := 0
+	status, code := 0, ""
 	for i := range 6 {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/api/auth/login",
 			strings.NewReader(`{"email":"`+email+`","password":"`+wrongPassword+`"}`))
@@ -171,10 +172,13 @@ func TestIdentity(t *testing.T) {
 		req.Header.Set("X-Forwarded-For", forwardedChain(i, 32))
 		resp, err := anon.Do(req)
 		require.NoError(t, err)
+		var refused httpkit.APIError
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&refused))
 		require.NoError(t, resp.Body.Close())
-		status = resp.StatusCode
+		status, code = resp.StatusCode, refused.Code
 	}
 	require.Equal(t, http.StatusTooManyRequests, status, "the brute-force guard locks the account after repeated failures, whatever X-Forwarded-For says")
+	require.Equal(t, "AUTH_ACCOUNT_LOCKED", code)
 
 	db := pg.Pool(t)
 	require.Eventually(t, func() bool {
@@ -258,6 +262,13 @@ func TestIdentity(t *testing.T) {
 		"the auth domain writes its metrics to the meter provider of telemetry")
 	require.InDelta(t, 1, snap.Get(t, "biz_verification_password_reset_requested_total", "result", "ok").Value, 0,
 		"the verification domain writes its metrics to the meter provider of telemetry")
+}
+
+// noAuthRateLimit выключает лимит клиента на /api/auth/*: потоки идентичности шлют запросы с одного адреса
+// подряд, а лимит держит TestBoot_AuthRateLimit.
+func noAuthRateLimit(t *testing.T) {
+	t.Helper()
+	t.Setenv("HTTP_AUTH_RATE_LIMIT_RPS", "0")
 }
 
 // forwardedChain — цепочка X-Forwarded-For запроса n из hops своих записей IPv4 (IPv6 одной /64 guard
@@ -406,6 +417,7 @@ func openSessions(t *testing.T, db *pgxpool.Pool, userID string) int {
 // пользователя.
 func TestSessions(t *testing.T) {
 	pg := serviceEnv(t)
+	noAuthRateLimit(t)
 	mail := &mailTap{}
 	var srv *httpkit.Server
 	app := fxtest.New(t, service,
@@ -680,9 +692,10 @@ func loginCookie(ctx context.Context, api sessionAPI, email, password string) (i
 // 200 после смены, не держит живую сессию, и открытых сессий пользователя после смены нет.
 func TestSessions_LoginDuringPasswordChange(t *testing.T) {
 	pg := serviceEnv(t)
-	// Все запросы теста — с одного IP: лимитер httpkit не должен глушить гонку.
+	// Все запросы теста — с одного IP: лимитеры httpkit и /api/auth/* не должны глушить гонку.
 	t.Setenv("HTTP_RATE_LIMIT_RPS", "100000")
 	t.Setenv("HTTP_RATE_LIMIT_BURST", "100000")
+	noAuthRateLimit(t)
 	var srv *httpkit.Server
 	app := fxtest.New(t, service, fx.Populate(&srv))
 	app.RequireStart()

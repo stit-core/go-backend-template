@@ -31,7 +31,7 @@ claims/principal. authnkit-примитивы (хеш паролей, TOTP). П�
 Публичного пути сделать admin нет. При `external` — admin назначает внешняя идентичность.>
 
 ## Brute-force
-<bruteforcekit: что защищается (вход, запросы сброса пароля), счётчики, lock-политика, поведение при сбое guard'а (вход — fail-closed), cleanup-job. При `external` вход — вне сервиса.>
+<bruteforcekit: что защищается (вход, запросы сброса пароля), счётчики, lock-политика, поведение при сбое guard'а (вход — fail-closed), cleanup-job. Лимит клиента на `/api/auth/*` (`HTTP_AUTH_RATE_LIMIT_*`, по умолчанию 5 rps и запас 10) обязателен при публичном входе: его значение — по ёмкости очереди Argon2id (слотов `GOMAXPROCS/ARGON2_THREADS`, хэш — десятки мс), клиент — IP по `HTTP_TRUST_PROXY_HOPS`; поток с многих адресов держит край (прокси, WAF) — кто и как. При `external` вход — вне сервиса.>
 
 ## Generates
 <Что de-template родит:

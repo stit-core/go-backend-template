@@ -16,8 +16,17 @@ import (
 
 // App — конфиги самого приложения; конфиги китов читают их <kit>.NewConfig.
 type App struct {
-	Env    Env `envconfig:"APP_ENV" required:"true"`
-	Cookie authgate.CookieConfig
+	Env           Env `envconfig:"APP_ENV" required:"true"`
+	Cookie        authgate.CookieConfig
+	AuthRateLimit AuthRateLimit
+}
+
+// AuthRateLimit — token-bucket на клиента (IP, как у лимитера httpkit) для /api/auth/*: вход, регистрация,
+// смена и сброс пароля считают Argon2id в общей очереди процесса, и поток одного клиента в пределах общего
+// лимита занял бы её для всех. RPS = 0 выключает его: лимит держит край (прокси, WAF).
+type AuthRateLimit struct {
+	RPS   int `default:"5"  envconfig:"HTTP_AUTH_RATE_LIMIT_RPS"`
+	Burst int `default:"10" envconfig:"HTTP_AUTH_RATE_LIMIT_BURST"`
 }
 
 // Env — окружение сервиса (APP_ENV): вне Dev старт не пускает небезопасную конфигурацию (Guard).
@@ -43,6 +52,9 @@ func Load() (*App, error) {
 	var cfg App
 	if err := kitconfig.Load(&cfg, kitconfig.Env()); err != nil {
 		return nil, fmt.Errorf("app config: %w", err)
+	}
+	if cfg.AuthRateLimit.RPS < 0 || cfg.AuthRateLimit.Burst < 0 {
+		return nil, errors.New("app config: HTTP_AUTH_RATE_LIMIT_RPS and HTTP_AUTH_RATE_LIMIT_BURST must be >= 0")
 	}
 	return &cfg, nil
 }
