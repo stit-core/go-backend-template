@@ -31,11 +31,14 @@ blocked-by: —
 - Существующие миграции, `go.mod`/`go.sum`, `pkg/policy`, `internal/platform/authgate/`.
 
 ## Критерии приёмки
-- [ ] **AC1** — RENF-01, переменные make: `make -i check MAKECMDGOALS=x`, `MAKECMDGOALS=x make -n check`,
+- [x] **AC1** — RENF-01, переменные make: `make -i check MAKECMDGOALS=x`, `MAKECMDGOALS=x make -n check`,
   `MAKECMDGOALS=x MAKEFLAGS=i make check` на красном дереве печатали `✓ check clean` — теперь отказ make
   до первого шага; переменные `MAKE*` пушащего (`MAKECMDGOALS=x GOFLAGS=… git push`) до гейта pre-push не
   доходят. Проверка: `go test ./internal/archtest -run 'TestMakeCheckCannotBeForged|TestPrePushGatesPushedCommit'`
   → PASS; те же тесты на Makefile и pre-push базы → FAIL
+  - Подтверждено: на базе FAIL 10 форм (`-i`/`-n` с `MAKECMDGOALS` из командной строки и окружения,
+    `MAKEFLAGS=i` с ней, `GATE`, `SHELL`, `GOFLAGS` с ней, `MAKEFILE_LIST`, `-i --eval 'x: check'`) и
+    pre-push (`goals=x make=true`); на ветке оба теста PASS (`N/gate/s1-red-list.txt`, `s1-green.log`)
 - [ ] **AC2** — RENF-01, окружение оболочки: с `BASH_ENV=<файл с exit 0>`, `SHELLOPTS=noexec` и
   экспортированной функцией `set` шаги-скрипты гейта на красном дереве остаются красными, pre-push не
   пропускает красный коммит, commit-msg — сообщение не по форме. Проверка: тесты окружения оболочки в
@@ -74,9 +77,13 @@ blocked-by: —
   Проверка: перегон кейсов `R/tpl-enf/run.py` и fail-open сценариев → поймано
 
 ## Шаги
-- [ ] **S1** — Самозащита `make check` не зависит от `MAKECMDGOALS`: `MAKECMDGOALS` и `MAKEFILE_LIST`
+- [x] **S1** — Самозащита `make check` не зависит от `MAKECMDGOALS`: `MAKECMDGOALS` и `MAKEFILE_LIST`
   вызывающего — отказ make, отказы гейта — при разборе и первой строкой рецепта; pre-push снимает `MAKE*`
   - Проверка: RED — новые формы на базе; GREEN — тесты PASS; `make check` → ✓ · Закрывает: AC1 · Зависит от: —
+  - Сделано: `gate_forged` — отказ make при `MAKECMDGOALS`/`MAKEFILE_LIST` вызывающего, `gate_refuse` — при
+    разборе по цели и первой строкой `check::`; pre-push снимает `MAKE*`, `MFLAGS`, `GNUMAKEFLAGS`; 44 формы
+    `TestMakeCheckCannotBeForged` (go-заглушка в PATH — подделка краснеет за секунды, без рекурсии) и
+    `TestPrePushGatesPushedCommit` → PASS; `make check` → ✓
 - [ ] **S2** — Окружение оболочки не подделывает гейт: Makefile снимает `BASH_ENV` и соседей с рецептов,
   хуки стартуют `bash -p` и снимают их с проверок, которые запускают
   - Проверка: RED → GREEN тестов окружения оболочки; `make check` → ✓ · Закрывает: AC2 · Зависит от: S1
@@ -113,5 +120,6 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-План заведён. Следующее: S1 — формы `MAKECMDGOALS` в `TestMakeCheckCannotBeForged` (RED на базе),
-затем правка Makefile и pre-push.
+S1 закрыт: самозащита не зависит от `MAKECMDGOALS`, pre-push снимает переменные make. Следующее: S2 —
+окружение оболочки (`BASH_ENV`, `SHELLOPTS`, функции): тесты на шаги-скрипты и хуки (RED), затем `unexport`
+в Makefile и `bash -p` хуков.

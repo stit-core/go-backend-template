@@ -35,8 +35,15 @@ while read -r local_ref local_sha _ _; do
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")
     git -C "$root" worktree add --detach --quiet "$tmp" "$commit"
     echo "pre-push: $local_ref — make check в свежем worktree $(git -C "$root" rev-parse --short "$commit")"
-    # Флаги и makefile'ы вызывающего make (MAKEFLAGS=i, -n…) до гейта не доходят; stdin гейта — не
-    # список ref'ов, его дочитывает цикл.
-    env -u MAKEFLAGS -u MFLAGS -u GNUMAKEFLAGS -u MAKEFILES make -C "$tmp" check </dev/null
+    # Переменные make из окружения пушащего (MAKEFLAGS=i, MAKEFILES, MAKECMDGOALS, MAKE…) до гейта не
+    # доходят: каждая из них меняет шаги или выключает его самозащиту. stdin гейта — не список ref'ов,
+    # его дочитывает цикл.
+    drop=()
+    while IFS= read -r -d '' entry; do
+        if [[ ${entry%%=*} =~ ^(MAKE.*|MFLAGS|GNUMAKEFLAGS)$ ]]; then
+            drop+=(-u "${entry%%=*}")
+        fi
+    done < <(env -0)
+    env ${drop[@]+"${drop[@]}"} make -C "$tmp" check </dev/null
     cleanup
 done

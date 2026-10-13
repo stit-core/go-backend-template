@@ -53,27 +53,37 @@ fmt-check: ## Проверка форматирования без мутаци�
 # Makefile: -f вызывающего в под-make не переходит, а GNUmakefile make прочёл бы первым.
 GATE = $(MAKE) -f Makefile --no-print-directory PKG= VERBOSE= FORMAT=
 
+# Цели и список makefile'ов задаёт сам make. MAKECMDGOALS из командной строки, окружения или makefile'а,
+# прочитанного раньше, выключил бы отказы гейта ниже (они включаются по цели), MAKEFILE_LIST из командной
+# строки — сверку makefile'ов: с такими переменными Makefile не читается ни для какой цели.
+override gate_forged := $(if $(filter-out default undefined,$(origin MAKECMDGOALS)),MAKECMDGOALS) \
+	$(if $(filter command% environment% override,$(origin MAKEFILE_LIST)),MAKEFILE_LIST)
+ifneq (,$(strip $(gate_forged)))
+$(error make не запускается с переменной $(strip $(gate_forged)) — её задаёт сам make)
+endif
+
 # make check не запускается там, где сказал бы «clean», не проверив всё: -i и -k глушат ошибки шагов,
 # -n/-q/-t их не выполняют, -p печатает рецепты, -j пускает чужой рецепт рядом, подмена переменных
 # гейта (и --eval до чтения Makefile) меняет шаги, makefile, прочитанный раньше этого, подменяет
 # рецепт, GOFLAGS (из env или go env -w) — go test и vet, API_TEST_MAIN_ARGS — перезапуск тестов
-# cmd/api в main. override — чтобы guard не выключался своей же переменной.
-ifneq (,$(filter check,$(MAKECMDGOALS)))
-override gate_bad := $(foreach f,i k n p q t,$(if $(findstring $f,$(firstword -$(MAKEFLAGS))),-$f)) \
+# cmd/api в main. Отказ — дважды: при чтении Makefile по цели (с -n, -q и -t рецепт не исполняется) и
+# первой строкой рецепта — когда прочитаны все makefile'ы и какой бы целью до рецепта ни дошли
+# (--eval 'x: check'). override — чтобы guard не выключался своей же переменной.
+override gate_bad = $(strip $(foreach f,i k n p q t,$(if $(findstring $f,$(firstword -$(MAKEFLAGS))),-$f)) \
 	$(if $(filter -j%,$(MAKEFLAGS)),-j) $(if $(filter --eval=%,$(MAKEFLAGS)),--eval) \
 	$(filter-out $(abspath Makefile),$(abspath $(MAKEFILE_LIST))) \
 	$(foreach v,MAKE SHELL .SHELLFLAGS MAKEFILES GATE DETAIL API_TEST_MAIN_ARGS,$(if $(filter command% environment% override,$(origin $v)),$v=…)) \
-	$(if $(shell go env GOFLAGS),GOFLAGS=$(shell go env GOFLAGS))
-ifneq (,$(strip $(gate_bad)))
-$(error make check не запускается с $(strip $(gate_bad)) — запусти просто make check)
-endif
+	$(if $(shell go env GOFLAGS),GOFLAGS=$(shell go env GOFLAGS)))
+override gate_refuse = $(if $(gate_bad),$(error make check не запускается с $(gate_bad) — запусти просто make check))
+ifneq (,$(filter check,$(MAKECMDGOALS)))
+$(gate_refuse)
 endif
 
 # Второй makefile (make -f Makefile -f extra.mk, MAKEFILES) подменил бы гейт. Рецепт check — правило «::»:
-# чужое «check:» — ошибка разбора, чужое «check::» идёт после этого, а его первая строка сверяет состав
-# makefile'ов, когда прочитаны все, — до первого шага гейта и при любых флагах make.
+# чужое «check:» — ошибка разбора, чужое «check::» идёт после этого, а его первая строка повторяет отказы,
+# когда прочитаны все makefile'ы, — до первого шага гейта и при любых флагах make.
 check:: ## Канонический gate (pre-push) по всему дереву; состав — CLAUDE.md § Команды
-	$(if $(filter-out $(abspath Makefile),$(abspath $(MAKEFILE_LIST))),$(error make check не запускается с makefile'ами $(strip $(MAKEFILE_LIST)) — только Makefile этого каталога))
+	$(gate_refuse)
 	@echo "→ make fmt-check"
 	@$(GATE) fmt-check
 	@echo "→ go vet -tags=integration ./..."

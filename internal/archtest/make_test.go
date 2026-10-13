@@ -11,28 +11,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMakeCheckCannotBeForged: флаги make, подмена переменных гейта и лишний makefile (check: или check::,
-// до или после Makefile, MAKEFILES) не подделывают «✓ check clean». Makefile под подделку (переприсваивает
-// MAKEFILE_LIST) обходит любую сверку внутри make — это правка гейта, вердикт для remote — pre-push.
-// Настоящий гейт здесь падает на первом шаге: gofumpt в PATH — false, поэтому проба не гоняет гейт целиком.
+// callerEnv — окружение теста без переменных make и git вызывающего (тест идёт и внутри make check, а тот —
+// в хуке git) и без PATH, с конфигом git без глобального и системного; extra — поверх.
+func callerEnv(extra ...string) []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if !strings.HasPrefix(key, "MAKE") && !strings.HasPrefix(key, "GIT_") && key != "MFLAGS" && key != "GNUMAKEFLAGS" && key != "PATH" {
+			env = append(env, kv)
+		}
+	}
+	env = append(env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	return append(env, extra...)
+}
+
+// TestMakeCheckCannotBeForged: флаги make, переменные вызывающего (командная строка и окружение) и лишний
+// makefile (check: или check::, до или после Makefile, MAKEFILES) не подделывают «✓ check clean». Makefile
+// под подделку (переприсваивает MAKEFILE_LIST) обходит любую сверку внутри make — это правка гейта, вердикт
+// для remote — pre-push. Инструменты гейта здесь — заглушки: gofumpt роняет первый шаг, а go отвечает только
+// на go env. Форма, прошедшая самозащиту, с -i дошла бы до test-int, а он снова запустил бы этот тест; без
+// go шаги падают сразу, и подделка видна за секунды.
 func TestMakeCheckCannotBeForged(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
+	require.FileExists(t, filepath.Join(root, "Makefile")) // make читает его сам: без этого кеш go test не видит правок
 	bin, fakes := t.TempDir(), t.TempDir()
 	fail, err := exec.LookPath("false")
 	require.NoError(t, err)
-	require.NoError(t, os.Symlink(fail, filepath.Join(bin, "gofumpt")))
+	for _, tool := range []string{"gofumpt", "golangci-lint", "sqlc", "mockery"} {
+		require.NoError(t, os.Symlink(fail, filepath.Join(bin, tool)))
+	}
+	realGo, err := exec.LookPath("go")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\n[ \"$1\" = env ] && exec \""+realGo+
+		"\" \"$@\"\necho \"go $*: the forge probe has no toolchain\" >&2\nexit 1\n"), 0o700))
 	writeFiles(t, fakes, map[string]string{
 		"colon.mk":  "check:\n\t@echo \"✓ check clean\"\n",
 		"double.mk": "check::\n\t@echo \"✓ check clean\"\n",
 		"shell.mk":  "override SHELL := /bin/true\n",
+		"goals.mk":  "MAKECMDGOALS := x\n",
 	})
 	colon, double, shell := filepath.Join(fakes, "colon.mk"), filepath.Join(fakes, "double.mk"), filepath.Join(fakes, "shell.mk")
+	goals := filepath.Join(fakes, "goals.mk")
 	for _, tc := range []struct {
 		name string
 		args []string
 		env  []string
-		gate bool // настоящий гейт запускается (и падает на заглушке)
+		gate bool // настоящий гейт запускается (и падает на заглушке первого шага)
 	}{
 		{name: "make check", args: []string{"check"}, gate: true},
 		{name: "-f ./Makefile", args: []string{"-f", "./Makefile", "check"}, gate: true},
@@ -44,35 +69,114 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 		{name: "MAKEFILES", args: []string{"check"}, env: []string{"MAKEFILES=" + double}},
 		{name: "--eval", args: []string{"--eval", "SHELL:=/bin/true", "check"}},
 		{name: "-E rule", args: []string{"-E", "check:: ; @echo \"✓ check clean\"", "check"}},
-		{name: "-k", args: []string{"-k", "-f", "Makefile", "-f", double, "check"}},
-		{name: "-j", args: []string{"-j2", "-f", "Makefile", "-f", double, "check"}},
+		{name: "-k and second makefile", args: []string{"-k", "-f", "Makefile", "-f", double, "check"}},
+		{name: "-j and second makefile", args: []string{"-j2", "-f", "Makefile", "-f", double, "check"}},
 		{name: "-p", args: []string{"-p", "check"}},
 		{name: "-i", args: []string{"-i", "check"}},
+		{name: "-k", args: []string{"-k", "check"}},
+		{name: "-j8", args: []string{"-j8", "check"}},
+		{name: "--ignore-errors", args: []string{"--ignore-errors", "check"}},
+		{name: "--keep-going", args: []string{"--keep-going", "check"}},
+		{name: "--dry-run", args: []string{"--dry-run", "check"}},
+		{name: "--touch", args: []string{"--touch", "check"}},
+		{name: "--question", args: []string{"--question", "check"}},
 		{name: "-e with GATE", args: []string{"-e", "check"}, env: []string{"GATE=true"}},
+		{name: "MAKEFLAGS=i on the command line", args: []string{"check", "MAKEFLAGS=i"}},
+		{name: "MAKEFLAGS=i in env", args: []string{"check"}, env: []string{"MAKEFLAGS=i"}},
+		{name: "GOFLAGS in env", args: []string{"check"}, env: []string{"GOFLAGS=-run=^$"}},
+		{name: "GOFLAGS on the command line", args: []string{"check", "GOFLAGS=-run=^$"}},
+		{name: "API_TEST_MAIN_ARGS in env", args: []string{"check"}, env: []string{"API_TEST_MAIN_ARGS=healthcheck"}},
+
+		// Формы RENF-01 повторного аудита: отказы самозащиты включались по MAKECMDGOALS, а её задаёт вызывающий.
+		{name: "-i with MAKECMDGOALS on the command line", args: []string{"-i", "check", "MAKECMDGOALS=x"}},
+		{name: "-i with MAKECMDGOALS in env", args: []string{"-i", "check"}, env: []string{"MAKECMDGOALS=x"}},
+		{name: "-n with MAKECMDGOALS on the command line", args: []string{"-n", "check", "MAKECMDGOALS=x"}},
+		{name: "-n with MAKECMDGOALS in env", args: []string{"-n", "check"}, env: []string{"MAKECMDGOALS=x"}},
+		{name: "MAKEFLAGS=i and MAKECMDGOALS in env", args: []string{"check"}, env: []string{"MAKECMDGOALS=x", "MAKEFLAGS=i"}},
+		{name: "GATE and MAKECMDGOALS on the command line", args: []string{"check", "MAKECMDGOALS=x", "GATE=true"}},
+		{name: "SHELL and MAKECMDGOALS on the command line", args: []string{"check", "MAKECMDGOALS=x", "SHELL=/bin/true"}},
+		{name: "GOFLAGS and MAKECMDGOALS in env", args: []string{"check"}, env: []string{"MAKECMDGOALS=x", "GOFLAGS=-skip=TestLayout"}},
+		{name: "MAKECMDGOALS from a makefile read before", args: []string{"-i", "-f", goals, "-f", "Makefile", "check"}},
+		{name: "-i, second makefile and MAKEFILE_LIST", args: []string{"-i", "-f", "Makefile", "-f", double, "check", "MAKEFILE_LIST=Makefile"}},
+		{name: "MAKEFILE_LIST on the command line", args: []string{"-f", "Makefile", "-f", double, "check", "MAKEFILE_LIST=Makefile"}},
+		{name: "-i behind a goal alias from --eval", args: []string{"-i", "--eval", "x: check", "x"}},
+		{name: "-k behind a goal alias and a second makefile", args: []string{"-k", "-f", "Makefile", "-f", double, "--eval", "x: check", "x"}},
+
+		{name: "-o of a step", args: []string{"-o", "fmt-check", "-o", "lint", "check"}, gate: true},
+		{name: "two goals", args: []string{"check", "lint"}, gate: true},
+		{name: "PKG, VERBOSE, FORMAT and COVER_FLOOR", args: []string{"check", "PKG=./pkg/...", "VERBOSE=1", "FORMAT=detailed", "COVER_FLOOR=1"}, gate: true},
+		{name: "guard variables on the command line", args: []string{"check", "gate_bad=", "gate_refuse=", "gate_forged="}, gate: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			cmd := exec.CommandContext(t.Context(), "make", tc.args...)
 			cmd.Dir = root
-			// Без окружения вызывающего make: тест идёт и внутри make check.
-			for _, kv := range os.Environ() {
-				key, _, _ := strings.Cut(kv, "=")
-				switch key {
-				case "MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKELEVEL", "MAKEFILES", "MAKEOVERRIDES", "PATH":
-				default:
-					cmd.Env = append(cmd.Env, kv)
-				}
-			}
-			cmd.Env = append(cmd.Env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-			cmd.Env = append(cmd.Env, tc.env...)
-			out, err := cmd.CombinedOutput()
+			cmd.Env = callerEnv(append([]string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, tc.env...)...)
+			data, err := cmd.CombinedOutput()
+			out := string(data)
 			require.Error(t, err, "make %v must fail here:\n%s", tc.args, out)
-			require.NotContains(t, string(out), "✓ check clean", "make %v forges the verdict of the gate", tc.args)
-			if tc.gate {
-				require.Contains(t, string(out), "→ make fmt-check", "make %v must run the real gate", tc.args)
+			require.NotContains(t, out, "✓ check clean", "make %v forges the verdict of the gate", tc.args)
+			if !tc.gate {
+				require.NotContains(t, out, "→ make fmt-check", "make %v must refuse to start the gate", tc.args)
+				return
 			}
+			require.Contains(t, out, "→ make fmt-check", "make %v must run the real gate", tc.args)
+			require.NotContains(t, out, "→ go vet", "make %v went past the failed step", tc.args)
 		})
 	}
+}
+
+// TestPrePushGatesPushedCommit: pre-push гоняет make check верхнего коммита пушимого ref'а в свежем
+// worktree — по дереву и Makefile самого коммита, и переменные make пушащего до гейта не доходят: каждая из
+// них меняет шаги или выключает его самозащиту. Гейт здесь игрушечный: Makefile коммита печатает вердикт
+// (файл verdict) и то, что дошло до него из окружения.
+func TestPrePushGatesPushedCommit(t *testing.T) {
+	t.Parallel()
+	hook := filepath.Join(repoRoot(t), "scripts", "git-hooks", "pre-push")
+	require.FileExists(t, hook) // хук читает bash: без этого кеш go test не видит его правок
+	repo, tmp := t.TempDir(), t.TempDir()
+	git(t, repo, "init", "-q", "-b", "main")
+	commit := func(verdict string) string {
+		t.Helper()
+		writeFiles(t, repo, map[string]string{
+			"Makefile": "check:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)]\"; test \"$$(cat verdict)\" = green\n",
+			"verdict":  verdict + "\n",
+		})
+		commitAll(t, repo)
+		return strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	}
+	push := func(stdin string, env ...string) (string, error) {
+		t.Helper()
+		cmd := exec.CommandContext(t.Context(), hook, "origin", "git@example.org:acme/backend.git")
+		cmd.Dir = repo
+		cmd.Stdin = strings.NewReader(stdin)
+		cmd.Env = callerEnv(append([]string{"PATH=" + os.Getenv("PATH"), "TMPDIR=" + tmp}, env...)...)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	zero := strings.Repeat("0", 40)
+	red := commit("red")
+
+	out, err := push("refs/heads/main " + red + " refs/heads/main " + zero + "\n")
+	require.Error(t, err, "a red commit must not be pushed:\n%s", out)
+	require.Contains(t, out, "toy gate: red goals=check make=make flags=[]")
+
+	forge := filepath.Join(tmp, "forge.mk")
+	writeFiles(t, tmp, map[string]string{"forge.mk": "check::\n\t@echo forged\n"})
+	out, err = push("refs/heads/main "+red+" refs/heads/main "+zero+"\n",
+		"MAKEFLAGS=i", "MFLAGS=-i", "GNUMAKEFLAGS=-i", "MAKEFILES="+forge, "MAKECMDGOALS=x", "MAKE=true", "MAKELEVEL=3")
+	require.Error(t, err, "make variables of the pusher's environment let a red commit through:\n%s", out)
+	require.Contains(t, out, "toy gate: red goals=check make=make flags=[]", "make variables of the pusher reach the gate")
+	require.NotContains(t, out, "forged")
+
+	green := commit("green")
+	out, err = push("refs/heads/main " + green + " refs/heads/main " + red + "\n")
+	require.NoError(t, err, "a green commit must be pushed:\n%s", out)
+	require.Contains(t, out, "toy gate: green")
+
+	out, err = push("refs/heads/old " + zero + " refs/heads/old " + red + "\n")
+	require.NoError(t, err, "a deleted ref has nothing to check:\n%s", out)
+	require.NotContains(t, out, "toy gate")
 }
 
 // releaseSandbox — репо с Makefile и release.sh шаблона на заглушках: скрипты шагов гейта, preflight и
