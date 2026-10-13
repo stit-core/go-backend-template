@@ -92,12 +92,13 @@ blocked-by: —
     (`nine/lifecycle/logs/s3-{fresh,setup}.log`): база — `OK`, ни строки о хуках, сбой `make setup` оставляет
     `.git/hooks`; ветка — `HOOKS: не подключены — make setup (.git/hooks: нет исполняемого commit-msg)`,
     `ATTENTION: hooks`, doctor `FAIL : git hooks`, после сбоя установки — `HOOKS: OK`
-- [x] **AC8** — RADP-01: при `identity: own` адаптер нового домена к `user` по `port.md` гейт не красит, без
-  решения и при `external` проверка прежняя; `port.md` об этом говорит (на базе `fp22c` красный).
-  Проверка: тест archtest → PASS; `run.py --no-full <worktree ветки> fp22c-new-consumer-identity-own` →
-  зелёный, `fp22` — красный, как задумано
-  - Подтверждено: `TestIdentityDependents` → PASS (6 случаев); `run.py --no-full` на копии ветки: `fp22c` —
-    GREEN-quick, `fp22` — CAUGHT `TestPruneNamesIdentityDependents` (`nine/lifecycle/logs/s1-fp22.tsv`)
+- [x] **AC8** — RADP-01: в форке при `identity: own` адаптер нового домена к `user` по `port.md` гейт не
+  красит, без решения и при `external` проверка прежняя; `port.md` об этом говорит (на базе `fp22c`
+  красный). Проверка: тест archtest → PASS; `run.py --no-full <клон ветки с origin форка>
+  fp22c-new-consumer-identity-own` → зелёный, `fp22` — красный, как задумано
+  - Подтверждено: `TestIdentityDependents` → PASS (6 случаев); `run.py --no-full` на клоне ветки с origin
+    `acme/own`: `fp22c` — GREEN-quick, `fp22` — CAUGHT `TestPruneNamesIdentityDependents`
+    (`nine/lifecycle/tpl-adp/n1-fork-fp22.tsv`); с origin канона `fp22c` — CAUGHT `TestCanonicalTemplate`
 
 ## Шаги
 - [x] **S1** — RADP-01: проверка prune молчит при `identity: own`, тест законной формы, строка в `port.md`
@@ -205,6 +206,9 @@ blocked-by: —
   `_`; `.` хаб не переводит): имя репо, из которого не выходит имя переменной окружения (`1c-gateway`,
   `my.service`), — отказ до тега, а не handoff, который хаб не выкатит. Разбор origin один:
   `release.sh --image` (как `--hooks` у doctor) — doctor ищет логин registry по хосту этого пути.
+- Валидатор трека (N1): в каноническом репо решения `identity` нет вовсе (`TestCanonicalTemplate`):
+  `identity: own` в каноне сняло бы проверку prune с кода шаблона, и форки с `external` получили бы
+  красный гейт на нём. Поэтому RADP-01 (`fp22c`) проверяется в клоне с origin форка.
 - RLIF-03: правило «до prune домены идентичности в графе — их env и киты остаются» — в A.3 и wiring §2
   (где агент читает), снятие — шагами prune по именам («Окружение», «Подключение по стеку»), без
   номеров: шаги сдвинулись. Проверка — гейтом на состояниях форка `ext` аудитора, которые даёт новый

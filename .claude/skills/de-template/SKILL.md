@@ -33,8 +33,8 @@ description: Развернуть платформу форка go-backend-templ
    git config --get remote.origin.url | grep -qiE '[:/]stit-core/go-backend-template(\.git)?/?$' \
      && echo "STOP: origin — канонический шаблон; de-template — только в форке"
    ```
-   Гейт держит то же: в каноническом репо `make check` красный на чужом module path и внешней
-   идентичности (archtest `TestCanonicalTemplate`), pre-push такое не отправит.
+   Гейт держит то же: в каноническом репо `make check` красный на чужом module path и решении
+   identity в `docs/stack/auth.md` (archtest `TestCanonicalTemplate`), pre-push такое не отправит.
 2. **Стек stable** — все 8 артефактов на месте, `status: stable`, валидатор зелёный; иначе СТОП →
    `stack-deep-dive`:
    ```bash

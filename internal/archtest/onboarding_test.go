@@ -161,8 +161,8 @@ func unnamedIdentityDependents(t *testing.T, root string, files []goFile) []stri
 var canonicalOrigin = regexp.MustCompile(`(?i)[:/]stit-core/go-backend-template(\.git)?/?$`)
 
 // TestCanonicalTemplate: в каноническом репо шаблона (origin — stit-core/go-backend-template) module path —
-// шаблона, внешней идентичности нет: de-template и prune разрушили бы шаблон, а с ними гейт красный и
-// pre-push их не отправит. У форка origin свой — ему можно.
+// шаблона, решения identity нет: de-template и prune разрушили бы шаблон, а identity: own сняло бы с его
+// кода проверку prune. С ними гейт красный, и pre-push их не отправит. У форка origin свой — ему можно.
 func TestCanonicalTemplate(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -183,7 +183,7 @@ func TestCanonicalTemplate(t *testing.T) {
 	require.NotNil(t, mod, "go.mod has no module line")
 	require.True(t, strings.HasSuffix(string(mod[1]), "/stit-core/go-backend-template"),
 		"origin is the canonical template, but go.mod says module %s: de-template runs on a fork, never on the template", mod[1])
-	require.False(t, identityExternal(t), "origin is the canonical template, but docs/stack/auth.md chose external identity: prune runs on a fork, never on the template")
+	require.Empty(t, identityChoice(t, root), "origin is the canonical template, but docs/stack/auth.md names an identity: the stack is designed in a fork, never in the template")
 }
 
 // TestStackValidator: шаблоны stack как есть — заглушки, de-template развернул бы из них пустой фундамент:
