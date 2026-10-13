@@ -328,6 +328,12 @@ func TestTemplateUpdatePaths(t *testing.T) {
 		"c/cmd/main.go":   "package main\n\nfunc main() {}\n",
 	}, readFiles(t, requested, code...), "PATHS brings the code of the template with the module path and the edits of the fork")
 
+	lines := fork(t)
+	out = bash(t, lines, script, "template/v1.1.0", "", "c/auth\nc/cmd")
+	require.Contains(t, out, "код по запросу (PATHS): c/auth c/cmd\n")
+	require.Equal(t, "package main\n\nfunc main() { run() }\n", readFiles(t, lines, "c/cmd/main.go")["c/cmd/main.go"],
+		"a path on the next line of PATHS is brought too")
+
 	typo := fork(t)
 	out, err := runIn(t, typo, "bash", script, "template/v1.1.0", "", "c/auth c/autth")
 	require.Error(t, err, out)

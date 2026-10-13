@@ -117,7 +117,8 @@ fi
 
 ! git merge-base --is-ancestor "$TO" "$FROM" || fail "обвязка форка уже содержит $TO (база $FROM)"
 [ -z "$(git status --porcelain)" ] || fail "дерево не чистое — закоммить или спрячь (git stash -u)"
-read -ra extra <<<"$PATHS"
+# Пути — через пробел или с новой строки: read без -d читал бы одну строку и молча терял остальные.
+read -r -d '' -a extra <<<"$PATHS" || true
 # Опечатка в пути промолчала бы: перенос без этого пути выглядит так же, как перенос без изменений в нём.
 for p in "${extra[@]}"; do
     p=${p#:(exclude)}
@@ -176,7 +177,7 @@ rm -f "$patch"
 
 conflicts=$(git diff --name-only --diff-filter=U)
 echo "обвязка: $FROM → $TO, файлов в индексе: $(git diff --cached --name-only | wc -l | tr -d ' ')"
-[ -z "$PATHS" ] || echo "код по запросу (PATHS): $PATHS"
+[ ${#extra[@]} -eq 0 ] || echo "код по запросу (PATHS): ${extra[*]}"
 [ -z "$conflicts" ] || { echo "конфликты — разреши и git add:"; sed 's/^/  /' <<<"$conflicts"; }
 [ ${#absent[@]} -eq 0 ] || { echo "нет в форке — не тронуты:"; printf '  %s\n' "${absent[@]}"; }
 [ ${#kept[@]} -eq 0 ] || { echo "шаблон удалил, форк менял — реши сам:"; printf '  %s\n' "${kept[@]}"; }
