@@ -8,8 +8,8 @@
 // генераторов; а ещё подключение доменов в cmd/api, ссылки прозы на make-цели и пути, //nolint только
 // включённых линтеров, пути и версия обвязки шаблона (.template), её перенос в форк (make
 // template-update), маркеры конфликтов, пути доменов идентичности и процедура их prune, канонический
-// репо шаблона, валидатор stack-артефактов, хуки guard-bash и commit-msg и самозащита make check. На
-// archtest и archkit //nolint не действует.
+// репо шаблона, валидатор stack-артефактов, хуки guard-bash и commit-msg, подключение git-хуков (make
+// setup, status, doctor) и самозащита make check. На archtest и archkit //nolint не действует.
 package archtest
 
 import (

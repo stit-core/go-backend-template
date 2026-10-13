@@ -53,7 +53,7 @@ make release VERSION=vX.Y.Z
 `scripts/release.sh` делает за тебя, по порядку:
 1. валидирует `VERSION` (semver; lightweight/`:latest`/`:edge` отвергаются);
 2. **confirm-промпт** `⚠ confirm release <v> from main@<sha>? [y/N]` (нет TTY/EOF → отмена, accidental release невозможен);
-3. `release-preflight.sh env` — окружение релиза, fail-fast до гейта и тега: ветка=main / clean / ключи ssh-agent читают приватные модули `go.mod` / `docker buildx` / **`make doctor`** (docker-auth, sqlc-drift, непарные миграции);
+3. `release-preflight.sh env` — окружение релиза, fail-fast до гейта и тега: ветка=main / clean / ключи ssh-agent читают приватные модули `go.mod` / `docker buildx` / **`make doctor`** (docker-auth, sqlc-drift, непарные миграции, git-хуки);
 4. чистое дерево, `make check`, `make e2e-smoke` (собранный бинарь со стеком в docker) и `govulncheck` (уязвимость, которую вызывает код; нужна сеть) — тег и образы только у проверенного HEAD (красный → fail до тега);
 5. annotated tag, если на HEAD ещё нет (иначе использует существующий; конфликт версий → fail);
 6. `release-preflight.sh tag` — на HEAD annotated semver-тег, и он — запрошенный;

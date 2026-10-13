@@ -5,7 +5,7 @@
 #   scripts/tools/status.sh          # быстрая сводка + критичный детект (~2s)
 #   scripts/tools/status.sh --full   # + итог make lint (тяжёлое, ~10s)
 #
-# Критичный детект (build/sqlc-drift/непарные миграции/draft/infra-touch)
+# Критичный детект (хуки/build/sqlc-drift/непарные миграции/draft/infra-touch)
 # гонится ВСЕГДА — не за --full. Каждая секция `== Name ==` для парсинга
 # агентом. Финальная строка: `OK` / `ATTENTION: <что>` — сигнал cockpit'у.
 
@@ -52,6 +52,15 @@ echo
 
 # === Critical === (всегда, быстро)
 echo "== Critical =="
+
+# git-хуки — единственная проверка изменения до remote (CI нет); подключает make setup.
+hooks=$(bash scripts/tools/doctor.sh --hooks)
+if [ -z "$hooks" ]; then
+    echo "HOOKS: OK"
+else
+    echo "HOOKS: не подключены — make setup ($hooks)"
+    ATTN="$ATTN hooks"
+fi
 
 # build — компилируется ли дерево
 if command -v go >/dev/null 2>&1 && [ -f go.mod ]; then

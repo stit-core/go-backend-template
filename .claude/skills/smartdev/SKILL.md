@@ -28,7 +28,7 @@ make status
 
 (`make status A=--full` — добавит итог `make lint` (`LINT: OK` / `LINT: FAIL`), +~10s; только если нужен lint-обзор.)
 
-Парси секции: `== Branch ==`, `== Working tree ==`, `== Critical ==` (BUILD/SQLC/MIGRATIONS/STACK-DRAFTS), `== Infra-touch ==`, `== Plan ==` (активные планы: статус, прогресс шагов и критериев, следующий шаг; число пунктов бэклога; handoff, если ждёт релиза), `== Template ==` (версия обвязки и тег шаблона новее неё — из тегов последнего `make template-update`; новее — в «Что висит»: перенос через `/upgrade`, по OK юзера), `== Domains ==`, `== Recent commits ==`, `== TODOs in changed files ==`. Последняя строка — `OK` или `ATTENTION:<что>`: это твой сигнал ветвления.
+Парси секции: `== Branch ==`, `== Working tree ==`, `== Critical ==` (HOOKS/BUILD/SQLC/MIGRATIONS/STACK-DRAFTS), `== Infra-touch ==`, `== Plan ==` (активные планы: статус, прогресс шагов и критериев, следующий шаг; число пунктов бэклога; handoff, если ждёт релиза), `== Template ==` (версия обвязки и тег шаблона новее неё — из тегов последнего `make template-update`; новее — в «Что висит»: перенос через `/upgrade`, по OK юзера), `== Domains ==`, `== Recent commits ==`, `== TODOs in changed files ==`. Последняя строка — `OK` или `ATTENTION:<что>`: это твой сигнал ветвления.
 
 ### 2. Поднять контекст (фикс «не помнит») — читай сам, не жди скрипта
 
@@ -47,6 +47,7 @@ make status
 
 | Сигнал из status / задачи | Действие — чейн |
 |---|---|
+| `ATTENTION:` hooks | → `make setup` (хуки подключаются первой строкой, затем инструменты): без хуков коммит и push уходят мимо гейта; дальше — по таблице |
 | `ATTENTION:` build / sqlc-drift / lint / красный тест | → `triage-failure` (red-арм, RED→GREEN разбор) |
 | `== Infra-touch ==` не `none` (или правишь env/секрет/миграцию с эффектом/cross-service/go.mod) | → `infra-handoff` (оформить INFRA-HANDOFF до claim/коммита) |
 | Активный план `in-progress` | Продолжай со следующего открытого шага; перед остановкой обнови «Где мы сейчас» (skill `plan`) |
@@ -76,7 +77,7 @@ make status
 ```
 ## Состояние
 **Ветка:** `<branch>` <ahead/behind>
-**Critical:** BUILD ok · SQLC ok · MIGRATIONS ok · STACK-DRAFTS none   (или ATTENTION:<...>)
+**Critical:** HOOKS ok · BUILD ok · SQLC ok · MIGRATIONS ok · STACK-DRAFTS none   (или ATTENTION:<...>)
 **Infra-touch:** none / <файлы>
 **План:** `<slug>` in-progress → дальше S<N>  (или —)
 

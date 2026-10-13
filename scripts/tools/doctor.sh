@@ -3,14 +3,32 @@
 #
 # Использование:
 #   scripts/tools/doctor.sh            # все проверки
+#   scripts/tools/doctor.sh --hooks    # только git-хуки: пусто — подключены, иначе причина (make status)
 #
 # Read-only: ничего не мутирует (mocks-drift — через make check/gen-check).
-# FAIL-класс (exit 2): docker-демон, docker-registry auth, sqlc-drift, непарные миграции.
+# FAIL-класс (exit 2): docker-демон, docker-registry auth, sqlc-drift, непарные миграции, git-хуки.
 # WARN-класс (exit 0): .env.local ключи, draft-артефакты.
 # Канонический status-line в конце: `OK: ...` / `FAIL: N blocking`.
 
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# hooks_problem — пусто, когда git запускает хуки этого дерева (make setup): каждый хук scripts/git-hooks
+# есть в каталоге хуков git, исполняемый и тот же; иначе — что не так.
+hooks_problem() {
+    local dir f h
+    dir=$(git rev-parse --git-path hooks 2>/dev/null) || { echo "не git-репо"; return; }
+    for f in scripts/git-hooks/*; do
+        [ -f "$f" ] || continue
+        h=${f##*/}
+        [ -x "$dir/$h" ] || { echo "$dir: нет исполняемого $h"; return; }
+        cmp -s "$dir/$h" "$f" || { echo "$dir/$h — не хук этого дерева ($f)"; return; }
+    done
+}
+if [ "${1:-}" = "--hooks" ]; then
+    hooks_problem
+    exit 0
+fi
 
 FAIL=0
 WARN=0
@@ -100,6 +118,14 @@ if [ -d docs/stack ]; then
     else
         warn "stack-artifacts: draft —$sdrafts (углуби через /stack-deep-dive)"
     fi
+fi
+
+# 7. git-хуки — CI нет: commit-msg, pre-commit и pre-push — единственная проверка изменения до remote.
+hooks=$(hooks_problem)
+if [ -z "$hooks" ]; then
+    ok "git hooks: подключены (scripts/git-hooks)"
+else
+    fail "git hooks: не подключены — make setup ($hooks)"
 fi
 
 echo

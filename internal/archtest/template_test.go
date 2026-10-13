@@ -277,16 +277,23 @@ func templateScript(t *testing.T) string {
 // глобального конфига git: подпись коммитов и хуки пользователя тест не видят.
 func runIn(t *testing.T, dir, name string, args ...string) (string, error) {
 	t.Helper()
+	return runEnv(t, dir, nil, name, args...)
+}
+
+// runEnv — runIn с env поверх окружения; переменные make вызывающего не доходят: тест идёт и внутри make check.
+func runEnv(t *testing.T, dir string, env []string, name string, args ...string) (string, error) {
+	t.Helper()
 	cmd := exec.CommandContext(t.Context(), name, args...)
 	cmd.Dir = dir
 	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, "GIT_") {
+		if key, _, _ := strings.Cut(kv, "="); !strings.HasPrefix(key, "GIT_") && !strings.HasPrefix(key, "MAKE") && key != "MFLAGS" && key != "GNUMAKEFLAGS" {
 			cmd.Env = append(cmd.Env, kv)
 		}
 	}
 	cmd.Env = append(cmd.Env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
 		"GIT_AUTHOR_NAME=archtest", "GIT_AUTHOR_EMAIL=archtest@example.com",
 		"GIT_COMMITTER_NAME=archtest", "GIT_COMMITTER_EMAIL=archtest@example.com")
+	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

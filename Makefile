@@ -150,10 +150,12 @@ release: ## release VERSION=vX.Y.Z — confirm→preflight(+doctor)→check→e2
 	@bash scripts/release.sh "$(VERSION)"
 
 ##@ SETUP
-setup: ## Поставить pinned dev-tools и подключить git-хуки scripts/git-hooks (core.hooksPath)
-	@bash scripts/install-tools.sh
+# Хуки — первыми: установка инструментов идёт по сети, её сбой не оставляет клон без хуков.
+setup: ## Подключить git-хуки scripts/git-hooks (core.hooksPath) и поставить pinned dev-tools
 	@git config core.hooksPath scripts/git-hooks
-	@echo "✓ setup: dev-tools + git hooks (core.hooksPath=scripts/git-hooks)"
+	@echo "✓ git hooks: core.hooksPath=scripts/git-hooks"
+	@bash scripts/install-tools.sh
+	@echo "✓ setup: git hooks + dev-tools"
 
 doctor: ## Fail-fast preflight: auth/env/drift
 	@bash scripts/tools/doctor.sh $(A)

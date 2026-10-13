@@ -65,10 +65,14 @@ blocked-by: —
   - Подтверждено: `vstack.sh` на ветке — V4–V7, V11, V15, V19, V20 → FAIL, V3 → OK
     (`nine/lifecycle/logs/vstack-{base,s2}.log`); `TestStackValidator` → PASS (9 заглушек, 4 решения);
     вердикты «пуста» на всех `docs/stack` машины — те же, что у базового валидатора
-- [ ] **AC7** — RENF-03: клон без `make setup` — `make status` пишет строку `HOOKS:` о неподключённых хуках и
+- [x] **AC7** — RENF-03: клон без `make setup` — `make status` пишет строку `HOOKS:` о неподключённых хуках и
   `ATTENTION: hooks`, `make doctor` — FAIL о хуках, `/smartdev` ведёт в `make setup`; `make setup`
   подключает хуки первой строкой — сбой установки инструментов их не отменяет (на базе — `OK`, о хуках ни
   строки: `R/tpl-enf/toy-fresh.tsv`). Проверка: тест archtest → PASS; свежий клон ветки → status и doctor
+  - Подтверждено: `TestHooksVisible` (4 случая) и `TestSetupWiresHooksFirst` → PASS; свежие клоны
+    (`nine/lifecycle/logs/s3-{fresh,setup}.log`): база — `OK`, ни строки о хуках, сбой `make setup` оставляет
+    `.git/hooks`; ветка — `HOOKS: не подключены — make setup (.git/hooks: нет исполняемого commit-msg)`,
+    `ATTENTION: hooks`, doctor `FAIL : git hooks`, после сбоя установки — `HOOKS: OK`
 - [x] **AC8** — RADP-01: при `identity: own` адаптер нового домена к `user` по `port.md` гейт не красит, без
   решения и при `external` проверка прежняя; `port.md` об этом говорит (на базе `fp22c` красный).
   Проверка: тест archtest → PASS; `run.py --no-full <worktree ветки> fp22c-new-consumer-identity-own` →
@@ -87,8 +91,11 @@ blocked-by: —
   - Сделано: `TestStackValidator` — RED на всех девяти заглушках, после правки `section_body_nonempty` —
     PASS; `vstack.sh` — заглушки FAIL, заполненные артефакты OK; проза `draft-stable.md`, `wiring.md`;
     `make check` → `✓ check clean`
-- [ ] **S3** — RENF-03: хуки в `make status` и `make doctor`, ATTENTION в `/smartdev`, `make setup` — хуки первыми
+- [x] **S3** — RENF-03: хуки в `make status` и `make doctor`, ATTENTION в `/smartdev`, `make setup` — хуки первыми
   - Проверка: тест archtest → RED, затем PASS; свежий клон ветки · Закрывает: AC7 · Зависит от: —
+  - Сделано: `hooks_test.go` — RED на базе (status `OK` без строки о хуках, `.git/hooks` после сбоя setup),
+    после правки PASS; проверка — `doctor.sh` (`--hooks` для status), строка `HOOKS` и `ATTENTION: hooks`,
+    FAIL doctor, хуки — первая строка `make setup`; строка в `/smartdev`; `make check` → `✓ check clean`
 - [ ] **S4** — RLIF-04: путь образа и имя сервиса в handoff — из origin, путь в confirm-промпте; доки и
   INFRA-HANDOFF о пути образа
   - Проверка: `TestReleaseImage` → RED, затем PASS; пробные форки · Закрывает: AC1 · Зависит от: —
@@ -115,6 +122,13 @@ blocked-by: —
   `_*` не в счёт), плюс подзаголовок и таблица без строк под разделителем. Размытое решение (V10
   «соответствующий код в platform/») и слово «потом» рядом с плейсхолдером (V21) машина не судит — это
   смысл, его держит чек-лист `draft-stable.md` § 2 и архитектор.
+- RENF-03: «подключены» — каждый хук `scripts/git-hooks` есть в каталоге хуков git
+  (`git rev-parse --git-path hooks`), исполняемый и тот же по содержимому: так OK и у worktree, чей
+  `core.hooksPath` абсолютный на хуки основного дерева с тем же содержимым, а чужой или устаревший каталог
+  хуков — отказ. Проверка одна — `doctor.sh` (`--hooks` для `status.sh`, как `--status` у
+  `template-update.sh`); doctor — FAIL, поэтому `release-preflight env` без хуков останавливает релиз.
+- Правка чужого файла: перечень в комментарии пакета `internal/archtest/archtest_test.go` (трек gate) —
+  «подключение git-хуков (make setup, status, doctor)»: CLAUDE.md держит перечень проверок там.
 
 ## Handoff
 - Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
@@ -122,4 +136,4 @@ blocked-by: —
   `docs/reference/ecosystem.md`. В хаб не пишем — отчёт дирижёру.
 
 ## Где мы сейчас
-S1 (RADP-01) и S2 (RLIF-05) закрыты. Следующее: S3 — хуки в `make status` и `make doctor`.
+S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03) закрыты. Следующее: S4 — путь образа релиза из origin.
