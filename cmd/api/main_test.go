@@ -143,6 +143,7 @@ func TestCheckStopBudget(t *testing.T) {
 	}{
 		{name: "kit defaults", http: 10 * time.Second, nats: 10 * time.Second},
 		{name: "behind a load balancer", drain: 5 * time.Second, http: 10 * time.Second, nats: 10 * time.Second},
+		{name: "http at exactly two thirds", drain: 10 * time.Second, http: 10 * time.Second, nats: 10 * time.Second},
 		{name: "http over two thirds", drain: 15 * time.Second, http: 10 * time.Second, nats: 10 * time.Second, wantErr: "HTTP_SHUTDOWN_DRAIN_DELAY + HTTP_SHUTDOWN_TIMEOUT = 25s"},
 		{name: "nats drain over a third", http: 10 * time.Second, nats: 11 * time.Second, wantErr: "NATS_DRAIN_TIMEOUT = 11s"},
 	}

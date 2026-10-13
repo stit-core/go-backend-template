@@ -172,8 +172,10 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Сделано: `TestRun_CreatesAdminOnce` — роль и `email_verified` после первого запуска,
     `TestRun_RequiresAddressAndPassword`, `TestRun_DeletedAccountKeepsNothing`; SD1, SD5, SD6, SD7 → KILLED
     (`N/identity/mutants/SD*.log`, раннер `N/identity/mutate.py`); `make check` → `✓ check clean`
-- [ ] **S11** — RTSTT-04: `fx.StopTimeout` графа и граница ⅔ бюджета остановки
+- [x] **S11** — RTSTT-04: `fx.StopTimeout` графа и граница ⅔ бюджета остановки
   - Проверка: мутанты K01, K04 → красные · Закрывает: AC10
+  - Сделано: случай «ровно ⅔» в `TestCheckStopBudget`, `app.StopTimeout() == stopTimeout` в `TestBoot`; K01, K04 →
+    KILLED (`N/identity/mutants/K0*.log`); `make check` → `✓ check clean`
 - [ ] **S12** — RTSTT-05: триггер `updated_at` держат тесты репозитория user
   - Проверка: мутант MI1 → красный · Закрывает: AC10
 - [ ] **S13** — RTSTT-06: вход сверяет `out.User`, схема регистрации — формат адреса, адаптер auth —
@@ -218,4 +220,4 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 —
 
 ## Где мы сейчас
-S1–S10 закрыты. Следующее: S11 — `fx.StopTimeout` и граница ⅔ бюджета (RTSTT-04).
+S1–S11 закрыты. Следующее: S12 — триггер `updated_at` (RTSTT-05).

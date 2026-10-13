@@ -131,6 +131,7 @@ func TestBoot(t *testing.T) {
 		fx.Populate(&srv),
 		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
 	app.RequireStart()
+	require.Equal(t, stopTimeout, app.StopTimeout(), "the stop hooks get the budget checkStopBudget checks the env against, not the fx default")
 	require.Same(t, telemetryMP, otel.GetMeterProvider(),
 		"telemetry.Module sets its meter provider as the global one: without it every metric of the kits is a no-op")
 
