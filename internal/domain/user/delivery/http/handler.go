@@ -158,7 +158,8 @@ func (h *Handler) delete(ctx context.Context, in *UserDeleteInput) (*struct{}, e
 }
 
 // Правило каждой ошибки домена — одно. userErrors переводит в хендлерах их все (ни одна не уходит
-// 500 — archtest), таблица операции объявляет в OpenAPI те, что отдаёт её usecase.
+// 500 — archtest), таблица операции объявляет в OpenAPI те, что отдаёт её usecase. 409 регистрации выдаёт,
+// что адрес занят: уникальный адрес — требование продукта (SECURITY.md § Принятые компромиссы).
 var (
 	notFoundRule         = httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"}
 	alreadyExistsRule    = httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"}
