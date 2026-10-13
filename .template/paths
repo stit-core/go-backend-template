@@ -8,6 +8,9 @@ CLAUDE.md
 :(exclude).claude/skills/stack-deep-dive/state
 Makefile
 scripts
+Dockerfile
+Dockerfile.migrate
+.dockerignore
 .golangci.yml
 .gitignore
 docs/README.md

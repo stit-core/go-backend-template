@@ -57,12 +57,17 @@ blocked-by: —
     (`nine/lifecycle/logs/s6-doctor.log`): база — `OK: doctor clean`, о шаблоне ни строки; ветка —
     `WARN : template: template/v1.0.0 · в шаблоне новее: template/v1.3.0 → skill /upgrade`, remote
     недоступен — `INFO … не ответил`, локальные теги и дерево не тронуты
-- [ ] **AC4** — RLIF-01: `make template-update TO=… PATHS='<пути>'` переносит с обвязкой и код вне
+- [x] **AC4** — RLIF-01: `make template-update TO=… PATHS='<пути>'` переносит с обвязкой и код вне
   `.template/paths` тем же трёхсторонним слиянием (module path форка, конфликты в индексе); формат
   аннотации — с разделом «Безопасность»; `/upgrade` пишет в тело коммита перенесённое и отклонённое из
   «Платформа» и «Безопасность»; `Dockerfile*` — решение в «Решениях». Проверка: `TestTemplateUpdate` →
   PASS (случай `PATHS`); копия форка `half` → перенос до `template/v1.3.0` с `PATHS` → код в индексе,
   конфликты названы (ср. `R/tpl-lif/logs/half-C-3way.log`)
+  - Подтверждено: `TestTemplateUpdatePaths` → PASS; `half` — база 0 файлов кода, ветка 59 и те же два
+    конфликта кода, что у аудитора (`nine/lifecycle/logs/s7-half.log`); формат аннотации с разделом
+    `Безопасность` (`contributing.md § Версия обвязки`), `/upgrade` шаги 2 и 5 — строка «перенесено» или
+    «отклонено — причина» на каждый пункт; `Dockerfile`, `Dockerfile.migrate`, `.dockerignore` — в
+    `.template/paths` (`TestTemplatePaths` → PASS)
 - [ ] **AC5** — RLIF-03: онбординг с `identity: external` проходим буквально: A.3 и wiring §2 оставляют
   стримы и киты доменов идентичности до prune, `prune.md` снимает киты, которых нет в `dependencies.md`
   (на базе A.3 буквально → красные `TestBoot`, `TestIdentity`; wiring §2 для auditkit → красный
@@ -128,9 +133,12 @@ blocked-by: —
     (`nine/lifecycle/logs/s7-half.log`): база — кода в индексе 0, ветка — 59 файлов кода, 6 конфликтов
     (4 обвязки и `cmd/api/boot_test.go`, `internal/domain/auth/usecase.go`, как в `half-C-3way.log`),
     module path форка; `/upgrade` шаг 2, `contributing.md`; `make check` → `✓ check clean`
-- [ ] **S8** — RLIF-01: раздел «Безопасность» в аннотации, `/upgrade` — перенесено и отклонено в теле
+- [x] **S8** — RLIF-01: раздел «Безопасность» в аннотации, `/upgrade` — перенесено и отклонено в теле
   коммита, `Dockerfile*` в `.template/paths`
   - Проверка: `make check` → `✓ check clean`; проза сверена с движком · Закрывает: AC4 · Зависит от: S7
+  - Сделано: раздел `Безопасность` в формате аннотации, `/upgrade` (вступление, шаги 2 и 5, anti-pattern),
+    `ecosystem.md`; `Dockerfile`, `Dockerfile.migrate`, `.dockerignore` в `.template/paths`;
+    `make check` → `✓ check clean`
 - [ ] **S9** — RLIF-03: A.3 и wiring §2 — строки и киты доменов идентичности до prune, шаг wiring в `prune.md`
   - Проверка: пробный форк `external` без auditkit по новому тексту · Закрывает: AC5 · Зависит от: —
 - [ ] **S10** — Гейт и приёмка: эксперименты всех критериев на итоговом дереве
@@ -170,6 +178,12 @@ blocked-by: —
   обвязки сдвигается одним переносом, код и обвязка — от одной базы, одним гейтом и коммитом (так же
   советует RLIF-07). Код без обвязки тега не переносится: следующий перенос начинался бы с базы, которую
   код уже обогнал. Пути — каталог, файл или `:(exclude)`; шаблонов имён нет (`read -ra`, без glob).
+- RLIF-01: `Dockerfile`, `Dockerfile.migrate` и `.dockerignore` — в `.template/paths`: сборка образа —
+  контракт с `scripts/release.sh` и `TestReleaseBuildForwardsSSHAgent`, которые уже в путях шаблона;
+  вне путей они расходились бы (ssh-mount, `insteadOf`, база по digest), а правку форка перенос
+  покажет конфликтом. Шаг «возьми Dockerfile из тега» аннотации больше не нужен.
+- RLIF-01: «Безопасность» — отдельный раздел аннотации для фиксов вне путей шаблона; перенос или
+  отказ — строкой в теле коммита `/upgrade`. Машиной (хук `commit-msg`) это не держится — вне трека.
 
 ## Handoff
 - Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
@@ -180,5 +194,5 @@ blocked-by: —
   релиза (блок RLIF-04 — в накопителе `handoff.md`).
 
 ## Где мы сейчас
-S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4–S5 (RLIF-04), S6 (RLIF-02), S7 (движок `PATHS`) закрыты.
-Следующее: S8 — раздел «Безопасность», перенесённое и отклонённое в теле коммита, `Dockerfile*`.
+S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4–S5 (RLIF-04), S6 (RLIF-02), S7–S8 (RLIF-01) закрыты.
+Следующее: S9 — RLIF-03, онбординг с `identity: external` (A.3, wiring §2, шаг в `prune.md`).
