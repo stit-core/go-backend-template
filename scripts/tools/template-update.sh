@@ -6,6 +6,8 @@
 #   make template-update TO=template/vX.Y.Z   перенести изменения до тега TO
 #   make template-update TO=… FROM=<коммит>   база переноса — этот коммит шаблона
 #   template-update.sh --status               строка версии для make status (без сети)
+#   template-update.sh --remote               теги remote template для make doctor (git ls-remote): exit 0 —
+#                                             новее версии форка нет, 1 — есть или remote нет, 2 — не ответил
 #
 # Первый перенос форка идёт от коммита шаблона, из которого он создан (дерево первого коммита форка),
 # следующие — от .template/version. Теги шаблона — из remote `template` (git remote add --no-tags
@@ -23,21 +25,53 @@ latest() { git tag -l 'template/v*' --sort=-v:refname | head -1; }
 newer() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$2" ]; }
 module() { awk '$1 == "module" { print $2; exit }'; }
 golibinfra() { awk '{ for (i = 1; i < NF; i++) if ($i ~ /\/golibinfra$/ && $(i + 1) ~ /^v/) { print $(i + 1); exit } }'; }
+# canon V — это репо шаблона: тег его версии V в истории и module path шаблона.
+canon() {
+    git rev-parse -q --verify "refs/tags/$1" >/dev/null && git merge-base --is-ancestor "$1" HEAD &&
+        [ "$(git show "$1:go.mod" | module)" = "$(module <go.mod)" ]
+}
 
 if [ "${1:-}" = "--status" ]; then
     v=$(version) l=$(latest)
     if [ -z "$v" ]; then
         echo "версии обвязки нет (.template/version) — skill /upgrade"
-    elif git rev-parse -q --verify "refs/tags/$v" >/dev/null && git merge-base --is-ancestor "$v" HEAD &&
-        [ "$(git show "$v:go.mod" | module)" = "$(module <go.mod)" ]; then
+    elif canon "$v"; then
         echo "$v +$(git rev-list --count "$v..HEAD") — канон шаблона"
     elif [ -n "$l" ] && newer "$v" "$l"; then
         echo "$v · в шаблоне новее: $l → skill /upgrade"
     elif [ -n "$l" ]; then
-        echo "$v · новее известных тегов шаблона нет (свежие теги — make template-update)"
+        echo "$v · новее известных тегов шаблона нет (теги remote — make doctor)"
     else
-        echo "$v · тегов шаблона в репо нет — в форке их подтянет make template-update"
+        echo "$v · тегов шаблона в репо нет — теги remote называет make doctor"
     fi
+    exit 0
+fi
+
+# Сеть — не ошибка: ни запроса пароля, ни ожидания дольше timeout.
+if [ "${1:-}" = "--remote" ]; then
+    v=$(version)
+    if [ -n "$v" ] && canon "$v"; then
+        echo "$v — канон шаблона"
+        exit 0
+    fi
+    git remote get-url template >/dev/null 2>&1 || {
+        echo "remote template не заведён — о новых тегах шаблона не узнать: git remote add --no-tags template <url шаблона> (skill /upgrade)"
+        exit 1
+    }
+    wait=()
+    ! command -v timeout >/dev/null || wait=(timeout 30)
+    ssh=${GIT_SSH_COMMAND:-$(git config core.sshCommand || echo ssh)}
+    tags=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="$ssh -o BatchMode=yes -o ConnectTimeout=10" \
+        "${wait[@]}" git ls-remote --tags --refs template 'refs/tags/template/v*' 2>/dev/null) || {
+        echo "remote template не ответил — теги шаблона не проверены"
+        exit 2
+    }
+    l=$(sed -n 's#.*refs/tags/##p' <<<"$tags" | sort -V | tail -1)
+    if [ -n "$l" ] && { [ -z "$v" ] || newer "$v" "$l"; }; then
+        echo "${v:-версии обвязки нет} · в шаблоне новее: $l → skill /upgrade"
+        exit 1
+    fi
+    echo "${v:-—} · новее тегов шаблона нет"
     exit 0
 fi
 

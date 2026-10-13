@@ -75,7 +75,9 @@ sibling-checkout'ами (`../<name>`).
   аннотации тега, skill `/upgrade`.
 - **Обвязка — из шаблона `go-backend-template`**: пути из `.template/paths` (CLAUDE.md, `.claude`,
   скрипты, Makefile, lint-конфиг, archtest, доки шаблона). Версия обвязки форка — `.template/version`,
-  новые — теги шаблона `template/vX.Y.Z`; перенос — `make template-update` (skill `/upgrade`).
+  новые — теги шаблона `template/vX.Y.Z` у remote `template` (его заводит финал `/init-service`); новый
+  тег называет `make doctor`, перенос — `make template-update` (skill `/upgrade`). Периодический
+  `/upgrade` по сервисам проекта — зона хаба.
 - **Конфиг и секреты — из окружения контейнера.** В проде их задаёт `<org>/infra`: `.env` на VPS по
   контракту его `.env.example`, интерполяция в compose `environment:`. Схема ключей — артефакт
   `docs/stack/config.md`; значения в этот репо не попадают.

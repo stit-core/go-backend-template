@@ -2,6 +2,7 @@ package archtest
 
 import (
 	"bytes"
+	"errors"
 	"maps"
 	"os"
 	"os/exec"
@@ -264,6 +265,72 @@ func TestTemplateUpdateBeforeVersionTag(t *testing.T) {
 	bash(t, fork, script, "template/v1.2.0")
 	require.Equal(t, map[string]string{".template/version": "template/v1.2.0\n", "h/k.md": "k1\n", "h/q.md": "q1\n"},
 		readFiles(t, fork, ".template/version", "h/k.md", "h/q.md"))
+}
+
+// TestTemplateUpdateRemote: о новом теге шаблона форк узнаёт из make doctor — теги remote template
+// (git ls-remote, без fetch): тег новее версии форка — WARN с ним и /upgrade, новее нет — OK; remote не
+// заведён — WARN, не ответил — не ошибка; канонический репо шаблона remote не спрашивает.
+func TestTemplateUpdateRemote(t *testing.T) {
+	t.Parallel()
+	script := templateScript(t)
+	tmpl, fork := t.TempDir(), t.TempDir()
+	v1 := map[string]string{".template/paths": ".template\n", ".template/version": "template/v1.0.0\n", "go.mod": "module example.com/tmpl\n"}
+	git(t, tmpl, "init", "-q")
+	writeFiles(t, tmpl, v1)
+	commitAll(t, tmpl)
+	git(t, tmpl, "tag", "-a", "template/v1.0.0", "-m", "template/v1.0.0")
+	writeFiles(t, tmpl, map[string]string{".template/version": "template/v1.1.0\n"})
+	commitAll(t, tmpl)
+	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0")
+
+	writeFiles(t, fork, union(v1, map[string]string{"go.mod": "module example.com/fork\n"}))
+	writeFiles(t, fork, readFiles(t, repoRoot(t), "scripts/tools/doctor.sh", "scripts/tools/template-update.sh"))
+	git(t, fork, "init", "-q")
+	commitAll(t, fork)
+	remote := func(dir string) (string, int) {
+		t.Helper()
+		out, err := runIn(t, dir, "bash", script, "--remote")
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			return out, exit.ExitCode()
+		}
+		require.NoError(t, err, out)
+		return out, 0
+	}
+
+	out, code := remote(fork)
+	require.Equal(t, 1, code, out)
+	require.Contains(t, out, "remote template не заведён")
+
+	git(t, fork, "remote", "add", "--no-tags", "template", tmpl)
+	out, code = remote(fork)
+	require.Equal(t, 1, code, out)
+	require.Equal(t, "template/v1.0.0 · в шаблоне новее: template/v1.1.0 → skill /upgrade\n", out)
+	require.Empty(t, git(t, fork, "tag", "-l"), "the doctor is read-only: ls-remote fetches no tags")
+	bin := t.TempDir()
+	stub, err := exec.LookPath("true")
+	require.NoError(t, err)
+	for _, tool := range []string{"sqlc", "docker"} {
+		require.NoError(t, os.Symlink(stub, filepath.Join(bin, tool)))
+	}
+	doctor, _ := runEnv(t, fork, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, "bash", "scripts/tools/doctor.sh")
+	require.Contains(t, doctor, "\nWARN : template: template/v1.0.0 · в шаблоне новее: template/v1.1.0 → skill /upgrade\n")
+
+	git(t, fork, "remote", "set-url", "template", filepath.Join(t.TempDir(), "missing.git"))
+	out, code = remote(fork)
+	require.Equal(t, 2, code, out)
+	require.Contains(t, out, "remote template не ответил")
+
+	git(t, fork, "remote", "set-url", "template", tmpl)
+	writeFiles(t, fork, map[string]string{".template/version": "template/v1.1.0\n"})
+	commitAll(t, fork)
+	out, code = remote(fork)
+	require.Equal(t, 0, code, out)
+	require.Equal(t, "template/v1.1.0 · новее тегов шаблона нет\n", out)
+
+	out, code = remote(tmpl)
+	require.Equal(t, 0, code, out)
+	require.Equal(t, "template/v1.1.0 — канон шаблона\n", out)
 }
 
 func templateScript(t *testing.T) string {

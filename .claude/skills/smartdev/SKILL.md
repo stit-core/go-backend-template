@@ -28,7 +28,7 @@ make status
 
 (`make status A=--full` — добавит итог `make lint` (`LINT: OK` / `LINT: FAIL`), +~10s; только если нужен lint-обзор.)
 
-Парси секции: `== Branch ==`, `== Working tree ==`, `== Critical ==` (HOOKS/BUILD/SQLC/MIGRATIONS/STACK-DRAFTS), `== Infra-touch ==`, `== Plan ==` (активные планы: статус, прогресс шагов и критериев, следующий шаг; число пунктов бэклога; handoff, если ждёт релиза), `== Template ==` (версия обвязки и тег шаблона новее неё — из тегов последнего `make template-update`; новее — в «Что висит»: перенос через `/upgrade`, по OK юзера), `== Domains ==`, `== Recent commits ==`, `== TODOs in changed files ==`. Последняя строка — `OK` или `ATTENTION:<что>`: это твой сигнал ветвления.
+Парси секции: `== Branch ==`, `== Working tree ==`, `== Critical ==` (HOOKS/BUILD/SQLC/MIGRATIONS/STACK-DRAFTS), `== Infra-touch ==`, `== Plan ==` (активные планы: статус, прогресс шагов и критериев, следующий шаг; число пунктов бэклога; handoff, если ждёт релиза), `== Template ==` (версия обвязки и тег шаблона новее неё — из тегов последнего `make template-update`, теги remote `template` называет `make doctor`; новее — в «Что висит»: перенос через `/upgrade`, по OK юзера), `== Domains ==`, `== Recent commits ==`, `== TODOs in changed files ==`. Последняя строка — `OK` или `ATTENTION:<что>`: это твой сигнал ветвления.
 
 ### 2. Поднять контекст (фикс «не помнит») — читай сам, не жди скрипта
 

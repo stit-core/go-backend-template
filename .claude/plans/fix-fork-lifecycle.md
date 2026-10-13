@@ -49,10 +49,14 @@ blocked-by: —
   мутант в копии `Dockerfile` → `go test -run TestReleaseBuildForwardsSSHAgent` → FAIL, без мутанта → PASS
   - Подтверждено: на базе оба мутанта (`Dockerfile` и `Dockerfile.migrate`) → `ok`; на ветке → FAIL с
     причиной («go fetches git.stit.tech over https…», «a fresh image knows no host key…»), дерево → PASS
-- [ ] **AC3** — RLIF-02: финал `/init-service` заводит remote `template`; `make doctor` спрашивает его теги
+- [x] **AC3** — RLIF-02: финал `/init-service` заводит remote `template`; `make doctor` спрашивает его теги
   (`git ls-remote`): тег новее версии форка — строка с ним и `/upgrade`, сбой сети — не ошибка (на базе
   doctor о шаблоне молчит). Проверка: тест archtest → PASS; копия форка `own` с remote на
   `R/tpl-lif/template.git` → `make doctor` называет `template/v1.3.0`; remote недоступен → без FAIL
+  - Подтверждено: `TestTemplateUpdateRemote` → PASS; клон `own` на коммите «онбординг закрыт»
+    (`nine/lifecycle/logs/s6-doctor.log`): база — `OK: doctor clean`, о шаблоне ни строки; ветка —
+    `WARN : template: template/v1.0.0 · в шаблоне новее: template/v1.3.0 → skill /upgrade`, remote
+    недоступен — `INFO … не ответил`, локальные теги и дерево не тронуты
 - [ ] **AC4** — RLIF-01: `make template-update TO=… PATHS='<пути>'` переносит с обвязкой и код вне
   `.template/paths` тем же трёхсторонним слиянием (module path форка, конфликты в индексе); формат
   аннотации — с разделом «Безопасность»; `/upgrade` пишет в тело коммита перенесённое и отклонённое из
@@ -112,8 +116,11 @@ blocked-by: —
   - Проверка: два мутанта → FAIL, дерево → PASS · Закрывает: AC2 · Зависит от: —
   - Сделано: тест сверяет `go mod download` с хостами `ENV GOPRIVATE` Dockerfile'а: `url.git@<host>:.insteadOf`
     для `https://<host>/` и `StrictHostKeyChecking=accept-new`; мутанты убиты; `make check` → `✓ check clean`
-- [ ] **S6** — RLIF-02: remote `template` в финале онбординга, теги шаблона в `make doctor`, проза `/upgrade`
+- [x] **S6** — RLIF-02: remote `template` в финале онбординга, теги шаблона в `make doctor`, проза `/upgrade`
   - Проверка: тест → RED, затем PASS; копия `own` с `template.git` · Закрывает: AC3 · Зависит от: S3
+  - Сделано: `template-update.sh --remote` (`git ls-remote`, exit 0/1/2), строка `template:` в doctor
+    (OK/WARN/INFO), общая проверка канона с `--status`; финал `/init-service` заводит remote, `/upgrade`,
+    `/smartdev`, `ecosystem.md`; `TestTemplateUpdateRemote` RED → PASS; `make check` → `✓ check clean`
 - [ ] **S7** — RLIF-01: перенос по запросу `PATHS=` в движке `make template-update`
   - Проверка: `TestTemplateUpdate` с `PATHS` → RED, затем PASS; копия `half` · Закрывает: AC4 · Зависит от: —
 - [ ] **S8** — RLIF-01: раздел «Безопасность» в аннотации, `/upgrade` — перенесено и отклонено в теле
@@ -150,6 +157,10 @@ blocked-by: —
 - Правка чужого файла: `TestReleaseBuildForwardsSSHAgent` в `internal/archtest/make_test.go` (трек gate) —
   без неё мутантов не убить, а копия проверки в своём файле дала бы два источника одного факта.
   Хосты — из `ENV GOPRIVATE` того же Dockerfile'а: форк на своём хосте правит его, а не тест.
+- RLIF-02: теги remote спрашивает `make doctor`, а не `make status`: cockpit гоняют каждую сессию, он без
+  сети; doctor идёт в `release-preflight env` — у каждого релиза форк видит новый тег. Новый тег и
+  отсутствие remote — WARN (не блокирует), сеть — INFO; `git ls-remote` без fetch — doctor read-only,
+  `timeout 30` и `BatchMode` — без зависания и вопросов. Канон шаблона remote не спрашивает.
 
 ## Handoff
 - Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
@@ -160,5 +171,5 @@ blocked-by: —
   релиза (блок RLIF-04 — в накопителе `handoff.md`).
 
 ## Где мы сейчас
-S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4–S5 (RLIF-04) закрыты. Следующее: S6 — теги шаблона в
-`make doctor`, remote `template` в финале онбординга.
+S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4–S5 (RLIF-04), S6 (RLIF-02) закрыты. Следующее: S7 — перенос
+кода по запросу `PATHS=` в `make template-update`.

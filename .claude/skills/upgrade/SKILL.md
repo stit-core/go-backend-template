@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Обновить сервис по двум каналам — golibinfra по аннотациям тегов (`go get`, правки по Breaking, `make check`, handoff) и обвязку шаблона (CLAUDE.md, `.claude`, скрипты, Makefile, lint-конфиг, archtest, доки шаблона) от тега `template/vX.Y.Z` через `make template-update`. Используй, когда просят поднять golibinfra или подтянуть улучшения шаблона, когда `make status` в `== Template ==` назвал тег шаблона новее версии форка или у форка нет `.template/version`.
+description: Обновить сервис по двум каналам — golibinfra по аннотациям тегов (`go get`, правки по Breaking, `make check`, handoff) и обвязку шаблона (CLAUDE.md, `.claude`, скрипты, Makefile, lint-конфиг, archtest, доки шаблона) от тега `template/vX.Y.Z` через `make template-update`. Используй, когда просят поднять golibinfra или подтянуть улучшения шаблона, когда `make doctor` (строка `template:`) или `make status` (`== Template ==`) назвал тег шаблона новее версии форка или у форка нет `.template/version`.
 ---
 
 # Skill: upgrade
@@ -17,8 +17,9 @@ description: Обновить сервис по двум каналам — goli
 ## Когда применять
 
 - Задача или план хаба: «подними golibinfra до vX.Y.Z», «подтяни обновления шаблона».
-- `make status` → `== Template ==`: `… · в шаблоне новее: template/vX.Y.Z` — предложи перенос юзеру.
-  Строка знает теги последнего `make template-update`; свежие — его превью.
+- `make doctor` → `template: … · в шаблоне новее: template/vX.Y.Z` (теги remote `template`,
+  `git ls-remote`) или `make status` → `== Template ==` с той же строкой (теги последнего
+  `make template-update`) — предложи перенос юзеру.
 - У форка нет `.template/version` — раздел «Форк без версии обвязки».
 
 Оба канала трогают «Сначала спросить» и гейт (`go.mod`; `Makefile`, `scripts/`, `internal/archtest`,
@@ -49,8 +50,9 @@ description: Обновить сервис по двум каналам — goli
 
 ## Обвязка шаблона
 
-Один раз — remote шаблона без его тегов: теги релизов шаблона `vX.Y.Z` смешались бы с тегами форка,
-теги обвязки `template/*` приносит `make template-update`.
+Remote шаблона без его тегов заводит финал `/init-service`; нет его (`make doctor`: «remote template не
+заведён») — заведи: теги релизов шаблона `vX.Y.Z` смешались бы с тегами форка, теги обвязки
+`template/*` приносит `make template-update`.
 
 ```bash
 git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-template.git

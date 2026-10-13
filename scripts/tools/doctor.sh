@@ -7,7 +7,7 @@
 #
 # Read-only: ничего не мутирует (mocks-drift — через make check/gen-check).
 # FAIL-класс (exit 2): docker-демон, docker-registry auth, sqlc-drift, непарные миграции, git-хуки.
-# WARN-класс (exit 0): .env.local ключи, draft-артефакты.
+# WARN-класс (exit 0): .env.local ключи, draft-артефакты, новый тег шаблона (remote template: сеть, без fetch).
 # Канонический status-line в конце: `OK: ...` / `FAIL: N blocking`.
 
 set -uo pipefail
@@ -127,6 +127,14 @@ if [ -z "$hooks" ]; then
 else
     fail "git hooks: не подключены — make setup ($hooks)"
 fi
+
+# 8. обвязка шаблона — новый тег у remote template (git ls-remote); сеть — не ошибка.
+tpl=$(bash scripts/tools/template-update.sh --remote 2>&1)
+case $? in
+    0) ok "template: $tpl" ;;
+    1) warn "template: $tpl" ;;
+    *) info "template: $tpl" ;;
+esac
 
 echo
 if [ "$FAIL" -gt 0 ]; then

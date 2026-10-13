@@ -74,6 +74,15 @@ Gate: `make check` зелёный.
 
 ### 5. Финал
 
+Канал обвязки — remote шаблона без его тегов: о новом теге `template/vX.Y.Z` скажет `make doctor`
+(`git ls-remote`, сеть — не ошибка), перенос — `/upgrade`.
+
+```bash
+git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-template.git
+```
+
+Gate: `make doctor` → строка `template:` с версией обвязки форка, без «remote template не заведён».
+
 Проект больше не помнит про шаблон: сообщи юзеру — онбординг закрыт, план удалён (skill `/plan`),
 дальше — `/smartdev`; релиз образов — `/release`; обновления golibinfra и обвязки шаблона
 (`.template/`) — `/upgrade`.
