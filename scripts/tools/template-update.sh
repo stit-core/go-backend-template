@@ -60,11 +60,11 @@ if [ "${1:-}" = "--remote" ]; then
         echo "remote template не заведён — о новых тегах шаблона не узнать: git remote add --no-tags template <url шаблона> (skill /upgrade)"
         exit 1
     }
-    wait=()
-    ! command -v timeout >/dev/null || wait=(timeout 30)
+    deadline=()
+    ! command -v timeout >/dev/null || deadline=(timeout 30)
     ssh=${GIT_SSH_COMMAND:-$(git config core.sshCommand || echo ssh)}
     tags=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="$ssh -o BatchMode=yes -o ConnectTimeout=10" \
-        "${wait[@]}" git ls-remote --tags --refs template 'refs/tags/template/v*' 2>/dev/null) || {
+        "${deadline[@]}" git ls-remote --tags --refs template 'refs/tags/template/v*' 2>/dev/null) || {
         echo "remote template не ответил — теги шаблона не проверены"
         exit 2
     }
