@@ -52,7 +52,7 @@ make release VERSION=vX.Y.Z
 
 `scripts/release.sh` делает за тебя, по порядку:
 1. валидирует `VERSION` (semver; lightweight/`:latest`/`:edge` отвергаются);
-2. **confirm-промпт** `⚠ confirm release <v> from main@<sha> → <host>/<org>/<репо>{,-migrate}:<v>? [y/N]` — путь образов сверь с тем, что ждёт хаб (нет TTY/EOF → отмена, accidental release невозможен; origin, из которого путь не вывести, — отказ);
+2. **confirm-промпт** `⚠ confirm release <v> from main@<sha> → <host>/<org>/<репо>{,-migrate}:<v>? [y/N]` — путь образов сверь с тем, что ждёт хаб (нет TTY/EOF → отмена, accidental release невозможен; origin, из которого путь не вывести, и имя репо, которое хаб не выкатит, — `1c-gateway`, `my.service`, — отказ);
 3. `release-preflight.sh env` — окружение релиза, fail-fast до гейта и тега: ветка=main / clean / ключи ssh-agent читают приватные модули `go.mod` / `docker buildx` / **`make doctor`** (docker-auth, sqlc-drift, непарные миграции, git-хуки);
 4. чистое дерево, `make check`, `make e2e-smoke` (собранный бинарь со стеком в docker) и `govulncheck` (уязвимость, которую вызывает код; нужна сеть) — тег и образы только у проверенного HEAD (красный → fail до тега);
 5. annotated tag, если на HEAD ещё нет (иначе использует существующий; конфликт версий → fail);

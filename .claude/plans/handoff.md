@@ -218,9 +218,11 @@ RISK   остановка: ждущий хук кита берёт ⅔ оста�
 
 === INFRA HANDOFF · передай инфра-админу ===
 WHAT   путь образов — <host>/<org>/<репо>{,-migrate} из origin репо сервиса, имя репо — имя сервиса для
-       хаба: тег — <РЕПО>_TAG (`-` и `.` → `_`), выкатка — make bump SVC=<репо>; у репо backend — те же
-       backend, backend-migrate и BACKEND_TAG; шаблон stit-core/go-backend-template выпускает
-       stit-core/go-backend-template{,-migrate} и GO_BACKEND_TEMPLATE_TAG
+       хаба: тег — <РЕПО>_TAG так, как его строит make bump (верхний регистр, `-` → `_`), выкатка —
+       make bump SVC=<репо>; у репо backend — те же backend, backend-migrate и BACKEND_TAG; шаблон
+       stit-core/go-backend-template выпускает stit-core/go-backend-template{,-migrate} и
+       GO_BACKEND_TEMPLATE_TAG; имя репо, из которого не выходит имя переменной (1c-gateway,
+       my.service), релиз отвергает до тега
 WHY    fix-fork-lifecycle S4 — RLIF-04: путь <org>/backend был зашит, и второй сервис орги перезаписывал
        образ первого
 ACTION сервис из шаблона, чей репо назван не backend: image в compose — ${REGISTRY_HOST}/${PROJECT_NAME}/<репо>

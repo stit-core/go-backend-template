@@ -47,9 +47,11 @@ fi
 # 2. docker-registry auth — частая боль: make release падает на unauthorized
 #    в середине пуша. Проверяем ПРИСУТСТВИЕ кред, не валидность токена
 #    (валидность — только сетевым запросом; здесь fail-fast по факту логина).
-HOST=$(git remote get-url origin 2>/dev/null | sed -E 's#^(git@|https?://)([^:/]+)[:/].*#\2#')
-if [ -z "$HOST" ]; then
-    warn "docker: не определить registry host из git remote"
+#    Registry — хост пути образа, который выпустит make release.
+IMAGE=$(bash scripts/release.sh --image 2>/dev/null)
+HOST=${IMAGE%%/*}
+if [ -z "$IMAGE" ]; then
+    warn "docker: путь образа из origin не выводится — make release откажет (scripts/release.sh)"
 elif ! command -v docker >/dev/null 2>&1; then
     warn "docker: бинарь не найден (нужен для make release)"
 else

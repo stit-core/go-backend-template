@@ -6,6 +6,7 @@
 #
 #   make release VERSION=vX.Y.Z
 #   make release VERSION=vX.Y.Z DRY_RUN=1   только handoff: без проверок, тега и образов
+#   release.sh --image                      путь образа из origin для make doctor; пусто — не выводится
 #
 # Handoff — накопитель .claude/plans/handoff.md и разделы `## Handoff` активных планов; после
 # выкатки образов накопитель очищается коммитом (отданное остаётся в дереве тега).
@@ -18,6 +19,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Образ — <host>/<org>/<репо> из origin: у сервисов одной орги свои пути. Userinfo origin (токен https) в
+# вывод не идёт. Порт https-origin — порт registry Gitea, порт ssh к registry не относится.
+ORIGIN=$(git remote get-url origin 2>/dev/null | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)[^@/]*@#\1#; s#/$##' || true)
+IMAGE=$(printf '%s\n' "${ORIGIN%.git}" | tr '[:upper:]' '[:lower:]' |
+    sed -nE -e 's#^https?://([^:/]+(:[0-9]+)?)/([^/]+)/([^/]+)$#\1/\3/\4#p' -e t \
+        -e 's#^([a-z]+://)?([^@/]+@)?([^:/]+)(:[0-9]*)?[:/]([^/]+)/([^/]+)$#\3/\5/\6#p')
+[ "${1:-}" != --image ] || { echo "$IMAGE"; exit 0; }
+
 VERSION="${1:-}"
 [ -n "$VERSION" ] || { echo "release: нужен VERSION. Usage: make release VERSION=vX.Y.Z" >&2; exit 2; }
 [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
@@ -25,18 +34,18 @@ VERSION="${1:-}"
 
 BR=$(git rev-parse --abbrev-ref HEAD)
 SHA=$(git rev-parse --short HEAD)
-# Образ — <host>/<org>/<репо> из origin: у сервисов одной орги свои пути. Хаб берёт образ по имени сервиса
-# (${PROJECT_NAME}/<svc>, тег — <SVC>_TAG): у форка <org>/backend это backend и BACKEND_TAG.
-ORIGIN=$(git remote get-url origin 2>/dev/null || true)
-ORIGIN=${ORIGIN%/}
-IMAGE=$(printf '%s\n' "${ORIGIN%.git}" | tr '[:upper:]' '[:lower:]' |
-    sed -nE 's#^([a-z]+://)?([^@/]+@)?([^:/]+)(:[0-9]*)?[:/]([^/]+)/([^/]+)$#\3/\5/\6#p')
 [ -n "$IMAGE" ] || {
     echo "release: путь образа берётся из origin — <host>:<org>/<репо> или https://<host>/<org>/<репо>, а origin: ${ORIGIN:-нет}" >&2
     exit 2
 }
+# Хаб берёт образ по имени сервиса (${PROJECT_NAME}/<svc>), тег — из <SVC>_TAG, который строит make bump:
+# верхний регистр, «-» → «_». У форка <org>/backend это backend и BACKEND_TAG.
 SVC=${IMAGE##*/}
-TAG_VAR=$(printf '%s' "$SVC" | tr 'a-z.-' 'A-Z__')_TAG
+TAG_VAR=$(printf '%s' "$SVC" | tr '[:lower:]-' '[:upper:]_')_TAG
+[[ $TAG_VAR =~ ^[[:upper:]_][[:upper:][:digit:]_]*$ ]] || {
+    echo "release: make bump ищет тег в $TAG_VAR — это не имя переменной окружения, хаб не выкатит $SVC: имя репо — с буквы, из латиницы, цифр, «-» и «_»" >&2
+    exit 2
+}
 HANDOFF=.claude/plans/handoff.md
 
 # Агрегированный INFRA-HANDOFF: тег сервиса и накопленные infra-изменения.
