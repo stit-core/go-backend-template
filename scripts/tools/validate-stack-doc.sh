@@ -16,8 +16,9 @@
 #   2. basename == frontmatter.name; id == "stack.<name>".
 #   3. Все обязательные H2 для kind присутствуют; при status: stable — в каждой решение. Не решение:
 #      плейсхолдер шаблона (блок от строки, которая начинается с `<`, до строки, которая кончается `>`, и
-#      пункт `- <…>`), заглушка — строка или пункт из одного TBD, TODO…, прочерка или многоточия, —
-#      подзаголовок и таблица без строк.
+#      пункт `- <…>`), заглушка — строка, пункт, чекбокс или цитата из TBD, TODO или FIXME словом (с
+#      хвостом или без), прочерка, многоточия или вопросов, — подзаголовок и таблица без строк или из
+#      строк одних заглушек.
 #   4. kind auth при status: stable — `identity: own | external` во frontmatter (домены идентичности
 #      остаются или prune их удаляет — skill init-service).
 #   --stable — ещё и все 8 kinds на месте и stable: вход de-template.
@@ -74,6 +75,12 @@ has_section() {
 
 section_body_nonempty() {
     awk -v sec="$2" '
+        # Заглушка вместо решения: пусто, TBD, TODO или FIXME словом (с хвостом или без), прочерк, многоточие,
+        # вопросы. Регистр, _*` и скобки не в счёт; Todoist и TODO-лист — слова, а не заглушки.
+        function stub(s) {
+            s = toupper(s); gsub(/[_*`()]/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s)
+            return s ~ /^(TBD|TODO|FIXME)([^-[:alnum:]].*)?$/ || s ~ /^(—|–|-|\.\.\.|…|\?+)?[.:;!]?$/
+        }
         BEGIN { in_sec = 0; has = 0 }
         /^## / {
             if (in_sec) exit
@@ -87,11 +94,13 @@ section_body_nonempty() {
             if (line == "" || line ~ /^#/) next                             # подзаголовок — не решение
             if (line ~ /^</) { if (line !~ />$/) placeholder = 1; next }    # плейсхолдер <...>, и многострочный
             if (line ~ /^\|[-:| \t]*$/) { rows = 1; next }                  # строки таблицы — под разделителем
-            if (line ~ /^\|/ && !rows) next                                 # шапка таблицы
+            if (line ~ /^\|/) {                                             # шапка; строка из одних заглушек
+                for (n = split(line, cell, "|"); rows && n > 0; n--) if (!stub(cell[n])) has = 1
+                next
+            }
             item = line; sub(/^([-*+]|[0-9]+[.)])[ \t]+/, "", item)         # пункт списка
-            if (item ~ /^<.*>$/) next
-            stub = toupper(item); gsub(/[_*`]/, "", stub)
-            if (stub ~ /^(TBD|TODO.*|—|–|-|\.\.\.|…)[.:;!]?$/) next         # заглушка вместо решения
+            sub(/^(\[[ xX]\]|>)[ \t]*/, "", item)                           # чекбокс, цитата
+            if (item ~ /^<.*>$/ || stub(item)) next
             has = 1
         }
         END { exit (has ? 0 : 1) }
@@ -148,7 +157,7 @@ validate_file() {
                 ERRORS+=("$file: нет H2-секции '$s' (kind=$kind)"); continue
             fi
             if [ "$status" = "stable" ] && ! section_body_nonempty "$file" "$s"; then
-                ERRORS+=("$file: секция '$s' пуста (status=stable требует решение; плейсхолдер <…>, TBD, TODO, прочерк, многоточие и таблица без строк — не решение)")
+                ERRORS+=("$file: секция '$s' пуста (status=stable требует решение; плейсхолдер <…>, TBD, TODO, FIXME, прочерк, многоточие и таблица без решений — не решение)")
             fi
         done
     fi

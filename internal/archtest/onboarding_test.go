@@ -188,8 +188,9 @@ func TestCanonicalTemplate(t *testing.T) {
 
 // TestStackValidator: шаблоны stack как есть — заглушки, de-template развернул бы из них пустой фундамент:
 // со status: stable валидатор отвергает каждую секцию и невыбранную идентичность. Заглушка вместо решения
-// (TBD, TODO…, прочерк, многоточие, таблица без строк, одни подзаголовки) — тоже пустая секция; артефакты
-// с решениями вместо плейсхолдеров проходят и --stable (вход de-template).
+// (TBD, TODO или FIXME словом — с хвостом или без, прочерк, многоточие, вопросы, таблица без строк или из
+// одних заглушек, одни подзаголовки) — тоже пустая секция; слово, которое с них начинается, — нет.
+// Артефакты с решениями вместо плейсхолдеров проходят и --stable (вход de-template).
 func TestStackValidator(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -229,14 +230,23 @@ func TestStackValidator(t *testing.T) {
 		{fill: "— не публикует: событий у сервиса нет", stable: true},
 		{fill: "- `cmd/api` — HTTP и outbox", stable: true},
 		{fill: "| Env | Тип |\n|---|---|\n| `PG_DSN` | строка |", stable: true},
+		{fill: "Todoist — внешний трекер задач", stable: true},
+		{fill: "TODO-лист в продукте не используется", stable: true},
 		{fill: "TBD"},
 		{fill: "_TBD_"},
 		{fill: "- TBD."},
+		{fill: "TBD: уточнить позже"},
+		{fill: "(TBD)"},
+		{fill: "- [ ] TBD"},
+		{fill: "> TBD"},
 		{fill: "**TODO**: заполнить позже"},
+		{fill: "FIXME"},
 		{fill: "—"},
 		{fill: "..."},
+		{fill: "???"},
 		{fill: "- <заполнить>"},
 		{fill: "| Env | Тип |\n|---|---|\n"}, // пустая строка: два плейсхолдера подряд — две таблицы, а не одна
+		{fill: "| Env | Тип |\n|---|---|\n| TBD | TBD |\n"},
 		{fill: "### Подсекция"},
 	} {
 		t.Run(tc.fill, func(t *testing.T) {
