@@ -21,7 +21,8 @@ status: draft
 
 ## Binaries
 <Какие бинари собираются и зачем: `cmd/api` (runtime), `cmd/migrate` (init-контейнер),
-`cmd/seed-admin` (one-off bootstrap). Какие образы пушатся.>
+`cmd/seed-admin` (one-off bootstrap). Какие образы пушатся: путь — `<host>/<org>/<репо>{,-migrate}` из
+origin (`make release`), имя репо — имя сервиса в хабе.>
 
 ## Generates
 <Что de-template родит из этого артефакта:

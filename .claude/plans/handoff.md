@@ -215,3 +215,18 @@ RISK   остановка: ждущий хук кита берёт ⅔ оста�
        достаётся до 6,7s, незавершённым обработчикам отменяется ctx, код выхода 0; stop_grace_period
        прежний (35s)
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   путь образов — <host>/<org>/<репо>{,-migrate} из origin репо сервиса, имя репо — имя сервиса для
+       хаба: тег — <РЕПО>_TAG (`-` и `.` → `_`), выкатка — make bump SVC=<репо>; у репо backend — те же
+       backend, backend-migrate и BACKEND_TAG; шаблон stit-core/go-backend-template выпускает
+       stit-core/go-backend-template{,-migrate} и GO_BACKEND_TEMPLATE_TAG
+WHY    fix-fork-lifecycle S4 — RLIF-04: путь <org>/backend был зашит, и второй сервис орги перезаписывал
+       образ первого
+ACTION сервис из шаблона, чей репо назван не backend: image в compose — ${REGISTRY_HOST}/${PROJECT_NAME}/<репо>
+       (migrate — <репо>-migrate), тег — <РЕПО>_TAG в .env; путь и имя тега — в handoff его релиза
+WHO    проект (compose, .env)
+DECIDE —
+RISK   compose с путём <org>/backend для такого сервиса тянет образ другого сервиса или прежний: релизы
+       этого сервиса лежат под <org>/<репо>
+===

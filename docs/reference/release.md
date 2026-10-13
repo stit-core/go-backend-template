@@ -11,13 +11,13 @@
 make release VERSION=vX.Y.Z
 ```
 
-`scripts/release.sh` одним проходом: confirm-промпт → `release-preflight env` — окружение релиза: ветка
-`main`, чистое дерево, доступ сборки к приватным модулям, buildx и `make doctor` → `make check`,
-`make e2e-smoke` и `govulncheck` (уязвимость, которую вызывает код, — стоп до тега) → annotated
-tag (rich changelog — `git tag -a` заранее) → `release-preflight tag` (на HEAD annotated semver-тег, и
-он — запрошенный) → `docker buildx --push --ssh default` двух образов lockstep:
-- `<host>/<org>/backend:vX.Y.Z` — `cmd/api` (runtime)
-- `<host>/<org>/backend-migrate:vX.Y.Z` — `cmd/migrate` + вшитые SQL (init-контейнер)
+`scripts/release.sh` одним проходом: confirm-промпт с полным путём образов → `release-preflight env` —
+окружение релиза: ветка `main`, чистое дерево, доступ сборки к приватным модулям, buildx и `make doctor` →
+`make check`, `make e2e-smoke` и `govulncheck` (уязвимость, которую вызывает код, — стоп до тега) →
+annotated tag (rich changelog — `git tag -a` заранее) → `release-preflight tag` (на HEAD annotated
+semver-тег, и он — запрошенный) → `docker buildx --push --ssh default` двух образов lockstep:
+- `<host>/<org>/<репо>:vX.Y.Z` — `cmd/api` (runtime)
+- `<host>/<org>/<репо>-migrate:vX.Y.Z` — `cmd/migrate` + вшитые SQL (init-контейнер)
 
 → агрегированный INFRA-HANDOFF → STOP.
 
@@ -25,8 +25,10 @@ tag (rich changelog — `git tag -a` заранее) → `release-preflight tag`
 сам бинарь, подкоманда `healthcheck` (`GET /health` по `HTTP_ADDR`, код выхода 0 — здоров); e2e-стек
 ждёт `healthy` по ней же.
 
-`<host>`/`<org>` берутся из `git remote get-url origin` — image-path следует за местом
-репо в Gitea, без правок при форке. Build локальный.
+Путь образа `<host>/<org>/<репо>` — из `git remote get-url origin`: он следует за местом репо в Gitea,
+без правок при форке, и у каждого сервиса орги свой. Имя репо — имя сервиса для хаба: тег —
+`<РЕПО>_TAG` (`-` и `.` → `_`), выкатка — `make bump SVC=<репо>`; у форка `<org>/backend` — `backend` и
+`BACKEND_TAG`. Origin, из которого путь не вывести (локальный путь), — отказ до тега. Build локальный.
 `docker login <host>` — креды оператора; `make doctor` в preflight ловит их отсутствие
 fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвергаются by design.
 
@@ -40,7 +42,7 @@ fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвер�
 
 ## INFRA-HANDOFF
 
-`make release` печатает агрегированный блок (`BACKEND_TAG`, накопитель `.claude/plans/handoff.md`
+`make release` печатает агрегированный блок (`<РЕПО>_TAG` с путём образов, накопитель `.claude/plans/handoff.md`
 с разделами `## Handoff` активных планов и команду выкатки `make bump`) — что передать в хаб
 `<org>/infra` — и очищает накопитель коммитом. Заранее, без проверок, тега и образов:
 `make release VERSION=vX.Y.Z DRY_RUN=1`. Сам репо `make bump` / `make ship` / `ssh` **не выполняет**.
@@ -49,13 +51,13 @@ fail-fast. Lightweight / `:latest` / `:edge` / тег не на HEAD отвер�
 
 | Зона | Где | Что делает |
 |---|---|---|
-| Проект | `<org>/infra` (← project-infra-template-compose) | `make bump SVC=backend TAG=vX.Y.Z` — правит `BACKEND_TAG` в `.env` на VPS + force-recreate, compose пуллит образ (канон rollout'а; `make ship` там — про доставку самого infra-репо) |
+| Проект | `<org>/infra` (← project-infra-template-compose) | `make bump SVC=<репо> TAG=vX.Y.Z` — правит `<РЕПО>_TAG` в `.env` на VPS + force-recreate, compose пуллит образ (канон rollout'а; `make ship` там — про доставку самого infra-репо) |
 | Verify | там же | `make ps`, лог `"starting" component=api version=vX.Y.Z commit=<sha>` |
 
 ## Откат
 
 Image уже в registry — пересборка не нужна. Полностью в infra-репо:
-`make bump SVC=backend TAG=<предыдущий>`. Релиз с миграцией приложения — любой, не только с
+`make bump SVC=<репо> TAG=<предыдущий>`. Релиз с миграцией приложения — любой, не только с
 эффектом, — откатывается в обратном порядке: сначала `migrate down` образом migrate откатываемого
 релиза, по разу на каждую его миграцию (`down` откатывает одну), затем `make bump`. Прежний образ
 migrate версий схемы новее своих не знает и падает на `up` (golang-migrate не находит версию); после

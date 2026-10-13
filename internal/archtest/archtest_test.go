@@ -9,7 +9,8 @@
 // включённых линтеров, пути и версия обвязки шаблона (.template), её перенос в форк (make
 // template-update), маркеры конфликтов, пути доменов идентичности и процедура их prune, канонический
 // репо шаблона, валидатор stack-артефактов, хуки guard-bash и commit-msg, подключение git-хуков (make
-// setup, status, doctor) и самозащита make check. На archtest и archkit //nolint не действует.
+// setup, status, doctor), путь образа релиза и самозащита make check. На archtest и archkit //nolint не
+// действует.
 package archtest
 
 import (

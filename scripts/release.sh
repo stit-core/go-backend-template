@@ -11,7 +11,7 @@
 # выкатки образов накопитель очищается коммитом (отданное остаётся в дереве тега).
 #
 # Зона ответственности этого репо: код → image в registry. На STOP — всё.
-# Деплой (make bump SVC=backend TAG=… — BACKEND_TAG в .env VPS) — в <client-org>/infra, НЕ здесь.
+# Деплой (make bump SVC=<репо> TAG=… — <РЕПО>_TAG в .env VPS) — в <client-org>/infra, НЕ здесь.
 #
 # Неинтерактивный запуск (нет TTY / EOF на prompt) → отмена (exit 1):
 # accidental release невозможен. Неинтерактивно, с явным согласием: RELEASE_YES=1.
@@ -25,17 +25,27 @@ VERSION="${1:-}"
 
 BR=$(git rev-parse --abbrev-ref HEAD)
 SHA=$(git rev-parse --short HEAD)
-HOST_ORG=$(git remote get-url origin | sed -E 's#^(git@|https?://)([^:/]+)[:/]([^/]+)/.*#\2/\3#')
-IMAGE_BASE="$HOST_ORG/backend"
+# Образ — <host>/<org>/<репо> из origin: у сервисов одной орги свои пути. Хаб берёт образ по имени сервиса
+# (${PROJECT_NAME}/<svc>, тег — <SVC>_TAG): у форка <org>/backend это backend и BACKEND_TAG.
+ORIGIN=$(git remote get-url origin 2>/dev/null || true)
+ORIGIN=${ORIGIN%/}
+IMAGE=$(printf '%s\n' "${ORIGIN%.git}" | tr '[:upper:]' '[:lower:]' |
+    sed -nE 's#^([a-z]+://)?([^@/]+@)?([^:/]+)(:[0-9]*)?[:/]([^/]+)/([^/]+)$#\3/\5/\6#p')
+[ -n "$IMAGE" ] || {
+    echo "release: путь образа берётся из origin — <host>:<org>/<репо> или https://<host>/<org>/<репо>, а origin: ${ORIGIN:-нет}" >&2
+    exit 2
+}
+SVC=${IMAGE##*/}
+TAG_VAR=$(printf '%s' "$SVC" | tr 'a-z.-' 'A-Z__')_TAG
 HANDOFF=.claude/plans/handoff.md
 
-# Агрегированный INFRA-HANDOFF: BACKEND_TAG и накопленные infra-изменения.
+# Агрегированный INFRA-HANDOFF: тег сервиса и накопленные infra-изменения.
 print_handoff() {
     local impacts
     impacts=$(bash scripts/tools/validate-plan.sh --handoff)
     echo
     echo "=== INFRA HANDOFF · передай инфра-админу out-of-band ==="
-    echo "BACKEND_TAG → $VERSION   (api + migrate, lockstep)"
+    echo "$TAG_VAR → $VERSION   ($IMAGE{,-migrate}: api + migrate, lockstep)"
     echo
     if [ -n "$impacts" ]; then
         echo "Накопленный handoff ($HANDOFF и раздел ## Handoff активных планов):"
@@ -46,8 +56,8 @@ print_handoff() {
     fi
     echo
     echo "Действия инфра-стороны:"
-    echo "  проект:  в <client-org>/infra — make bump SVC=backend TAG=$VERSION"
-    echo "           (правит BACKEND_TAG в .env на VPS + force-recreate)"
+    echo "  проект:  в <client-org>/infra — make bump SVC=$SVC TAG=$VERSION"
+    echo "           (правит $TAG_VAR в .env на VPS + force-recreate)"
 }
 
 if [ "${DRY_RUN:-}" = "1" ]; then
@@ -58,9 +68,9 @@ fi
 
 # --- confirm (видимое вне репо действие — explicit OK обязателен) ---
 if [ "${RELEASE_YES:-}" = "1" ]; then
-    echo "release: RELEASE_YES=1 — пропускаю prompt"
+    echo "release: RELEASE_YES=1 — без вопроса: $IMAGE{,-migrate}:$VERSION"
 else
-    printf "⚠ confirm release %s from %s@%s? [y/N] " "$VERSION" "$BR" "$SHA"
+    printf "⚠ confirm release %s from %s@%s → %s{,-migrate}:%s? [y/N] " "$VERSION" "$BR" "$SHA" "$IMAGE" "$VERSION"
     read -r ans 2>/dev/null || ans=""
     case "$ans" in
         y | Y) ;;
@@ -103,14 +113,14 @@ docker buildx build --platform linux/amd64 --push --ssh default \
     --build-arg TARGET=api \
     --build-arg VERSION="$VERSION" \
     --build-arg GIT_SHA="$SHA" \
-    -t "$IMAGE_BASE:$VERSION" .
+    -t "$IMAGE:$VERSION" .
 
 docker buildx build --platform linux/amd64 --push --ssh default -f Dockerfile.migrate \
     --build-arg VERSION="$VERSION" \
     --build-arg GIT_SHA="$SHA" \
-    -t "$IMAGE_BASE-migrate:$VERSION" .
+    -t "$IMAGE-migrate:$VERSION" .
 
-echo "✓ released $IMAGE_BASE{,-migrate}:$VERSION"
+echo "✓ released $IMAGE{,-migrate}:$VERSION"
 
 # --- агрегированный INFRA-HANDOFF; накопитель пустеет: отданное остаётся в дереве тега ---
 print_handoff

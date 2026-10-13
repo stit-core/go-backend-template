@@ -36,10 +36,14 @@ blocked-by: —
 - Машинная проверка тела коммита `/upgrade` (перенесено и отклонено) — хук `commit-msg` вне трека.
 
 ## Критерии приёмки
-- [ ] **AC1** — RLIF-04: путь образа — из origin: форки `acme/own` и `acme/ext` одной орги выпускают
+- [x] **AC1** — RLIF-04: путь образа — из origin: форки `acme/own` и `acme/ext` одной орги выпускают
   `<host>/acme/own{,-migrate}` и `<host>/acme/ext{,-migrate}` (на базе оба — `<host>/acme/backend`);
   confirm-промпт `make release` называет полный путь образов, handoff — `<SVC>_TAG` и `make bump SVC=<репо>`.
   Проверка: `go test ./internal/archtest -run TestReleaseImage` → PASS; пробные форки → промпт с путём
+  - Подтверждено: `TestReleaseImage` → PASS (scp, https, ssh с портом и регистром, `backend`, отказ на
+    локальном пути — без тега); клоны форков `own` и `ext` (`nine/lifecycle/logs/s4-forks.log`): база —
+    промпт без пути, `BACKEND_TAG`, `SVC=backend` у обоих; ветка — `→ git.stit.tech/acme/own{,-migrate}`,
+    `OWN_TAG`, `SVC=own` и `→ …/acme/ext…`, `EXT_TAG`, `SVC=ext`
 - [ ] **AC2** — RLIF-04: `TestReleaseBuildForwardsSSHAgent` красный на обоих мутантах `go mod download` —
   без `insteadOf` https → ssh и без `StrictHostKeyChecking=accept-new` (на базе оба зелёные). Проверка:
   мутант в копии `Dockerfile` → `go test -run TestReleaseBuildForwardsSSHAgent` → FAIL, без мутанта → PASS
@@ -96,9 +100,12 @@ blocked-by: —
   - Сделано: `hooks_test.go` — RED на базе (status `OK` без строки о хуках, `.git/hooks` после сбоя setup),
     после правки PASS; проверка — `doctor.sh` (`--hooks` для status), строка `HOOKS` и `ATTENTION: hooks`,
     FAIL doctor, хуки — первая строка `make setup`; строка в `/smartdev`; `make check` → `✓ check clean`
-- [ ] **S4** — RLIF-04: путь образа и имя сервиса в handoff — из origin, путь в confirm-промпте; доки и
+- [x] **S4** — RLIF-04: путь образа и имя сервиса в handoff — из origin, путь в confirm-промпте; доки и
   INFRA-HANDOFF о пути образа
   - Проверка: `TestReleaseImage` → RED, затем PASS; пробные форки · Закрывает: AC1 · Зависит от: —
+  - Сделано: `release_test.go` — RED на базе (промпт без пути), после правки `release.sh` PASS; доки
+    `release.md`, `ecosystem.md`, `/release`, плейсхолдер `service.md § Binaries`; блок в накопителе
+    `handoff.md`; `make check` → `✓ check clean`
 - [ ] **S5** — RLIF-04: `TestReleaseBuildForwardsSSHAgent` держит `insteadOf` и `accept-new`
   - Проверка: два мутанта → FAIL, дерево → PASS · Закрывает: AC2 · Зависит от: —
 - [ ] **S6** — RLIF-02: remote `template` в финале онбординга, теги шаблона в `make doctor`, проза `/upgrade`
@@ -128,12 +135,23 @@ blocked-by: —
   хуков — отказ. Проверка одна — `doctor.sh` (`--hooks` для `status.sh`, как `--status` у
   `template-update.sh`); doctor — FAIL, поэтому `release-preflight env` без хуков останавливает релиз.
 - Правка чужого файла: перечень в комментарии пакета `internal/archtest/archtest_test.go` (трек gate) —
-  «подключение git-хуков (make setup, status, doctor)»: CLAUDE.md держит перечень проверок там.
+  «подключение git-хуков (make setup, status, doctor)», «путь образа релиза»: CLAUDE.md держит перечень
+  проверок там.
+- RLIF-04: путь образа — только из origin (`<host>/<org>/<репо>`, как у `ai-gateway-template` и форков
+  `stit-hub/*`), без второго источника в `docs/stack/service.md`: имена репо в орге не совпадают, значит и
+  пути образов; хаб и так берёт образ как `${PROJECT_NAME}/<svc>`. `backend` — не литерал скрипта, а имя
+  репо форка по конвенции: у `<org>/backend` путь и `BACKEND_TAG` прежние. Регистр — нижний (ссылка docker),
+  порт ssh в путь registry не идёт; origin, из которого путь не вывести, — отказ до вопроса и тега.
+  `release_test.go` — новый файл трека (функции песочницы релиза — из `make_test.go`, без правки).
 
 ## Handoff
 - Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
   строкой `make doctor`; строка о канале обвязки (`template/vX.Y.Z`, remote `template`) — в его
   `docs/reference/ecosystem.md`. В хаб не пишем — отчёт дирижёру.
+- Аннотация следующего тега обвязки (дирижёр, S8 программы), Breaking: путь образа — `<host>/<org>/<репо>`
+  из origin, тег в хабе — `<РЕПО>_TAG`; форк с репо не `backend` — image и тег в compose хаба по handoff
+  релиза (блок RLIF-04 — в накопителе `handoff.md`).
 
 ## Где мы сейчас
-S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03) закрыты. Следующее: S4 — путь образа релиза из origin.
+S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4 (RLIF-04, путь образа) закрыты. Следующее: S5 — мутанты
+`TestReleaseBuildForwardsSSHAgent`.

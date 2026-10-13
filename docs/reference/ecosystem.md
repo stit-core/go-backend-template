@@ -6,16 +6,17 @@
 
 ## Роль
 
-`go-backend-template` форкается в `<org>/backend` — Go-сервис проекта: HTTP API, outbox-drain,
-NATS-подписчики и фоновые jobs в одном бинаре `cmd/api`; `cmd/migrate` — отдельный образ
-(init-контейнер). Зона репо — код → образ в registry; выкатка — не здесь.
+`go-backend-template` форкается в `<org>/backend` (второй сервис орги — `<org>/<имя>`) — Go-сервис
+проекта: HTTP API, outbox-drain, NATS-подписчики и фоновые jobs в одном бинаре `cmd/api`;
+`cmd/migrate` — отдельный образ (init-контейнер). Зона репо — код → образ в registry; выкатка — не здесь.
+Имя репо — имя сервиса: путь образа и его имя в хабе.
 
 ```
 <org>/strategy ──домены (design-time, read-only)──► <org>/backend (этот репо) ◄── golibinfra (go.mod)
                                                          │ make release
                                                          ▼
-                                   registry Gitea: <host>/<org>/backend{,-migrate}:vX.Y.Z
-                                                         │ make bump SVC=backend TAG=vX.Y.Z
+                                   registry Gitea: <host>/<org>/<репо>{,-migrate}:vX.Y.Z
+                                                         │ make bump SVC=<репо> TAG=vX.Y.Z
                                                          ▼
                                    <org>/infra — хаб проекта, docker-compose на VPS
 ```
@@ -49,15 +50,18 @@ sibling-checkout'ами (`../<name>`).
 
 ## Что репо отдаёт
 
-- **Образы** `<host>/<org>/backend:vX.Y.Z` (`cmd/api`) и `<host>/<org>/backend-migrate:vX.Y.Z`
+- **Образы** `<host>/<org>/<репо>:vX.Y.Z` (`cmd/api`) и `<host>/<org>/<репо>-migrate:vX.Y.Z`
   (`cmd/migrate` + SQL) одним lockstep-тегом — `make release` (skill `/release`, процедура —
-  [release.md](release.md)). `<host>/<org>` выводятся из `git remote get-url origin`: образы уходят
-  в container registry той же Gitea, где лежит репо (`git.stit.tech`). `<org>/infra` тянет их из
-  registry `REGISTRY_HOST` (дефолт `git.stit.tech`).
-- **INFRA-HANDOFF-блок**: `BACKEND_TAG` + накопитель `.claude/plans/handoff.md` (`make release`).
-- **STOP после `/release`.** Выкатка тега — `make bump SVC=backend TAG=vX.Y.Z` в `<org>/infra`
-  (правит `BACKEND_TAG` в `.env` на VPS + force-recreate); откат — тот же `make bump` с предыдущим
-  тегом. Деплой-команды (`make bump`, `make ship`, `ssh`) отсюда не запускаются.
+  [release.md](release.md)). Путь выводится из `git remote get-url origin`: образы уходят в container
+  registry той же Gitea, где лежит репо (`git.stit.tech`), у каждого сервиса орги — свой. `<org>/infra`
+  тянет их из registry `REGISTRY_HOST` (дефолт `git.stit.tech`) как `${PROJECT_NAME}/<svc>`, `<svc>` —
+  имя репо.
+- **INFRA-HANDOFF-блок**: `<РЕПО>_TAG` с путём образов + накопитель `.claude/plans/handoff.md`
+  (`make release`).
+- **STOP после `/release`.** Выкатка тега — `make bump SVC=<репо> TAG=vX.Y.Z` в `<org>/infra`
+  (правит `<РЕПО>_TAG` в `.env` на VPS + force-recreate; у `<org>/backend` — `BACKEND_TAG`); откат —
+  тот же `make bump` с предыдущим тегом. Деплой-команды (`make bump`, `make ship`, `ssh`) отсюда не
+  запускаются.
 
 ## Что репо берёт
 

@@ -5,9 +5,9 @@ description: Выпустить версию бэкенда одной кома�
 
 # Skill: release
 
-Канонический release-флоу. **Зона ответственности этого репо: код → image в registry. На STOP — всё.** Build локальный, push в `<host>/<org>/backend{,-migrate}` под одним lockstep `vX.Y.Z`-тегом. Воркер отдельным образом не собирается — outbox drain, NATS subscribers, jobs живут в `cmd/api/`.
+Канонический release-флоу. **Зона ответственности этого репо: код → image в registry. На STOP — всё.** Build локальный, push в `<host>/<org>/<репо>{,-migrate}` (путь — из origin, у каждого сервиса орги свой) под одним lockstep `vX.Y.Z`-тегом. Воркер отдельным образом не собирается — outbox drain, NATS subscribers, jobs живут в `cmd/api/`.
 
-Дальше — handoff в хаб `<org>/infra`: rollout — `make bump SVC=backend TAG=<v>` там (правит `BACKEND_TAG` в `.env` на VPS + force-recreate). Эти шаги не выполняются здесь — `make release` печатает агрегированный INFRA-HANDOFF-блок, и он уходит в хаб.
+Дальше — handoff в хаб `<org>/infra`: rollout — `make bump SVC=<репо> TAG=<v>` там (правит `<РЕПО>_TAG` в `.env` на VPS + force-recreate; у `<org>/backend` — `BACKEND_TAG`). Эти шаги не выполняются здесь — `make release` печатает агрегированный INFRA-HANDOFF-блок, и он уходит в хаб.
 
 ## Когда применять
 
@@ -52,12 +52,12 @@ make release VERSION=vX.Y.Z
 
 `scripts/release.sh` делает за тебя, по порядку:
 1. валидирует `VERSION` (semver; lightweight/`:latest`/`:edge` отвергаются);
-2. **confirm-промпт** `⚠ confirm release <v> from main@<sha>? [y/N]` (нет TTY/EOF → отмена, accidental release невозможен);
+2. **confirm-промпт** `⚠ confirm release <v> from main@<sha> → <host>/<org>/<репо>{,-migrate}:<v>? [y/N]` — путь образов сверь с тем, что ждёт хаб (нет TTY/EOF → отмена, accidental release невозможен; origin, из которого путь не вывести, — отказ);
 3. `release-preflight.sh env` — окружение релиза, fail-fast до гейта и тега: ветка=main / clean / ключи ssh-agent читают приватные модули `go.mod` / `docker buildx` / **`make doctor`** (docker-auth, sqlc-drift, непарные миграции, git-хуки);
 4. чистое дерево, `make check`, `make e2e-smoke` (собранный бинарь со стеком в docker) и `govulncheck` (уязвимость, которую вызывает код; нужна сеть) — тег и образы только у проверенного HEAD (красный → fail до тега);
 5. annotated tag, если на HEAD ещё нет (иначе использует существующий; конфликт версий → fail);
 6. `release-preflight.sh tag` — на HEAD annotated semver-тег, и он — запрошенный;
-7. `docker buildx --platform linux/amd64 --push --ssh default` двух image'ей lockstep: `<host>/<org>/backend:<v>` (`cmd/api`) и `<host>/<org>/backend-migrate:<v>` (`cmd/migrate` + вшитые SQL, init-контейнер), `VERSION`/`GIT_SHA` зашиты в бинарник; приватные модули `go mod download` берёт по SSH ключом ssh-agent — в слои образа ключ не попадает;
+7. `docker buildx --platform linux/amd64 --push --ssh default` двух image'ей lockstep: `<host>/<org>/<репо>:<v>` (`cmd/api`) и `<host>/<org>/<репо>-migrate:<v>` (`cmd/migrate` + вшитые SQL, init-контейнер), `VERSION`/`GIT_SHA` зашиты в бинарник; приватные модули `go mod download` берёт по SSH ключом ssh-agent — в слои образа ключ не попадает;
 8. печатает агрегированный **INFRA-HANDOFF** (см. ниже), очищает накопитель коммитом и STOP.
 
 Что уйдёт в хаб, видно заранее, без проверок, тега и образов: `make release VERSION=vX.Y.Z DRY_RUN=1`.
@@ -72,10 +72,10 @@ make release VERSION=vX.Y.Z
 
 `make release` сам печатает блок `=== INFRA HANDOFF ===`:
 
-- `BACKEND_TAG → <v>` (api+migrate lockstep);
+- `<РЕПО>_TAG → <v>` с путём образов (api+migrate lockstep);
 - **накопленный handoff** — накопитель `.claude/plans/handoff.md` (его пополняет skill `infra-handoff`) и разделы `## Handoff` активных планов. Если пусто — печатает напоминание убедиться, что инфра-затрагивающее зафиксировано. После печати накопитель очищается коммитом `meta(handoff): …`; отданное — `git show vX.Y.Z:.claude/plans/handoff.md`;
 - действие инфра-стороны:
-  - проект: в `<org>/infra` — `make bump SVC=backend TAG=<v>` (правит `BACKEND_TAG` в `.env` на VPS + force-recreate).
+  - проект: в `<org>/infra` — `make bump SVC=<репо> TAG=<v>` (правит `<РЕПО>_TAG` в `.env` на VPS + force-recreate).
 
 Твоя роль после команды: отдать этот блок в хаб `<org>/infra` — пришёл агентом из хаба, блок входит в твой отчёт; прямой заход — покажи юзеру и попроси передать. `make bump`/`make ship`/`ssh` отсюда не выполняются — другой репо, другие креды.
 
@@ -86,7 +86,7 @@ make release VERSION=vX.Y.Z
 ## Откат
 
 Полностью в infra-репо (этот репо не участвует — image в registry):
-`make bump SVC=backend TAG=<предыдущий>`. Релиз с миграцией приложения — сначала `migrate down`
+`make bump SVC=<репо> TAG=<предыдущий>`. Релиз с миграцией приложения — сначала `migrate down`
 образом откатываемого релиза, по разу на миграцию, затем `make bump` (`docs/reference/release.md`
 § Откат).
 
