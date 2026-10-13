@@ -58,10 +58,13 @@ blocked-by: —
   (на базе A.3 буквально → красные `TestBoot`, `TestIdentity`; wiring §2 для auditkit → красный
   `TestFxGraphValidates`). Проверка: пробный форк со стеком `external` без auditkit по новому тексту →
   `make check` зелёный на этапе 2 и после prune, auditkit вне графа
-- [ ] **AC6** — RLIF-05: `validate-stack-doc.sh --stable` отвергает секцию-заглушку (`TBD`, `_TBD_`, `TODO…`,
+- [x] **AC6** — RLIF-05: `validate-stack-doc.sh --stable` отвергает секцию-заглушку (`TBD`, `_TBD_`, `TODO…`,
   `—`, `...`, `- <заполнить>`, таблица без строк, одни подзаголовки), содержимое проходит (на базе — `OK`,
   `R/tpl-lif/logs/v-stack-validator.log`). Проверка: `bash R/tpl-lif/bin/vstack.sh <worktree> <каталог>` →
   V4–V7, V11, V15, V19, V20 — FAIL, V3 — OK; `TestStackValidator` → PASS
+  - Подтверждено: `vstack.sh` на ветке — V4–V7, V11, V15, V19, V20 → FAIL, V3 → OK
+    (`nine/lifecycle/logs/vstack-{base,s2}.log`); `TestStackValidator` → PASS (9 заглушек, 4 решения);
+    вердикты «пуста» на всех `docs/stack` машины — те же, что у базового валидатора
 - [ ] **AC7** — RENF-03: клон без `make setup` — `make status` пишет строку `HOOKS:` о неподключённых хуках и
   `ATTENTION: hooks`, `make doctor` — FAIL о хуках, `/smartdev` ведёт в `make setup`; `make setup`
   подключает хуки первой строкой — сбой установки инструментов их не отменяет (на базе — `OK`, о хуках ни
@@ -79,8 +82,11 @@ blocked-by: —
   - Сделано: проверка — функция над корнем репо (`unnamedIdentityDependents`), решение `identity` читает
     `identityChoice`; `TestIdentityDependents` без выхода при `own` — RED ровно в случае `own identity`, с
     выходом — PASS; `fp22c` зелёный, `fp22` пойман; `make check` → `✓ check clean`
-- [ ] **S2** — RLIF-05: валидатор stack не считает заглушку содержимым; тест и проза `draft-stable.md`
+- [x] **S2** — RLIF-05: валидатор stack не считает заглушку содержимым; тест и проза `draft-stable.md`
   - Проверка: `TestStackValidator` с заглушками → RED, затем PASS; `vstack.sh` · Закрывает: AC6 · Зависит от: —
+  - Сделано: `TestStackValidator` — RED на всех девяти заглушках, после правки `section_body_nonempty` —
+    PASS; `vstack.sh` — заглушки FAIL, заполненные артефакты OK; проза `draft-stable.md`, `wiring.md`;
+    `make check` → `✓ check clean`
 - [ ] **S3** — RENF-03: хуки в `make status` и `make doctor`, ATTENTION в `/smartdev`, `make setup` — хуки первыми
   - Проверка: тест archtest → RED, затем PASS; свежий клон ветки · Закрывает: AC7 · Зависит от: —
 - [ ] **S4** — RLIF-04: путь образа и имя сервиса в handoff — из origin, путь в confirm-промпте; доки и
@@ -105,6 +111,10 @@ blocked-by: —
 - RADP-01: проверка prune молчит только при `identity: own`; без решения (шаблон, `<own|external>`) и при
   `external` она прежняя — там prune возможен. `identityExternal` оставлен обёрткой над `identityChoice`:
   его берёт самопроверка прозы (`harness_test.go`, файл трека harness) — без правки чужого файла.
+- RLIF-05: заглушка — строка или пункт из одного `TBD`, `TODO…`, прочерка или многоточия (регистр и
+  `_*` не в счёт), плюс подзаголовок и таблица без строк под разделителем. Размытое решение (V10
+  «соответствующий код в platform/») и слово «потом» рядом с плейсхолдером (V21) машина не судит — это
+  смысл, его держит чек-лист `draft-stable.md` § 2 и архитектор.
 
 ## Handoff
 - Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
@@ -112,4 +122,4 @@ blocked-by: —
   `docs/reference/ecosystem.md`. В хаб не пишем — отчёт дирижёру.
 
 ## Где мы сейчас
-S1 закрыт (RADP-01). Воспроизведение RLIF-05 на базе — `nine/lifecycle/logs/vstack-base.log`. Следующее: S2.
+S1 (RADP-01) и S2 (RLIF-05) закрыты. Следующее: S3 — хуки в `make status` и `make doctor`.

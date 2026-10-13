@@ -187,8 +187,9 @@ func TestCanonicalTemplate(t *testing.T) {
 }
 
 // TestStackValidator: шаблоны stack как есть — заглушки, de-template развернул бы из них пустой фундамент:
-// со status: stable валидатор отвергает каждую секцию и невыбранную идентичность; те же артефакты с
-// содержимым вместо плейсхолдеров проходят и --stable (вход de-template).
+// со status: stable валидатор отвергает каждую секцию и невыбранную идентичность. Заглушка вместо решения
+// (TBD, TODO…, прочерк, многоточие, таблица без строк, одни подзаголовки) — тоже пустая секция; артефакты
+// с решениями вместо плейсхолдеров проходят и --stable (вход de-template).
 func TestStackValidator(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -197,29 +198,63 @@ func TestStackValidator(t *testing.T) {
 	templates, err := filepath.Glob(filepath.Join(root, "docs", "stack", "_templates", "*.md"))
 	require.NoError(t, err)
 	require.Len(t, templates, 8, "eight stack kinds")
-	stub, filled := t.TempDir(), t.TempDir()
+	texts := map[string]string{}
 	sections := 0
 	for _, p := range templates {
 		data, err := os.ReadFile(p)
 		require.NoError(t, err)
 		text := strings.Replace(string(data), "\nstatus: draft\n", "\nstatus: stable\n", 1)
 		sections += strings.Count(text, "\n## ")
-		writeFiles(t, stub, map[string]string{filepath.Base(p): text})
-		writeFiles(t, filled, map[string]string{filepath.Base(p): fillStackTemplate(text)})
+		texts[filepath.Base(p)] = text
+	}
+	stack := func(t *testing.T, fill func(string) string) string {
+		t.Helper()
+		dir := t.TempDir()
+		for name, text := range texts {
+			writeFiles(t, dir, map[string]string{name: fill(text)})
+		}
+		return dir
 	}
 
-	out, err := runIn(t, root, "bash", script, stub)
+	out, err := runIn(t, root, "bash", script, stack(t, func(text string) string { return text }))
 	require.Error(t, err, out)
 	require.Equal(t, sections, strings.Count(out, "пуста (status=stable"), "every section of an unchanged template is empty:\n%s", out)
 	require.Contains(t, out, "auth.md: frontmatter.identity")
 
-	out, err = runIn(t, root, "bash", script, "--stable", filled)
-	require.NoError(t, err, out)
+	for _, tc := range []struct {
+		fill   string // строка вместо каждого плейсхолдера
+		stable bool
+	}{
+		{fill: "Решение архитектора.", stable: true},
+		{fill: "— не публикует: событий у сервиса нет", stable: true},
+		{fill: "- `cmd/api` — HTTP и outbox", stable: true},
+		{fill: "| Env | Тип |\n|---|---|\n| `PG_DSN` | строка |", stable: true},
+		{fill: "TBD"},
+		{fill: "_TBD_"},
+		{fill: "- TBD."},
+		{fill: "**TODO**: заполнить позже"},
+		{fill: "—"},
+		{fill: "..."},
+		{fill: "- <заполнить>"},
+		{fill: "| Env | Тип |\n|---|---|\n"}, // пустая строка: два плейсхолдера подряд — две таблицы, а не одна
+		{fill: "### Подсекция"},
+	} {
+		t.Run(tc.fill, func(t *testing.T) {
+			t.Parallel()
+			out, err := runIn(t, root, "bash", script, "--stable", stack(t, func(text string) string { return fillStackTemplate(text, tc.fill) }))
+			if tc.stable {
+				require.NoError(t, err, "a decision is content: %q\n%s", tc.fill, out)
+				return
+			}
+			require.Error(t, err, out)
+			require.Equal(t, sections, strings.Count(out, "пуста (status=stable"), "a stub is no decision: %q\n%s", tc.fill, out)
+		})
+	}
 }
 
-// fillStackTemplate — шаблон стека с содержимым: плейсхолдер (от строки с `<` до строки, которая кончается
-// `>`) — строка решения, идентичность — своя.
-func fillStackTemplate(text string) string {
+// fillStackTemplate — шаблон стека, где каждый плейсхолдер (от строки с `<` до строки, которая кончается `>`)
+// заменён строкой fill, а идентичность — своя.
+func fillStackTemplate(text, fill string) string {
 	var b strings.Builder
 	inside := false
 	for line := range strings.Lines(text) {
@@ -229,7 +264,7 @@ func fillStackTemplate(text string) string {
 			inside = !strings.HasSuffix(trimmed, ">")
 		case strings.HasPrefix(trimmed, "<"):
 			inside = !strings.HasSuffix(trimmed, ">")
-			b.WriteString("Решение архитектора.\n")
+			b.WriteString(fill + "\n")
 		case strings.HasPrefix(trimmed, "identity:"):
 			b.WriteString("identity: own\n")
 		default:

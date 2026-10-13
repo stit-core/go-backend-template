@@ -14,8 +14,10 @@
 # Проверяет:
 #   1. Frontmatter: id, kind, name, status (обязательные); kind ∈ 8 stack-kinds.
 #   2. basename == frontmatter.name; id == "stack.<name>".
-#   3. Все обязательные H2 для kind присутствуют; при status: stable — непусты: плейсхолдер шаблона
-#      (блок от строки, которая начинается с `<`, до строки, которая кончается `>`) — не содержимое.
+#   3. Все обязательные H2 для kind присутствуют; при status: stable — в каждой решение. Не решение:
+#      плейсхолдер шаблона (блок от строки, которая начинается с `<`, до строки, которая кончается `>`, и
+#      пункт `- <…>`), заглушка — строка или пункт из одного TBD, TODO…, прочерка или многоточия, —
+#      подзаголовок и таблица без строк.
 #   4. kind auth при status: stable — `identity: own | external` во frontmatter (домены идентичности
 #      остаются или prune их удаляет — skill init-service).
 #   --stable — ещё и все 8 kinds на месте и stable: вход de-template.
@@ -81,8 +83,15 @@ section_body_nonempty() {
         in_sec {
             line = $0; gsub(/^[ \t]+|[ \t]+$/, "", line)
             if (placeholder) { if (line ~ />$/) placeholder = 0; next }
-            if (line == "") next
-            if (line ~ /^</) { if (line !~ />$/) placeholder = 1; next }   # плейсхолдер <...>, и многострочный
+            if (line !~ /^\|/) rows = 0
+            if (line == "" || line ~ /^#/) next                             # подзаголовок — не решение
+            if (line ~ /^</) { if (line !~ />$/) placeholder = 1; next }    # плейсхолдер <...>, и многострочный
+            if (line ~ /^\|[-:| \t]*$/) { rows = 1; next }                  # строки таблицы — под разделителем
+            if (line ~ /^\|/ && !rows) next                                 # шапка таблицы
+            item = line; sub(/^([-*+]|[0-9]+[.)])[ \t]+/, "", item)         # пункт списка
+            if (item ~ /^<.*>$/) next
+            stub = toupper(item); gsub(/[_*`]/, "", stub)
+            if (stub ~ /^(TBD|TODO.*|—|–|-|\.\.\.|…)[.:;!]?$/) next         # заглушка вместо решения
             has = 1
         }
         END { exit (has ? 0 : 1) }
@@ -139,7 +148,7 @@ validate_file() {
                 ERRORS+=("$file: нет H2-секции '$s' (kind=$kind)"); continue
             fi
             if [ "$status" = "stable" ] && ! section_body_nonempty "$file" "$s"; then
-                ERRORS+=("$file: секция '$s' пуста (status=stable требует контент; строка с «<» в начале — плейсхолдер шаблона)")
+                ERRORS+=("$file: секция '$s' пуста (status=stable требует решение; плейсхолдер <…>, TBD, TODO, прочерк, многоточие и таблица без строк — не решение)")
             fi
         done
     fi
