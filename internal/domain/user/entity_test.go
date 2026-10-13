@@ -24,6 +24,15 @@ func TestNewUser(t *testing.T) {
 		{"happy admin", "a@b.com", "h", "Alice", identity.RoleAdmin, nil},
 		{"default role", "a@b.com", "h", "Alice", identity.RoleUnknown, nil},
 		{"bad email", "not-an-email", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
+		{"letter case is kept", "Bob@Example.com", "h", "A", identity.RoleClient, nil},
+		// Адрес — только в форме, которую разбирает mail.ParseAddress: иначе один ящик получил бы несколько
+		// учётных записей, а guard входа считает их одним субъектом.
+		{"space before the address", " a@b.com", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
+		{"space after the address", "a@b.com ", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
+		{"tab before the address", "\ta@b.com", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
+		{"display name", "Bob <bob@example.com>", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
+		{"angle brackets", "<bob@example.com>", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
+		{"comment", "bob@example.com (comment)", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"email of 254 bytes", strings.Repeat("a", 64) + "@" + strings.Repeat("b", 185) + ".com", "h", "A", identity.RoleClient, nil},
 		{"email of 255 bytes in 131 characters", strings.Repeat("я", 124) + "a@b.com", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"bad role", "a@b.com", "h", "A", identity.Role("hacker"), user.ErrInvalidRole},

@@ -71,6 +71,21 @@ func TestRun_RevokeFailureRollsBackPromotion(t *testing.T) {
 	require.Equal(t, "x", hash)
 }
 
+// Адрес admin — по правилу сущности user: учётной записи, которую не завела бы регистрация, seed не
+// заводит.
+func TestRun_RejectsAddressOutsideUserRules(t *testing.T) {
+	pg := seedEnv(t, "admin@example.com")
+	for _, email := range []string{" admin@example.com", "admin@example.com\t", "Admin <admin@example.com>", "not an address"} {
+		t.Run(email, func(t *testing.T) {
+			t.Setenv("SEED_ADMIN_EMAIL", email)
+			require.Equal(t, 1, run(t.Context(), logkit.Nop()))
+		})
+	}
+	var users int
+	require.NoError(t, pg.DB(t).QueryRow(t.Context(), `SELECT count(*) FROM users`).Scan(&users))
+	require.Zero(t, users, "a refused seed writes nothing")
+}
+
 // Повторный запуск идемпотентен: admin с этим адресом один.
 func TestRun_CreatesAdminOnce(t *testing.T) {
 	pg := seedEnv(t, "admin@example.com")

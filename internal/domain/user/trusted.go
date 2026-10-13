@@ -43,7 +43,7 @@ func (t *Trusted) LockByID(ctx context.Context, id string) (*User, error) {
 }
 
 func (t *Trusted) LookupByEmail(ctx context.Context, email string) (*User, error) {
-	return t.d.Repo.GetByEmail(ctx, email)
+	return t.d.Repo.GetByEmail(ctx, emailKey(email))
 }
 
 func (t *Trusted) VerifyPassword(ctx context.Context, userID, plain string) (bool, error) {

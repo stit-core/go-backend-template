@@ -413,6 +413,25 @@ func TestSessions(t *testing.T) {
 		require.Equal(t, 1, reused, "the reuse is in the audit of the account")
 	})
 
+	// Один ящик — одна учётная запись: адрес с пробелом по краям регистрация отвергает, а вход находит по нему
+	// ту же учётную запись — guard входа тоже считает их одним субъектом.
+	t.Run("a padded address is the same mailbox", func(t *testing.T) {
+		for _, padded := range []string{" " + alice, alice + " ", "\t" + alice} {
+			body, err := json.Marshal(map[string]string{"email": padded, "password": sessionPassword, "name": "Twin"})
+			require.NoError(t, err)
+			status, resp, _ := api.call(http.MethodPost, "/api/auth/register", string(body), nil)
+			require.Equal(t, http.StatusUnprocessableEntity, status, "register %q: %s", padded, resp)
+			require.Equal(t, "USER_INVALID_EMAIL", errorCode(t, resp))
+		}
+		var accounts int
+		require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM users WHERE lower(btrim(email, E' \t')) = $1`, alice).Scan(&accounts))
+		require.Equal(t, 1, accounts)
+
+		before := openSessions(t, db, aliceID)
+		api.login(" "+alice+" ", sessionPassword)
+		require.Equal(t, before+1, openSessions(t, db, aliceID), "the padded address logs into the same account")
+	})
+
 	t.Run("logout closes its session", func(t *testing.T) {
 		other := api.login(alice, sessionPassword)
 		current := api.login(alice, sessionPassword)

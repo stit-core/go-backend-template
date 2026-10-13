@@ -13,6 +13,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user/mocks"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
@@ -33,7 +34,7 @@ func TestTrusted_Lookup(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetByID(mock.Anything, "u1").Return(want, nil).Once()
 	repo.EXPECT().GetByIDForShare(mock.Anything, "u1").Return(want, nil).Once()
-	repo.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(nil, user.ErrNotFound).Once()
+	repo.EXPECT().GetByEmail(mock.Anything, "A@b.com").Return(nil, user.ErrNotFound).Once()
 	tr := newTrusted(t, repo, nil)
 
 	got, err := tr.LookupByID(context.Background(), "u1")
@@ -42,8 +43,32 @@ func TestTrusted_Lookup(t *testing.T) {
 	locked, err := tr.LockByID(context.Background(), "u1")
 	require.NoError(t, err)
 	require.Same(t, want, locked, "the locking read is the repository's FOR SHARE read")
-	_, err = tr.LookupByEmail(context.Background(), "a@b.com")
-	require.ErrorIs(t, err, user.ErrNotFound)
+	_, err = tr.LookupByEmail(context.Background(), " A@b.com\t")
+	require.ErrorIs(t, err, user.ErrNotFound, "the address is looked up without the spaces around it, the letter case is the query's")
+}
+
+// Поиск по адресу и guard входа считают один адрес одним субъектом: ключ поиска — ключ guard'а
+// (bruteforcekit.NormalizeKey) без нижнего регистра, его снимает LOWER(email) запроса.
+func FuzzTrusted_LookupByEmail(f *testing.F) {
+	for _, seed := range []string{"a@b.com", " a@b.com", "A@B.com\t", " a@b.com\n", "a b@c.d", ""} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, email string) {
+		subject, _, err := bruteforcekit.Config{}.NormalizeKey(email, "192.0.2.1")
+		if err != nil || strings.HasPrefix(subject, "SHA256:") {
+			t.Skip("the guard keys no such subject or keys it by its hash")
+		}
+		var key string
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetByEmail(mock.Anything, mock.Anything).RunAndReturn(func(_ context.Context, k string) (*user.User, error) {
+			key = k
+			return nil, user.ErrNotFound
+		}).Once()
+
+		_, err = newTrusted(t, repo, nil).LookupByEmail(context.Background(), email)
+		require.ErrorIs(t, err, user.ErrNotFound)
+		require.Equal(t, subject, strings.ToLower(key), "email %q", email)
+	})
 }
 
 func TestTrusted_VerifyPassword(t *testing.T) {

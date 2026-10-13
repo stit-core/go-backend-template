@@ -19,6 +19,9 @@ import (
 	sessionpg "git.stit.tech/stit-core/golibinfra/authnkit/session/pgstore"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 )
 
 var (
@@ -48,6 +51,11 @@ func run(ctx context.Context, log logkit.Logger) int {
 	}
 	if email == "" || password == "" {
 		log.Error(ctx, "SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD are required")
+		return 1
+	}
+	// Адрес и имя — по правилам сущности user: учётной записи, которую не завела бы регистрация, seed не заводит.
+	if _, err := user.NewUser(email, "", name, identity.RoleAdmin); err != nil {
+		log.Error(ctx, "SEED_ADMIN_EMAIL or SEED_ADMIN_NAME breaks the rules of the user domain", "error", err)
 		return 1
 	}
 	poolCfg, err := pgkit.NewPoolConfig()

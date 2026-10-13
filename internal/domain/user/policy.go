@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"net/mail"
 	"strings"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
@@ -10,6 +11,17 @@ import (
 
 // maxEmailLen — предел адреса по RFC 5321 в байтах: длиннее не учтёт guard входа, и вход не состоится.
 const maxEmailLen = 254
+
+// validEmail — адрес ровно в той форме, в какую его разбирает mail.ParseAddress: без имени, скобок,
+// комментария и пробелов по краям. Их отбрасывают guard входа и поиск по адресу — с ними у одного ящика
+// было бы несколько учётных записей; регистр снимает индекс LOWER(email).
+func validEmail(email string) bool {
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Name == "" && addr.Address == email && len(email) <= maxEmailLen
+}
+
+// emailKey — адрес для поиска: без пробелов по краям, как ключ guard'а входа (bruteforcekit.NormalizeKey).
+func emailKey(email string) string { return strings.TrimSpace(email) }
 
 // validName: NUL Postgres в TEXT не хранит — имя с ним упало бы на записи ошибкой драйвера (500).
 func validName(name string) bool { return !strings.ContainsRune(name, 0) }

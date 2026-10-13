@@ -1,7 +1,6 @@
 package user
 
 import (
-	"net/mail"
 	"time"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
@@ -30,7 +29,7 @@ type User struct {
 }
 
 func NewUser(email, passwordHash, name string, role identity.Role) (*User, error) {
-	if _, err := mail.ParseAddress(email); err != nil || len(email) > maxEmailLen {
+	if !validEmail(email) {
 		return nil, ErrInvalidEmail
 	}
 	if !validName(name) {

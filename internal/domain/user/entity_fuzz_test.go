@@ -17,13 +17,16 @@ func FuzzNewUser(f *testing.F) {
 	f.Add("not-an-email", "h", "n", "client")
 	f.Add("user+tag@e.co", "h", "юзер", "weird-role")
 	f.Add("ok@example.com", "h", "a\x00b", "client")
+	f.Add(" ok@example.com", "h", "n", "client")
+	f.Add("ok@example.com\t", "h", "n", "client")
+	f.Add("Bob <ok@example.com>", "h", "n", "client")
 
 	f.Fuzz(func(t *testing.T, email, ph, name, roleStr string) {
 		role := identity.Role(roleStr)
 		u, err := user.NewUser(email, ph, name, role)
 
-		_, mailErr := mail.ParseAddress(email)
-		validEmail := mailErr == nil && len(email) <= 254
+		addr, mailErr := mail.ParseAddress(email)
+		validEmail := mailErr == nil && addr.Name == "" && addr.Address == email && len(email) <= 254
 		validName := !strings.ContainsRune(name, 0)
 		validRole := role == identity.RoleAdmin || role == identity.RoleClient || role == identity.RoleUnknown
 
@@ -37,6 +40,9 @@ func FuzzNewUser(f *testing.F) {
 		case validRole:
 			require.NoError(t, err, "email %q role %q", email, role)
 			require.Equal(t, email, u.Email)
+			// Guard входа и поиск по адресу обрезают пробелы по краям: адрес сущности их не несёт, и у ящика
+			// одна учётная запись.
+			require.Equal(t, strings.TrimSpace(u.Email), u.Email)
 		}
 	})
 }
