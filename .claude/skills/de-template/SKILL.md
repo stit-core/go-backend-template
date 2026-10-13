@@ -84,6 +84,11 @@ go mod tidy
 к фактическому контракту проекта. Секреты — только имена ключей (значения не коммить;
 `.claude/rules/env-local.md`). Boot-тест и e2e-стенд берут env из него.
 
+При `identity: external` домены идентичности до prune (этап 4 `/init-service`) ещё в графе, и их
+строки остаются: стримы `user` и `verification` в `NATS_JS_STREAM_NAMES` (без них старт падает: «no
+stream covers subjects: user.>»), `SESSION_*`, `BRUTEFORCE_SUBJECT_*`. Снимает их шаг «Окружение»
+`.claude/skills/init-service/references/prune.md`.
+
 ### A.4 Планы и handoff
 
 `.claude/plans/` — форк стартует без планов и handoff шаблона: только `backlog.md` и `handoff.md` с

@@ -21,19 +21,23 @@
      `registerHTTP`);
    - `cmd/migrate/sources/sources.go` — `useroutbox`, `verifoutbox`, `sessionpg`, `bruteforcepg`;
    - `cmd/api/api_test.go` — их открытые операции из `publicOperations`.
-3. **Генерация** — блоки удалённых доменов в `sqlc.yaml` и `.mockery.yml`.
-4. **Миграции** — свои — номерами подряд с `0001` (`git mv` с сохранением порядка: migrations-check
+3. **Подключение по стеку** — киты, которые de-template оставил ради доменов идентичности (wiring §2
+   скилла `de-template`): кит, которого нет в `docs/stack/dependencies.md § golibinfra kits` (аудит —
+   `auditpg.Module` в `cmd/api/main.go` и `auditpg.Migrations` в `cmd/migrate/sources/sources.go`), —
+   вон из графа и из источников миграций, импорты — `go mod tidy`.
+4. **Генерация** — блоки удалённых доменов в `sqlc.yaml` и `.mockery.yml`.
+5. **Миграции** — свои — номерами подряд с `0001` (`git mv` с сохранением порядка: migrations-check
    ждёт нумерацию с 0001, прод-БД у проекта ещё нет). Расширение `pgcrypto` и функция `set_updated_at()`
    из `0001_users` уходят с ней: своя миграция, которой они нужны, заводит их сама.
-5. **Окружение** — `.env.example`: в `NATS_JS_STREAM_NAMES` — стримы своих доменов-публикаторов (без
+6. **Окружение** — `.env.example`: в `NATS_JS_STREAM_NAMES` — стримы своих доменов-публикаторов (без
    `user` и `verification`; публикаторов нет — `NATS_JS_STREAM_NAMES=`), комментарий над ним — про них;
    у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*` и
    `BRUTEFORCE_SUBJECT_*` с их комментариями удали.
-6. **Раскладка** — `internal/archtest/layout_settings_test.go`: запись
+7. **Раскладка** — `internal/archtest/layout_settings_test.go`: запись
    `archkit.WithUncheckedPackages("internal/platform/identity")` убери, если корень ни одного своего
    домена не берёт `internal/platform/identity` (сам или через `pkg/`): лишняя запись — `TestLayout`
    красный с подсказкой `remove it`.
-7. `make gen` → `make check` → `✓ check clean`.
+8. `make gen` → `make check` → `✓ check clean`.
 
 ## Что остаётся
 

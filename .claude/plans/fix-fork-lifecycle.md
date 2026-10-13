@@ -68,11 +68,15 @@ blocked-by: —
     `Безопасность` (`contributing.md § Версия обвязки`), `/upgrade` шаги 2 и 5 — строка «перенесено» или
     «отклонено — причина» на каждый пункт; `Dockerfile`, `Dockerfile.migrate`, `.dockerignore` — в
     `.template/paths` (`TestTemplatePaths` → PASS)
-- [ ] **AC5** — RLIF-03: онбординг с `identity: external` проходим буквально: A.3 и wiring §2 оставляют
+- [x] **AC5** — RLIF-03: онбординг с `identity: external` проходим буквально: A.3 и wiring §2 оставляют
   стримы и киты доменов идентичности до prune, `prune.md` снимает киты, которых нет в `dependencies.md`
   (на базе A.3 буквально → красные `TestBoot`, `TestIdentity`; wiring §2 для auditkit → красный
   `TestFxGraphValidates`). Проверка: пробный форк со стеком `external` без auditkit по новому тексту →
   `make check` зелёный на этапе 2 и после prune, auditkit вне графа
+  - Подтверждено: клоны `ext` (`nine/lifecycle/logs/s9-ext*.log`) — этап 2 по новому A.3 и wiring §2
+    (`NATS_JS_STREAM_NAMES=user,verification`, аудит в графе) → `✓ check clean` 760/760; после prune с
+    шагом «Подключение по стеку» (`auditpg` вне графа и источников) → `✓ check clean` 141/141; старое
+    буквальное wiring §2 на этапе 2 → `TestFxGraphValidates`: «missing type: auditkit.Logger»
 - [x] **AC6** — RLIF-05: `validate-stack-doc.sh --stable` отвергает секцию-заглушку (`TBD`, `_TBD_`, `TODO…`,
   `—`, `...`, `- <заполнить>`, таблица без строк, одни подзаголовки), содержимое проходит (на базе — `OK`,
   `R/tpl-lif/logs/v-stack-validator.log`). Проверка: `bash R/tpl-lif/bin/vstack.sh <worktree> <каталог>` →
@@ -139,8 +143,11 @@ blocked-by: —
   - Сделано: раздел `Безопасность` в формате аннотации, `/upgrade` (вступление, шаги 2 и 5, anti-pattern),
     `ecosystem.md`; `Dockerfile`, `Dockerfile.migrate`, `.dockerignore` в `.template/paths`;
     `make check` → `✓ check clean`
-- [ ] **S9** — RLIF-03: A.3 и wiring §2 — строки и киты доменов идентичности до prune, шаг wiring в `prune.md`
+- [x] **S9** — RLIF-03: A.3 и wiring §2 — строки и киты доменов идентичности до prune, шаг wiring в `prune.md`
   - Проверка: пробный форк `external` без auditkit по новому тексту · Закрывает: AC5 · Зависит от: —
+  - Сделано: A.3 — env доменов идентичности до шага «Окружение» prune; wiring §2 — исключение для китов,
+    которые берут домены идентичности, с аудитом; `prune.md` — шаг 3 «Подключение по стеку»; клоны `ext`
+    на состояниях нового текста — гейт зелёный; `make check` → `✓ check clean`
 - [ ] **S10** — Гейт и приёмка: эксперименты всех критериев на итоговом дереве
   - Проверка: `make check` → `✓ check clean`; AC1–AC8 подтверждены · Закрывает: AC1, AC2, AC3, AC4, AC5,
     AC6, AC7, AC8 · Зависит от: S1, S2, S3, S4, S5, S6, S7, S8, S9
@@ -184,6 +191,10 @@ blocked-by: —
   покажет конфликтом. Шаг «возьми Dockerfile из тега» аннотации больше не нужен.
 - RLIF-01: «Безопасность» — отдельный раздел аннотации для фиксов вне путей шаблона; перенос или
   отказ — строкой в теле коммита `/upgrade`. Машиной (хук `commit-msg`) это не держится — вне трека.
+- RLIF-03: правило «до prune домены идентичности в графе — их env и киты остаются» — в A.3 и wiring §2
+  (где агент читает), снятие — шагами prune по именам («Окружение», «Подключение по стеку»), без
+  номеров: шаги сдвинулись. Проверка — гейтом на состояниях форка `ext` аудитора, которые даёт новый
+  текст: отдельный пробный онбординг повторил бы тот же код.
 
 ## Handoff
 - Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
@@ -194,5 +205,5 @@ blocked-by: —
   релиза (блок RLIF-04 — в накопителе `handoff.md`).
 
 ## Где мы сейчас
-S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4–S5 (RLIF-04), S6 (RLIF-02), S7–S8 (RLIF-01) закрыты.
-Следующее: S9 — RLIF-03, онбординг с `identity: external` (A.3, wiring §2, шаг в `prune.md`).
+S1–S9 закрыты: RADP-01, RLIF-05, RENF-03, RLIF-04, RLIF-02, RLIF-01, RLIF-03. Следующее: S10 — гейт и
+повтор экспериментов всех критериев на итоговом дереве.

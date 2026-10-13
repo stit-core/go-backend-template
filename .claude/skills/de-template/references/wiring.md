@@ -15,8 +15,9 @@
 ### 2. dependencies → `docs/stack/dependencies.md`
 - киты golibinfra — из `golibinfra kits`: нужный — его `<kit>.NewConfig` в `kitConfigs` и модуль в графе
   (`cmd/api/main.go`); кит шаблона, которого там нет, — вон из графа, импорты — `go mod tidy`. Кроме
-  китов доменов идентичности (сессии, антибрутфорс): при `identity: external` их уберёт prune вместе с
-  доменами (п. 4), сейчас их ещё берут домены.
+  китов, которые берут домены идентичности (сессии, антибрутфорс, аудит — `auditkit.Logger` у `auth`,
+  `user`, `verification`): без них граф не собирается (`TestFxGraphValidates`), а при `identity: external`
+  их снимают шаги «Подключение» и «Подключение по стеку» prune (`/init-service`) — после своих доменов.
 - `timerkit.Module` и пробы healthkit (`healthkit.ProvideProbe(<kit>.Probe)`, у NATS —
   `natskit.ProvideProbe("")`) — потребители групп китов: без первого не идут джобы (дренаж outbox,
   cleanup — `TestFxGraphValidates` красный), без проб `/ready` не видит зависимость (список проб сверяет
