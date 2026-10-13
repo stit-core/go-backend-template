@@ -73,9 +73,13 @@ blocked-by: —
   - Подтверждено: база — `make lint` OK со слабым `.golangci.toml` (`gate/altconfig2.sh`), с `// #nosec` у
     md5 и с `//revive:disable:var-naming` (`N/gate/s6-base-*.txt`); ветка — те же инъекции: `make lint` FAIL
     (errcheck, forbidigo, gosec), `TestLinterDirectives` называет обе директивы; `TestLintUsesItsConfig` → PASS
-- [ ] **AC7** — RENF-07: после `make gen` без `git add` `make gen-check` → OK (было FAIL «запусти make
+- [x] **AC7** — RENF-07: после `make gen` без `git add` `make gen-check` → OK (было FAIL «запусти make
   gen»); ручная правка мока в дереве (M04b-unstaged) → FAIL с файлом (было `✓`, правка стёрта молча);
   `MOCKERY_*` из окружения шаг не меняют. Проверка: сценарии `R/tpl-enf/gate/gen-roundtrip.sh` и M04b
+  - Подтверждено: база — после `make gen` без `git add` FAIL «запусти make gen», правка мока в дереве —
+    OK и стёрта, `MOCKERY_CONFIG` с выводом в `mocks2` при устаревшем моке — OK (`N/gate/s7-base-*.txt`);
+    ветка — три пути gen-roundtrip OK, обе подделки FAIL с файлом (`s7-branch-*.txt`);
+    `TestGenCheckComparesMocksWithTree` — на Makefile базы 4 из 4 FAIL, на ветке PASS
 - [ ] **AC8** — RENF-08, RENF-09: тест без утверждений в `pkg/` и `cmd/` (N-t-pkg, N-t-cmd, на базе `✓`)
   ловит `TestTestsAssert`; нарушение extra-правил gofumpt (N-fmt2) ловит `make fmt-check` и чинит
   `make fmt`. Проверка: инъекции
@@ -126,8 +130,11 @@ blocked-by: —
   - Сделано: `lint.sh` и `golangciEnabled` (harness_test.go) — `--config .golangci.yml`, `lint.sh` снимает и
     `GOLANGCI_LINT_CACHEPROG`; gosec `nosec: true`; `TestLinterDirectives` (директивы revive и gosec) и
     `TestLintUsesItsConfig`; `make check` → ✓
-- [ ] **S7** — gen-check сверяет моки с деревом до прогона mockery; `MOCKERY_*` окружения — не для шага
+- [x] **S7** — gen-check сверяет моки с деревом до прогона mockery; `MOCKERY_*` окружения — не для шага
   - Проверка: gen-roundtrip и M04b-unstaged; `make check` → ✓ · Закрывает: AC7 · Зависит от: —
+  - Сделано: снимок `cksum` моков дерева до и после mockery вместо `git diff` с индексом; новый мок вне
+    индекса — отказ с `git add`; `unexport MOCKERY_*`; тест на заглушках; troubleshooting
+    `docs/contributing.md`; `make check` → ✓
 - [ ] **S8** — `TestTestsAssert` — все тесты модуля
   - Проверка: N-t-pkg, N-t-cmd на базе `✓`, на ветке — красный; `make check` → ✓ · Закрывает: AC8 · Зависит от: —
 - [ ] **S9** — `make fmt` и `fmt-check` — `gofumpt -extra`
@@ -146,6 +153,8 @@ blocked-by: —
 - Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
   у хуков, которые git запускает сам. Хуки перезапускают себя без переменных make и оболочки (без маркера:
   условие — сами переменные), а не чистят окружение каждой проверки.
+- gen-check: моки сверяются с деревом до mockery (как остальной гейт — дерево), новый мок вне индекса —
+  отказ по-прежнему: без `git add` он не уйдёт в коммит, а pre-push увидит его отсутствие поздно.
 - `internal/archtest/harness_test.go` (файл трека harness): `golangciEnabled` — `--config .golangci.yml`,
   иначе `TestNolintNamesEnabledLinters` судит по чужому конфигу (третий вызов RENF-05).
 - migrations-check: индекс по таблице, созданной в том же файле, — не эффект (иначе маркер у каждой новой
@@ -168,8 +177,8 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S6 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
-линтеров не выводят код из гейта, порог покрытия — 100, migrations-check без fail-open. Эксперименты: база —
+S1–S7 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
+линтеров не выводят код из гейта, порог покрытия — 100, migrations-check и gen-check без fail-open. Эксперименты: база —
 worktree `N/wt-gate-x` (e8ea150, снять в S13), срез ветки с незакоммиченным шагом — временный `N/wt-gate-y`
-(раннеры аудитора откатывают дерево к HEAD). Следующее: S7 — gen-check сверяет моки с деревом
-(RED — `gate/gen-roundtrip.sh` на базе).
+(раннеры аудитора откатывают дерево к HEAD). Следующее: S8 — `TestTestsAssert` на все тесты модуля
+(RED — N-t-pkg, N-t-cmd).

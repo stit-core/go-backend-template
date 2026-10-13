@@ -137,7 +137,7 @@ string-replace edit.
 | Path-scoped rule не грузится | файл читали через Bash или создали через Write — открой его через Read; frontmatter `paths:` (не `globs:`!) — проверить glob |
 | CLAUDE.md игнорируется | длина >200 строк, либо конфликт инструкций между секциями |
 | Коммит reject'нут | `scripts/git-hooks/commit-msg` — type ∈ {feat,fix,refactor,docs,test,chore,meta} |
-| `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса или HTTP-операции (`openapi.json`) / `untracked mocks` — новый мок не в индексе: `git add` |
+| `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса или HTTP-операции (`openapi.json`) / `моки разошлись с кодом` — mockery обновил их в дереве: обновлённые — в коммит, ручная правка мока не живёт / `новые моки не в индексе` — `git add` |
 | archtest: `golangci-lint linters --json` не запустился | golangci-lint нет в PATH — `make setup` (pinned-версия) |
 | `make lint` → `FAIL: golangci-lint exit N` | линтер не отработал, причина — в хвосте вывода: 3 — конфиг или неизвестный линтер, 4 — таймаут, 5 — нет Go-файлов, 7 — ошибка в логе (например, пакет не найден) |
 | Замечания lint по файлам, которых нет | кеш анализа своего дерева — `.cache/golangci-lint`; удалить каталог |

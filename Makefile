@@ -110,23 +110,35 @@ check:: ## Канонический gate (pre-push) по всему дереву
 	@echo "✓ check clean"
 
 ##@ GEN
+# mockery читает MOCKERY_CONFIG и MOCKERY_* из окружения поверх .mockery.yml: моки, выведенные мимо
+# каталогов mocks/, gen-check не сверил бы.
+unexport $(filter MOCKERY_%,$(.VARIABLES))
+
 gen: ## Регенерация сгенерированного: sqlc, mockery, openapi.json (без запуска сервиса)
 	sqlc generate
 	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
 	mockery
 	go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 -args -update
 
+# Моки сверяются с деревом до прогона mockery, а не с индексом: свежие моки после make gen, ещё не в
+# индексе, — не дрейф, а ручная правка мока в дереве — дрейф, а не молча стёртая правка. Новый мок вне
+# индекса — отдельный отказ: без git add он не уйдёт в коммит.
 gen-check: ## Проверка, что sqlc, моки и openapi.json актуальны (шаг make check)
 	@sqlc diff || { echo "FAIL: sqlc diff — вывод выше (дрейф сгенерированного чинит make gen)"; exit 1; }
 	@out=$$(go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 2>&1) || \
 		{ echo "$$out"; echo "FAIL: TestOpenAPISpec — вывод выше (расхождение с openapi.json чинит make gen)"; exit 1; }
 	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
-	@mockery
-	@git diff --exit-code -- '**/mocks/*.go' || { echo "FAIL: моки устарели — запусти make gen"; exit 1; }
+	@before=$$(git ls-files -co --exclude-standard -- '**/mocks/*.go' | xargs -r cksum) && mockery && \
+	after=$$(git ls-files -co --exclude-standard -- '**/mocks/*.go' | xargs -r cksum) || \
+		{ echo "FAIL: mockery или чтение моков — вывод выше"; exit 1; }; \
+	if [ "$$before" != "$$after" ]; then \
+		printf '%s\n%s\n' "$$before" "$$after" | sort | uniq -u | awk '{print "  " $$3}' | sort -u; \
+		echo "FAIL: моки разошлись с кодом — mockery обновил их в дереве (файлы выше): обновлённые — в коммит, ручная правка мока не живёт"; exit 1; \
+	fi
 	@untracked=$$(git ls-files --others --exclude-standard -- '**/mocks/*.go'); \
 	if [ -n "$$untracked" ]; then \
 		echo "$$untracked" | sed 's/^/  /'; \
-		echo "FAIL: untracked mocks — интерфейс не в .mockery.yml был, либо мок не закоммичен"; exit 1; \
+		echo "FAIL: новые моки не в индексе — git add (или интерфейса нет в .mockery.yml)"; exit 1; \
 	fi
 	@echo "OK: sqlc, моки и openapi.json совпадают с кодом"
 

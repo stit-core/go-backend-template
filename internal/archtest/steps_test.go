@@ -82,6 +82,63 @@ func TestLintUsesItsConfig(t *testing.T) {
 	require.Contains(t, out, "(gosec)", "the gosec directive silences gosec")
 }
 
+// TestGenCheckComparesMocksWithTree: gen-check сверяет моки с деревом до прогона mockery, а не с индексом:
+// свежие моки после make gen — не дрейф, ручная правка мока в дереве — дрейф, новый мок вне индекса —
+// отказ, а MOCKERY_* окружения до mockery не доходят. Инструменты — заглушки: mockery пишет моки v2 (с
+// MOCKERY_CONFIG в окружении — никуда, как вывод мимо mocks/), sqlc и go отвечают успехом.
+func TestGenCheckComparesMocksWithTree(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	bin := t.TempDir()
+	writeFiles(t, bin, map[string]string{
+		"mockery": "#!/bin/sh\n[ -z \"$MOCKERY_CONFIG\" ] || exit 0\nprintf 'package mocks // v2\\n' >p/mocks/m.go\nprintf 'package mocks // n\\n' >p/mocks/n.go\n",
+		"sqlc":    "#!/bin/sh\nexit 0\n",
+		"go":      "#!/bin/sh\nexit 0\n",
+	})
+	for _, tool := range []string{"mockery", "sqlc", "go"} {
+		require.NoError(t, os.Chmod(filepath.Join(bin, tool), 0o700))
+	}
+	for _, tc := range []struct {
+		name    string
+		tree    string // p/mocks/m.go в дереве; в индексе — v1
+		newMock bool   // n.go — вне индекса
+		env     []string
+		want    string
+		ok      bool
+	}{
+		{name: "fresh mocks out of the index", tree: "package mocks // v2\n", want: "OK: sqlc, моки", ok: true},
+		{name: "a hand-edited mock in the tree", tree: "package mocks // v2 hand-edited\n", want: "  p/mocks/m.go"},
+		{name: "MOCKERY_CONFIG in env", tree: "package mocks // v1\n", env: []string{"MOCKERY_CONFIG=/elsewhere.yml"}, want: "FAIL: моки разошлись"},
+		{name: "a new mock out of the index", tree: "package mocks // v2\n", newMock: true, want: "FAIL: новые моки не в индексе"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			writeFiles(t, repo, union(readFiles(t, root, "Makefile"), map[string]string{
+				"p/mocks/m.go": "package mocks // v1\n",
+				"p/mocks/n.go": "package mocks // n\n",
+			}))
+			git(t, repo, "init", "-q", "-b", "main")
+			commitAll(t, repo)
+			if tc.newMock {
+				git(t, repo, "rm", "-q", "--cached", "p/mocks/n.go")
+			}
+			writeFiles(t, repo, map[string]string{"p/mocks/m.go": tc.tree})
+			cmd := exec.CommandContext(t.Context(), "make", "--no-print-directory", "gen-check")
+			cmd.Dir = repo
+			cmd.Env = callerEnv(append([]string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, tc.env...)...)
+			data, err := cmd.CombinedOutput()
+			out := string(data)
+			require.Contains(t, out, tc.want)
+			if tc.ok {
+				require.NoError(t, err, out)
+				return
+			}
+			require.Error(t, err, out)
+		})
+	}
+}
+
 // TestMigrationsCheck: migrations-check пропускает только каталог по конвенции, а up с эффектом для выкатки
 // — разрушительный, правку данных, долгий lock, расширение, код DO — только с маркером
 // `-- infra-handoff:`. Индекс по таблице этого же файла и CONCURRENTLY, действия FK и триггер на UPDATE —
