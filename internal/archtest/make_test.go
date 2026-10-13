@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -274,14 +275,24 @@ func TestReleasePreflight(t *testing.T) {
 }
 
 // TestReleaseBuildForwardsSSHAgent: приватные модули сборка образа берёт по SSH ключом ssh-agent — go mod
-// download в Dockerfile'ах релиза требует ssh-mount, адрес хоста GOPRIVATE переписан с https на ssh, а ключ
-// хоста в свежем образе принимается (accept-new); release.sh передаёт агент каждой сборке. Без любой из
-// частей релиз упал бы на сборке образа уже после тега.
+// download в Dockerfile'ах релиза требует ssh-mount, в окружении этой команды git идёт за модулем хоста
+// GOPRIVATE по ssh, а ключ хоста в свежем образе принимается (accept-new); release.sh передаёт агент каждой
+// сборке. Без любой из частей релиз упал бы на сборке образа уже после тега.
 func TestReleaseBuildForwardsSSHAgent(t *testing.T) {
 	t.Parallel()
 	files := readFiles(t, repoRoot(t), "Dockerfile", "Dockerfile.migrate", "scripts/release.sh")
 	commands := func(name string) []string {
 		return strings.Split(strings.ReplaceAll(files[name], "\\\n", " "), "\n")
+	}
+	// fetches — адрес, по которому git пойдёт за url в окружении команды RUN: go в ней — заглушка, а
+	// git ls-remote --get-url раскрывает insteadOf без сети.
+	fetches := func(run, url string) string {
+		bin := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\nexec git ls-remote --get-url "+url+"\n"), 0o700))
+		script := regexp.MustCompile(`^RUN(\s+--\S+)*\s+`).ReplaceAllString(run, "")
+		out, err := runEnv(t, t.TempDir(), []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, "sh", "-c", script)
+		require.NoError(t, err, out)
+		return out
 	}
 	for _, dockerfile := range []string{"Dockerfile", "Dockerfile.migrate"} {
 		var hosts []string
@@ -299,8 +310,8 @@ func TestReleaseBuildForwardsSSHAgent(t *testing.T) {
 				downloads++
 				require.Contains(t, cmd, "--mount=type=ssh,required=true", "%s: go mod download takes private modules with the key of the ssh-agent", dockerfile)
 				for _, host := range hosts {
-					require.Contains(t, cmd, "url.git@"+host+":.insteadOf", "%s: go fetches %s over https, the key of the ssh-agent works over ssh only", dockerfile, host)
-					require.Contains(t, cmd, "=https://"+host+"/", "%s: the https address of %s is the one rewritten to ssh", dockerfile, host)
+					require.Equal(t, "git@"+host+":acme/kit\n", fetches(cmd, "https://"+host+"/acme/kit"),
+						"%s: go fetches %s over https, the key of the ssh-agent works over ssh only", dockerfile, host)
 				}
 				require.Contains(t, cmd, "StrictHostKeyChecking=accept-new", "%s: a fresh image knows no host key, and BatchMode does not ask", dockerfile)
 			}

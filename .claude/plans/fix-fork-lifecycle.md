@@ -48,7 +48,8 @@ blocked-by: —
   без `insteadOf` https → ssh и без `StrictHostKeyChecking=accept-new` (на базе оба зелёные). Проверка:
   мутант в копии `Dockerfile` → `go test -run TestReleaseBuildForwardsSSHAgent` → FAIL, без мутанта → PASS
   - Подтверждено: на базе оба мутанта (`Dockerfile` и `Dockerfile.migrate`) → `ok`; на ветке → FAIL с
-    причиной («go fetches git.stit.tech over https…», «a fresh image knows no host key…»), дерево → PASS
+    причиной («go fetches git.stit.tech over https…», «a fresh image knows no host key…»), дерево → PASS;
+    мутант `GIT_CONFIG_COUNT=0` (и только в `Dockerfile.migrate`) → FAIL «go fetches … over https»
 - [x] **AC3** — RLIF-02: финал `/init-service` заводит remote `template`; `make doctor` спрашивает его теги
   (`git ls-remote`): тег новее версии форка — строка с ним и `/upgrade`, сбой сети — не ошибка (на базе
   doctor о шаблоне молчит). Проверка: тест archtest → PASS; копия форка `own` с remote на
@@ -183,7 +184,10 @@ blocked-by: —
   `release_test.go` — новый файл трека (функции песочницы релиза — из `make_test.go`, без правки).
 - Правка чужого файла: `TestReleaseBuildForwardsSSHAgent` в `internal/archtest/make_test.go` (трек gate) —
   без неё мутантов не убить, а копия проверки в своём файле дала бы два источника одного факта.
-  Хосты — из `ENV GOPRIVATE` того же Dockerfile'а: форк на своём хосте правит его, а не тест.
+  Хосты — из `ENV GOPRIVATE` того же Dockerfile'а: форк на своём хосте правит его, а не тест. Адрес
+  модуля сверяется по смыслу (валидатор трека, N5: текстовую сверку `insteadOf` обходил
+  `GIT_CONFIG_COUNT=0`): команда RUN идёт в `sh` с заглушкой `go`, и `git ls-remote --get-url` в её
+  окружении называет адрес, по которому git пойдёт за модулем.
 - RLIF-02: теги remote спрашивает `make doctor`, а не `make status`: cockpit гоняют каждую сессию, он без
   сети; doctor идёт в `release-preflight env` — у каждого релиза форк видит новый тег. Новый тег и
   отсутствие remote — WARN (не блокирует), сеть — INFO; `git ls-remote` без fetch — doctor read-only,
