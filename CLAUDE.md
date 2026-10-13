@@ -56,8 +56,8 @@ DDD-артефакты доменов — в соседнем strategy-репо 
 Конциз-by-default: `FORMAT=detailed`/`VERBOSE=1` — полно, `PKG=./x/...` — подмножество; `make check`
 их не читает. `make check` = fmt-check + vet + lint + migrations-check + test-int (юнит +
 integration, нужен Docker) + build (`./...` без тегов, как образ) + gen-check + cover-check (покрытие
-профиля test-int ≥95%, функций без тестов нет). `make gen` — sqlc, mockery и `openapi.json` (контракт API из регистраций huma, без
-запуска сервиса).
+профиля test-int 100%, непокрываемое — список `cover.sh`; функций без тестов нет). `make gen` — sqlc,
+mockery и `openapi.json` (контракт API из регистраций huma, без запуска сервиса).
 
 ## Карта: где что
 

@@ -209,9 +209,11 @@ test-bench: ## Бенчмарки
 # Покрытие — профиль одного прогона юнит + integration (make test-int) по internal/ и pkg/ без
 # сгенерированного и internal/testkit: доля statement'ов ≥ порога и ни одной функции без исполненного
 # statement'а (scripts/tools/cover.sh); make check проверяет профиль своего test-int, не гоняя тесты
-# второй раз. Порог — константа гейта: ни окружение, ни командная строка его не меняют.
-override COVER_FLOOR := 95
-cover-check: ## Покрытие юнит + integration ≥ $(COVER_FLOOR)%, функций без тестов нет: make test-int и его профиль (FORMAT=detailed — блоки)
+# второй раз. Порог — факт, 100: запас ниже факта пропускал удалённые юнит-тесты usecase, которые
+# попутно исполняют integration-тесты; блок, который тесты не исполнят по построению, — в списке
+# непокрываемого cover.sh. Порог — константа гейта: ни окружение, ни командная строка его не меняют.
+override COVER_FLOOR := 100
+cover-check: ## Покрытие юнит + integration 100% (непокрываемое — список cover.sh), функций без тестов нет: make test-int и его профиль (FORMAT=detailed — все блоки)
 	@$(GATE) test-int
 	@bash scripts/tools/cover.sh $(DETAIL) coverage.out $(COVER_FLOOR)
 

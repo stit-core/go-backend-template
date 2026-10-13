@@ -8,8 +8,9 @@
 # исполняет boot-тест cmd/api, засчитываются), кроме сгенерированного (заголовок «Code generated … DO
 # NOT EDIT.»: sqlc, mockery) и тестовой обвязки internal/testkit/. Два условия: доля statement'ов всех
 # блоков (и замыканий вне функций) не ниже floor и ни одной функции, у которой тесты не исполнили ни
-# одного statement'а, — новая функция без тестов не проходит при любом проценте. Отказ — с файлами и
-# функциями, detailed — ещё и каждый непокрытый блок. Последняя строка — `OK: …` / `FAIL: …`.
+# одного statement'а, — новая функция без тестов не проходит при любом проценте. Блок из списка
+# непокрываемого (ниже) идёт исполненным. Отказ — с блоками и функциями (detailed — все блоки).
+# Последняя строка — `OK: …` / `FAIL: …`.
 
 set -uo pipefail
 
@@ -19,7 +20,7 @@ for arg in "$@"; do
     case "$arg" in
         --format=*) FORMAT="${arg#--format=}" ;;
         -h | --help)
-            sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) ARGS+=("$arg") ;;
@@ -43,33 +44,72 @@ generated=$(grep -rlE --include='*.go' '^// Code generated .* DO NOT EDIT\.$' in
 scoped=$(mktemp) || exit 1
 trap 'rm -f "$scoped"' EXIT
 
+# Непокрываемое — блок, который тесты не исполнят по построению: строка «<файл от корня репо>:<текст из
+# строк блока>», над ней — комментарий «# почему». Неисполненный блок этого файла, в строках которого есть
+# текст, идёт исполненным; запись без такого блока — отказ: список не копит устаревшее. Пополнить список —
+# ослабить гейт (CLAUDE.md § Сначала спросить).
+uncoverable=$(
+    cat <<'LIST'
+LIST
+)
+
 # Блок профиля: <файл>:<начало>,<конец> <statement'ов> <счётчик>; блок приходит от каждого тестового бинаря,
 # покрыт — если счётчик хоть одного больше нуля. Блоки scope идут ещё и в $scoped — для покрытия функций;
 # там блок пустого тела считается за statement: иначе -func даёт исполненной пустой функции 0.0% (0 из 0).
-report=$(LC_ALL=C awk -v testkit="$module/internal/testkit/" -v scoped="$scoped" '
-    FNR == NR { if ($0 != "") gen[$0] = 1; next }
-    FNR == 1 { print > scoped; next }
+report=$(LC_ALL=C awk -v module="$module/" -v testkit="$module/internal/testkit/" -v scoped="$scoped" '
+    FNR == 1 { part++ }
+    part == 1 { if ($0 !~ /^[[:space:]]*(#|$)/) { i = index($0, ":"); efile[++ne] = substr($0, 1, i - 1); etext[ne] = substr($0, i + 1) }; next }
+    part == 2 { if ($0 != "") gen[$0] = 1; next }
+    FNR == 1 { head = $0; next }
     {
         file = substr($1, 1, index($1, ":") - 1)
         if (file in gen || index(file, testkit) == 1) next
-        line = $0; if ($2 == 0) { $2 = 1 }; print > scoped; $0 = line
-        if (!($1 in stmts)) { stmts[$1] = $2; fileOf[$1] = file; order[++n] = $1 }
+        lines[++nl] = $0
+        if (!($1 in stmts)) { stmts[$1] = $2; fileOf[$1] = substr(file, length(module) + 1); order[++n] = $1 }
         if ($3 > 0) hit[$1] = 1
+    }
+    # listed — номер записи непокрываемого, текст которой есть в строках блока b, или 0.
+    function listed(b,   se, from, to, e, l, ln, found) {
+        split(substr(b, index(b, ":") + 1), se, ","); from = int(se[1]); to = int(se[2])
+        for (e = 1; e <= ne; e++) {
+            if (efile[e] != fileOf[b]) continue
+            ln = 0; found = 0
+            while ((getline l < efile[e]) > 0) if (++ln >= from && ln <= to && index(l, etext[e])) found = 1
+            close(efile[e])
+            if (found) return e
+        }
+        return 0
     }
     END {
         for (i = 1; i <= n; i++) {
+            b = order[i]
+            if (!(b in hit) && (e = listed(b))) { hit[b] = 1; used[e] = 1; excluded += stmts[b] }
+        }
+        print head > scoped
+        for (i = 1; i <= nl; i++) {
+            $0 = lines[i]
+            if ($2 == 0) $2 = 1
+            if ($1 in hit) $3 = 1
+            print > scoped
+        }
+        for (i = 1; i <= n; i++) {
             b = order[i]; total += stmts[b]
             if (b in hit) { covered += stmts[b]; continue }
-            miss[fileOf[b]] += stmts[b]
-            printf "BLOCK %s %d\n", b, stmts[b]
+            printf "BLOCK %s%s %d\n", fileOf[b], substr(b, index(b, ":")), stmts[b]
         }
-        for (f in miss) printf "MISS %d %s\n", miss[f], f
-        printf "TOTAL %d %d\n", covered, total
-    }' <(printf '%s\n' "$generated") "$profile")
+        for (e = 1; e <= ne; e++) if (!(e in used)) printf "STALE %s:%s\n", efile[e], etext[e]
+        printf "TOTAL %d %d %d\n", covered, total, excluded
+    }' <(printf '%s\n' "$uncoverable") <(printf '%s\n' "$generated") "$profile")
 
-read -r covered total < <(awk '$1 == "TOTAL" {print $2, $3}' <<<"$report")
+read -r covered total excluded < <(awk '$1 == "TOTAL" {print $2, $3, $4}' <<<"$report")
 if [ "${total:-0}" -eq 0 ]; then
     echo "FAIL: в профиле $profile нет statement'ов scope (internal/, pkg/)"
+    exit 1
+fi
+stale=$(sed -n 's/^STALE //p' <<<"$report")
+if [ -n "$stale" ]; then
+    sed 's/^/  /' <<<"$stale"
+    echo "FAIL: запись непокрываемого без неисполненного блока — убери её из scripts/tools/cover.sh"
     exit 1
 fi
 funcs=$(go tool cover -func="$scoped") || { echo "FAIL: go tool cover -func"; exit 1; }
@@ -77,12 +117,10 @@ untested=$(awk '$1 != "total:" && $NF == "0.0%" {print $1, $2}' <<<"$funcs")
 
 pct=$(LC_ALL=C awk -v c="$covered" -v t="$total" 'BEGIN { printf "%.2f", 100 * c / t }')
 summary="$covered/$total statement'ов; юнит + integration, internal/ и pkg/ без сгенерированного и internal/testkit"
+[ "$excluded" -eq 0 ] || summary+="; непокрываемое списком — $excluded"
 low=""
 LC_ALL=C awk -v c="$covered" -v t="$total" -v f="$floor" 'BEGIN { exit !(100 * c / t < f) }' && low=1
 
-if [ "$FORMAT" = detailed ]; then
-    awk '$1 == "BLOCK" {printf "  %s (%d)\n", $2, $3}' <<<"$report"
-fi
 if [ -z "$low" ] && [ -z "$untested" ]; then
     echo "OK: coverage $pct% >= $floor%, функций без тестов нет ($summary)"
     exit 0
@@ -92,8 +130,14 @@ if [ -n "$untested" ]; then
     sed 's/^/  /' <<<"$untested"
 fi
 if [ -n "$low" ]; then
-    echo "Непокрытые statement'ы по файлам (FORMAT=detailed — блоки):"
-    awk '$1 == "MISS" {print $2, $3}' <<<"$report" | sort -k1,1nr | head -20 | sed 's/^/  /'
+    blocks=$(awk '$1 == "BLOCK" {printf "%s (%d)\n", $2, $3}' <<<"$report")
+    echo "Непокрытые блоки (файл:строка.колонка,строка.колонка и statement'ов):"
+    if [ "$FORMAT" = detailed ]; then
+        sed 's/^/  /' <<<"$blocks"
+    else
+        head -20 <<<"$blocks" | sed 's/^/  /'
+        [ "$(wc -l <<<"$blocks")" -le 20 ] || echo "  … все — FORMAT=detailed"
+    fi
 fi
 reasons=()
 [ -z "$low" ] || reasons+=("coverage $pct% < floor $floor%")

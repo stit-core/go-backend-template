@@ -53,9 +53,12 @@ blocked-by: —
   - Подтверждено: база с N-b-unit, N-b-prod, N-b-migrate — `make check` → `✓ check clean`
     (`N/gate/s3-base-nb.log`); ветка — FAIL на test-int, `TestBuildConstraints` называет три файла
     (`s3-branch-nb.log`); `make build` на N-b-migrate → `undefined: lockHint`, FAIL
-- [ ] **AC4** — RTSTT-01: эксперименты CV01, CV04, CV05, CV15 (на базе `✓ check clean`) — `make check`
+- [x] **AC4** — RTSTT-01: эксперименты CV01, CV04, CV05, CV15 (на базе `✓ check clean`) — `make check`
   красный на cover-check; порог — 100, непокрываемое — явный список `cover.sh`, запись без непокрытого
   блока — отказ. Проверка: эксперименты под flock → `FAIL: coverage … < floor 100%`; тест списка → PASS
+  - Подтверждено: база — CV01 95,39 %, CV04 99,74 %, CV05 98,58 %, CV15 96,32 % → `✓ check clean`
+    (`N/gate/cov-base/`); ветка — те же доли → `FAIL: … < floor 100%` с непокрытыми блоками
+    (`N/gate/cov-branch/`); `TestCoverCheck` → PASS
 - [ ] **AC5** — RENF-04, RSECT-07: migrations-check — каталог с файлами не по маске → FAIL (было
   `OK (пусто)`); `DELETE`, `UPDATE … SET`, `SET NOT NULL`, `CREATE INDEX` без `CONCURRENTLY` по таблице не
   из этого файла, `CREATE EXTENSION`, `DO` без маркера → FAIL; новая таблица с индексом и миграции
@@ -101,8 +104,11 @@ blocked-by: —
   - Сделано: `TestBuildConstraints` (`generated_test.go`, рядом с заголовком сгенерированного): строка
     ограничения — только `//go:build integration` у `*_test.go`, файл не исключён из сборки гейта
     (`build.MatchFile`: суффиксы ОС и архитектуры); build — `go build ./...`; `make check` → ✓
-- [ ] **S4** — Порог покрытия 100 и явный список непокрываемого в `cover.sh`
+- [x] **S4** — Порог покрытия 100 и явный список непокрываемого в `cover.sh`
   - Проверка: CV01, CV04, CV05, CV15 под flock — красные; `make check` → ✓ · Закрывает: AC4 · Зависит от: —
+  - Сделано: `COVER_FLOOR := 100`; в `cover.sh` — список непокрываемого (пуст: «<файл>:<текст блока>» с
+    причиной, запись без неисполненного блока — отказ), отказ называет блоки; `TestCoverCheck` (новый
+    `steps_test.go` — тесты шагов гейта); правило `tests-pipeline`, CLAUDE.md § Команды; `make check` → ✓
 - [ ] **S5** — migrations-check: имена не по маске, каталог, классы эффекта RSECT-07; правило и reference
   - Проверка: `TestMigrationsCheck` RED → GREEN; `make check` → ✓ · Закрывает: AC5 · Зависит от: —
 - [ ] **S6** — lint: `--config .golangci.yml`, gosec без `#nosec`, директивы revive — отказ archtest
@@ -127,6 +133,8 @@ blocked-by: —
 - Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
   у хуков, которые git запускает сам. Хуки перезапускают себя без переменных make и оболочки (без маркера:
   условие — сами переменные), а не чистят окружение каждой проверки.
+- Непокрываемое — запись «<файл>:<текст из строк блока>» в `cover.sh`, а не позиция блока: правка выше в
+  файле её не ломает; блок из списка идёт исполненным (функция из одних таких блоков — не «без тестов»).
 - Правило ограничений сборки — в `generated_test.go` рядом с `TestGeneratedHeaderOnlyInGeneratorOutput`
   (так советует аудит, файл трека), а не в `archtest_test.go`; там — строка в комментарии пакета.
 - commit-msg (файл трека harness): только строка интерпретатора `#!/bin/bash -p` — без неё `BASH_ENV`
@@ -139,6 +147,7 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S3 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки не выводят файлы
-из гейта. Эксперименты на базе — worktree `N/wt-gate-x` (e8ea150, снять в S13). Следующее: S4 — порог
-покрытия 100 и список непокрываемого (RED — CV01, CV04, CV05, CV15 на базе).
+S1–S4 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки не выводят файлы
+из гейта, порог покрытия — 100. Эксперименты: база — worktree `N/wt-gate-x` (e8ea150, снять в S13), срез
+ветки с незакоммиченным шагом — временный `N/wt-gate-y` (раннеры аудитора откатывают дерево к HEAD).
+Следующее: S5 — migrations-check (`TestMigrationsCheck` RED на базе).
