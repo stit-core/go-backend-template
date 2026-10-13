@@ -274,8 +274,9 @@ func TestReleasePreflight(t *testing.T) {
 }
 
 // TestReleaseBuildForwardsSSHAgent: приватные модули сборка образа берёт по SSH ключом ssh-agent — go mod
-// download в Dockerfile'ах релиза требует ssh-mount, а release.sh передаёт агент каждой сборке. Без одной
-// из половин релиз упал бы на сборке образа уже после тега.
+// download в Dockerfile'ах релиза требует ssh-mount, адрес хоста GOPRIVATE переписан с https на ssh, а ключ
+// хоста в свежем образе принимается (accept-new); release.sh передаёт агент каждой сборке. Без любой из
+// частей релиз упал бы на сборке образа уже после тега.
 func TestReleaseBuildForwardsSSHAgent(t *testing.T) {
 	t.Parallel()
 	files := readFiles(t, repoRoot(t), "Dockerfile", "Dockerfile.migrate", "scripts/release.sh")
@@ -283,11 +284,25 @@ func TestReleaseBuildForwardsSSHAgent(t *testing.T) {
 		return strings.Split(strings.ReplaceAll(files[name], "\\\n", " "), "\n")
 	}
 	for _, dockerfile := range []string{"Dockerfile", "Dockerfile.migrate"} {
+		var hosts []string
+		for _, cmd := range commands(dockerfile) {
+			if private, ok := strings.CutPrefix(cmd, "ENV GOPRIVATE="); ok {
+				for _, pattern := range strings.Split(private, ",") {
+					hosts = append(hosts, strings.TrimSuffix(pattern, "/*"))
+				}
+			}
+		}
+		require.NotEmpty(t, hosts, "%s: GOPRIVATE names the hosts of the private modules", dockerfile)
 		downloads := 0
 		for _, cmd := range commands(dockerfile) {
 			if strings.Contains(cmd, "go mod download") {
 				downloads++
 				require.Contains(t, cmd, "--mount=type=ssh,required=true", "%s: go mod download takes private modules with the key of the ssh-agent", dockerfile)
+				for _, host := range hosts {
+					require.Contains(t, cmd, "url.git@"+host+":.insteadOf", "%s: go fetches %s over https, the key of the ssh-agent works over ssh only", dockerfile, host)
+					require.Contains(t, cmd, "=https://"+host+"/", "%s: the https address of %s is the one rewritten to ssh", dockerfile, host)
+				}
+				require.Contains(t, cmd, "StrictHostKeyChecking=accept-new", "%s: a fresh image knows no host key, and BatchMode does not ask", dockerfile)
 			}
 		}
 		require.Equal(t, 1, downloads, "%s: one RUN downloads the modules", dockerfile)

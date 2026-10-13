@@ -44,9 +44,11 @@ blocked-by: —
     локальном пути — без тега); клоны форков `own` и `ext` (`nine/lifecycle/logs/s4-forks.log`): база —
     промпт без пути, `BACKEND_TAG`, `SVC=backend` у обоих; ветка — `→ git.stit.tech/acme/own{,-migrate}`,
     `OWN_TAG`, `SVC=own` и `→ …/acme/ext…`, `EXT_TAG`, `SVC=ext`
-- [ ] **AC2** — RLIF-04: `TestReleaseBuildForwardsSSHAgent` красный на обоих мутантах `go mod download` —
+- [x] **AC2** — RLIF-04: `TestReleaseBuildForwardsSSHAgent` красный на обоих мутантах `go mod download` —
   без `insteadOf` https → ssh и без `StrictHostKeyChecking=accept-new` (на базе оба зелёные). Проверка:
   мутант в копии `Dockerfile` → `go test -run TestReleaseBuildForwardsSSHAgent` → FAIL, без мутанта → PASS
+  - Подтверждено: на базе оба мутанта (`Dockerfile` и `Dockerfile.migrate`) → `ok`; на ветке → FAIL с
+    причиной («go fetches git.stit.tech over https…», «a fresh image knows no host key…»), дерево → PASS
 - [ ] **AC3** — RLIF-02: финал `/init-service` заводит remote `template`; `make doctor` спрашивает его теги
   (`git ls-remote`): тег новее версии форка — строка с ним и `/upgrade`, сбой сети — не ошибка (на базе
   doctor о шаблоне молчит). Проверка: тест archtest → PASS; копия форка `own` с remote на
@@ -106,8 +108,10 @@ blocked-by: —
   - Сделано: `release_test.go` — RED на базе (промпт без пути), после правки `release.sh` PASS; доки
     `release.md`, `ecosystem.md`, `/release`, плейсхолдер `service.md § Binaries`; блок в накопителе
     `handoff.md`; `make check` → `✓ check clean`
-- [ ] **S5** — RLIF-04: `TestReleaseBuildForwardsSSHAgent` держит `insteadOf` и `accept-new`
+- [x] **S5** — RLIF-04: `TestReleaseBuildForwardsSSHAgent` держит `insteadOf` и `accept-new`
   - Проверка: два мутанта → FAIL, дерево → PASS · Закрывает: AC2 · Зависит от: —
+  - Сделано: тест сверяет `go mod download` с хостами `ENV GOPRIVATE` Dockerfile'а: `url.git@<host>:.insteadOf`
+    для `https://<host>/` и `StrictHostKeyChecking=accept-new`; мутанты убиты; `make check` → `✓ check clean`
 - [ ] **S6** — RLIF-02: remote `template` в финале онбординга, теги шаблона в `make doctor`, проза `/upgrade`
   - Проверка: тест → RED, затем PASS; копия `own` с `template.git` · Закрывает: AC3 · Зависит от: S3
 - [ ] **S7** — RLIF-01: перенос по запросу `PATHS=` в движке `make template-update`
@@ -143,6 +147,9 @@ blocked-by: —
   репо форка по конвенции: у `<org>/backend` путь и `BACKEND_TAG` прежние. Регистр — нижний (ссылка docker),
   порт ssh в путь registry не идёт; origin, из которого путь не вывести, — отказ до вопроса и тега.
   `release_test.go` — новый файл трека (функции песочницы релиза — из `make_test.go`, без правки).
+- Правка чужого файла: `TestReleaseBuildForwardsSSHAgent` в `internal/archtest/make_test.go` (трек gate) —
+  без неё мутантов не убить, а копия проверки в своём файле дала бы два источника одного факта.
+  Хосты — из `ENV GOPRIVATE` того же Dockerfile'а: форк на своём хосте правит его, а не тест.
 
 ## Handoff
 - Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
@@ -153,5 +160,5 @@ blocked-by: —
   релиза (блок RLIF-04 — в накопителе `handoff.md`).
 
 ## Где мы сейчас
-S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4 (RLIF-04, путь образа) закрыты. Следующее: S5 — мутанты
-`TestReleaseBuildForwardsSSHAgent`.
+S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4–S5 (RLIF-04) закрыты. Следующее: S6 — теги шаблона в
+`make doctor`, remote `template` в финале онбординга.
