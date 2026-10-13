@@ -257,3 +257,18 @@ WHO    клиенты API
 DECIDE предел 200 символов ок?
 RISK   клиент, который шлёт длинное или пустое имя, получает 422
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   подписки на user.events.registered больше нет: регистрацию читает только durable
+       verification-user-registered-v2 (user.events.registered.v2); прежний durable verification-user-registered
+       (стрим user) сервис не создаёт и не читает — дочитывания из блока fix-reference-code S11 нет
+WHY    fix-identity-edges S5 — переходная подписка снята (RCOD-13)
+ACTION окружение, где работает релиз до .v2: до выкатки дождаться, пока прежний api опубликует строки outbox_user с
+       subject user.events.registered и durable verification-user-registered их дочитает (`nats consumer info
+       user verification-user-registered` → Unprocessed 0); после выкатки — `nats consumer rm user
+       verification-user-registered`
+WHO    проект (NATS)
+DECIDE —
+RISK   событие user.events.registered, не дочитанное до выкатки, письма подтверждения адреса не получит;
+       неудалённый durable остаётся в стриме user без читателя
+===

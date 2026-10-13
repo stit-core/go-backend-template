@@ -61,9 +61,11 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   своим cookie: `GET /api/users` и `PATCH` чужого — 403)
   - Подтверждено: AI4 на ветке → FAIL `TestTokens_AccessCarriesRole/client` и
     `TestSessions/a_client_session_is_refused_admin_operations` (`N/identity/s4-ai4-mutant.log`); без мутанта — PASS
-- [ ] **AC5** — Прежнего durable на `user.events.registered` нет, его удаление — блоком в накопителе.
+- [x] **AC5** — Прежнего durable на `user.events.registered` нет, его удаление — блоком в накопителе.
   Проверка: `TestRegister` (`verification/delivery/nats`) → durable только у `.v2`; блок в
   `.claude/plans/handoff.md`
+  - Подтверждено: `TestRegister` → один durable `verification-user-registered-v2`; блок «удалить durable
+    verification-user-registered» — в накопителе
 - [ ] **AC6** — Повтор события регистрации после подтверждения адреса письма не шлёт: ключ подписчика —
   состояние агрегата (порт отдаёт «адрес подтверждён»), канон — в rule `events-and-messaging` и `event.md`.
   На базе (E1) после подтверждения — второе письмо и вторая запись. Проверка: юнит «повтор после погашения»
@@ -114,8 +116,10 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Сделано: таблица ролей client и admin в `TestTokens_AccessCarriesRole`; подтест `TestSessions` — сессия
     клиента: `GET /api/users` и `PATCH` чужого статуса — 403 `FORBIDDEN`; AI4 → оба красные; `make check` →
     `✓ check clean`
-- [ ] **S5** — events-v1-reader: снять подписку прежним durable; блок «удалить durable» в накопитель
+- [x] **S5** — events-v1-reader: снять подписку прежним durable; блок «удалить durable» в накопитель
   - Проверка: `make test PKG=./internal/domain/verification/...` → PASS · Закрывает: AC5
+  - Сделано: сняты `subjectUserRegisteredV1`, `durableNameV1` и вторая подписка, комментарии-история; RED на
+    базе — `TestRegister` (два durable), GREEN; блок в накопителе; `make check` → `✓ check clean`
 - [ ] **S6** — subscriber-replay: подписчик пропускает подтверждённый адрес (порт отдаёт состояние), канон
   в rule и `event.md`
   - Проверка: RED → GREEN юнита «повтор после погашения»; E1 → письмо одно · Закрывает: AC6
@@ -152,6 +156,8 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 - `seed-admin` проверяет адрес и имя конструктором `user.NewUser` — одно правило сущности без нового экспорта.
 - Пустое после обрезки имя сущность отвергает, как скелет `make new-domain`: «как в скелете» — один способ
   проверки строкового поля; `minLength:"1"` схемы пустое имя из пробелов не ловит.
+- Блок S5 в накопителе прямо отменяет дочитывание прежним durable из блока fix-reference-code S11: оба едут
+  одним релизом, а правка чужого блока — не дело трека; порядок для окружения до `.v2` — в ACTION.
 - Чужой файл: rule `domain-architecture` (трек boundaries, волна 2) — фраза о канонической форме ключа
   уникальности в «Вход — проверка поля»: конвенция, которую копирует следующая сущность.
 
@@ -159,4 +165,4 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 —
 
 ## Где мы сейчас
-S1–S4 закрыты. Следующее: S5 — events-v1-reader.
+S1–S5 закрыты. Следующее: S6 — subscriber-replay.

@@ -83,24 +83,17 @@ func (b *streamSubs) SubscribeStream(ctx context.Context, stream, subject, durab
 	return b.Recorder.SubscribeStream(ctx, stream, subject, durable, h)
 }
 
-// Событие до перехода на .v2 (с Email) дочитывает прежний durable — с места, где остановился прежний
-// консьюмер, — тем же обработчиком: строка outbox, записанная до выкатки, и недоставленное письма не теряют.
+// Регистрацию читает один durable — у subject'а .v2; прежнего durable и subject'а без версии нет.
 func TestRegister(t *testing.T) {
 	t.Parallel()
 	bus := &streamSubs{Recorder: natstest.New(natstest.WithStream("user")), durables: map[string]string{}}
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().IssueEmailVerification(mock.Anything, "u-v2").Return(nil).Once()
-	uc.EXPECT().IssueEmailVerification(mock.Anything, "u-v1").Return(nil).Once()
+	uc.EXPECT().IssueEmailVerification(mock.Anything, "u1").Return(nil).Once()
 	lc := fxtest.NewLifecycle(t)
 	Register(lc, bus, NewHandler(uc, logkit.Nop()))
 	lc.RequireStart()
 	t.Cleanup(lc.RequireStop)
 
-	require.Equal(t, map[string]string{
-		"user.events.registered.v2": "verification-user-registered-v2",
-		"user.events.registered":    "verification-user-registered",
-	}, bus.durables)
-	ctx := context.Background()
-	require.NoError(t, bus.Deliver(ctx, "user.events.registered.v2", []byte(`{"ID":"u-v2","At":"2026-01-02T03:04:05Z"}`)))
-	require.NoError(t, bus.Deliver(ctx, "user.events.registered", []byte(`{"ID":"u-v1","Email":"a@b.com","At":"2026-01-02T03:04:05Z"}`)))
+	require.Equal(t, map[string]string{"user.events.registered.v2": "verification-user-registered-v2"}, bus.durables)
+	require.NoError(t, bus.Deliver(context.Background(), "user.events.registered.v2", []byte(`{"ID":"u1","At":"2026-01-02T03:04:05Z"}`)))
 }
