@@ -17,7 +17,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 - Утверждай результат, ошибку (`require.ErrorIs`) и эффекты: вызовы портов с точными
   аргументами, запись в БД, событие (`outboxtest.Recorder`), исход метрики (провайдер теста
   `metrictest.NewProvider`, значение — `require.InDelta`). `NotNil` ради покрытия — не тест:
-  тест без утверждений ловит archtest `TestTestsAssert`, пустышку — `/code-review`.
+  тест без утверждений в любом пакете модуля ловит archtest `TestTestsAssert`, пустышку — `/code-review`.
 - Рядом с happy path — error path и граница (пусто, максимум, чужой id).
 - Красный тест не подгоняй под код: сначала реши, кто прав; меняешь ожидание — причина в теле
   коммита.

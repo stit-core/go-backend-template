@@ -462,8 +462,11 @@ func TestNoExportedSubjectInDomainRoot(t *testing.T) {
 	}
 }
 
-// TestTestsAssert: покрытие считает исполненный код, поэтому тест домена или платформы без
-// единого утверждения поднимает его, ничего не проверив.
+// TestTestsAssert: покрытие считает исполненный код, поэтому тест без единого утверждения поднимает его,
+// ничего не проверив, — в любом пакете модуля: покрытие набирают и тесты pkg/ и cmd/. Тест домена и
+// платформы утверждает require, assert или проверкой тестового кита (rule tests-pipeline); остальным
+// засчитываются ещё t.Error*, t.Fatal*, t.Fail* и t, отданный хелперу-проверке (archkit.Check,
+// testkit.MigrationLadder).
 func TestTestsAssert(t *testing.T) {
 	t.Parallel()
 	type testFile struct {
@@ -473,12 +476,13 @@ func TestTestsAssert(t *testing.T) {
 	}
 	byPkg := map[string][]testFile{}
 	for _, f := range goFiles(t) {
-		if f.test && (under(f.pkg, "internal/domain") || under(f.pkg, "internal/platform")) {
+		if f.test {
 			file := parseGo(t, f.path)
 			byPkg[f.pkg] = append(byPkg[f.pkg], testFile{f.path, file, importsByName(file)})
 		}
 	}
-	for _, files := range byPkg {
+	for pkg, files := range byPkg {
+		bare := !under(pkg, "internal/domain") && !under(pkg, "internal/platform")
 		// Утверждающий хелпер пакета — функция без результатов или общая таблица (var) с
 		// утверждением, в том числе через другой хелпер: фикстура с require (newUC) возвращает
 		// значение, тест на ней одной — пустышка.
@@ -488,7 +492,7 @@ func TestTestsAssert(t *testing.T) {
 			for _, f := range files {
 				for _, decl := range f.file.Decls {
 					for name, node := range helperDecls(decl) {
-						if !helpers[name] && asserts(node, f.byName, helpers) {
+						if !helpers[name] && asserts(node, f.byName, helpers, bare) {
 							helpers[name], grew = true, true
 						}
 					}
@@ -499,7 +503,7 @@ func TestTestsAssert(t *testing.T) {
 			for _, decl := range f.file.Decls {
 				fn, ok := decl.(*ast.FuncDecl)
 				if ok && fn.Recv == nil && strings.HasPrefix(fn.Name.Name, "Test") && fn.Name.Name != "TestMain" &&
-					!asserts(fn.Body, f.byName, helpers) {
+					!asserts(fn.Body, f.byName, helpers, bare) {
 					t.Errorf("%s: %s asserts nothing — no require, assert, Assert*/Require* of a test kit or testify/mock, or helper of the package that asserts (rule tests-pipeline): such a test raises coverage without checking anything", f.path, fn.Name.Name)
 				}
 			}
@@ -529,11 +533,25 @@ func helperDecls(decl ast.Decl) map[string]ast.Node {
 }
 
 // asserts — в узле есть testify require/assert, Assert*/Require* тестового кита (пакета из testkit)
-// или testify/mock (AssertExpectationsForObjects), утверждающий хелпер.
-func asserts(node ast.Node, byName map[string]string, helpers map[string]bool) bool {
+// или testify/mock (AssertExpectationsForObjects), утверждающий хелпер; bare — ещё и t.Error*, t.Fatal*,
+// t.Fail* и вызов-оператор, которому отдан t (archkit.Check(t, …)).
+func asserts(node ast.Node, byName map[string]string, helpers map[string]bool, bare bool) bool {
 	found := false
 	ast.Inspect(node, func(n ast.Node) bool {
 		switch x := n.(type) {
+		case *ast.ExprStmt:
+			call, ok := x.X.(*ast.CallExpr)
+			if !ok || !bare {
+				break
+			}
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok && isIdent(sel.X, "t") {
+				switch sel.Sel.Name {
+				case "Error", "Errorf", "Fatal", "Fatalf", "Fail", "FailNow":
+					found = true
+				}
+			} else if len(call.Args) > 0 && isIdent(call.Args[0], "t") {
+				found = true
+			}
 		case *ast.SelectorExpr:
 			if id, ok := x.X.(*ast.Ident); ok {
 				pkg := byName[id.Name]

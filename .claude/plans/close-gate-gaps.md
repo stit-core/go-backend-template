@@ -135,8 +135,13 @@ blocked-by: —
   - Сделано: снимок `cksum` моков дерева до и после mockery вместо `git diff` с индексом; новый мок вне
     индекса — отказ с `git add`; `unexport MOCKERY_*`; тест на заглушках; troubleshooting
     `docs/contributing.md`; `make check` → ✓
-- [ ] **S8** — `TestTestsAssert` — все тесты модуля
+- [x] **S8** — `TestTestsAssert` — все тесты модуля
   - Проверка: N-t-pkg, N-t-cmd на базе `✓`, на ветке — красный; `make check` → ✓ · Закрывает: AC8 · Зависит от: —
+  - Сделано: все `*_test.go` модуля; домены и платформа — прежние утверждения (require, кит), остальным —
+    ещё `t.Error*`, `t.Fatal*`, `t.Fail*` и `t`, отданный хелперу-проверке (`archkit.Check`,
+    `testkit.MigrationLadder`); база с N-t-pkg и N-t-cmd — `✓ check clean` (`N/gate/s8-base-nt.log`), ветка —
+    FAIL с обоими файлами (`s8-branch-nt.log`); тест домена на одном `t.Fatalf` — по-прежнему отказ;
+    правило `tests-pipeline`; `make check` → ✓
 - [ ] **S9** — `make fmt` и `fmt-check` — `gofumpt -extra`
   - Проверка: N-fmt2 → fmt-check FAIL, `make fmt` чинит; `make check` → ✓ · Закрывает: AC8 · Зависит от: —
 - [ ] **S10** — Имя домена с инициализмом: скелет по правилу revive, archtest сверяет префикс без регистра
@@ -153,6 +158,9 @@ blocked-by: —
 - Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
   у хуков, которые git запускает сам. Хуки перезапускают себя без переменных make и оболочки (без маркера:
   условие — сами переменные), а не чистят окружение каждой проверки.
+- `TestTestsAssert` вне доменов и платформы засчитывает `t.Error*`/`t.Fatal*` и `t`, отданный хелперу:
+  так утверждают archtest (все нарушения разом), `archkit.Check` и `testkit.MigrationLadder`; в доменах и
+  платформе — прежняя строгость (require и кит, правило `tests-pipeline`), гейт не ослаблен.
 - gen-check: моки сверяются с деревом до mockery (как остальной гейт — дерево), новый мок вне индекса —
   отказ по-прежнему: без `git add` он не уйдёт в коммит, а pre-push увидит его отсутствие поздно.
 - `internal/archtest/harness_test.go` (файл трека harness): `golangciEnabled` — `--config .golangci.yml`,
@@ -177,8 +185,8 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S7 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
+S1–S8 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
 линтеров не выводят код из гейта, порог покрытия — 100, migrations-check и gen-check без fail-open. Эксперименты: база —
 worktree `N/wt-gate-x` (e8ea150, снять в S13), срез ветки с незакоммиченным шагом — временный `N/wt-gate-y`
-(раннеры аудитора откатывают дерево к HEAD). Следующее: S8 — `TestTestsAssert` на все тесты модуля
-(RED — N-t-pkg, N-t-cmd).
+(раннеры аудитора откатывают дерево к HEAD). Следующее: S9 — `gofumpt -extra` в `make fmt` и `fmt-check`
+(RED — N-fmt2).
