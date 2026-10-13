@@ -166,9 +166,12 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     `✓ check clean`
 
 ### Пробелы тестов
-- [ ] **S10** — RTSTT-03: `seed-admin` — роль и подтверждённый адрес после первого запуска, отказ без адреса
+- [x] **S10** — RTSTT-03: `seed-admin` — роль и подтверждённый адрес после первого запуска, отказ без адреса
   или пароля, удалённая учётная запись с тем же адресом
   - Проверка: мутанты SD1, SD5, SD6, SD7 → красные · Закрывает: AC10
+  - Сделано: `TestRun_CreatesAdminOnce` — роль и `email_verified` после первого запуска,
+    `TestRun_RequiresAddressAndPassword`, `TestRun_DeletedAccountKeepsNothing`; SD1, SD5, SD6, SD7 → KILLED
+    (`N/identity/mutants/SD*.log`, раннер `N/identity/mutate.py`); `make check` → `✓ check clean`
 - [ ] **S11** — RTSTT-04: `fx.StopTimeout` графа и граница ⅔ бюджета остановки
   - Проверка: мутанты K01, K04 → красные · Закрывает: AC10
 - [ ] **S12** — RTSTT-05: триггер `updated_at` держат тесты репозитория user
@@ -215,4 +218,4 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 —
 
 ## Где мы сейчас
-S1–S9 закрыты. Следующее: S10 — тесты `seed-admin` (RTSTT-03).
+S1–S10 закрыты. Следующее: S11 — `fx.StopTimeout` и граница ⅔ бюджета (RTSTT-04).

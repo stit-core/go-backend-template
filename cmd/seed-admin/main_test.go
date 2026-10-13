@@ -94,17 +94,67 @@ func TestRun_RejectsAdminOutsideUserRules(t *testing.T) {
 	require.Zero(t, users, "a refused seed writes nothing")
 }
 
-// Повторный запуск идемпотентен: admin с этим адресом один.
+// Первый запуск заводит admin с подтверждённым адресом, повторный идемпотентен: admin с этим адресом один.
 func TestRun_CreatesAdminOnce(t *testing.T) {
 	pg := seedEnv(t, "admin@example.com")
+	type account struct {
+		role     string
+		verified bool
+	}
+	accounts := func() []account {
+		rows, err := pg.DB(t).Query(t.Context(), `SELECT role, email_verified FROM users WHERE LOWER(email) = 'admin@example.com' AND status = 'active'`)
+		require.NoError(t, err)
+		var got []account
+		for rows.Next() {
+			var a account
+			require.NoError(t, rows.Scan(&a.role, &a.verified))
+			got = append(got, a)
+		}
+		require.NoError(t, rows.Err())
+		return got
+	}
 
 	require.Equal(t, 0, run(t.Context(), logkit.Nop()))
-	require.Equal(t, 0, run(t.Context(), logkit.Nop()))
+	require.Equal(t, []account{{role: "admin", verified: true}}, accounts(), "the first run creates an admin with a verified address: the operator gave it")
 
-	var admins int
-	require.NoError(t, pg.DB(t).QueryRow(
+	require.Equal(t, 0, run(t.Context(), logkit.Nop()))
+	require.Equal(t, []account{{role: "admin", verified: true}}, accounts(), "the second run creates nothing")
+}
+
+// Без адреса или пароля seed не стартует и ничего не пишет: admin без пароля не заводится.
+func TestRun_RequiresAddressAndPassword(t *testing.T) {
+	pg := seedEnv(t, "admin@example.com")
+	for _, unset := range []string{"SEED_ADMIN_EMAIL", "SEED_ADMIN_PASSWORD"} {
+		t.Run(unset, func(t *testing.T) {
+			t.Setenv(unset, "")
+			require.Equal(t, 1, run(t.Context(), logkit.Nop()))
+		})
+	}
+	var users int
+	require.NoError(t, pg.DB(t).QueryRow(t.Context(), `SELECT count(*) FROM users`).Scan(&users))
+	require.Zero(t, users)
+}
+
+// Удалённая учётная запись с тем же адресом адрес не держит: seed заводит нового admin, а удалённую не
+// повышает и не оживляет.
+func TestRun_DeletedAccountKeepsNothing(t *testing.T) {
+	pg := seedEnv(t, "admin@example.com")
+	db := pg.DB(t)
+	var deletedID string
+	require.NoError(t, db.QueryRow(
 		t.Context(),
-		`SELECT count(*) FROM users WHERE LOWER(email) = 'admin@example.com' AND role = 'admin' AND status = 'active'`,
+		`INSERT INTO users (email, password_hash, name, status, role) VALUES ('admin@example.com', 'x', 'Gone', 'deleted', 'client') RETURNING id`,
+	).Scan(&deletedID))
+
+	require.Equal(t, 0, run(t.Context(), logkit.Nop()))
+
+	var status, role string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT status, role FROM users WHERE id = $1`, deletedID).Scan(&status, &role))
+	require.Equal(t, []string{"deleted", "client"}, []string{status, role}, "the deleted account stays as it was")
+	var admins int
+	require.NoError(t, db.QueryRow(
+		t.Context(),
+		`SELECT count(*) FROM users WHERE LOWER(email) = 'admin@example.com' AND role = 'admin' AND status = 'active' AND id <> $1`, deletedID,
 	).Scan(&admins))
-	require.Equal(t, 1, admins)
+	require.Equal(t, 1, admins, "a new admin is created")
 }
