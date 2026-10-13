@@ -1,0 +1,2228 @@
+# Мутации make mutate (scripts/tools/mutate.py, rule tests-pipeline): правки «было → стало» по тексту кода,
+# без номеров строк. Блок мутации:
+#
+#   ## <id> <слой> — <что ломает>
+#   = <почему тесты её не видят>          только у известной эквивалентной
+#   <файл от корня репо>
+#   - <строка «было»>                     «было» — текст ровно одного места файла, пробелы не важны
+#   + <строка «стало»>                    нет строк «+» — место удаляется
+#
+# Несколько файлов — несколько групп «файл, -, +». Правка кода, которая убрала «было», делает мутацию
+# устаревшей: make mutate называет её, прогон не падает — перепиши блок под код.
+
+## M02 entity — CanLogin: allow-list → deny-list
+internal/domain/user/entity.go
+- func (u *User) CanLogin() bool { return u.Status == StatusActive }
++ func (u *User) CanLogin() bool { return u.Status != StatusBlocked && u.Status != StatusDeleted }
+
+## M03 entity — NewUser: проверка роли убрана
+internal/domain/user/entity.go
+- 	if role != identity.RoleAdmin && role != identity.RoleClient {
+- 		return nil, ErrInvalidRole
+- 	}
+
+## E01 entity — NewUser: адрес ровно в 254 байта отвергнут (граница)
+internal/domain/user/entity.go
+- err != nil || len(email) > maxEmailLen {
++ err != nil || len(email) >= maxEmailLen {
+
+## E02 entity — NewUser: роль по умолчанию — admin
+internal/domain/user/entity.go
+- 	if role == identity.RoleUnknown {
+- 		role = identity.RoleClient
+- 	}
++ 	if role == identity.RoleUnknown {
++ 		role = identity.RoleAdmin
++ 	}
+
+## E03 entity — NewUser: новый пользователь заблокирован
+internal/domain/user/entity.go
+- 		Status:       StatusActive,
++ 		Status:       StatusBlocked,
+
+## E04 entity — ChangeStatus: deleted → deleted — «без перехода», а не отказ
+internal/domain/user/entity.go
+- case to == u.Status && to != StatusDeleted:
++ case to == u.Status:
+
+## E05 entity — ChangeStatus: active → deleted разрешён (удаление в обход Delete: без события и аудита удаления)
+internal/domain/user/entity.go
+- case u.Status == StatusActive && to == StatusBlocked, u.Status == StatusBlocked && to == StatusActive:
++ case u.Status == StatusActive && to != StatusActive, u.Status == StatusBlocked && to == StatusActive:
+
+## E06 entity — ChangeStatus: разблокировка невозможна
+internal/domain/user/entity.go
+- case u.Status == StatusActive && to == StatusBlocked, u.Status == StatusBlocked && to == StatusActive:
++ case u.Status == StatusActive && to == StatusBlocked:
+
+## E07 entity — validName: NUL в имени пропускается (500 на записи)
+internal/domain/user/policy.go
+- return !strings.ContainsRune(name, 0) }
++ return !strings.ContainsRune(name, 1) }
+
+## E08 entity — Rename: имя не проверяется
+internal/domain/user/entity.go
+- 	if !validName(name) {
+- 		return ErrInvalidName
+- 	}
+- 	u.Name = name
++ 	u.Name = name
+
+## M01 policy — selfOrAdmin: любой с личностью — «сам» (IDOR)
+internal/domain/user/policy.go
+- if caller.UserID == targetID {
++ if caller.UserID != "" {
+
+## P01 policy — adminOnly: любой с ролью — админ (список и смена статуса — клиенту)
+internal/domain/user/policy.go
+- func adminOnly(caller identity.Identity) policy.Decision {
+- 	if caller.Role == identity.RoleAdmin {
++ func adminOnly(caller identity.Identity) policy.Decision {
++ 	if caller.Role != identity.RoleUnknown {
+
+## P02 policy — CanChangeStatus: selfOrAdmin — заблокированный снимает блокировку с себя
+internal/domain/user/policy.go
+- func (p *Policy) CanChangeStatus(_ context.Context, caller identity.Identity, _ string) policy.Decision {
+- 	return adminOnly(caller)
++ func (p *Policy) CanChangeStatus(_ context.Context, caller identity.Identity, targetID string) policy.Decision {
++ 	return selfOrAdmin(caller, targetID)
+
+## P03 policy — CanList: список — любому с личностью
+internal/domain/user/policy.go
+- func (p *Policy) CanList(_ context.Context, caller identity.Identity) policy.Decision {
+- 	return adminOnly(caller)
++ func (p *Policy) CanList(_ context.Context, _ identity.Identity) policy.Decision {
++ 	return policy.Allow()
+
+## P04 policy — CanDelete: себя удалить нельзя (только админ)
+internal/domain/user/policy.go
+- func (p *Policy) CanDelete(_ context.Context, caller identity.Identity, targetID string) policy.Decision {
+- 	return selfOrAdmin(caller, targetID)
++ func (p *Policy) CanDelete(_ context.Context, caller identity.Identity, _ string) policy.Decision {
++ 	return adminOnly(caller)
+
+## P05 policy — selfOrAdmin: админ к чужим не допущен
+internal/domain/user/policy.go
+- func selfOrAdmin(caller identity.Identity, targetID string) policy.Decision {
+- 	if caller.Role == identity.RoleAdmin {
+- 		return policy.Allow()
+- 	}
++ func selfOrAdmin(caller identity.Identity, targetID string) policy.Decision {
+
+## P06 policy — auth.CanChangePassword: админ чужой пароль не меняет
+internal/domain/auth/policy.go
+- 	if caller.Role == identity.RoleAdmin {
+- 		return policy.Allow()
+- 	}
+- 	if caller.UserID == targetID {
++ 	if caller.UserID == targetID {
+
+## P07 policy — auth.CanChangePassword: любой с личностью меняет чужой пароль (IDOR)
+internal/domain/auth/policy.go
+- if caller.UserID == targetID {
++ if caller.UserID != "" {
+
+## M04+M05 pkg — PasswordStrong: >= → > (8 символов отвергнуты)
+pkg/policy/policy.go
+- utf8.RuneCountInString(plain) >= MinPasswordLen
++ utf8.RuneCountInString(plain) > MinPasswordLen
+
+## P08 pkg — policy.Deny разрешает
+pkg/policy/policy.go
+- return Decision{IsAllowed: false, Reason: reason} }
++ return Decision{IsAllowed: true, Reason: reason} }
+
+## PG1 pkg — paging.Normalize: размер 0 не заменяется дефолтом
+pkg/paging/paging.go
+- if p.Size <= 0 {
++ if p.Size < 0 {
+
+## PG2 pkg — paging.Offset: первая страница пропускается
+pkg/paging/paging.go
+- return (p.Number - 1) * p.Size }
++ return p.Number * p.Size }
+
+## PG3 pkg — paging.Normalize: номер страницы без верхней границы
+pkg/paging/paging.go
+- 	if p.Number > MaxNumber {
+- 		p.Number = MaxNumber
+- 	}
+
+## PG4 pkg — paging: схема пускает size до 1000 (usecase срежет до 100)
+pkg/paging/paging.go
+- maximum:"100"    minimum:"1" query:"size"
++ maximum:"1000"   minimum:"1" query:"size"
+
+## OC1 pkg — outcome.Invalid называется как Expired
+pkg/outcome/outcome.go
+- Invalid = New("invalid")
++ Invalid = New("expired")
+
+## M05s usecase/user — Register не применяет правило пароля
+internal/domain/user/usecase.go
+- if !policy.PasswordStrong(in.Password) {
++ if !policy.PasswordStrong(in.Password) && in.Password == "" {
+
+## M06 usecase/user — Register: событие registered не пишется
+internal/domain/user/usecase.go
+- return uc.d.Events.Publish(txCtx, subjectUserRegistered, UserRegistered{ID: u.ID, At: uc.d.Clock.Now()})
++ return nil
+
+## M07 usecase/user — Update: policy спрашивают о вызывающем, а не о цели (IDOR)
+internal/domain/user/usecase.go
+- uc.d.Policy.CanUpdate(ctx, caller, id)
++ uc.d.Policy.CanUpdate(ctx, caller, caller.UserID)
+
+## M08 usecase/user — Update: версия клиента не сверяется (обход optimistic lock)
+internal/domain/user/usecase.go
+- 		if u.Version != in.Version {
+- 			return ErrConcurrentUpdate
+- 		}
+
+## M08b usecase/user — Update: устаревшая версия принимается
+internal/domain/user/usecase.go
+- if u.Version != in.Version {
++ if u.Version < in.Version {
+
+## D02 usecase/user — Register (создание + событие, как Create у note): Publish вне транзакции
+internal/domain/user/usecase.go
+- return uc.d.Events.Publish(txCtx, subjectUserRegistered,
++ return uc.d.Events.Publish(ctx, subjectUserRegistered,
+
+## D02b usecase/user — Update: Publish вне транзакции
+internal/domain/user/usecase.go
+- return uc.d.Events.Publish(txCtx, subjectUserUpdated,
++ return uc.d.Events.Publish(ctx, subjectUserUpdated,
+
+## D02c usecase/user — Delete: Publish вне транзакции
+internal/domain/user/usecase.go
+- return uc.d.Events.Publish(txCtx, subjectUserDeleted,
++ return uc.d.Events.Publish(ctx, subjectUserDeleted,
+
+## D02e usecase/user — Register: Publish после коммита транзакции
+internal/domain/user/usecase.go
+- 		if err := uc.d.Repo.Insert(txCtx, u); err != nil {
+- 			return err
+- 		}
+- 		return uc.d.Events.Publish(txCtx, subjectUserRegistered, UserRegistered{ID: u.ID, At: uc.d.Clock.Now()})
+- 	}); err != nil {
+- 		return nil, err
+- 	}
++ 		return uc.d.Repo.Insert(txCtx, u)
++ 	}); err != nil {
++ 		return nil, err
++ 	}
++ 	if err := uc.d.Events.Publish(ctx, subjectUserRegistered, UserRegistered{ID: u.ID, At: uc.d.Clock.Now()}); err != nil {
++ 		return nil, err
++ 	}
+
+## U01 usecase/user — Register: каждый регистрируется админом
+internal/domain/user/usecase.go
+- NewUser(in.Email, hash, in.Name, identity.RoleClient)
++ NewUser(in.Email, hash, in.Name, identity.RoleAdmin)
+
+## U02 usecase/user — Register: перепутаны аргументы — имя = адрес
+internal/domain/user/usecase.go
+- NewUser(in.Email, hash, in.Name, identity.RoleClient)
++ NewUser(in.Email, hash, in.Email, identity.RoleClient)
+
+## U03 usecase/user — Register: аудит не пишется
+internal/domain/user/usecase.go
+- 	uc.audit(ctx, auditkit.Entry{ActorID: u.ID, Action: "register", Resource: "user", ResourceID: u.ID})
+
+## U04 usecase/user — Register: в событии вместо ID — адрес (PII в outbox)
+internal/domain/user/usecase.go
+- UserRegistered{ID: u.ID, At: uc.d.Clock.Now()}
++ UserRegistered{ID: u.Email, At: uc.d.Clock.Now()}
+
+## U05 usecase/user — Register: пароль длиннее предела хэшера — 500, а не 422
+internal/domain/user/usecase.go
+- 	case errors.Is(err, authnkit.ErrPasswordTooLong):
+- 		return nil, ErrPasswordTooLong
+- 	case err != nil:
++ 	case errors.Is(err, authnkit.ErrPasswordTooLong):
++ 		return nil, fmt.Errorf("hash password: %w", err)
++ 	case err != nil:
+
+## U06 usecase/user — GetByID: policy спрашивают о вызывающем (IDOR)
+internal/domain/user/usecase.go
+- uc.d.Policy.CanGetByID(ctx, caller, id)
++ uc.d.Policy.CanGetByID(ctx, caller, caller.UserID)
+
+## U07 usecase/user — Delete: policy спрашивают о вызывающем (IDOR)
+internal/domain/user/usecase.go
+- uc.d.Policy.CanDelete(ctx, caller, id)
++ uc.d.Policy.CanDelete(ctx, caller, caller.UserID)
+
+## U08 usecase/user — List: страница не нормализуется
+internal/domain/user/usecase.go
+- uc.d.Repo.List(ctx, filter, page.Normalize())
++ uc.d.Repo.List(ctx, filter, page)
+
+## U09 usecase/user — List: total без фильтра
+internal/domain/user/usecase.go
+- total, err := uc.d.Repo.Count(ctx, filter)
++ total, err := uc.d.Repo.Count(ctx, ListFilter{})
+
+## U10 usecase/user — Update: смену статуса решает CanUpdate (клиент меняет свой статус)
+internal/domain/user/usecase.go
+- uc.d.Policy.CanChangeStatus(ctx, caller, id)
++ uc.d.Policy.CanUpdate(ctx, caller, id)
+
+## U11 usecase/user — Update: сессии закрываются у активного, а не у заблокированного
+internal/domain/user/usecase.go
+- 		if !u.CanLogin() {
++ 		if u.CanLogin() {
+
+## U12 usecase/user — Update: закрытие сессий вне транзакции записи
+internal/domain/user/usecase.go
+- uc.d.Sessions.RevokeAll(txCtx, u.ID)
++ uc.d.Sessions.RevokeAll(ctx, u.ID)
+
+## U13 usecase/user — Update: чтение вне транзакции записи
+internal/domain/user/usecase.go
+- u, err := uc.d.Repo.GetByID(txCtx, id)
++ u, err := uc.d.Repo.GetByID(ctx, id)
+
+## U14 usecase/user — Update: запись вне транзакции события
+internal/domain/user/usecase.go
+- uc.d.Repo.Update(txCtx, u)
++ uc.d.Repo.Update(ctx, u)
+
+## U15 usecase/user — Update: автор в аудите — цель, а не вызывающий
+internal/domain/user/usecase.go
+- ActorID: caller.UserID, Action: "update", Resource: "user", ResourceID: updated.ID}
++ ActorID: updated.ID, Action: "update", Resource: "user", ResourceID: updated.ID}
+
+## U16 usecase/user — Update: событие уходит с subject удаления
+internal/domain/user/usecase.go
+- uc.d.Events.Publish(txCtx, subjectUserUpdated, UserUpdated{
++ uc.d.Events.Publish(txCtx, subjectUserDeleted, UserUpdated{
+
+## U17 usecase/user — Update: пустая правка проходит (версия растёт, событие уходит)
+internal/domain/user/usecase.go
+- 	if in.Name == nil && in.Status == nil {
+- 		return nil, ErrNoUpdateFields
+- 	}
+
+## U18 usecase/user — Delete: сессии удалённого не закрываются
+internal/domain/user/usecase.go
+- 		if err := uc.d.Sessions.RevokeAll(txCtx, id); err != nil {
+- 			return err
+- 		}
+- 		return uc.d.Events.Publish(txCtx, subjectUserDeleted
++ 		return uc.d.Events.Publish(txCtx, subjectUserDeleted
+
+## U19 usecase/user — Delete: удаление вне транзакции
+internal/domain/user/usecase.go
+- uc.d.Repo.Delete(txCtx, id)
++ uc.d.Repo.Delete(ctx, id)
+
+## U20 usecase/user — Delete: в аудите цель — вызывающий
+internal/domain/user/usecase.go
+- Action: "delete", Resource: "user", ResourceID: id}
++ Action: "delete", Resource: "user", ResourceID: caller.UserID}
+
+## U21 usecase/user — audit: запись без времени
+internal/domain/user/usecase.go
+- 	e.At = uc.d.Clock.Now()
+
+## U22 usecase/user — audit: сбой аудита — уровнем info
+internal/domain/user/usecase.go
+- uc.d.Log.Error(ctx, "audit "+e.Action, "error", err)
++ uc.d.Log.Info(ctx, "audit "+e.Action, "error", err)
+
+## U23 usecase/user — Update: имя теряется, когда меняют и статус
+internal/domain/user/usecase.go
+- 		if in.Name != nil {
++ 		if in.Name != nil && in.Status == nil {
+
+## U24 usecase/user — Register: вставка вне транзакции события
+internal/domain/user/usecase.go
+- uc.d.Repo.Insert(txCtx, u)
++ uc.d.Repo.Insert(ctx, u)
+
+## U25 usecase/user — Me: ID вызывающего склеен с пустой строкой — тот же ID
+= контроль списка эквивалентных: Me читает тот же ID
+internal/domain/user/usecase.go
+- return uc.d.Repo.GetByID(ctx, caller.UserID)
+- }
++ return uc.d.Repo.GetByID(ctx, caller.UserID+"")
++ }
+
+## T01 trusted — VerifyPassword: пароль длиннее предела — «совпал»
+internal/domain/user/trusted.go
+- 	if errors.Is(err, authnkit.ErrPasswordTooLong) {
+- 		return false, nil
+- 	}
++ 	if errors.Is(err, authnkit.ErrPasswordTooLong) {
++ 		return true, nil
++ 	}
+
+## T02 trusted — UpdatePassword: сессии старого пароля не закрываются
+internal/domain/user/trusted.go
+- 		return t.d.Sessions.RevokeAll(txCtx, userID)
++ 		return nil
+
+## T03 trusted — UpdatePassword: запись пароля вне транзакции закрытия сессий
+internal/domain/user/trusted.go
+- t.d.Repo.UpdatePassword(txCtx, userID, hash, version)
++ t.d.Repo.UpdatePassword(ctx, userID, hash, version)
+
+## T04 trusted — LockByID читает без блокировки
+internal/domain/user/trusted.go
+- return t.d.Repo.GetByIDForShare(ctx, id)
++ return t.d.Repo.GetByID(ctx, id)
+
+## T05 trusted — UpdatePassword: закрытие сессий вне транзакции
+internal/domain/user/trusted.go
+- return t.d.Sessions.RevokeAll(txCtx, userID)
++ return t.d.Sessions.RevokeAll(ctx, userID)
+
+## M17 repo — repo Update: ConcurrentUpdate → NotFound
+internal/domain/user/infra/postgres/repository.go
+- 	if pgkit.IsNoRows(err) {
+- 		return nil, user.ErrConcurrentUpdate
+- 	}
+- 	if err != nil {
+- 		return nil, fmt.Errorf("user repo: update: %w", err)
++ 	if pgkit.IsNoRows(err) {
++ 		return nil, user.ErrNotFound
++ 	}
++ 	if err != nil {
++ 		return nil, fmt.Errorf("user repo: update: %w", err)
+
+## M17b repo — repo UpdatePassword: ConcurrentUpdate → NotFound
+internal/domain/user/infra/postgres/repository.go
+- 	if pgkit.IsNoRows(err) {
+- 		return nil, user.ErrConcurrentUpdate
+- 	}
+- 	if err != nil {
+- 		return nil, fmt.Errorf("user repo: update password: %w", err)
++ 	if pgkit.IsNoRows(err) {
++ 		return nil, user.ErrNotFound
++ 	}
++ 	if err != nil {
++ 		return nil, fmt.Errorf("user repo: update password: %w", err)
+
+## R01 repo — Insert: занятый адрес — сбой (500), а не ErrAlreadyExists (409)
+internal/domain/user/infra/postgres/repository.go
+- 	if pgkit.IsUniqueViolation(err) {
+- 		return user.ErrAlreadyExists
+- 	}
+
+## R02 repo — Insert: UpdatedAt не заполняется
+internal/domain/user/infra/postgres/repository.go
+- 	u.UpdatedAt = row.UpdatedAt.Time
+
+## R03 repo — GetByEmail: адрес с NUL — ошибка драйвера (500)
+internal/domain/user/infra/postgres/repository.go
+- if strings.ContainsRune(email, 0) {
++ if strings.ContainsRune(email, 1) {
+
+## R04 repo — Update: статус не пишется (блокировка не сохраняется)
+internal/domain/user/infra/postgres/repository.go
+- 		Status:  string(u.Status),
+- 		ID:      uid,
++ 		Status:  string(user.StatusActive),
++ 		ID:      uid,
+
+## R05 repo — Delete: повтор и несуществующий — успех
+internal/domain/user/infra/postgres/repository.go
+- return fmt.Errorf("user repo: delete: %w", err)
+- 	}
+- 	if rows == 0 {
++ return fmt.Errorf("user repo: delete: %w", err)
++ 	}
++ 	if rows < 0 {
+
+## R06 repo — SetEmailVerified: нет пользователя — успех
+internal/domain/user/infra/postgres/repository.go
+- return fmt.Errorf("user repo: set email verified: %w", err)
+- 	}
+- 	if rows == 0 {
++ return fmt.Errorf("user repo: set email verified: %w", err)
++ 	}
++ 	if rows < 0 {
+
+## R07 repo — List: любая страница — первая
+internal/domain/user/infra/postgres/repository.go
+- Offset: int32(page.Offset()),
++ Offset: 0,
+
+## R08 repo — identityRole: админ читается клиентом
+internal/domain/user/infra/postgres/role.go
+- 	case string(identity.RoleAdmin):
+- 		return identity.RoleAdmin
++ 	case string(identity.RoleAdmin):
++ 		return identity.RoleClient
+
+## R09 repo — identityRole: неизвестная роль — админ
+internal/domain/user/infra/postgres/role.go
+- 	default:
+- 		return identity.RoleUnknown
++ 	default:
++ 		return identity.RoleAdmin
+
+## R10 repo — List: фильтр статуса не доходит до SQL
+internal/domain/user/infra/postgres/repository.go
+- 		Status: statusFilter(filter.Status),
+- 	})
+- 	if err != nil {
+- 		return nil, fmt.Errorf("user repo: list: %w", err)
++ 		Status: nil,
++ 	})
++ 	if err != nil {
++ 		return nil, fmt.Errorf("user repo: list: %w", err)
+
+## R11 repo — Count: фильтр статуса не доходит до SQL
+internal/domain/user/infra/postgres/repository.go
+- r.q.CountUsers(ctx, statusFilter(filter.Status))
++ r.q.CountUsers(ctx, nil)
+
+## R12 repo — rowToEntity: хэш пароля не читается (вход невозможен)
+internal/domain/user/infra/postgres/repository.go
+- 		PasswordHash:  row.PasswordHash,
++ 		PasswordHash:  "",
+
+## R13 repo — GetByID: битый id из пути — сбой (500), а не «нет такого»
+internal/domain/user/infra/postgres/repository.go
+- func (r *Repository) GetByID(ctx context.Context, id string) (*user.User, error) {
+- 	uid, err := pgkit.ParseUUID(id)
+- 	if err != nil {
+- 		return nil, user.ErrNotFound
+- 	}
++ func (r *Repository) GetByID(ctx context.Context, id string) (*user.User, error) {
++ 	uid, err := pgkit.ParseUUID(id)
++ 	if err != nil {
++ 		return nil, err
++ 	}
+
+## R14 repo — rowToEntity: email_verified не читается
+internal/domain/user/infra/postgres/repository.go
+- 		EmailVerified: row.EmailVerified,
++ 		EmailVerified: false,
+
+## VI6 repo — репозиторий: повторное погашение — успех (ссылка многоразовая)
+internal/domain/verification/infra/postgres/repository.go
+- 	case rows == 0:
+- 		return verification.ErrTokenUsed
++ 	case rows < 0:
++ 		return verification.ErrTokenUsed
+
+## VI7 repo — UpsertEmailVerification: уже отправленное — сбой вместо issued=false
+internal/domain/verification/infra/postgres/repository.go
+- 	if pgkit.IsNoRows(err) {
+- 		return "", false, nil
+- 	}
+
+## VI8 repo — GetPasswordReset: used_at не читается
+internal/domain/verification/infra/postgres/repository.go
+- 		UsedAt:    pgkit.NullableTime(row.UsedAt),
+- 	}, nil
+- }
+-
+- func (r *Repository) MarkPasswordResetUsed
++ 		UsedAt:    nil,
++ 	}, nil
++ }
++
++ func (r *Repository) MarkPasswordResetUsed
+
+## VI9 repo — MarkPasswordResetUsed: битый id — успех
+internal/domain/verification/infra/postgres/repository.go
+- 	if err != nil {
+- 		return verification.ErrInvalidResetToken
+- 	}
+- 	return used(r.q.MarkPasswordResetUsed(ctx, uid))
++ 	if err != nil {
++ 		return nil
++ 	}
++ 	return used(r.q.MarkPasswordResetUsed(ctx, uid))
+
+## VI10 repo — GetEmailVerification: вместо пользователя — ID токена
+internal/domain/verification/infra/postgres/repository.go
+- 		UserID:    pgkit.UUIDString(row.UserID),
+- 		ExpiresAt: row.ExpiresAt.Time,
+- 		UsedAt:    pgkit.NullableTime(row.UsedAt),
+- 	}, nil
+- }
+-
+- func (r *Repository) MarkEmailVerificationUsed
++ 		UserID:    pgkit.UUIDString(row.ID),
++ 		ExpiresAt: row.ExpiresAt.Time,
++ 		UsedAt:    pgkit.NullableTime(row.UsedAt),
++ 	}, nil
++ }
++
++ func (r *Repository) MarkEmailVerificationUsed
+
+## M23 sql — UpdateUser: version = $4 OR TRUE
+internal/domain/user/infra/postgres/queries/users.sql
+- WHERE id = $3
+-   AND version = $4
++ WHERE id = $3
++   AND (version = $4 OR TRUE)
+
+## M24 sql — GetUserByEmail: без LOWER()
+internal/domain/user/infra/postgres/queries/users.sql
+- WHERE LOWER(email) = LOWER($1)
++ WHERE email = $1
+
+## M25 sql — GetUserByID: возвращает удалённых
+internal/domain/user/infra/postgres/queries/users.sql
+- WHERE id = $1
+-   AND status != 'deleted';
+-
+- -- name: GetUserByIDForShare
++ WHERE id = $1;
++
++ -- name: GetUserByIDForShare
+
+## M26 sql — UpsertEmailVerification: убран ON CONFLICT
+internal/domain/verification/infra/postgres/queries/email_verifications.sql
+- ON CONFLICT (user_id) WHERE used_at IS NULL DO UPDATE
+- SET token_hash = EXCLUDED.token_hash,
+-     expires_at = EXCLUDED.expires_at
+- WHERE email_verifications.sent_at IS NULL
+
+## S01 sql — GetUserByIDForShare: без FOR SHARE
+internal/domain/user/infra/postgres/queries/users.sql
+-   AND status != 'deleted'
+- FOR SHARE;
++   AND status != 'deleted';
+
+## S02 sql — GetUserByIDForShare: видит удалённых
+internal/domain/user/infra/postgres/queries/users.sql
+- WHERE id = $1
+-   AND status != 'deleted'
+- FOR SHARE;
++ WHERE id = $1
++ FOR SHARE;
+
+## S03 sql — GetUserByEmail: видит удалённых
+internal/domain/user/infra/postgres/queries/users.sql
+- WHERE LOWER(email) = LOWER($1)
+-   AND status != 'deleted';
++ WHERE LOWER(email) = LOWER($1);
+
+## S04 sql — UpdateUser: версия не растёт
+internal/domain/user/infra/postgres/queries/users.sql
+-     version = version + 1
+- WHERE id = $3
++     version = version
++ WHERE id = $3
+
+## S05 sql — UpdateUser: правит удалённого
+internal/domain/user/infra/postgres/queries/users.sql
+-   AND version = $4
+-   AND status != 'deleted'
+- RETURNING
++   AND version = $4
++ RETURNING
+
+## S06 sql — DeleteUser: повтор удаления «удаляет» снова
+internal/domain/user/infra/postgres/queries/users.sql
+- WHERE id = $1
+-   AND status != 'deleted';
+-
+- -- name: UpdateUserPassword
++ WHERE id = $1;
++
++ -- name: UpdateUserPassword
+
+## S07 sql — DeleteUser: версия не растёт
+internal/domain/user/infra/postgres/queries/users.sql
+- SET status = 'deleted',
+-     version = version + 1
+- WHERE id = $1
++ SET status = 'deleted'
++ WHERE id = $1
+
+## S08 sql — UpdateUserPassword: устаревшая версия проходит
+internal/domain/user/infra/postgres/queries/users.sql
+- WHERE id = $2
+-   AND version = $3
++ WHERE id = $2
++   AND version >= $3
+
+## S09 sql — UpdateUserPassword: пишет удалённому
+internal/domain/user/infra/postgres/queries/users.sql
+-   AND version = $3
+-   AND status != 'deleted'
+- RETURNING
++   AND version = $3
++ RETURNING
+
+## S10 sql — SetUserEmailVerified: отмечает удалённого
+internal/domain/user/infra/postgres/queries/users.sql
+- SET email_verified = true
+- WHERE id = $1
+-   AND status != 'deleted';
++ SET email_verified = true
++ WHERE id = $1;
+
+## S11 sql — ListUsers: старые первыми
+internal/domain/user/infra/postgres/queries/users.sql
+- ORDER BY created_at DESC
++ ORDER BY created_at ASC
+
+## S12 sql — ListUsers: удалённые в списке
+internal/domain/user/infra/postgres/queries/users.sql
+- FROM users
+- WHERE status != 'deleted'
+-   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
+- ORDER BY
++ FROM users
++ WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
++ ORDER BY
+
+## S13 sql — CountUsers: считает удалённых
+internal/domain/user/infra/postgres/queries/users.sql
+- SELECT COUNT(*)
+- FROM users
+- WHERE status != 'deleted'
+-   AND (
++ SELECT COUNT(*)
++ FROM users
++ WHERE (
+
+## VS1 sql — UpsertEmailVerification: отправленное перевыпускается (ссылка из письма гаснет)
+internal/domain/verification/infra/postgres/queries/email_verifications.sql
+- WHERE email_verifications.sent_at IS NULL
+- RETURNING id;
++ RETURNING id;
+
+## VS2 sql — MarkEmailVerificationUsed: без условия «не погашен»
+internal/domain/verification/infra/postgres/queries/email_verifications.sql
+- UPDATE email_verifications SET used_at = NOW() WHERE id = $1 AND used_at IS NULL;
++ UPDATE email_verifications SET used_at = NOW() WHERE id = $1;
+
+## VS3 sql — MarkPasswordResetUsed: без условия «не погашен» (гонка двух confirm меняет пароль дважды)
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- UPDATE password_resets SET used_at = NOW() WHERE id = $1 AND used_at IS NULL;
++ UPDATE password_resets SET used_at = NOW() WHERE id = $1;
+
+## VS4 sql — RevokePasswordResets: гасит ссылки всех остальных
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- WHERE user_id = $1 AND used_at IS NULL;
++ WHERE user_id != $1 AND used_at IS NULL;
+
+## VS5 sql — RevokePasswordResets: переписывает used_at уже погашенных
+= код читает только used_at IS NULL
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- WHERE user_id = $1 AND used_at IS NULL;
++ WHERE user_id = $1;
+
+## VS6 sql — MarkEmailVerificationSent: условие по user_id (по id подтверждения ничего не отмечает)
+internal/domain/verification/infra/postgres/queries/email_verifications.sql
+- UPDATE email_verifications SET sent_at = NOW() WHERE id = $1;
++ UPDATE email_verifications SET sent_at = NOW() WHERE user_id = $1;
+
+## VS7 sql — UpsertEmailVerification: перевыпуск не продлевает срок
+internal/domain/verification/infra/postgres/queries/email_verifications.sql
+- SET token_hash = EXCLUDED.token_hash,
+-     expires_at = EXCLUDED.expires_at
+- WHERE
++ SET token_hash = EXCLUDED.token_hash
++ WHERE
+
+## M09 usecase/auth — Login: попытка не учитывается guard'ом (Attempt не зовётся)
+internal/domain/auth/usecase.go
+- lock, err := uc.d.Guard.Attempt(ctx, in.Email, ip)
++ lock, err := (*LockState)(nil), error(nil)
+
+## M09c usecase/auth — ChangePassword: угадывание старого пароля не учитывается
+internal/domain/auth/usecase.go
+- lock, err := uc.d.Guard.Attempt(ctx, current.Email, ip)
++ lock, err := (*LockState)(nil), error(nil)
+
+## M09d usecase/auth — Login: неудача прощается (RecordSuccess на неверном пароле — счётчик не копится)
+internal/domain/auth/usecase.go
+- 	if ok, err := uc.d.Hasher.Verify(ctx, in.Password, u.PasswordHash); err != nil || !ok {
++ 	if ok, err := uc.d.Hasher.Verify(ctx, in.Password, u.PasswordHash); err != nil || !ok {
++ 		if rerr := uc.d.Guard.RecordSuccess(ctx, in.Email, ip); rerr != nil {
++ 			uc.d.Log.Error(ctx, "guard record success", "err", rerr)
++ 		}
+
+## M10 usecase/auth — Refresh: пользователь — не владелец сессии (не next.Subject)
+internal/domain/auth/usecase.go
+- u, err := uc.d.Users.GetByID(ctx, next.Subject)
++ u, err := uc.d.Users.GetByID(ctx, next.SessionID)
+
+## M10b usecase/auth — Refresh: пользователь по значению токена, а не по владельцу
+internal/domain/auth/usecase.go
+- u, err := uc.d.Users.GetByID(ctx, next.Subject)
++ u, err := uc.d.Users.GetByID(ctx, next.Value)
+
+## M11 usecase/auth — Logout: сессия не закрывается (нет Revoke)
+internal/domain/auth/usecase.go
+- subject, err := uc.d.Sessions.Revoke(ctx, refreshToken)
++ subject, err := "", error(nil)
+
+## M18 usecase/auth — Refresh: сбой хранилища сессий — %v
+internal/domain/auth/usecase.go
+- fmt.Errorf("rotate session: %w", err)
++ fmt.Errorf("rotate session: %v", err)
+
+## M18b usecase/auth — Login: сбой открытия сессии — %v
+internal/domain/auth/usecase.go
+- fmt.Errorf("open session: %w", err)
++ fmt.Errorf("open session: %v", err)
+
+## M18c usecase/auth — ChangePassword: ошибка поиска пользователя — %v
+internal/domain/auth/usecase.go
+- fmt.Errorf("load user: %w", err)
++ fmt.Errorf("load user: %v", err)
+
+## A01 usecase/auth — Login: сбой guard'а — fail-open (вход идёт дальше)
+internal/domain/auth/usecase.go
+- 	case err != nil:
+- 		// Fail-closed: попытка, которую guard не учёл, до пароля не доходит — иначе сбой его хранилища
+- 		// снимал бы защиту от перебора.
+- 		return nil, outcome.Error, fmt.Errorf("login guard: %w", err)
+- 	case lock != nil:
+- 		return nil, resultLocked
++ 	case lock != nil:
++ 		return nil, resultLocked
+
+## A02 usecase/auth — Login: блокировка guard'а не останавливает вход
+internal/domain/auth/usecase.go
+- 	case lock != nil:
+- 		return nil, resultLocked,
++ 	case lock != nil && lock.RetryAfter < 0:
++ 		return nil, resultLocked,
+
+## A03 usecase/auth — Login: заблокированный доходит до проверки пароля (останавливает только перечитывание под блокировкой)
+internal/domain/auth/usecase.go
+- 	case !u.CanLogin:
+- 		uc.d.Hasher.VerifyDummy(ctx)
+- 		uc.auditLoginFailed(ctx, u.ID, resultBlocked)
+- 		return nil, resultBlocked, ErrInvalidCredentials
+- 	}
++ 	}
+
+## A04 usecase/auth — Login: неизвестный адрес — без холостой проверки (тайминг выдаёт учётную запись)
+internal/domain/auth/usecase.go
+- 		uc.d.Hasher.VerifyDummy(ctx)
+- 		return nil, resultInvalidLogin, ErrInvalidCredentials
+- 	case err != nil:
++ 		return nil, resultInvalidLogin, ErrInvalidCredentials
++ 	case err != nil:
+
+## A05 usecase/auth — Login: неверный пароль принимается
+internal/domain/auth/usecase.go
+- in.Password, u.PasswordHash); err != nil || !ok {
++ in.Password, u.PasswordHash); err != nil && !ok {
+
+## A06 usecase/auth — Login: у RecordSuccess перепутаны subject и IP
+internal/domain/auth/usecase.go
+- uc.d.Guard.RecordSuccess(ctx, in.Email, ip); err != nil {
++ uc.d.Guard.RecordSuccess(ctx, ip, in.Email); err != nil {
+
+## A07 usecase/auth — openSession: смена роли за время входа не замечается
+internal/domain/auth/usecase.go
+- case !current.CanLogin || current.PasswordHash != checked.PasswordHash || current.Role != checked.Role:
++ case !current.CanLogin || current.PasswordHash != checked.PasswordHash:
+
+## A08 usecase/auth — openSession: смена пароля за время входа не замечается
+internal/domain/auth/usecase.go
+- case !current.CanLogin || current.PasswordHash != checked.PasswordHash || current.Role != checked.Role:
++ case !current.CanLogin || current.Role != checked.Role:
+
+## A09 usecase/auth — openSession: сессия открывается вне транзакции блокировки
+internal/domain/auth/usecase.go
+- uc.d.Sessions.Issue(txCtx, checked.ID)
++ uc.d.Sessions.Issue(ctx, checked.ID)
+
+## A10 usecase/auth — openSession: перечитывание без блокировки строки
+internal/domain/auth/usecase.go
+- uc.d.Users.LockByID(txCtx, checked.ID)
++ uc.d.Users.GetByID(txCtx, checked.ID)
+
+## A11 usecase/auth — Login: аудит входа не пишется
+internal/domain/auth/usecase.go
+- 	uc.audit(ctx, auditkit.Entry{ActorID: u.ID, Action: "login", Resource: "user", ResourceID: u.ID})
+
+## A12 usecase/auth — auditLoginFailed: причина отказа теряется
+internal/domain/auth/usecase.go
+- Metadata: map[string]any{"reason": reason.String()},
++ Metadata: map[string]any{"reason": "failed"},
+
+## A13 usecase/auth — Login: исход «blocked» в метрике — как неверный пароль
+internal/domain/auth/usecase.go
+- uc.auditLoginFailed(ctx, u.ID, resultBlocked)
+- 		return nil, resultBlocked, ErrInvalidCredentials
++ uc.auditLoginFailed(ctx, u.ID, resultBlocked)
++ 		return nil, resultInvalidLogin, ErrInvalidCredentials
+
+## A14 usecase/auth — Login: исход пишется в счётчик refresh
+internal/domain/auth/usecase.go
+- uc.d.Metrics.RecordLogin(ctx, result)
++ uc.d.Metrics.RecordRefresh(ctx, result)
+
+## A15 usecase/auth — Refresh: повтор токена (кража сессии) не попадает в аудит
+internal/domain/auth/usecase.go
+- 		uc.audit(ctx, auditkit.Entry{ActorID: reused.Subject, Action: "refresh_reused", Resource: "session", ResourceID: reused.SessionID})
+
+## A16 usecase/auth — Refresh: истёкший токен — как невалидный
+internal/domain/auth/usecase.go
+- return nil, outcome.Expired, ErrRefreshExpired
++ return nil, outcome.Expired, ErrRefreshInvalid
+
+## A17 usecase/auth — Refresh: заблокированный продлевает сессию
+internal/domain/auth/usecase.go
+- 	case err != nil || !u.CanLogin:
++ 	case err != nil:
+
+## A18 usecase/auth — Refresh: сессия заблокированного не закрывается
+internal/domain/auth/usecase.go
+- 		if _, err := uc.d.Sessions.Revoke(ctx, next.Value); err != nil {
+- 			uc.d.Log.Error(ctx, "revoke session", "user_id", next.Subject, "error", err)
+- 		}
+
+## A19 usecase/auth — Refresh: закрывается по старому (уже погашенному) токену, а не по новому
+= session.Store.Revoke закрывает сессию по любому её токену: pgstore ищет сессию по хэшу в authn_session_tokens, погашенные токены там остаются
+internal/domain/auth/usecase.go
+- uc.d.Sessions.Revoke(ctx, next.Value); err != nil {
++ uc.d.Sessions.Revoke(ctx, refreshToken); err != nil {
+
+## A20 usecase/auth — Refresh: клиенту возвращается старый токен
+internal/domain/auth/usecase.go
+- RefreshToken: next.Value, User: u}, outcome.OK, nil
++ RefreshToken: refreshToken, User: u}, outcome.OK, nil
+
+## A21 usecase/auth — ChangePassword: policy спрашивают о вызывающем (IDOR)
+internal/domain/auth/usecase.go
+- uc.d.Policy.CanChangePassword(ctx, caller, userID)
++ uc.d.Policy.CanChangePassword(ctx, caller, caller.UserID)
+
+## A22 usecase/auth — ChangePassword: правило пароля не применяется
+internal/domain/auth/usecase.go
+- 	if !policy.PasswordStrong(newPassword) {
+- 		return ErrWeakPassword
+- 	}
+-
+- 	current, err := uc.d.Users.GetByID(ctx, userID)
++ 	current, err := uc.d.Users.GetByID(ctx, userID)
+
+## A23 usecase/auth — ChangePassword: попытки идут не в счётчик входа учётной записи
+internal/domain/auth/usecase.go
+- uc.d.Guard.Attempt(ctx, current.Email, ip)
++ uc.d.Guard.Attempt(ctx, userID, ip)
+
+## A24 usecase/auth — ChangePassword: неверный старый пароль принимается
+internal/domain/auth/usecase.go
+- 	if !verified {
++ 	if !verified && oldPassword == "" {
+
+## A25 usecase/auth — ChangePassword: пароль пишется вызывающему, а не цели
+internal/domain/auth/usecase.go
+- uc.d.PasswordSet.UpdatePassword(ctx, userID, hash, current.Version)
++ uc.d.PasswordSet.UpdatePassword(ctx, caller.UserID, hash, current.Version)
+
+## A26 usecase/auth — ChangePassword: блокировка guard'а не останавливает подбор старого пароля
+internal/domain/auth/usecase.go
+- 	case lock != nil:
+- 		return &LockedError{Wait: lock.RetryAfter}
++ 	case lock != nil && lock.RetryAfter < 0:
++ 		return &LockedError{Wait: lock.RetryAfter}
+
+## A27 usecase/auth — ChangePassword: автор в аудите — цель
+internal/domain/auth/usecase.go
+- ActorID: caller.UserID, Action: "change_password"
++ ActorID: userID, Action: "change_password"
+
+## A28 usecase/auth — ChangePassword: сверяется пароль вызывающего, а не цели
+internal/domain/auth/usecase.go
+- uc.d.PasswordVerify.VerifyPassword(ctx, userID, oldPassword)
++ uc.d.PasswordVerify.VerifyPassword(ctx, caller.UserID, oldPassword)
+
+## A29 usecase/auth — ChangePassword: успех не сбрасывает счётчик
+internal/domain/auth/usecase.go
+- 	if err := uc.d.Guard.RecordSuccess(ctx, current.Email, ip); err != nil {
+- 		uc.d.Log.Error(ctx, "guard record success", "error", err)
+- 	}
+-
+- 	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
++ 	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
+
+## A30 usecase/auth — LockedError.Unwrap: блокировка — как неверный пароль (401 вместо 429)
+internal/domain/auth/errors.go
+- { return ErrAccountLocked }
++ { return ErrInvalidCredentials }
+
+## A31 usecase/auth — LockedError.RetryAfter: всегда 0
+internal/domain/auth/errors.go
+- { return e.Wait }
++ { return 0 }
+
+## A32 usecase/auth — метрика входа: метка result переименована
+internal/domain/auth/metrics.go
+- m.logins.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result.String())))
++ m.logins.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", result.String())))
+
+## A33 usecase/auth — метрика refresh переименована (алерт слепнет)
+internal/domain/auth/metrics.go
+- bizmetric.Counter(m, "auth", "refresh",
++ bizmetric.Counter(m, "auth", "refreshes",
+
+## A34 usecase/auth — Logout: сбой хранилища — «вышел» (сессия жива)
+internal/domain/auth/usecase.go
+- 		return fmt.Errorf("revoke session: %w", err)
+- 	}
+- 	if subject != "" {
++ 		return nil
++ 	}
++ 	if subject != "" {
+
+## A35 usecase/auth — Login: клиенту уходит ID сессии вместо токена
+internal/domain/auth/usecase.go
+- RefreshToken: refresh.Value, User: u}, outcome.OK, nil
++ RefreshToken: refresh.SessionID, User: u}, outcome.OK, nil
+
+## A36 usecase/auth — Login: в ответе пользователь без адреса, имени и роли
+internal/domain/auth/usecase.go
+- RefreshToken: refresh.Value, User: u}, outcome.OK, nil
++ RefreshToken: refresh.Value, User: &User{ID: u.ID}}, outcome.OK, nil
+
+## M09b infra — адаптер guard: попытка не уходит в bruteforcekit
+internal/domain/auth/infra/bruteforce/guard.go
+- lock, err := g.guard.Attempt(ctx, subject, ip)
++ lock, err := (*bruteforcekit.LockState)(nil), error(nil)
+
+## M31 infra — адаптер guard: блокировка теряется
+internal/domain/auth/infra/bruteforce/guard.go
+- return &auth.LockState{RetryAfter: lock.RetryAfter}, nil
++ return nil, nil
+
+## AI1 infra — guard: ключ, который нельзя учесть, — «заблокирован» (429), а не неверный вход
+internal/domain/auth/infra/bruteforce/guard.go
+- fmt.Errorf("%w: %w", auth.ErrInvalidCredentials, err)
++ fmt.Errorf("%w: %w", auth.ErrAccountLocked, err)
+
+## AI2 infra — guard: перепутаны subject и IP
+internal/domain/auth/infra/bruteforce/guard.go
+- g.guard.Attempt(ctx, subject, ip)
++ g.guard.Attempt(ctx, ip, subject)
+
+## AI3 infra — guard: успех не доходит до bruteforcekit (счётчик не сбрасывается)
+internal/domain/auth/infra/bruteforce/guard.go
+- return g.guard.RecordSuccess(ctx, subject, ip)
++ return nil
+
+## AI4 infra — jwt: в access-токене роль всегда admin
+internal/domain/auth/infra/jwt/jwt.go
+- "role": string(u.Role),
++ "role": "admin",
+
+## AI5 infra — jwt: sub — адрес вместо ID
+internal/domain/auth/infra/jwt/jwt.go
+- "sub":  u.ID,
++ "sub":  u.Email,
+
+## AI6 infra — guard: Retry-After блокировки теряется
+internal/domain/auth/infra/bruteforce/guard.go
+- return &auth.LockState{RetryAfter: lock.RetryAfter}, nil
++ return &auth.LockState{}, nil
+
+## VI1 infra — лимитер сброса инвертирован
+internal/domain/verification/infra/bruteforce/limiter.go
+- return lock == nil, nil
++ return lock != nil, nil
+
+## VI2 infra — лимитер сброса: без префикса счётчика
+internal/domain/verification/infra/bruteforce/limiter.go
+- l.guard.Attempt(ctx, subjectPrefix+userID, ip)
++ l.guard.Attempt(ctx, userID, ip)
+
+## VI3 infra — лимитер сброса: IP не учитывается
+internal/domain/verification/infra/bruteforce/limiter.go
+- l.guard.Attempt(ctx, subjectPrefix+userID, ip)
++ l.guard.Attempt(ctx, subjectPrefix+userID, "")
+
+## VI4 infra — лог-mailer поднимается вне dev (письма молча не уходят в проде)
+internal/domain/verification/infra/logmail/logmail.go
+- 	if env != appconfig.Dev {
+- 		return nil, ErrOutsideDev
+- 	}
+
+## VI5 infra — лог-mailer пишет адрес и токен сброса в лог
+internal/domain/verification/infra/logmail/logmail.go
+- func (m *mailer) SendPasswordReset(ctx context.Context, _, _ string) error {
+- 	m.log.Info(ctx, "mail not sent: dev log mailer", "mail", "password_reset")
++ func (m *mailer) SendPasswordReset(ctx context.Context, email, token string) error {
++ 	m.log.Info(ctx, "mail not sent: dev log mailer", "mail", "password_reset", "to", email, "link", token)
+
+## M15 adapter — mapUserErr: потерян маппинг ErrNotFound
+internal/domain/auth/module/adapters.go
+- 	case errors.Is(err, user.ErrNotFound):
+- 		return auth.ErrUserNotFound
+
+## M15b adapter — mapUserErr: потерян маппинг ErrConcurrentUpdate
+internal/domain/auth/module/adapters.go
+- 	case errors.Is(err, user.ErrConcurrentUpdate):
+- 		return auth.ErrConcurrentUpdate
+
+## M15c adapter — mapUserErr: ErrNotFound → чужой sentinel
+internal/domain/auth/module/adapters.go
+- case errors.Is(err, user.ErrNotFound):
+- 		return auth.ErrUserNotFound
++ case errors.Is(err, user.ErrNotFound):
++ 		return auth.ErrConcurrentUpdate
+
+## M30 adapter — адаптер auth: CanLogin = true
+internal/domain/auth/module/adapters.go
+- CanLogin:     u.CanLogin(),
++ CanLogin:     true,
+
+## AD1 adapter — auth-адаптер VerifyPassword: любой старый пароль «верен»
+internal/domain/auth/module/adapters.go
+- 	return ok, mapUserErr(err)
++ 	return ok || err == nil, mapUserErr(err)
+
+## AD2 adapter — auth-адаптер: хэш пароля не переносится
+internal/domain/auth/module/adapters.go
+- 		PasswordHash: u.PasswordHash,
++ 		PasswordHash: "",
+
+## AD3 adapter — auth-адаптер: версия не переносится
+internal/domain/auth/module/adapters.go
+- 		Version:      u.Version,
++ 		Version:      0,
+
+## AD4 adapter — auth-адаптер GetByEmail зовёт поиск по ID
+internal/domain/auth/module/adapters.go
+- a.users.LookupByEmail(ctx, email)
++ a.users.LookupByID(ctx, email)
+
+## AD5 adapter — auth-адаптер LockByID читает без блокировки
+internal/domain/auth/module/adapters.go
+- u, err := a.users.LockByID(ctx, id)
++ u, err := a.users.LookupByID(ctx, id)
+
+## AD6 adapter — auth-адаптер UpdatePassword: ошибки user не переводятся
+internal/domain/auth/module/adapters.go
+- return mapUserErr(a.users.UpdatePassword(ctx, userID, hash, version))
++ return a.users.UpdatePassword(ctx, userID, hash, version)
+
+## AD7 adapter — auth-адаптер: роль не переносится
+internal/domain/auth/module/adapters.go
+- 		Role:         u.Role,
++ 		Role:         "",
+
+## VAD1 adapter — verification-адаптер: CanLogin = true (сброс пароля заблокированному)
+internal/domain/verification/module/adapters.go
+- 		CanLogin: u.CanLogin(),
++ 		CanLogin: true,
+
+## VAD2 adapter — verification-адаптер MarkEmailVerified: ошибки user не переводятся
+internal/domain/verification/module/adapters.go
+- return mapUserErr(a.users.MarkEmailVerified(ctx, userID))
++ return a.users.MarkEmailVerified(ctx, userID)
+
+## VAD3 adapter — verification-адаптер UpdatePassword: ctx вызывающего (транзакция) теряется
+internal/domain/verification/module/adapters.go
+- return mapUserErr(a.users.UpdatePassword(ctx, userID, hash, version))
++ return mapUserErr(a.users.UpdatePassword(context.Background(), userID, hash, version))
+
+## VAD4 adapter — verification-адаптер UpdatePassword: перепутаны userID и hash
+internal/domain/verification/module/adapters.go
+- return mapUserErr(a.users.UpdatePassword(ctx, userID, hash, version))
++ return mapUserErr(a.users.UpdatePassword(ctx, hash, userID, version))
+
+## VAD5 adapter — verification-адаптер: версия не переносится
+internal/domain/verification/module/adapters.go
+- 		Version:  u.Version,
++ 		Version:  0,
+
+## VAD6 adapter — verification-адаптер: ErrNotFound → чужой sentinel
+internal/domain/verification/module/adapters.go
+- 	case errors.Is(err, user.ErrNotFound):
+- 		return verification.ErrUserNotFound
++ 	case errors.Is(err, user.ErrNotFound):
++ 		return verification.ErrConcurrentUpdate
+
+## M19 handler — user: USER_NOT_FOUND 404 → 400
+internal/domain/user/delivery/http/handler.go
+- Err: user.ErrNotFound, Status: http.StatusNotFound,
++ Err: user.ErrNotFound, Status: http.StatusBadRequest,
+
+## M20 handler — auth: отказ policy 403 → 401
+internal/domain/auth/delivery/http/handler.go
+- concurrentUpdateRule,
+- 		authgate.ForbiddenRule)
+-
+- 	loginErrors
++ concurrentUpdateRule,
++ 		httpkit.ErrorRule{Match: authgate.ForbiddenRule.Match, Status: http.StatusUnauthorized, Code: "UNAUTHORIZED", Detail: "unauthorized"})
++
++ 	loginErrors
+
+## M21 handler — user update: Status не передаётся в usecase
+internal/domain/user/delivery/http/handler.go
+- Status:  in.Body.Status,
++ Status:  nil,
+
+## M22 handler — listUsers: Security убран (ни Secured, ни Public)
+internal/domain/user/delivery/http/handler.go
+- huma.Register(api, listErrors.Declare(authgate.Secured(huma.Operation{
++ huma.Register(api, listErrors.Declare(huma.Operation{
+internal/domain/user/delivery/http/handler.go
+- 	})), h.list)
++ 	}), h.list)
+
+## M22b handler — listUsers помечена Public вместо Secured
+internal/domain/user/delivery/http/handler.go
+- listErrors.Declare(authgate.Secured(huma.Operation{
++ listErrors.Declare(httpkit.Public(huma.Operation{
+
+## AH1 handler — login: в usecase вместо пароля уходит адрес
+internal/domain/auth/delivery/http/handler.go
+- 		Password: in.Body.Password,
++ 		Password: in.Body.Email,
+
+## AH2 handler — refresh: пустой cookie уходит в usecase
+internal/domain/auth/delivery/http/handler.go
+- 	if in.RefreshCookie.Value == "" {
+- 		return nil, authErrors.Map(auth.ErrRefreshExpired)
+- 	}
+
+## AH3 handler — logout: с cookie сессия не закрывается
+internal/domain/auth/delivery/http/handler.go
+- 	if in.RefreshCookie.Value != "" {
++ 	if in.RefreshCookie.Value == "" {
+
+## AH4 handler — logout: cookie не гасятся
+internal/domain/auth/delivery/http/handler.go
+- return &AuthLogoutOutput{SetCookie: authgate.BuildExpiredAuthCookies(h.cookieCfg)}, nil
++ return &AuthLogoutOutput{}, nil
+
+## AH5 handler — changePassword: перепутаны старый и новый пароль
+internal/domain/auth/delivery/http/handler.go
+- h.uc.ChangePassword(ctx, in.Body.UserID, in.Body.OldPassword, in.Body.NewPassword)
++ h.uc.ChangePassword(ctx, in.Body.UserID, in.Body.NewPassword, in.Body.OldPassword)
+
+## AH6 handler — logout под Security (с истёкшим access не выйти)
+internal/domain/auth/delivery/http/handler.go
+- huma.Register(api, httpkit.Public(huma.Operation{
+- 		OperationID:   "logoutUser",
++ huma.Register(api, authgate.Secured(huma.Operation{
++ 		OperationID:   "logoutUser",
+
+## AH7 handler — блокировка входа: 423 вместо 429
+internal/domain/auth/delivery/http/handler.go
+- Err: auth.ErrAccountLocked, Status: http.StatusTooManyRequests,
++ Err: auth.ErrAccountLocked, Status: http.StatusLocked,
+
+## AH8 handler — неверный старый пароль: ошибка указывает на поле нового
+internal/domain/auth/delivery/http/handler.go
+- Detail: "old password does not match", Field: "body.old_password"}
++ Detail: "old password does not match", Field: "body.new_password"}
+
+## AH9 handler — повтор refresh отвечает кодом истёкшего
+internal/domain/auth/delivery/http/handler.go
+- Code: "AUTH_REFRESH_REUSED",
++ Code: "AUTH_REFRESH_EXPIRED",
+
+## AH10 handler — login: 429 не объявлен в OpenAPI
+internal/domain/auth/delivery/http/handler.go
+- loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule)
++ loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule)
+
+## AH11 handler — change-password: схема пускает новый пароль короче 8
+internal/domain/auth/delivery/http/dto.go
+- json:"new_password" maxLength:"1024" minLength:"8"   required:"true"
++ json:"new_password" maxLength:"1024" minLength:"1"   required:"true"
+
+## AH12 handler — refresh читает не тот cookie
+internal/domain/auth/delivery/http/dto.go
+- type AuthRefreshInput struct {
+- 	RefreshCookie http.Cookie `cookie:"refresh_token"`
++ type AuthRefreshInput struct {
++ 	RefreshCookie http.Cookie `cookie:"access_token"`
+
+## AH13 handler — ответ входа: в email — хэш пароля
+internal/domain/auth/delivery/http/view.go
+- 	v.Email = u.Email
++ 	v.Email = u.PasswordHash
+
+## AH14 handler — ответ входа без роли
+internal/domain/auth/delivery/http/view.go
+- 	v.Role = string(u.Role)
+
+## AH15 handler — login: access и refresh перепутаны в cookie
+internal/domain/auth/delivery/http/handler.go
+- SetCookie: authgate.BuildAuthCookies(result.AccessToken, result.RefreshToken, h.cookieCfg),
+- 	}
+- 	out.Body.Data.FromEntity(result.User)
++ SetCookie: authgate.BuildAuthCookies(result.RefreshToken, result.AccessToken, h.cookieCfg),
++ 	}
++ 	out.Body.Data.FromEntity(result.User)
+
+## AH16 handler — change-password: неизвестный пользователь — 401 вместо 404
+internal/domain/auth/delivery/http/handler.go
+- Err: auth.ErrUserNotFound, Status: http.StatusNotFound,
++ Err: auth.ErrUserNotFound, Status: http.StatusUnauthorized,
+
+## AH17 handler — refresh: клиенту возвращается прежний refresh-cookie
+internal/domain/auth/delivery/http/handler.go
+- 	result, err := h.uc.Refresh(ctx, in.RefreshCookie.Value)
+- 	if err != nil {
+- 		return nil, authErrors.Map(err)
+- 	}
+- 	return &AuthRefreshOutput{
+- 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, result.RefreshToken, h.cookieCfg),
++ 	result, err := h.uc.Refresh(ctx, in.RefreshCookie.Value)
++ 	if err != nil {
++ 		return nil, authErrors.Map(err)
++ 	}
++ 	return &AuthRefreshOutput{
++ 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, in.RefreshCookie.Value, h.cookieCfg),
+
+## UH1 handler — list: в page — размер страницы
+internal/domain/user/delivery/http/handler.go
+- out.Body.Page = in.Number
++ out.Body.Page = in.Size
+
+## UH2 handler — list: фильтр статуса не доходит до usecase
+internal/domain/user/delivery/http/handler.go
+- 	if in.Status != "" {
++ 	if in.Status == "" {
+
+## UH3 handler — update: версия клиента не доходит до usecase
+internal/domain/user/delivery/http/handler.go
+- 		Version: in.Body.Version,
++ 		Version: 0,
+
+## UH4 handler — register: 200 вместо 201
+internal/domain/user/delivery/http/handler.go
+- DefaultStatus: http.StatusCreated,
++ DefaultStatus: http.StatusOK,
+
+## UH5 handler — пустая правка: 422 вместо 400
+internal/domain/user/delivery/http/handler.go
+- Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest,
++ Err: user.ErrNoUpdateFields, Status: http.StatusUnprocessableEntity,
+
+## UH6 handler — update: 409 перехода статуса не объявлен в OpenAPI
+internal/domain/user/delivery/http/handler.go
+- noUpdateFieldsRule, invalidNameRule, concurrentUpdateRule, statusTransitionRule, authgate.ForbiddenRule)
++ noUpdateFieldsRule, invalidNameRule, concurrentUpdateRule, authgate.ForbiddenRule)
+
+## UH7 handler — register: схема не проверяет формат email
+internal/domain/user/delivery/http/dto.go
+- json:"email"    format:"email"   required:"true"
++ json:"email"    required:"true"
+
+## UH8 handler — list: схема пускает status=deleted
+internal/domain/user/delivery/http/dto.go
+- Status string `enum:"active,blocked" query:"status"`
++ Status string `enum:"active,blocked,deleted" query:"status"`
+
+## UH9 handler — update: version необязателен (0 по умолчанию)
+= huma считает поле без omitempty обязательным — openapi.json не меняется
+internal/domain/user/delivery/http/dto.go
+- json:"version"          required:"true"
++ json:"version"
+
+## UH10 handler — ответ пользователя: в name — хэш пароля
+internal/domain/user/delivery/http/view.go
+- 	v.Name = u.Name
++ 	v.Name = u.PasswordHash
+
+## UH11 handler — ответ пользователя без версии (следующий PATCH — 409)
+internal/domain/user/delivery/http/view.go
+- 	v.Version = u.Version
+
+## UH12 handler — update: имя не доходит до usecase
+internal/domain/user/delivery/http/handler.go
+- 		Name:    in.Body.Name,
+- 		Status:  in.Body.Status,
++ 		Name:    nil,
++ 		Status:  in.Body.Status,
+
+## UH13 handler — list: total — размер страницы
+internal/domain/user/delivery/http/handler.go
+- out.Body.Total = total
++ out.Body.Total = total - total + len(list)
+
+## UH14 handler — register: имя = адрес
+internal/domain/user/delivery/http/handler.go
+- 		Email:    in.Body.Email,
+- 		Password: in.Body.Password,
+- 		Name:     in.Body.Name,
++ 		Email:    in.Body.Email,
++ 		Password: in.Body.Password,
++ 		Name:     in.Body.Email,
+
+## UH15 handler — устаревшая версия: 412 вместо 409
+internal/domain/user/delivery/http/handler.go
+- Err: user.ErrConcurrentUpdate, Status: http.StatusConflict,
++ Err: user.ErrConcurrentUpdate, Status: http.StatusPreconditionFailed,
+
+## UH16 handler — getUser: адрес в ответе пуст
+internal/domain/user/delivery/http/handler.go
+- 	u, err := h.uc.GetByID(ctx, in.ID)
+- 	if err != nil {
+- 		return nil, userErrors.Map(err)
+- 	}
+- 	out := &UserGetOutput{}
+- 	out.Body.Data.FromEntity(u)
+- 	return out, nil
++ 	u, err := h.uc.GetByID(ctx, in.ID)
++ 	if err != nil {
++ 		return nil, userErrors.Map(err)
++ 	}
++ 	out := &UserGetOutput{}
++ 	out.Body.Data.FromEntity(u)
++ 	out.Body.Data.Email = ""
++ 	return out, nil
+
+## VH1 handler — confirm сброса: перепутаны токен и пароль
+internal/domain/verification/delivery/http/handler.go
+- h.uc.ConfirmPasswordReset(ctx, in.Body.Token, in.Body.Password)
++ h.uc.ConfirmPasswordReset(ctx, in.Body.Password, in.Body.Token)
+
+## VH2 handler — запрос сброса: сбой поиска — 204 (ошибка проглочена)
+internal/domain/verification/delivery/http/handler.go
+- 	if err := h.uc.RequestPasswordReset(ctx, in.Body.Email); err != nil {
+- 		return nil, verificationErrors.Map(err)
+- 	}
++ 	if err := h.uc.RequestPasswordReset(ctx, in.Body.Email); err != nil && ctx.Err() != nil {
++ 		return nil, verificationErrors.Map(err)
++ 	}
+
+## VH3 handler — погашенная ссылка: 400 вместо 409
+internal/domain/verification/delivery/http/handler.go
+- Err: verification.ErrTokenUsed, Status: http.StatusConflict,
++ Err: verification.ErrTokenUsed, Status: http.StatusBadRequest,
+
+## VH4 handler — негодная ссылка сброса отвечает кодом подтверждения email
+internal/domain/verification/delivery/http/handler.go
+- Code: "VERIFICATION_INVALID_RESET_TOKEN",
++ Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN",
+
+## VH5 handler — email-verify: поле токена переименовано
+internal/domain/verification/delivery/http/dto.go
+- type VerificationEmailVerifyInput struct {
+- 	Body struct {
+- 		Token string `json:"token" required:"true"`
++ type VerificationEmailVerifyInput struct {
++ 	Body struct {
++ 		Token string `json:"code" required:"true"`
+
+## VH6 handler — email-verify: 409 не объявлен в OpenAPI
+internal/domain/verification/delivery/http/handler.go
+- confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule, tokenUsedRule)
++ confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule)
+
+## VH7 handler — email-verify: путь операции изменён
+internal/domain/verification/delivery/http/handler.go
+- Path:          "/api/auth/email-verify",
++ Path:          "/api/auth/email-verification",
+
+## VH8 handler — confirm сброса: схема пускает пароль короче 8
+internal/domain/verification/delivery/http/dto.go
+- json:"password" maxLength:"1024" minLength:"8" required:"true"
++ json:"password" maxLength:"1024" minLength:"1" required:"true"
+
+## VH9 handler — email-verify: ошибка usecase — 204
+internal/domain/verification/delivery/http/handler.go
+- h.uc.ConfirmEmail(ctx, in.Body.Token); err != nil {
+- 		return nil, verificationErrors.Map(err)
++ h.uc.ConfirmEmail(ctx, in.Body.Token); err != nil && ctx.Err() != nil {
++ 		return nil, verificationErrors.Map(err)
+
+## M04s usecase/verification — confirm сброса не применяет правило пароля
+internal/domain/verification/usecase.go
+- if !policy.PasswordStrong(newPassword) {
++ if !policy.PasswordStrong(newPassword) && newPassword == "" {
+
+## M12 usecase/verification — ConfirmPasswordReset: ссылка не гасится условным UPDATE
+internal/domain/verification/usecase.go
+- 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
+- 			return err
+- 		}
+
+## M12b usecase/verification — ConfirmPasswordReset: ни погашения, ни отзыва — ссылка многоразовая
+internal/domain/verification/usecase.go
+- 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
+- 			return err
+- 		}
+- 		if err := uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID); err != nil {
+- 			return err
+- 		}
+
+## M13 usecase/verification — ConfirmPasswordReset: нет проверки UsedAt
+internal/domain/verification/usecase.go
+- 	case pr.UsedAt != nil:
+- 		return ErrTokenUsed
+
+## M14 usecase/verification — IssueEmailVerification: неверный subject
+internal/domain/verification/usecase.go
+- uc.d.Events.Publish(txCtx, subjectEmailVerificationRequested,
++ uc.d.Events.Publish(txCtx, subjectPasswordResetRequested,
+
+## M14b usecase/verification — issuePasswordReset: неверный subject
+internal/domain/verification/usecase.go
+- return uc.d.Events.Publish(txCtx, subjectPasswordResetRequested,
++ return uc.d.Events.Publish(txCtx, subjectEmailVerificationRequested,
+
+## M16 usecase/verification — RequestPasswordReset: сбой поиска пользователя → nil (204)
+internal/domain/verification/usecase.go
+- return outcome.Error, fmt.Errorf("lookup user: %w", err)
++ return outcome.Error, nil
+
+## M16b usecase/verification — RequestPasswordReset: сбой поиска — как неизвестный email
+internal/domain/verification/usecase.go
+- return outcome.Error, fmt.Errorf("lookup user: %w", err)
++ return resultUserNotFound, nil
+
+## M34 usecase/verification — issuePasswordReset: Publish вне транзакции
+internal/domain/verification/usecase.go
+- return uc.d.Events.Publish(txCtx, subjectPasswordResetRequested,
++ return uc.d.Events.Publish(ctx, subjectPasswordResetRequested,
+
+## D02d usecase/verification — IssueEmailVerification: Publish вне транзакции
+internal/domain/verification/usecase.go
+- return uc.d.Events.Publish(txCtx, subjectEmailVerificationRequested,
++ return uc.d.Events.Publish(ctx, subjectEmailVerificationRequested,
+
+## V01 usecase/verification — IssueEmailVerification: удалённый пользователь — ошибка (бесконечный повтор доставки)
+internal/domain/verification/usecase.go
+- "user gone before email verification, skip", "user_id", userID)
+- 		return nil
++ "user gone before email verification, skip", "user_id", userID)
++ 		return err
+
+## V02 usecase/verification — IssueEmailVerification: событие уходит и без выпуска токена
+internal/domain/verification/usecase.go
+- 		if err != nil || !issued {
+- 			return err
+- 		}
++ 		if err != nil {
++ 			return err
++ 		}
+
+## V03 usecase/verification — IssueEmailVerification: повтор после отправки шлёт письмо с токеном, которого нет в БД
+internal/domain/verification/usecase.go
+- 	if !issued {
+- 		uc.d.Log.Info(ctx, "email verification already sent, skip", "user_id", userID)
+- 		return nil
+- 	}
+
+## V04 usecase/verification — IssueEmailVerification: «письмо ушло» не отмечается (повтор перевыпускает токен)
+internal/domain/verification/usecase.go
+- 	if err := uc.d.Repo.MarkEmailVerificationSent(ctx, tokenID); err != nil {
+- 		return fmt.Errorf("mark verification email sent: %w", err)
+- 	}
+
+## V05 usecase/verification — IssueEmailVerification: порядок — «ушло» отмечается до отправки (сбой mailer теряет письмо)
+internal/domain/verification/usecase.go
+- 	if err := uc.d.Mailer.SendEmailVerification(ctx, u.Email, t); err != nil {
+- 		return fmt.Errorf("send verification email: %w", err)
+- 	}
+- 	if err := uc.d.Repo.MarkEmailVerificationSent(ctx, tokenID); err != nil {
+- 		return fmt.Errorf("mark verification email sent: %w", err)
+- 	}
++ 	if err := uc.d.Repo.MarkEmailVerificationSent(ctx, tokenID); err != nil {
++ 		return fmt.Errorf("mark verification email sent: %w", err)
++ 	}
++ 	if err := uc.d.Mailer.SendEmailVerification(ctx, u.Email, t); err != nil {
++ 		return fmt.Errorf("send verification email: %w", err)
++ 	}
+
+## V06 usecase/verification — IssueEmailVerification: в письме хэш вместо токена
+internal/domain/verification/usecase.go
+- uc.d.Mailer.SendEmailVerification(ctx, u.Email, t)
++ uc.d.Mailer.SendEmailVerification(ctx, u.Email, authnkit.HashToken(t))
+
+## V07 usecase/verification — IssueEmailVerification: в БД сырой токен вместо хэша
+internal/domain/verification/usecase.go
+- UpsertEmailVerification(txCtx, userID, authnkit.HashToken(t), uc.d.Clock.Now().Add(emailVerificationTTL))
++ UpsertEmailVerification(txCtx, userID, t, uc.d.Clock.Now().Add(emailVerificationTTL))
+
+## V08 usecase/verification — IssueEmailVerification: срок ссылки — час сброса вместо суток
+internal/domain/verification/usecase.go
+- authnkit.HashToken(t), uc.d.Clock.Now().Add(emailVerificationTTL))
++ authnkit.HashToken(t), uc.d.Clock.Now().Add(passwordResetTTL))
+
+## V09 usecase/verification — событие подтверждения несёт сырой токен
+internal/domain/verification/usecase.go
+- EmailVerificationRequested{TokenID: tokenID, UserID: userID,
++ EmailVerificationRequested{TokenID: t, UserID: userID,
+
+## V10 usecase/verification — IssueEmailVerification: выпуск токена вне транзакции события
+internal/domain/verification/usecase.go
+- uc.d.Repo.UpsertEmailVerification(txCtx, userID,
++ uc.d.Repo.UpsertEmailVerification(ctx, userID,
+
+## V11 usecase/verification — RequestPasswordReset: сброс выпускается заблокированному
+internal/domain/verification/usecase.go
+- 	case !u.CanLogin:
+- 		return resultInactive, nil
+- 	}
++ 	}
+
+## V12 usecase/verification — RequestPasswordReset: сбой после поиска уходит ответом (500 выдаёт учётную запись)
+internal/domain/verification/usecase.go
+- 	return result, nil
+- }
+-
+- func (uc *Usecase) issuePasswordReset
++ 	return result, err
++ }
++
++ func (uc *Usecase) issuePasswordReset
+
+## V13 usecase/verification — RequestPasswordReset: лимит запросов не действует
+internal/domain/verification/usecase.go
+- 	case !allowed:
++ 	case !allowed && u.ID == "":
+
+## V14 usecase/verification — RequestPasswordReset: лимит считается по адресу, а не по ID
+internal/domain/verification/usecase.go
+- uc.d.Limiter.Allow(ctx, u.ID, identity.IPFrom(ctx))
++ uc.d.Limiter.Allow(ctx, u.Email, identity.IPFrom(ctx))
+
+## V15 usecase/verification — сброс: в письме хэш вместо токена
+internal/domain/verification/usecase.go
+- uc.d.Mailer.SendPasswordReset(ctx, u.Email, token)
++ uc.d.Mailer.SendPasswordReset(ctx, u.Email, authnkit.HashToken(token))
+
+## V16 usecase/verification — сброс: в БД сырой токен вместо хэша
+internal/domain/verification/usecase.go
+- InsertPasswordReset(txCtx, u.ID, authnkit.HashToken(token), uc.d.Clock.Now().Add(passwordResetTTL))
++ InsertPasswordReset(txCtx, u.ID, token, uc.d.Clock.Now().Add(passwordResetTTL))
+
+## V17 usecase/verification — событие сброса несёт сырой токен
+internal/domain/verification/usecase.go
+- PasswordResetRequested{TokenID: tokenID, UserID: u.ID,
++ PasswordResetRequested{TokenID: tokenID[:0] + token, UserID: u.ID,
+
+## V18 usecase/verification — ConfirmPasswordReset: ссылка негодна в последний миг срока (граница)
+internal/domain/verification/usecase.go
+- case uc.d.Clock.Now().After(pr.ExpiresAt):
++ case !uc.d.Clock.Now().Before(pr.ExpiresAt):
+
+## V19 usecase/verification — ConfirmPasswordReset: срок ссылки не проверяется
+internal/domain/verification/usecase.go
+- 	case uc.d.Clock.Now().After(pr.ExpiresAt):
+- 		return ErrInvalidResetToken
+- 	}
++ 	}
+
+## V20 usecase/verification — ConfirmPasswordReset: удалённый пользователь — 404 USER_NOT_FOUND вместо негодной ссылки
+internal/domain/verification/usecase.go
+- 		return ErrInvalidResetToken // токен удалённого пользователя
++ 		return err // токен удалённого пользователя
+
+## V21 usecase/verification — ConfirmPasswordReset: прочие ссылки сброса остаются годными
+internal/domain/verification/usecase.go
+- 		if err := uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID); err != nil {
+- 			return err
+- 		}
+
+## V22 usecase/verification — ConfirmPasswordReset: пароль пишется вне транзакции погашения
+internal/domain/verification/usecase.go
+- uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version)
++ uc.d.PasswordSet.UpdatePassword(ctx, pr.UserID, hash, current.Version)
+
+## V23 usecase/verification — ConfirmPasswordReset: порядок — пароль пишется до погашения ссылки
+internal/domain/verification/usecase.go
+- 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
+- 			return err
+- 		}
+- 		if err := uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID); err != nil {
+- 			return err
+- 		}
+- 		return uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version)
++ 		if err := uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version); err != nil {
++ 			return err
++ 		}
++ 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
++ 			return err
++ 		}
++ 		return uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID)
+
+## V24 usecase/verification — ConfirmPasswordReset: поиск по сырому токену
+internal/domain/verification/usecase.go
+- uc.d.Repo.GetPasswordReset(ctx, authnkit.HashToken(token))
++ uc.d.Repo.GetPasswordReset(ctx, token)
+
+## V25 usecase/verification — ConfirmPasswordReset: аудит не пишется
+internal/domain/verification/usecase.go
+- 	uc.audit(ctx, auditkit.Entry{ActorID: pr.UserID, Action: "password_reset_confirmed", Resource: "user", ResourceID: pr.UserID})
+
+## V26 usecase/verification — ConfirmEmail: погашенная ссылка доходит до транзакции
+internal/domain/verification/usecase.go
+- 	case ev.UsedAt != nil:
+- 		return ErrTokenUsed
+
+## V27 usecase/verification — ConfirmEmail: отмечается не тот ID
+internal/domain/verification/usecase.go
+- uc.d.EmailVerifier.MarkEmailVerified(txCtx, ev.UserID)
++ uc.d.EmailVerifier.MarkEmailVerified(txCtx, ev.ID)
+
+## V28 usecase/verification — ConfirmEmail: порядок — email отмечается до погашения ссылки
+internal/domain/verification/usecase.go
+- 		if err := uc.d.Repo.MarkEmailVerificationUsed(txCtx, ev.ID); err != nil {
+- 			return err
+- 		}
+- 		err := uc.d.EmailVerifier.MarkEmailVerified(txCtx, ev.UserID)
+- 		if errors.Is(err, ErrUserNotFound) {
+- 			return ErrInvalidVerificationToken // токен удалённого пользователя
+- 		}
+- 		return err
++ 		err := uc.d.EmailVerifier.MarkEmailVerified(txCtx, ev.UserID)
++ 		if errors.Is(err, ErrUserNotFound) {
++ 			return ErrInvalidVerificationToken // токен удалённого пользователя
++ 		}
++ 		if err != nil {
++ 			return err
++ 		}
++ 		return uc.d.Repo.MarkEmailVerificationUsed(txCtx, ev.ID)
+
+## V29 usecase/verification — ConfirmEmail: ссылка удалённого пользователя — успех
+internal/domain/verification/usecase.go
+- 			return ErrInvalidVerificationToken // токен удалённого пользователя
++ 			return nil // токен удалённого пользователя
+
+## V30 usecase/verification — ConfirmEmail: срок ссылки не проверяется
+internal/domain/verification/usecase.go
+- 	case uc.d.Clock.Now().After(ev.ExpiresAt):
+- 		return ErrInvalidVerificationToken
+- 	}
++ 	}
+
+## V31 usecase/verification — срок подтверждения email — 24 минуты
+internal/domain/verification/policy.go
+- emailVerificationTTL = 24 * time.Hour
++ emailVerificationTTL = 24 * time.Minute
+
+## V32 usecase/verification — срок ссылки сброса — сутки
+internal/domain/verification/policy.go
+- passwordResetTTL     = time.Hour
++ passwordResetTTL     = 24 * time.Hour
+
+## V33 usecase/verification — subject события сброса сменил версию молча
+internal/domain/verification/events.go
+- subjectPasswordResetRequested     = "verification.events.password_reset_requested.v2"
++ subjectPasswordResetRequested     = "verification.events.password_reset_requested.v3"
+
+## V34 usecase/verification — метрика сброса считает запрос дважды
+internal/domain/verification/metrics.go
+- m.resetRequests.Add(ctx, 1,
++ m.resetRequests.Add(ctx, 2,
+
+## V35 usecase/verification — ConfirmEmail: автор в аудите — ID токена
+internal/domain/verification/usecase.go
+- ActorID: ev.UserID, Action: "email_confirmed"
++ ActorID: ev.ID, Action: "email_confirmed"
+
+## V36 usecase/verification — IssueEmailVerification: «ушло» отмечается по ID пользователя
+internal/domain/verification/usecase.go
+- uc.d.Repo.MarkEmailVerificationSent(ctx, tokenID)
++ uc.d.Repo.MarkEmailVerificationSent(ctx, userID)
+
+## V37 usecase/verification — IssueEmailVerification: пользователя ищут по адресу вместо ID
+internal/domain/verification/usecase.go
+- u, err := uc.d.Users.GetByID(ctx, userID)
+- 	if errors.Is(err, ErrUserNotFound) {
++ u, err := uc.d.Users.GetByEmail(ctx, userID)
++ 	if errors.Is(err, ErrUserNotFound) {
+
+## M33 nats — onUserRegistered: ошибка логируется и проглатывается (нет повтора доставки)
+internal/domain/verification/delivery/nats/handler.go
+- return fmt.Errorf("issue email verification for user %s: %w", e.ID, err)
++ h.log.Error(ctx, fmt.Sprintf("issue email verification for user %s", e.ID), "err", err)
++ 		return nil
+
+## VN1 nats — схема события потребителя: ID читается из другого поля
+internal/domain/verification/delivery/nats/dto.go
+- ID string    `json:"ID"`
++ ID string    `json:"UserID"`
+
+## VN2 nats — подписка слушает subject, которого поставщик не публикует
+internal/domain/verification/delivery/nats/dto.go
+- SubjectUserRegistered   = "user.events.registered.v2"
++ SubjectUserRegistered   = "user.events.registered.v3"
+
+## VN3 nats — прежний subject — тем же durable, что новый
+internal/domain/verification/delivery/nats/handler.go
+- subscribe(subjectUserRegisteredV1, durableNameV1)
++ subscribe(subjectUserRegisteredV1, durableName)
+
+## VN4 nats — подписка на несуществующий стрим
+internal/domain/verification/delivery/nats/handler.go
+- streamUser  = "user"
++ streamUser  = "users"
+
+## VN5 nats — durable переименован (в проде — повторная доставка всего стрима)
+internal/domain/verification/delivery/nats/handler.go
+- durableName = "verification-user-registered-v2"
++ durableName = "verification-user-registered-v3"
+
+## VN6 nats — прежний subject не дочитывается (письма событий до .v2 теряются)
+internal/domain/verification/delivery/nats/handler.go
+- 	subscribe(subjectUserRegisteredV1, durableNameV1)
+
+## VN7 nats — onUserRegistered: ошибка usecase глотается, пока ctx жив (повтора доставки нет)
+internal/domain/verification/delivery/nats/handler.go
+- h.uc.IssueEmailVerification(ctx, e.ID); err != nil {
+- 		return fmt.Errorf(
++ h.uc.IssueEmailVerification(ctx, e.ID); err != nil && ctx.Err() != nil {
++ 		return fmt.Errorf(
+
+## M20b platform/authgate — общее ForbiddenRule: 403 → 401
+internal/platform/authgate/forbidden.go
+- Status: http.StatusForbidden
++ Status: http.StatusUnauthorized
+
+## M27 platform/authgate — Extract: ParseAccess → Parse (любой подписанный токен — access)
+internal/platform/authgate/jwt.go
+- e.parser.ParseAccess(r.Context(), token)
++ e.parser.Parse(r.Context(), token)
+
+## M28 platform/authgate — tokenFromRequest: пустая cookie принимается
+internal/platform/authgate/jwt.go
+- if err != nil || c.Value == "" {
++ if err != nil {
+
+## M32 platform/authgate — authCookie: SameSite None
+internal/platform/authgate/cookie.go
+- HttpOnly: true,
+- 		SameSite: http.SameSiteStrictMode,
+- 		Secure:   cfg.Secure,
+- 	}
+- }
+-
+- func expiredCookie
++ HttpOnly: true,
++ 		SameSite: http.SameSiteNoneMode,
++ 		Secure:   cfg.Secure,
++ 	}
++ }
++
++ func expiredCookie
+
+## M32b platform/authgate — authCookie: SameSite Lax
+internal/platform/authgate/cookie.go
+- HttpOnly: true,
+- 		SameSite: http.SameSiteStrictMode,
+- 		Secure:   cfg.Secure,
+- 	}
+- }
+-
+- func expiredCookie
++ HttpOnly: true,
++ 		SameSite: http.SameSiteLaxMode,
++ 		Secure:   cfg.Secure,
++ 	}
++ }
++
++ func expiredCookie
+
+## M32c platform/authgate — expiredCookie: SameSite None
+internal/platform/authgate/cookie.go
+- SameSite: http.SameSiteStrictMode,
+- 		Secure:   cfg.Secure,
+- 		MaxAge:   -1,
++ SameSite: http.SameSiteNoneMode,
++ 		Secure:   cfg.Secure,
++ 		MaxAge:   -1,
+
+## G01 platform/authgate — Extract: роль читается из sub
+internal/platform/authgate/jwt.go
+- role, _ := claims["role"].(string)
++ role, _ := claims["sub"].(string)
+
+## G02 platform/authgate — Extract: ID читается из role
+internal/platform/authgate/jwt.go
+- sub, _ := claims["sub"].(string)
++ sub, _ := claims["role"].(string)
+
+## G03 platform/authgate — authCookie без HttpOnly (токен доступен JS)
+internal/platform/authgate/cookie.go
+- 		HttpOnly: true,
+- 		SameSite: http.SameSiteStrictMode,
+- 		Secure:   cfg.Secure,
+- 	}
+- }
+-
+- func expiredCookie
++ 		HttpOnly: false,
++ 		SameSite: http.SameSiteStrictMode,
++ 		Secure:   cfg.Secure,
++ 	}
++ }
++
++ func expiredCookie
+
+## G04 platform/authgate — authCookie: Path /api/auth (cookie не уходит на /api/users)
+internal/platform/authgate/cookie.go
+- 		Value:    value,
+- 		Path:     "/",
++ 		Value:    value,
++ 		Path:     "/api/auth",
+
+## G05 platform/authgate — expiredCookie не гасит cookie
+internal/platform/authgate/cookie.go
+- MaxAge:   -1,
++ MaxAge:   0,
+
+## G06 platform/authgate — BuildAuthCookies: значения access и refresh перепутаны
+internal/platform/authgate/cookie.go
+- *authCookie(CookieAccess, access, cfg), *authCookie(CookieRefresh, refresh, cfg)}
++ *authCookie(CookieAccess, refresh, cfg), *authCookie(CookieRefresh, access, cfg)}
+
+## G07 platform/authgate — authCookie: Secure всегда false
+internal/platform/authgate/cookie.go
+- 		SameSite: http.SameSiteStrictMode,
+- 		Secure:   cfg.Secure,
+- 	}
+- }
+-
+- func expiredCookie
++ 		SameSite: http.SameSiteStrictMode,
++ 		Secure:   false,
++ 	}
++ }
++
++ func expiredCookie
+
+## G08 platform/authgate — имя refresh-cookie расходится с тем, что читают хендлеры
+internal/platform/authgate/cookie.go
+- CookieRefresh = "refresh_token"
++ CookieRefresh = "refresh"
+
+## G09 platform/authgate — истёкший access: 403 вместо 401
+internal/platform/authgate/session.go
+- Err: authnkit.ErrTokenExpired, Status: http.StatusUnauthorized, Code: "AUTH_ACCESS_EXPIRED"
++ Err: authnkit.ErrTokenExpired, Status: http.StatusForbidden, Code: "AUTH_ACCESS_EXPIRED"
+
+## G10 platform/authgate — отказ policy: другой code
+internal/platform/authgate/forbidden.go
+- Code: "FORBIDDEN"
++ Code: "ACCESS_DENIED"
+
+## G11 platform/authgate — лог: user_id пишется и без личности (пустой)
+internal/platform/authgate/module.go
+- 	return id.UserID, ok
++ 	return id.UserID, ok || true
+
+## G12 platform/authgate — модуль не регистрирует user_id в логе
+internal/platform/authgate/module.go
+- 	fx.Invoke(registerIdentityLogAttr),
+
+## G13 platform/authgate — Extract: истёкший access не отличается от «войти заново»
+internal/platform/authgate/jwt.go
+- return r.Context(), SessionErrors.Map(fmt.Errorf("authgate: parse jwt: %w", err))
++ return r.Context(), fmt.Errorf("authgate: parse jwt: %w", err)
+
+## G14 platform/authgate — tokenFromRequest: условие ослаблено (&& вместо ||) — nil-cookie разыменовывается
+internal/platform/authgate/jwt.go
+- if err != nil || c.Value == "" {
+- 		return "", errors.New("authgate: no auth cookie")
++ if err != nil && c.Value == "" {
++ 		return "", errors.New("authgate: no auth cookie")
+
+## C01 platform/config — Guard: вне dev пускает лог без маскирования
+internal/platform/config/config.go
+- 	if redact.Disabled {
+- 		unsafe = append(unsafe, "LOG_REDACT_DISABLED=true")
+- 	}
+
+## C02 platform/config — Guard: условие aud инвертировано
+internal/platform/config/config.go
+- if len(jwt.Audience) == 0 {
++ if len(jwt.Audience) != 0 {
+
+## C03 platform/config — Guard: условие COOKIE_SECURE инвертировано
+internal/platform/config/config.go
+- if !app.Cookie.Secure {
++ if app.Cookie.Secure {
+
+## C04 platform/config — Guard объявлен, но в модуле не стоит
+internal/platform/config/config.go
+- 	fx.Invoke(Guard),
+
+## C05 platform/config — APP_ENV необязателен
+internal/platform/config/config.go
+- Env    Env `envconfig:"APP_ENV" required:"true"`
++ Env    Env `envconfig:"APP_ENV"`
+
+## C06 platform/config — значение dev-окружения изменилось молча
+internal/platform/config/config.go
+- const Dev Env = "dev"
++ const Dev Env = "development"
+
+## C07 platform/config — Guard действует только при APP_ENV=production (staging без гарда)
+internal/platform/config/config.go
+- 	if app.Env == Dev {
+- 		return nil
+- 	}
++ 	if app.Env != "production" {
++ 		return nil
++ 	}
+
+## C08 platform/config — Guard: условие docs инвертировано
+internal/platform/config/config.go
+- if httpCfg.DocsEnabled {
++ if !httpCfg.DocsEnabled {
+
+## EV1 platform/events — outbox домена без ограничения subject'ов
+internal/platform/events/outbox.go
+- outboxkit.Instance(name, table, outboxkit.WithSubjects(name+".>")),
++ outboxkit.Instance(name, table),
+
+## EV2 platform/events — publisher outbox'а не приватен модулю домена
+internal/platform/events/outbox.go
+- 			fx.Private,
+
+## EV3 platform/events — outbox домена принимает чужие subject'ы
+internal/platform/events/outbox.go
+- outboxkit.WithSubjects(name+".>")
++ outboxkit.WithSubjects(">")
+
+## ID1 platform/identity — identity.From: личность есть и у анонима (пустая)
+internal/platform/identity/identity.go
+- 	id, ok := ctx.Value(ctxKey{}).(Identity)
+- 	return id, ok
++ 	id, ok := ctx.Value(ctxKey{}).(Identity)
++ 	return id, ok || id.UserID == ""
+
+## M29 cmd/api — граф: TrustProxyHops = 1 (XFF клиента — ключ антибрутфорса)
+cmd/api/main.go
+- 	httpkit.NewConfig,
++ 	func() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 1; return c, err },
+
+## M29h2 cmd/api — граф: TrustProxyHops = 2
+cmd/api/main.go
+- 	httpkit.NewConfig,
++ 	func() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 2; return c, err },
+
+## M29h3 cmd/api — граф: TrustProxyHops = 3
+cmd/api/main.go
+- 	httpkit.NewConfig,
++ 	func() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 3; return c, err },
+
+## M29h4 cmd/api — доп., вне сопоставления (Решения: 1–3): TrustProxyHops = 4
+cmd/api/main.go
+- 	httpkit.NewConfig,
++ 	func() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 4; return c, err },
+
+## K01 cmd/api — checkStopBudget: ровно ⅔ бюджета — отказ (граница)
+cmd/api/main.go
+- d > stopTimeout*2/3 {
++ d >= stopTimeout*2/3 {
+
+## K02 cmd/api — checkStopBudget: дренаж NATS — до всего бюджета
+cmd/api/main.go
+- if natsCfg.DrainTimeout > stopTimeout/3 {
++ if natsCfg.DrainTimeout > stopTimeout {
+
+## K03 cmd/api — checkStopBudget объявлен, но в графе не стоит
+cmd/api/main.go
+- fx.Invoke(checkStopBudget, logStart),
++ fx.Invoke(logStart),
+
+## K04 cmd/api — граф без fx.StopTimeout (остановка — 15 с fx по умолчанию при бюджете 30 с)
+cmd/api/main.go
+- 	fx.StopTimeout(stopTimeout),
+
+## K05 cmd/api — подкоманда healthcheck не узнаётся (стартует сервис)
+cmd/api/main.go
+- os.Args[1] == "healthcheck" {
++ os.Args[1] == "health" {
+
+## K06 cmd/api — healthcheck всегда отвечает 0
+cmd/api/main.go
+- 		os.Exit(httpkit.Healthcheck(context.Background()))
++ 		httpkit.Healthcheck(context.Background())
++ 		os.Exit(0)
+
+## K07 cmd/api — операции verification не зарегистрированы
+cmd/api/http.go
+- 	verifhttp.Register(api, h.Verification)
+
+## K08 cmd/api — httpModule не регистрирует операции: сервис без API
+cmd/api/http.go
+- 	fx.Invoke(registerHTTP),
+
+## K09 cmd/api — порядок графа: httpModule первым
+cmd/api/main.go
+- 	infraModules,
+- 	platformModules,
+- 	domainModules,
+- 	httpModule,
++ 	httpModule,
++ 	infraModules,
++ 	platformModules,
++ 	domainModules,
+
+## K10 cmd/api — граф без timerkit (фоновые задачи китов)
+cmd/api/main.go
+- 	"git.stit.tech/stit-core/golibinfra/timerkit"
+cmd/api/main.go
+- 		timerkit.Module,
+
+## K11 cmd/api — граф без clockkit (контроль: ValidateApp)
+cmd/api/main.go
+- 	"git.stit.tech/stit-core/golibinfra/clockkit"
+cmd/api/main.go
+- 		clockkit.Module,
+
+## K12 cmd/api — граф без fx.RecoverFromPanics
+cmd/api/main.go
+- 	fx.RecoverFromPanics(),
+
+## K13 cmd/api — meter доменов без имени scope
+cmd/api/main.go
+- return p.MeterProvider.Meter("app") })
++ return p.MeterProvider.Meter("") })
+
+## MG1 cmd/migrate — migrate version: dirty-источник — код 0
+cmd/migrate/main.go
+- "version", v, "dirty", dirty, "error", err)
+- 				return 1
++ "version", v, "dirty", dirty, "error", err)
+
+## MG2 cmd/migrate — migrate: неизвестная команда — код 0
+cmd/migrate/main.go
+- 		log.Error(ctx, "unknown command", "command", os.Args[1])
+- 		return 1
++ 		log.Error(ctx, "unknown command", "command", os.Args[1])
++ 		return 0
+
+## MG3 cmd/migrate — migrate up: отказ — код 0 (выкатка идёт дальше)
+cmd/migrate/main.go
+- 			log.Error(ctx, "migrate up failed", "error", err)
+- 			return 1
++ 			log.Error(ctx, "migrate up failed", "error", err)
++ 			return 0
+
+## MG4 cmd/migrate — migrate без PG_DSN — код 0
+cmd/migrate/main.go
+- 	if dsn == "" {
+- 		log.Error(ctx, "PG_DSN is required")
+- 		return 1
++ 	if dsn == "" {
++ 		log.Error(ctx, "PG_DSN is required")
++ 		return 0
+
+## SR1 cmd/migrate — sources.Kits без таблицы аудита
+cmd/migrate/sources/sources.go
+- 	auditpg "git.stit.tech/stit-core/golibinfra/auditkit/pgstore"
+cmd/migrate/sources/sources.go
+- 	auditpg.Migrations,
+
+## SD1 cmd/seed — seed-admin: повышает удалённую учётную запись
+cmd/seed-admin/main.go
+- WHERE LOWER(email) = LOWER($1) AND status <> 'deleted' FOR UPDATE
++ WHERE LOWER(email) = LOWER($1) FOR UPDATE
+
+## SD2 cmd/seed — seed-admin: поиск без FOR UPDATE
+cmd/seed-admin/main.go
+- AND status <> 'deleted' FOR UPDATE"
++ AND status <> 'deleted'"
+
+## SD3 cmd/seed — seed-admin: закрытие сессий вне транзакции повышения
+= строку пользователя держит FOR UPDATE транзакции повышения: вход ждёт её коммита и перечитывает роль и хэш, сбой закрытия откатывает повышение и с мутацией
+cmd/seed-admin/main.go
+- return sessions.RevokeAll(txCtx, id)
++ return sessions.RevokeAll(ctx, id)
+
+## SD4 cmd/seed — seed-admin: существующая учётная запись не повышается
+cmd/seed-admin/main.go
+- UPDATE users SET role = 'admin', password_hash = $1 WHERE id = $2
++ UPDATE users SET role = 'client', password_hash = $1 WHERE id = $2
+
+## SD5 cmd/seed — seed-admin: новая учётная запись — клиент
+cmd/seed-admin/main.go
+- VALUES ($1, $2, $3, 'active', 'admin', true) RETURNING id
++ VALUES ($1, $2, $3, 'active', 'client', true) RETURNING id
+
+## SD6 cmd/seed — seed-admin: пустой пароль проходит
+cmd/seed-admin/main.go
+- if email == "" || password == "" {
++ if email == "" && password == "" {
+
+## SD7 cmd/seed — seed-admin: email админа не подтверждён
+cmd/seed-admin/main.go
+- VALUES ($1, $2, $3, 'active', 'admin', true) RETURNING id
++ VALUES ($1, $2, $3, 'active', 'admin', false) RETURNING id
+
+## SD8 cmd/seed — seed-admin: повышение вне транзакции закрытия сессий
+cmd/seed-admin/main.go
+- 		if id, err = upsertAdmin(txCtx, db, email, hash, name); err != nil {
++ 		if id, err = upsertAdmin(ctx, db, email, hash, name); err != nil {
+
+## MI1 migrations — 0001: нет триггера updated_at (updated_at не меняется)
+migrations/0001_users.up.sql
+- CREATE TRIGGER users_updated_at
+-     BEFORE UPDATE ON users
+-     FOR EACH ROW
+-     EXECUTE FUNCTION set_updated_at();
+
+## MI2 migrations — 0001: уникальность адреса с учётом регистра
+migrations/0001_users.up.sql
+- ON users (LOWER(email)) WHERE status != 'deleted';
++ ON users (email) WHERE status != 'deleted';
+
+## MI3 migrations — 0001: удалённый не освобождает адрес
+migrations/0001_users.up.sql
+- ON users (LOWER(email)) WHERE status != 'deleted';
++ ON users (LOWER(email));
+
+## MI4 migrations — 0001: индекс хэша токена сброса не уникален
+= уникальность 256-битного хэша функционально не используется
+migrations/0001_users.up.sql
+- CREATE UNIQUE INDEX password_resets_token_hash_idx ON password_resets (token_hash);
++ CREATE INDEX password_resets_token_hash_idx ON password_resets (token_hash);
+
+## MI5 migrations — 0003: индекс ожидающего подтверждения не частичный (погашенное блокирует новое)
+migrations/0003_email_verifications_idempotency.up.sql
+-     ON email_verifications (user_id)
+-     WHERE used_at IS NULL;
++     ON email_verifications (user_id);
+
+## MI6 migrations — 0005 down: индекс не восстанавливается
+migrations/0005_drop_refresh_sessions.down.sql
+- CREATE INDEX refresh_sessions_expires_at_idx ON refresh_sessions (expires_at);
+
+## MI7 migrations — 0003 down ничего не откатывает
+migrations/0003_email_verifications_idempotency.down.sql
+- DROP INDEX email_verifications_pending_user_idx;
++ DROP INDEX IF EXISTS email_verifications_pending_user_idx_gone;
+
+## MI8 migrations — 0001: нет CHECK роли
+= значения роли пишут сущность и SQL-литералы: CHECK — вторая линия защиты
+migrations/0001_users.up.sql
+- 'deleted')),
+-     CONSTRAINT users_role_check   CHECK (role   IN ('admin',  'client'))
+- );
++ 'deleted'))
++ );
+
+## MI9 migrations — 0001: версия по умолчанию 0
+migrations/0001_users.up.sql
+- version        INT         NOT NULL DEFAULT 1,
++ version        INT         NOT NULL DEFAULT 0,
+
+## MI10 migrations — 0001: email подтверждён по умолчанию
+migrations/0001_users.up.sql
+- email_verified BOOLEAN     NOT NULL DEFAULT false,
++ email_verified BOOLEAN     NOT NULL DEFAULT true,
+
+## MI11 migrations — 0001: индекс хэша токена подтверждения не уникален
+= уникальность 256-битного хэша функционально не используется
+migrations/0001_users.up.sql
+- CREATE UNIQUE INDEX email_verifications_token_hash_idx ON email_verifications (token_hash);
++ CREATE INDEX email_verifications_token_hash_idx ON email_verifications (token_hash);
+
+## MI12 migrations — 0001: нет CHECK статуса
+= значения статуса пишут сущность и SQL-литералы: CHECK — вторая линия защиты
+migrations/0001_users.up.sql
+-     CONSTRAINT users_status_check CHECK (status IN ('active', 'blocked', 'deleted')),

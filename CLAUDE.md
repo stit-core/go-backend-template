@@ -57,7 +57,8 @@ DDD-артефакты доменов — в соседнем strategy-репо 
 их не читает. `make check` = fmt-check + vet + lint + migrations-check + test-int (юнит +
 integration, нужен Docker) + build (`./...` без тегов, как образ) + gen-check + cover-check (покрытие
 профиля test-int 100%, непокрываемое — список `cover.sh`; функций без тестов нет). `make gen` — sqlc,
-mockery и `openapi.json` (контракт API из регистраций huma, без запуска сервиса).
+mockery и `openapi.json` (контракт API из регистраций huma, без запуска сервиса). `make mutate` —
+мутационный прогон вне гейта (rule `tests-pipeline`).
 
 ## Карта: где что
 

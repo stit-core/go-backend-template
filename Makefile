@@ -1,4 +1,4 @@
-.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench cover-check tidy
+.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench cover-check mutate tidy
 
 # Release-вычисления (image-path host/org, lockstep tag) self-contained в
 # scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
@@ -218,6 +218,11 @@ test-fuzz: ## Короткие fuzz-прогоны (10s на цель; go test -
 
 test-bench: ## Бенчмарки
 	go test -run=^$$ -bench=. -benchmem ./internal/domain/...
+
+# Силу тестов держат мутации, а не процент покрытия: правки «было → стало» scripts/tools/mutants.txt по
+# одной на чистом дереве, итог — выжившие списком (scripts/tools/mutate.py, rule tests-pipeline).
+mutate: ## Мутационный прогон вне гейта, нужен Docker (A="<id> …" — эти мутации заново, A=--check — только якоря)
+	@python3 -I scripts/tools/mutate.py $(A)
 
 # Покрытие — профиль одного прогона юнит + integration (make test-int) по internal/ и pkg/ без
 # сгенерированного и internal/testkit: доля statement'ов ≥ порога и ни одной функции без исполненного
