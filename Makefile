@@ -160,8 +160,8 @@ setup: ## Подключить git-хуки scripts/git-hooks (core.hooksPath) �
 doctor: ## Fail-fast preflight: auth/env/drift
 	@bash scripts/tools/doctor.sh $(A)
 
-template-update: ## Обвязка шаблона в форк: новые теги шаблона; TO=template/vX.Y.Z — перенос (FROM= — база)
-	@bash scripts/tools/template-update.sh "$(TO)" "$(FROM)"
+template-update: ## Обвязка шаблона в форк: новые теги шаблона; TO=template/vX.Y.Z — перенос (FROM= — база, PATHS='<пути>' — и код форка)
+	@bash scripts/tools/template-update.sh "$(TO)" "$(FROM)" "$(PATHS)"
 
 ##@ META
 plan-check: ## Формат планов .claude/plans/ (A=--summary — сводка активных планов)

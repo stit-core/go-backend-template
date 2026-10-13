@@ -121,8 +121,13 @@ blocked-by: —
   - Сделано: `template-update.sh --remote` (`git ls-remote`, exit 0/1/2), строка `template:` в doctor
     (OK/WARN/INFO), общая проверка канона с `--status`; финал `/init-service` заводит remote, `/upgrade`,
     `/smartdev`, `ecosystem.md`; `TestTemplateUpdateRemote` RED → PASS; `make check` → `✓ check clean`
-- [ ] **S7** — RLIF-01: перенос по запросу `PATHS=` в движке `make template-update`
+- [x] **S7** — RLIF-01: перенос по запросу `PATHS=` в движке `make template-update`
   - Проверка: `TestTemplateUpdate` с `PATHS` → RED, затем PASS; копия `half` · Закрывает: AC4 · Зависит от: —
+  - Сделано: `PATHS` добавляет пути к путям шаблона того же переноса, опечатка — отказ до переноса;
+    `TestTemplateUpdatePaths` RED (третий аргумент игнорировался) → PASS; клоны `half`
+    (`nine/lifecycle/logs/s7-half.log`): база — кода в индексе 0, ветка — 59 файлов кода, 6 конфликтов
+    (4 обвязки и `cmd/api/boot_test.go`, `internal/domain/auth/usecase.go`, как в `half-C-3way.log`),
+    module path форка; `/upgrade` шаг 2, `contributing.md`; `make check` → `✓ check clean`
 - [ ] **S8** — RLIF-01: раздел «Безопасность» в аннотации, `/upgrade` — перенесено и отклонено в теле
   коммита, `Dockerfile*` в `.template/paths`
   - Проверка: `make check` → `✓ check clean`; проза сверена с движком · Закрывает: AC4 · Зависит от: S7
@@ -161,6 +166,10 @@ blocked-by: —
   сети; doctor идёт в `release-preflight env` — у каждого релиза форк видит новый тег. Новый тег и
   отсутствие remote — WARN (не блокирует), сеть — INFO; `git ls-remote` без fetch — doctor read-only,
   `timeout 30` и `BatchMode` — без зависания и вопросов. Канон шаблона remote не спрашивает.
+- RLIF-01: `PATHS` добавляет пути к путям шаблона, а не заменяет их: тег — единица выпуска, версия
+  обвязки сдвигается одним переносом, код и обвязка — от одной базы, одним гейтом и коммитом (так же
+  советует RLIF-07). Код без обвязки тега не переносится: следующий перенос начинался бы с базы, которую
+  код уже обогнал. Пути — каталог, файл или `:(exclude)`; шаблонов имён нет (`read -ra`, без glob).
 
 ## Handoff
 - Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
@@ -171,5 +180,5 @@ blocked-by: —
   релиза (блок RLIF-04 — в накопителе `handoff.md`).
 
 ## Где мы сейчас
-S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4–S5 (RLIF-04), S6 (RLIF-02) закрыты. Следующее: S7 — перенос
-кода по запросу `PATHS=` в `make template-update`.
+S1 (RADP-01), S2 (RLIF-05), S3 (RENF-03), S4–S5 (RLIF-04), S6 (RLIF-02), S7 (движок `PATHS`) закрыты.
+Следующее: S8 — раздел «Безопасность», перенесённое и отклонённое в теле коммита, `Dockerfile*`.

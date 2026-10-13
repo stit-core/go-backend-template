@@ -11,8 +11,9 @@ description: Обновить сервис по двум каналам — goli
   `template/vX.Y.Z` переносит `make template-update`, версия обвязки форка — `.template/version`.
 
 Остальное — код форка (домены, `internal/platform`, `cmd`, `pkg`, миграции): правки шаблона там
-называет раздел `Платформа` аннотации тега, форк переносит их сам, если нужны. Сначала golibinfra,
-потом обвязка: обвязка тега рассчитана на golibinfra из `go.mod` этого тега.
+называет раздел `Платформа` аннотации тега, нужные форк берёт тем же переносом по запросу
+(`PATHS='<пути>'`). Сначала golibinfra, потом обвязка: обвязка тега рассчитана на golibinfra из `go.mod`
+этого тега.
 
 ## Когда применять
 
@@ -63,8 +64,10 @@ git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-templat
    golibinfra форка ниже, чем у тега, — сначала раздел golibinfra.
 2. `make template-update TO=template/vX.Y.Z` на чистом дереве — трёхстороннее слияние путей шаблона
    до тега: первый перенос — от коммита шаблона, из которого создан форк (по дереву первого коммита
-   форка), следующие — от `.template/version`; итог — в индексе (`git diff --cached`),
-   `.template/version` уже сдвинут:
+   форка), следующие — от `.template/version`. Код форка, который форк берёт из раздела `Платформа`, —
+   тем же переносом: `PATHS='<пути из аннотаций>'` (каталог, файл или `:(exclude)<путь>`; путь, которого
+   нет ни в теге, ни в базе, — отказ). Итог — в индексе (`git diff --cached`), `.template/version` уже
+   сдвинут:
    - **конфликты** (`git status` — `UU`, `AA`): шаблон и форк правили одно место — сведи обе правки
      по смыслу и `git add`; забытый маркер конфликта роняет `make check` (archtest
      `TestNoConflictMarkers`);
@@ -76,7 +79,7 @@ git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-templat
      (`git show template/vX.Y.Z:internal/archtest/layout_settings_test.go`) и сведи со своей раскладкой.
      Нарушения, которые `TestLayout` нашёл в коде форка, — правкой кода или записью
      `archkit.WithKnownViolations` с ID находки (перечень проверок — README `archkit`).
-3. Шаги `Breaking` и `Гейт` из аннотаций всех тегов до `TO`; правки раздела `Платформа` — по нужде.
+3. Шаги `Breaking` и `Гейт` из аннотаций всех тегов до `TO`.
 4. `make gen`, затем готово по CLAUDE.md § Готово.
 5. Коммит `chore(template): обвязка template/vX.Y.Z`, в теле — что форк правил руками.
 

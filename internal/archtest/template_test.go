@@ -267,6 +267,74 @@ func TestTemplateUpdateBeforeVersionTag(t *testing.T) {
 		readFiles(t, fork, ".template/version", "h/k.md", "h/q.md"))
 }
 
+// TestTemplateUpdatePaths: код форка вне путей шаблона (домены идентичности, cmd, платформа) переносится по
+// запросу тем же трёхсторонним слиянием, что и обвязка, — make template-update TO=… PATHS='<пути>': module
+// path форка, правки форка целы; без PATHS код не едет, путь, которого нет в шаблоне, — отказ до переноса.
+func TestTemplateUpdatePaths(t *testing.T) {
+	t.Parallel()
+	script := templateScript(t)
+	tmpl := t.TempDir()
+	v1 := map[string]string{
+		".template/paths": ".template\nh\n", ".template/version": "template/v1.0.0\n",
+		"go.mod": "module example.com/tmpl\n", "h/rule.md": "r1\n",
+		"c/auth/login.go": "package auth\n\nimport \"example.com/tmpl/c/user\"\n\nvar Check = user.Weak\n",
+		"c/auth/limit.go": "package auth\n\nconst A = 1\n\nconst B = 2\n\nconst C = 3\n",
+		"c/cmd/main.go":   "package main\n\nfunc main() {}\n",
+	}
+	git(t, tmpl, "init", "-q")
+	writeFiles(t, tmpl, v1)
+	commitAll(t, tmpl)
+	git(t, tmpl, "tag", "-a", "template/v1.0.0", "-m", "template/v1.0.0")
+	writeFiles(t, tmpl, map[string]string{
+		".template/version": "template/v1.1.0\n", "h/rule.md": "r2\n",
+		"c/auth/login.go": "package auth\n\nimport \"example.com/tmpl/c/user\"\n\nvar Check = user.Strict\n",
+		"c/auth/limit.go": "package auth\n\nconst A = 10\n\nconst B = 2\n\nconst C = 3\n",
+		"c/cmd/main.go":   "package main\n\nfunc main() { run() }\n",
+	})
+	commitAll(t, tmpl)
+	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0\n\nБезопасность:\n- c/auth: строгая проверка входа")
+
+	fork := func(t *testing.T) string {
+		t.Helper()
+		dir := t.TempDir()
+		writeFiles(t, dir, union(v1, map[string]string{
+			"go.mod":          "module example.com/fork\n",
+			"c/auth/login.go": "package auth\n\nimport \"example.com/fork/c/user\"\n\nvar Check = user.Weak\n",
+			"c/auth/limit.go": "package auth\n\nconst A = 1\n\nconst B = 2\n\nconst C = 30\n",
+		}))
+		git(t, dir, "init", "-q")
+		commitAll(t, dir)
+		git(t, dir, "remote", "add", "--no-tags", "template", tmpl)
+		return dir
+	}
+	code := []string{".template/version", "h/rule.md", "c/auth/login.go", "c/auth/limit.go", "c/cmd/main.go"}
+
+	harness := fork(t)
+	bash(t, harness, script, "template/v1.1.0")
+	require.Equal(t, map[string]string{
+		".template/version": "template/v1.1.0\n", "h/rule.md": "r2\n",
+		"c/auth/login.go": "package auth\n\nimport \"example.com/fork/c/user\"\n\nvar Check = user.Weak\n",
+		"c/auth/limit.go": "package auth\n\nconst A = 1\n\nconst B = 2\n\nconst C = 30\n",
+		"c/cmd/main.go":   "package main\n\nfunc main() {}\n",
+	}, readFiles(t, harness, code...), "without PATHS the code of the fork stays as is")
+
+	requested := fork(t)
+	out := bash(t, requested, script, "template/v1.1.0", "", "c/auth")
+	require.Contains(t, out, "код по запросу (PATHS): c/auth\n")
+	require.Equal(t, map[string]string{
+		".template/version": "template/v1.1.0\n", "h/rule.md": "r2\n",
+		"c/auth/login.go": "package auth\n\nimport \"example.com/fork/c/user\"\n\nvar Check = user.Strict\n",
+		"c/auth/limit.go": "package auth\n\nconst A = 10\n\nconst B = 2\n\nconst C = 30\n",
+		"c/cmd/main.go":   "package main\n\nfunc main() {}\n",
+	}, readFiles(t, requested, code...), "PATHS brings the code of the template with the module path and the edits of the fork")
+
+	typo := fork(t)
+	out, err := runIn(t, typo, "bash", script, "template/v1.1.0", "", "c/auth c/autth")
+	require.Error(t, err, out)
+	require.Contains(t, out, "PATHS: c/autth — нет ни в")
+	require.Empty(t, git(t, typo, "status", "--porcelain"), "a refused update leaves the tree as is")
+}
+
 // TestTemplateUpdateRemote: о новом теге шаблона форк узнаёт из make doctor — теги remote template
 // (git ls-remote, без fetch): тег новее версии форка — WARN с ним и /upgrade, новее нет — OK; remote не
 // заведён — WARN, не ответил — не ошибка; канонический репо шаблона remote не спрашивает.

@@ -5,6 +5,8 @@
 #   make template-update                      версия форка, новые теги шаблона и их аннотации
 #   make template-update TO=template/vX.Y.Z   перенести изменения до тега TO
 #   make template-update TO=… FROM=<коммит>   база переноса — этот коммит шаблона
+#   make template-update TO=… PATHS='<пути>'  тем же переносом — и код форка по этим путям (каталог, файл
+#                                             или :(exclude)<путь>): разделы «Безопасность» и «Платформа»
 #   template-update.sh --status               строка версии для make status (без сети)
 #   template-update.sh --remote               теги remote template для make doctor (git ls-remote): exit 0 —
 #                                             новее версии форка нет, 1 — есть или remote нет, 2 — не ответил
@@ -75,7 +77,7 @@ if [ "${1:-}" = "--remote" ]; then
     exit 0
 fi
 
-TO=${1:-} FROM=${2:-} v=$(version)
+TO=${1:-} FROM=${2:-} PATHS=${3:-} v=$(version)
 git remote get-url template >/dev/null 2>&1 ||
     fail "нет remote template — git remote add --no-tags template <url шаблона> (skill /upgrade)"
 git fetch -q --no-tags template 'refs/tags/template/*:refs/tags/template/*'
@@ -115,8 +117,15 @@ fi
 
 ! git merge-base --is-ancestor "$TO" "$FROM" || fail "обвязка форка уже содержит $TO (база $FROM)"
 [ -z "$(git status --porcelain)" ] || fail "дерево не чистое — закоммить или спрячь (git stash -u)"
+read -ra extra <<<"$PATHS"
+# Опечатка в пути промолчала бы: перенос без этого пути выглядит так же, как перенос без изменений в нём.
+for p in "${extra[@]}"; do
+    p=${p#:(exclude)}
+    git cat-file -e "$TO:$p" 2>/dev/null || git cat-file -e "$FROM:$p" 2>/dev/null ||
+        fail "PATHS: $p — нет ни в $TO, ни в базе $FROM"
+done
 
-mapfile -t paths < <({ git show "$FROM:.template/paths" 2>/dev/null || true; git show "$TO:.template/paths"; } |
+mapfile -t paths < <({ git show "$FROM:.template/paths" 2>/dev/null || true; git show "$TO:.template/paths"; printf '%s\n' "${extra[@]}"; } |
     grep -vE '^[[:space:]]*(#|$)' | sort -u)
 mapfile -t gofiles < <(git diff --no-renames --name-only "$FROM" "$TO" -- "${paths[@]}" | grep '\.go$' || true)
 NEW=$(module <go.mod)
@@ -167,6 +176,7 @@ rm -f "$patch"
 
 conflicts=$(git diff --name-only --diff-filter=U)
 echo "обвязка: $FROM → $TO, файлов в индексе: $(git diff --cached --name-only | wc -l | tr -d ' ')"
+[ -z "$PATHS" ] || echo "код по запросу (PATHS): $PATHS"
 [ -z "$conflicts" ] || { echo "конфликты — разреши и git add:"; sed 's/^/  /' <<<"$conflicts"; }
 [ ${#absent[@]} -eq 0 ] || { echo "нет в форке — не тронуты:"; printf '  %s\n' "${absent[@]}"; }
 [ ${#kept[@]} -eq 0 ] || { echo "шаблон удалил, форк менял — реши сам:"; printf '  %s\n' "${kept[@]}"; }
