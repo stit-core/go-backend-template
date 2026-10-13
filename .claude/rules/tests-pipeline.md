@@ -92,6 +92,9 @@ RED→GREEN: падающий тест, воспроизводящий баг �
 
 - Build-tag `//go:build integration` сверху файла; гоняются в `make check` (шаг `make test-int`).
   Docker обязателен: вне `-short` testkit без Docker роняет тест, а не пропускает его.
+- Другого ограничения сборки в репо нет: только `//go:build integration` и только у `*_test.go`, без
+  суффиксов ОС и архитектуры в имени (archtest `TestBuildConstraints`) — иначе файл выпал бы из vet,
+  lint, тестов и покрытия гейта или из образа; шаг build собирает `./...` без тегов, как образ.
 - Контейнер+миграции+пул — `golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(path))`
   (нужна kit-таблица → ещё `testkit.WithMigrations(<kit>pg.Migrations)`);
   канон — `internal/domain/user/infra/postgres/repository_test.go`. Seed-хелперы строк

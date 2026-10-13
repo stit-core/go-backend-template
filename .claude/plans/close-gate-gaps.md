@@ -46,10 +46,13 @@ blocked-by: —
   - Подтверждено: на базе `BASH_ENV`, функция `set` и `SHELLOPTS=noexec` пропускают commit-msg, pre-commit и
     `make lint` (код 0, `N/gate/s2-base-forgeries.txt`), функции `read`/`env` — pre-push; на ветке
     `TestGateStepsIgnoreShellEnvironment`, `TestHooksIgnoreCallerEnvironment`, `TestPrePushGatesPushedCommit` → PASS
-- [ ] **AC3** — RENF-02: инъекции N-b-unit, N-b-prod, N-b-migrate (на базе `✓ check clean`) — гейт
+- [x] **AC3** — RENF-02: инъекции N-b-unit, N-b-prod, N-b-migrate (на базе `✓ check clean`) — гейт
   красный: ограничение сборки, кроме `//go:build integration` в `*_test.go`, — отказ archtest; шаг build
   собирает `./...` без тегов, как образ. Проверка: инъекция → `go test ./internal/archtest` FAIL с файлом,
   `make build` на N-b-migrate → FAIL
+  - Подтверждено: база с N-b-unit, N-b-prod, N-b-migrate — `make check` → `✓ check clean`
+    (`N/gate/s3-base-nb.log`); ветка — FAIL на test-int, `TestBuildConstraints` называет три файла
+    (`s3-branch-nb.log`); `make build` на N-b-migrate → `undefined: lockHint`, FAIL
 - [ ] **AC4** — RTSTT-01: эксперименты CV01, CV04, CV05, CV15 (на базе `✓ check clean`) — `make check`
   красный на cover-check; порог — 100, непокрываемое — явный список `cover.sh`, запись без непокрытого
   блока — отказ. Проверка: эксперименты под flock → `FAIL: coverage … < floor 100%`; тест списка → PASS
@@ -93,8 +96,11 @@ blocked-by: —
   - Сделано: Makefile — `unexport` `BASH_ENV`, `ENV`, `SHELLOPTS`, `BASHOPTS`, `CDPATH`, `GLOBIGNORE` и
     `BASH_FUNC_*`; хуки — `#!/bin/bash -p`, pre-push и pre-commit перезапускаются без переменных make и
     оболочки; тесты на шаги lint и test (и с `SHELL=/bin/bash`), хуки и pre-push → PASS; `make check` → ✓
-- [ ] **S3** — Ограничение сборки — только `integration` в `*_test.go` (archtest); build — `go build ./...`
+- [x] **S3** — Ограничение сборки — только `integration` в `*_test.go` (archtest); build — `go build ./...`
   - Проверка: N-b-* на базе `✓`, на ветке — красный; `make check` → ✓ · Закрывает: AC3 · Зависит от: —
+  - Сделано: `TestBuildConstraints` (`generated_test.go`, рядом с заголовком сгенерированного): строка
+    ограничения — только `//go:build integration` у `*_test.go`, файл не исключён из сборки гейта
+    (`build.MatchFile`: суффиксы ОС и архитектуры); build — `go build ./...`; `make check` → ✓
 - [ ] **S4** — Порог покрытия 100 и явный список непокрываемого в `cover.sh`
   - Проверка: CV01, CV04, CV05, CV15 под flock — красные; `make check` → ✓ · Закрывает: AC4 · Зависит от: —
 - [ ] **S5** — migrations-check: имена не по маске, каталог, классы эффекта RSECT-07; правило и reference
@@ -121,6 +127,8 @@ blocked-by: —
 - Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
   у хуков, которые git запускает сам. Хуки перезапускают себя без переменных make и оболочки (без маркера:
   условие — сами переменные), а не чистят окружение каждой проверки.
+- Правило ограничений сборки — в `generated_test.go` рядом с `TestGeneratedHeaderOnlyInGeneratorOutput`
+  (так советует аудит, файл трека), а не в `archtest_test.go`; там — строка в комментарии пакета.
 - commit-msg (файл трека harness): только строка интерпретатора `#!/bin/bash -p` — без неё `BASH_ENV`
   пропускал сообщение не по форме, RENF-01 не закрыть.
 - pre-push снимает переменные по классам (`MAKE*`, `MFLAGS`, `GNUMAKEFLAGS`, переменные оболочки), а не
@@ -131,5 +139,6 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1, S2 закрыты: самозащита гейта не зависит от переменных make и окружения оболочки вызывающего.
-Следующее: S3 — archtest ограничений сборки и `go build ./...` в шаге build (RED — инъекции N-b-*).
+S1–S3 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки не выводят файлы
+из гейта. Эксперименты на базе — worktree `N/wt-gate-x` (e8ea150, снять в S13). Следующее: S4 — порог
+покрытия 100 и список непокрываемого (RED — CV01, CV04, CV05, CV15 на базе).

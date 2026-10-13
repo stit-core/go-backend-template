@@ -35,11 +35,13 @@ test-int: ## Юнит + integration (testcontainers, нужен Docker) — ша
 lint: ## golangci-lint concise (PKG=./x/... FORMAT=detailed)
 	@bash scripts/tools/lint.sh $(DETAIL) $(PKG)
 
-build: ## Сборка бинарника bin/api concise (VERBOSE=1 — сырой go build)
+# Шаг build собирает всё дерево без тегов — как образ собирает cmd/*: остальные шаги гейта видят код с
+# тегом integration.
+build: ## Сборка всего дерева без тегов, как образ (go build ./...; VERBOSE=1 — сырой вывод)
 	@if [ -n "$(VERBOSE)" ]; then \
-		go build -o ./bin/api ./cmd/api; \
+		go build ./...; \
 	else \
-		out=$$(go build -o ./bin/api ./cmd/api 2>&1) && echo "OK: build bin/api" \
+		out=$$(go build ./... 2>&1) && echo "OK: build ./... без тегов" \
 		  || { echo "$$out" | head -20; echo "FAIL: build"; exit 1; }; \
 	fi
 

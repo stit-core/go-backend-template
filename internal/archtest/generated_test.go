@@ -1,6 +1,10 @@
 package archtest
 
 import (
+	"bufio"
+	"bytes"
+	"go/build"
+	"go/build/constraint"
 	"os"
 	"path"
 	"path/filepath"
@@ -45,4 +49,53 @@ func TestGeneratedHeaderOnlyInGeneratorOutput(t *testing.T) {
 			t.Errorf("%s: the generated-code header takes the file out of coverage and lint — only generator output carries it: sqlc (infra/postgres/db), mockery (mocks), a fully generated client package in pkg/", file)
 		}
 	}
+}
+
+// TestBuildConstraints: гейт проверяет код в сборке с тегом integration, образ собирает без тегов. Файл,
+// который ограничение сборки исключает из сборки гейта, выпал бы из vet, lint, тестов и покрытия, а в
+// бинарь попал бы; ограничение у не-теста разводит то, что проверено, и то, что собрано. Поэтому
+// ограничение — только //go:build integration и только у *_test.go, а суффикс имени (_windows.go,
+// _arm64.go) не исключает файл из сборки гейта на этой машине. Каталоги testdata и «_»-файлы go не видит.
+func TestBuildConstraints(t *testing.T) {
+	t.Parallel()
+	gate := build.Default
+	gate.BuildTags = []string{"integration"}
+	for _, f := range goFiles(t) {
+		if slices.ContainsFunc(strings.Split(f.path, "/"), func(part string) bool {
+			return part == "testdata" || strings.HasPrefix(part, "_")
+		}) {
+			continue
+		}
+		file := filepath.Join(repoRoot(t), f.path)
+		src, err := os.ReadFile(file)
+		require.NoError(t, err)
+		for _, line := range buildLines(src) {
+			if expr, err := constraint.Parse(line); err != nil || !f.test || expr.String() != "integration" {
+				t.Errorf("%s: %q — a build constraint is //go:build integration on a *_test.go only: "+
+					"another one takes the file out of vet, lint, tests and coverage of the gate or out of the image", f.path, line)
+			}
+		}
+		ok, err := gate.MatchFile(filepath.Dir(file), filepath.Base(file))
+		require.NoError(t, err, f.path)
+		if !ok {
+			t.Errorf("%s: the build of the gate (tag integration) skips the file: its name (_windows.go, _arm64.go) or "+
+				"constraint takes it out of vet, lint, tests and coverage", f.path)
+		}
+	}
+}
+
+// buildLines — строки ограничений сборки (//go:build и // +build) в заголовке файла до package.
+func buildLines(src []byte) []string {
+	var lines []string
+	sc := bufio.NewScanner(bytes.NewReader(src))
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, "package ") {
+			break
+		}
+		if constraint.IsGoBuild(line) || constraint.IsPlusBuild(line) {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
