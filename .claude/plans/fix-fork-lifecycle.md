@@ -66,14 +66,19 @@ blocked-by: —
   `ATTENTION: hooks`, `make doctor` — FAIL о хуках, `/smartdev` ведёт в `make setup`; `make setup`
   подключает хуки первой строкой — сбой установки инструментов их не отменяет (на базе — `OK`, о хуках ни
   строки: `R/tpl-enf/toy-fresh.tsv`). Проверка: тест archtest → PASS; свежий клон ветки → status и doctor
-- [ ] **AC8** — RADP-01: при `identity: own` адаптер нового домена к `user` по `port.md` гейт не красит, без
+- [x] **AC8** — RADP-01: при `identity: own` адаптер нового домена к `user` по `port.md` гейт не красит, без
   решения и при `external` проверка прежняя; `port.md` об этом говорит (на базе `fp22c` красный).
   Проверка: тест archtest → PASS; `run.py --no-full <worktree ветки> fp22c-new-consumer-identity-own` →
   зелёный, `fp22` — красный, как задумано
+  - Подтверждено: `TestIdentityDependents` → PASS (6 случаев); `run.py --no-full` на копии ветки: `fp22c` —
+    GREEN-quick, `fp22` — CAUGHT `TestPruneNamesIdentityDependents` (`nine/lifecycle/logs/s1-fp22.tsv`)
 
 ## Шаги
-- [ ] **S1** — RADP-01: проверка prune молчит при `identity: own`, тест законной формы, строка в `port.md`
+- [x] **S1** — RADP-01: проверка prune молчит при `identity: own`, тест законной формы, строка в `port.md`
   - Проверка: тест → RED на базе, GREEN после; кейсы `fp22c` и `fp22` · Закрывает: AC8 · Зависит от: —
+  - Сделано: проверка — функция над корнем репо (`unnamedIdentityDependents`), решение `identity` читает
+    `identityChoice`; `TestIdentityDependents` без выхода при `own` — RED ровно в случае `own identity`, с
+    выходом — PASS; `fp22c` зелёный, `fp22` пойман; `make check` → `✓ check clean`
 - [ ] **S2** — RLIF-05: валидатор stack не считает заглушку содержимым; тест и проза `draft-stable.md`
   - Проверка: `TestStackValidator` с заглушками → RED, затем PASS; `vstack.sh` · Закрывает: AC6 · Зависит от: —
 - [ ] **S3** — RENF-03: хуки в `make status` и `make doctor`, ATTENTION в `/smartdev`, `make setup` — хуки первыми
@@ -97,7 +102,9 @@ blocked-by: —
     AC6, AC7, AC8 · Зависит от: S1, S2, S3, S4, S5, S6, S7, S8, S9
 
 ## Решения
-—
+- RADP-01: проверка prune молчит только при `identity: own`; без решения (шаблон, `<own|external>`) и при
+  `external` она прежняя — там prune возможен. `identityExternal` оставлен обёрткой над `identityChoice`:
+  его берёт самопроверка прозы (`harness_test.go`, файл трека harness) — без правки чужого файла.
 
 ## Handoff
 - Хаб `<org>/infra` (RLIF-02): периодический `/upgrade` по сервисам — сервис говорит о новом теге обвязки
@@ -105,4 +112,4 @@ blocked-by: —
   `docs/reference/ecosystem.md`. В хаб не пишем — отчёт дирижёру.
 
 ## Где мы сейчас
-План заведён, воспроизведение RLIF-05 на базе — `nine/lifecycle/logs/vstack-base.log`. Следующее: S1.
+S1 закрыт (RADP-01). Воспроизведение RLIF-05 на базе — `nine/lifecycle/logs/vstack-base.log`. Следующее: S2.

@@ -157,6 +157,12 @@ make test PKG=./internal/archtest/...
 `TestLayout` красный строкой `archkit:` — провайдер импортирован не из `module/` или не корневым пакетом.
 Перенеси код. Новый домен покрыт автоматически.
 
+Поставщик — домен идентичности (`user`, `auth`, `verification`): у проекта с `identity: own`
+(`docs/stack/auth.md`) это обычный порт, prune проекту не нужен, и в процедуре prune адаптер не называют.
+В шаблоне и у форка без решения `TestPruneNamesIdentityDependents` требует назвать файлы адаптера в
+`.claude/skills/init-service/references/prune.md` — prune их правит; при `identity: external` домены
+идентичности уходят, порт к ним не заводят.
+
 ### 8. Тесты
 
 - `usecase_test.go` потребителя: используй `Mock<Provider>Reader` (свежесгенерированный). Тестируй именно поведение consumer'а.
