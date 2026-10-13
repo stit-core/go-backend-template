@@ -9,6 +9,11 @@
 # идут через A= (status/plan-check) / Q=,P= (search) / NAME= (new-domain) /
 # VERSION= (release) / TO=,FROM= (template-update).
 
+# Окружение оболочки вызывающего до рецептов не доходит: файл автозапуска bash (`exit 0` в нём — и шаг
+# «прошёл»), опции (SHELLOPTS=noexec — скрипт читается, но не исполняется) и экспортированные функции с
+# именами команд шага. Шаги-скрипты гейта — bash: снятое здесь им не достаётся.
+unexport BASH_ENV ENV SHELLOPTS BASHOPTS CDPATH GLOBIGNORE $(filter BASH_FUNC_%,$(.VARIABLES))
+
 help: ## сгруппированный список команд
 	@awk 'BEGIN {FS = ":.*## "} \
 		/^##@ / {printf "\n\033[1m%s\033[0m\n", substr($$0, 5); next} \

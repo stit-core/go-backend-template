@@ -1,7 +1,18 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 # pre-commit: быстрые проверки перед коммитом; полный гейт — pre-push (make check).
 # Нет инструмента — коммит не проходит.
 set -euo pipefail
+
+# Переменные make и оболочки из окружения вызывающего (MAKEFLAGS=i, MAKECMDGOALS, BASH_ENV, функции
+# BASH_FUNC_…) до проверок не доходят: каждая из них меняет шаги или выключает самозащиту гейта. Сам хук
+# их не читает (`bash -p`) и перезапускается без них.
+drop=()
+while IFS= read -r -d '' entry; do
+    if [[ ${entry%%=*} =~ ^(MAKE.*|MFLAGS|GNUMAKEFLAGS|BASH_ENV|ENV|SHELLOPTS|BASHOPTS|CDPATH|GLOBIGNORE|BASH_FUNC_.*)$ ]]; then
+        drop+=(-u "${entry%%=*}")
+    fi
+done < <(env -0)
+[ ${#drop[@]} -eq 0 ] || exec env "${drop[@]}" "$0" "$@"
 
 cd "$(git rev-parse --show-toplevel)"
 

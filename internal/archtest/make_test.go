@@ -25,6 +25,38 @@ func callerEnv(extra ...string) []string {
 	return append(env, extra...)
 }
 
+// stubTools — каталог для PATH: названные инструменты — false, а go отвечает только на go env (по нему
+// Makefile узнаёт GOFLAGS, test.sh — cgo): шаг гейта, который дошёл бы до go test, падает сразу.
+func stubTools(t *testing.T, tools ...string) string {
+	t.Helper()
+	bin := t.TempDir()
+	fail, err := exec.LookPath("false")
+	require.NoError(t, err)
+	for _, tool := range tools {
+		require.NoError(t, os.Symlink(fail, filepath.Join(bin, tool)))
+	}
+	realGo, err := exec.LookPath("go")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\n[ \"$1\" = env ] && exec \""+realGo+
+		"\" \"$@\"\necho \"go $*: the probe has no toolchain\" >&2\nexit 1\n"), 0o700))
+	return bin
+}
+
+// shellForgeries — окружение оболочки, которым вызывающий подменил бы bash-скрипт: файл автозапуска
+// (BASH_ENV), функции с именами его команд (export -f) и опция «читать, но не исполнять» (SHELLOPTS).
+func shellForgeries(t *testing.T) map[string][]string {
+	t.Helper()
+	exit0 := filepath.Join(t.TempDir(), "exit0.sh")
+	require.NoError(t, os.WriteFile(exit0, []byte("exit 0\n"), 0o600))
+	return map[string][]string{
+		"BASH_ENV":         {"BASH_ENV=" + exit0},
+		"function set":     {"BASH_FUNC_set%%=() { exit 0; }"},
+		"function env":     {"BASH_FUNC_env%%=() { :; }"},
+		"function read":    {"BASH_FUNC_read%%=() { return 1; }"},
+		"SHELLOPTS=noexec": {"SHELLOPTS=noexec"},
+	}
+}
+
 // TestMakeCheckCannotBeForged: флаги make, переменные вызывающего (командная строка и окружение) и лишний
 // makefile (check: или check::, до или после Makefile, MAKEFILES) не подделывают «✓ check clean». Makefile
 // под подделку (переприсваивает MAKEFILE_LIST) обходит любую сверку внутри make — это правка гейта, вердикт
@@ -35,23 +67,15 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	require.FileExists(t, filepath.Join(root, "Makefile")) // make читает его сам: без этого кеш go test не видит правок
-	bin, fakes := t.TempDir(), t.TempDir()
-	fail, err := exec.LookPath("false")
-	require.NoError(t, err)
-	for _, tool := range []string{"gofumpt", "golangci-lint", "sqlc", "mockery"} {
-		require.NoError(t, os.Symlink(fail, filepath.Join(bin, tool)))
-	}
-	realGo, err := exec.LookPath("go")
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\n[ \"$1\" = env ] && exec \""+realGo+
-		"\" \"$@\"\necho \"go $*: the forge probe has no toolchain\" >&2\nexit 1\n"), 0o700))
+	bin, fakes := stubTools(t, "gofumpt", "golangci-lint", "sqlc", "mockery"), t.TempDir()
+	shell := shellForgeries(t)
 	writeFiles(t, fakes, map[string]string{
 		"colon.mk":  "check:\n\t@echo \"✓ check clean\"\n",
 		"double.mk": "check::\n\t@echo \"✓ check clean\"\n",
 		"shell.mk":  "override SHELL := /bin/true\n",
 		"goals.mk":  "MAKECMDGOALS := x\n",
 	})
-	colon, double, shell := filepath.Join(fakes, "colon.mk"), filepath.Join(fakes, "double.mk"), filepath.Join(fakes, "shell.mk")
+	colon, double, shellMk := filepath.Join(fakes, "colon.mk"), filepath.Join(fakes, "double.mk"), filepath.Join(fakes, "shell.mk")
 	goals := filepath.Join(fakes, "goals.mk")
 	for _, tc := range []struct {
 		name string
@@ -65,7 +89,7 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 		{name: "-o and second makefile", args: []string{"-o", "gate-makefiles", "-f", "Makefile", "-f", colon, "check"}},
 		{name: "second makefile with check:: after", args: []string{"-f", "Makefile", "-f", double, "check"}},
 		{name: "second makefile with check:: before", args: []string{"-f", double, "-f", "Makefile", "check"}},
-		{name: "second makefile with SHELL after", args: []string{"-f", "Makefile", "-f", shell, "check"}},
+		{name: "second makefile with SHELL after", args: []string{"-f", "Makefile", "-f", shellMk, "check"}},
 		{name: "MAKEFILES", args: []string{"check"}, env: []string{"MAKEFILES=" + double}},
 		{name: "--eval", args: []string{"--eval", "SHELL:=/bin/true", "check"}},
 		{name: "-E rule", args: []string{"-E", "check:: ; @echo \"✓ check clean\"", "check"}},
@@ -106,6 +130,9 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 		{name: "two goals", args: []string{"check", "lint"}, gate: true},
 		{name: "PKG, VERBOSE, FORMAT and COVER_FLOOR", args: []string{"check", "PKG=./pkg/...", "VERBOSE=1", "FORMAT=detailed", "COVER_FLOOR=1"}, gate: true},
 		{name: "guard variables on the command line", args: []string{"check", "gate_bad=", "gate_refuse=", "gate_forged="}, gate: true},
+		{name: "BASH_ENV in env", args: []string{"check"}, env: shell["BASH_ENV"], gate: true},
+		{name: "SHELLOPTS=noexec in env", args: []string{"check"}, env: shell["SHELLOPTS=noexec"], gate: true},
+		{name: "exported function set in env", args: []string{"check"}, env: shell["function set"], gate: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -127,8 +154,8 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 }
 
 // TestPrePushGatesPushedCommit: pre-push гоняет make check верхнего коммита пушимого ref'а в свежем
-// worktree — по дереву и Makefile самого коммита, и переменные make пушащего до гейта не доходят: каждая из
-// них меняет шаги или выключает его самозащиту. Гейт здесь игрушечный: Makefile коммита печатает вердикт
+// worktree — по дереву и Makefile самого коммита, а переменные make и оболочки пушащего до гейта не
+// доходят: каждая из них меняет шаги или выключает его самозащиту. Гейт здесь игрушечный: Makefile коммита печатает вердикт
 // (файл verdict) и то, что дошло до него из окружения.
 func TestPrePushGatesPushedCommit(t *testing.T) {
 	t.Parallel()
@@ -139,7 +166,7 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	commit := func(verdict string) string {
 		t.Helper()
 		writeFiles(t, repo, map[string]string{
-			"Makefile": "check:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)]\"; test \"$$(cat verdict)\" = green\n",
+			"Makefile": "check:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)] shell=[$${BASH_ENV-}$${SHELLOPTS-}$${BASHOPTS-}]\"; test \"$$(cat verdict)\" = green\n",
 			"verdict":  verdict + "\n",
 		})
 		commitAll(t, repo)
@@ -159,15 +186,22 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 
 	out, err := push("refs/heads/main " + red + " refs/heads/main " + zero + "\n")
 	require.Error(t, err, "a red commit must not be pushed:\n%s", out)
-	require.Contains(t, out, "toy gate: red goals=check make=make flags=[]")
+	require.Contains(t, out, "toy gate: red goals=check make=make flags=[] shell=[]")
 
 	forge := filepath.Join(tmp, "forge.mk")
 	writeFiles(t, tmp, map[string]string{"forge.mk": "check::\n\t@echo forged\n"})
 	out, err = push("refs/heads/main "+red+" refs/heads/main "+zero+"\n",
 		"MAKEFLAGS=i", "MFLAGS=-i", "GNUMAKEFLAGS=-i", "MAKEFILES="+forge, "MAKECMDGOALS=x", "MAKE=true", "MAKELEVEL=3")
 	require.Error(t, err, "make variables of the pusher's environment let a red commit through:\n%s", out)
-	require.Contains(t, out, "toy gate: red goals=check make=make flags=[]", "make variables of the pusher reach the gate")
+	require.Contains(t, out, "toy gate: red goals=check make=make flags=[] shell=[]", "make variables of the pusher reach the gate")
 	require.NotContains(t, out, "forged")
+
+	// Окружение оболочки пушащего: bash-хук его не читает, и до гейта оно не доходит.
+	for name, env := range shellForgeries(t) {
+		out, err = push("refs/heads/main "+red+" refs/heads/main "+zero+"\n", env...)
+		require.Error(t, err, "%s in the pusher's environment lets a red commit through:\n%s", name, out)
+		require.Contains(t, out, "toy gate: red goals=check make=make flags=[] shell=[]", "%s reaches the gate", name)
+	}
 
 	green := commit("green")
 	out, err = push("refs/heads/main " + green + " refs/heads/main " + red + "\n")
@@ -177,6 +211,68 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err = push("refs/heads/old " + zero + " refs/heads/old " + red + "\n")
 	require.NoError(t, err, "a deleted ref has nothing to check:\n%s", out)
 	require.NotContains(t, out, "toy gate")
+}
+
+// TestGateStepsIgnoreShellEnvironment: шаги-скрипты гейта (bash) на красном дереве остаются красными при
+// любом окружении оболочки вызывающего — и там, где рецепт make идёт в bash (SHELL=/bin/bash). Дерево
+// игрушечное: Makefile и скрипты шаблона, линтер — false, go — заглушка без go test.
+func TestGateStepsIgnoreShellEnvironment(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	repo, bin := t.TempDir(), stubTools(t, "golangci-lint")
+	writeFiles(t, repo, readFiles(t, root, "Makefile", "scripts/tools/lint.sh", "scripts/tools/test.sh"))
+	git(t, repo, "init", "-q", "-b", "main")
+	forgeries := shellForgeries(t)
+	forgeries["clean environment"] = nil
+	for step, refusal := range map[string]string{"lint": "FAIL: .golangci.yml", "test": "FAIL: go test exit"} {
+		for name, env := range forgeries {
+			for _, shell := range []string{"", "SHELL=/bin/bash"} {
+				args := []string{"--no-print-directory", step}
+				if shell != "" {
+					args = append(args, shell)
+				}
+				cmd := exec.CommandContext(t.Context(), "make", args...)
+				cmd.Dir = repo
+				cmd.Env = callerEnv(append([]string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, env...)...)
+				out, err := cmd.CombinedOutput()
+				require.Error(t, err, "make %v with %s: the step must stay red:\n%s", args, name, out)
+				require.Contains(t, string(out), refusal, "make %v with %s: the step must run", args, name)
+			}
+		}
+	}
+}
+
+// TestHooksIgnoreCallerEnvironment: хуки git — bash: окружение оболочки коммитящего (файл автозапуска,
+// функции, опции) их не выключает, а переменные make и оболочки не доходят до проверок, которые хук
+// запускает. commit-msg отвергает сообщение не по форме; pre-commit падает на первом шаге (gofumpt — false)
+// и дальше не идёт.
+func TestHooksIgnoreCallerEnvironment(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	commitMsg, preCommit := filepath.Join(root, "scripts", "git-hooks", "commit-msg"), filepath.Join(root, "scripts", "git-hooks", "pre-commit")
+	require.FileExists(t, commitMsg) // хуки читает bash: без этого кеш go test не видит их правок
+	require.FileExists(t, preCommit)
+	repo, bin := t.TempDir(), stubTools(t, "gofumpt")
+	writeFiles(t, repo, union(readFiles(t, root, "Makefile"), map[string]string{"COMMIT_EDITMSG": "update stuff\n"}))
+	git(t, repo, "init", "-q", "-b", "main")
+	forgeries := shellForgeries(t)
+	forgeries["make flags"] = []string{"MAKEFLAGS=i", "MAKECMDGOALS=x"}
+	for name, env := range forgeries {
+		run := func(hook string, args ...string) (string, error) {
+			cmd := exec.CommandContext(t.Context(), hook, args...)
+			cmd.Dir = repo
+			cmd.Env = callerEnv(append([]string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, env...)...)
+			out, err := cmd.CombinedOutput()
+			return string(out), err
+		}
+		out, err := run(commitMsg, filepath.Join(repo, "COMMIT_EDITMSG"))
+		require.Error(t, err, "%s: commit-msg accepts a message that is not a Conventional Commit:\n%s", name, out)
+
+		out, err = run(preCommit)
+		require.Error(t, err, "%s: pre-commit passes a red tree:\n%s", name, out)
+		require.Contains(t, out, "FAIL: gofumpt", "%s: pre-commit must run its first step", name)
+		require.NotContains(t, out, "pre-commit: go vet", "%s: pre-commit went past the failed step", name)
+	}
 }
 
 // releaseSandbox — репо с Makefile и release.sh шаблона на заглушках: скрипты шагов гейта, preflight и

@@ -39,10 +39,13 @@ blocked-by: —
   - Подтверждено: на базе FAIL 10 форм (`-i`/`-n` с `MAKECMDGOALS` из командной строки и окружения,
     `MAKEFLAGS=i` с ней, `GATE`, `SHELL`, `GOFLAGS` с ней, `MAKEFILE_LIST`, `-i --eval 'x: check'`) и
     pre-push (`goals=x make=true`); на ветке оба теста PASS (`N/gate/s1-red-list.txt`, `s1-green.log`)
-- [ ] **AC2** — RENF-01, окружение оболочки: с `BASH_ENV=<файл с exit 0>`, `SHELLOPTS=noexec` и
+- [x] **AC2** — RENF-01, окружение оболочки: с `BASH_ENV=<файл с exit 0>`, `SHELLOPTS=noexec` и
   экспортированной функцией `set` шаги-скрипты гейта на красном дереве остаются красными, pre-push не
   пропускает красный коммит, commit-msg — сообщение не по форме. Проверка: тесты окружения оболочки в
   `internal/archtest` → PASS; на базе → FAIL
+  - Подтверждено: на базе `BASH_ENV`, функция `set` и `SHELLOPTS=noexec` пропускают commit-msg, pre-commit и
+    `make lint` (код 0, `N/gate/s2-base-forgeries.txt`), функции `read`/`env` — pre-push; на ветке
+    `TestGateStepsIgnoreShellEnvironment`, `TestHooksIgnoreCallerEnvironment`, `TestPrePushGatesPushedCommit` → PASS
 - [ ] **AC3** — RENF-02: инъекции N-b-unit, N-b-prod, N-b-migrate (на базе `✓ check clean`) — гейт
   красный: ограничение сборки, кроме `//go:build integration` в `*_test.go`, — отказ archtest; шаг build
   собирает `./...` без тегов, как образ. Проверка: инъекция → `go test ./internal/archtest` FAIL с файлом,
@@ -84,9 +87,12 @@ blocked-by: —
     разборе по цели и первой строкой `check::`; pre-push снимает `MAKE*`, `MFLAGS`, `GNUMAKEFLAGS`; 44 формы
     `TestMakeCheckCannotBeForged` (go-заглушка в PATH — подделка краснеет за секунды, без рекурсии) и
     `TestPrePushGatesPushedCommit` → PASS; `make check` → ✓
-- [ ] **S2** — Окружение оболочки не подделывает гейт: Makefile снимает `BASH_ENV` и соседей с рецептов,
+- [x] **S2** — Окружение оболочки не подделывает гейт: Makefile снимает `BASH_ENV` и соседей с рецептов,
   хуки стартуют `bash -p` и снимают их с проверок, которые запускают
   - Проверка: RED → GREEN тестов окружения оболочки; `make check` → ✓ · Закрывает: AC2 · Зависит от: S1
+  - Сделано: Makefile — `unexport` `BASH_ENV`, `ENV`, `SHELLOPTS`, `BASHOPTS`, `CDPATH`, `GLOBIGNORE` и
+    `BASH_FUNC_*`; хуки — `#!/bin/bash -p`, pre-push и pre-commit перезапускаются без переменных make и
+    оболочки; тесты на шаги lint и test (и с `SHELL=/bin/bash`), хуки и pre-push → PASS; `make check` → ✓
 - [ ] **S3** — Ограничение сборки — только `integration` в `*_test.go` (archtest); build — `go build ./...`
   - Проверка: N-b-* на базе `✓`, на ветке — красный; `make check` → ✓ · Закрывает: AC3 · Зависит от: —
 - [ ] **S4** — Порог покрытия 100 и явный список непокрываемого в `cover.sh`
@@ -112,6 +118,11 @@ blocked-by: —
   - Проверка: кейсы AC11 → поймано; `make check` → `✓ check clean` · Закрывает: AC11 · Зависит от: S1–S12
 
 ## Решения
+- Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
+  у хуков, которые git запускает сам. Хуки перезапускают себя без переменных make и оболочки (без маркера:
+  условие — сами переменные), а не чистят окружение каждой проверки.
+- commit-msg (файл трека harness): только строка интерпретатора `#!/bin/bash -p` — без неё `BASH_ENV`
+  пропускал сообщение не по форме, RENF-01 не закрыть.
 - pre-push снимает переменные по классам (`MAKE*`, `MFLAGS`, `GNUMAKEFLAGS`, переменные оболочки), а не
   `env -i` с белым списком — как golibinfra v1.5.0: белый список срезал бы `GOPRIVATE`, прокси и
   настройки Docker, без которых гейт не идёт.
@@ -120,6 +131,5 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1 закрыт: самозащита не зависит от `MAKECMDGOALS`, pre-push снимает переменные make. Следующее: S2 —
-окружение оболочки (`BASH_ENV`, `SHELLOPTS`, функции): тесты на шаги-скрипты и хуки (RED), затем `unexport`
-в Makefile и `bash -p` хуков.
+S1, S2 закрыты: самозащита гейта не зависит от переменных make и окружения оболочки вызывающего.
+Следующее: S3 — archtest ограничений сборки и `go build ./...` в шаге build (RED — инъекции N-b-*).

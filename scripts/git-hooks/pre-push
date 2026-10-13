@@ -1,12 +1,26 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 # pre-push: канонический gate перед отправкой в remote — `make check` верхнего коммита каждого пушимого
 # ref'а в свежем worktree (промежуточные коммиты push'а не гоняются). Вердикт — про то, что уходит в
 # remote: незакоммиченные правки и игнорируемые файлы рабочего дерева на него не влияют. Кеш lint у
 # свежего worktree холодный (lint.sh кладёт его в checkout).
 #
+# Строка интерпретатора — `bash -p`: файл автозапуска (BASH_ENV), экспортированные функции и SHELLOPTS
+# из окружения пушащего хук не читает — иначе `exit 0` в них пропускал бы push без гейта.
+#
 # Обход — только руками человека: SKIP_PREPUSH=1 git push. Из сессии Claude его,
 # --no-verify и core.hooksPath блокирует хук .claude/hooks/guard-bash.sh.
 set -euo pipefail
+
+# Переменные make и оболочки из окружения вызывающего (MAKEFLAGS=i, MAKECMDGOALS, BASH_ENV, функции
+# BASH_FUNC_…) до проверок не доходят: каждая из них меняет шаги или выключает самозащиту гейта. Сам хук
+# их не читает (`bash -p`) и перезапускается без них.
+drop=()
+while IFS= read -r -d '' entry; do
+    if [[ ${entry%%=*} =~ ^(MAKE.*|MFLAGS|GNUMAKEFLAGS|BASH_ENV|ENV|SHELLOPTS|BASHOPTS|CDPATH|GLOBIGNORE|BASH_FUNC_.*)$ ]]; then
+        drop+=(-u "${entry%%=*}")
+    fi
+done < <(env -0)
+[ ${#drop[@]} -eq 0 ] || exec env "${drop[@]}" "$0" "$@"
 
 if [ "${SKIP_PREPUSH:-}" = "1" ]; then
     echo "pre-push: SKIP_PREPUSH=1 — пропускаю проверки"
@@ -35,15 +49,7 @@ while read -r local_ref local_sha _ _; do
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")
     git -C "$root" worktree add --detach --quiet "$tmp" "$commit"
     echo "pre-push: $local_ref — make check в свежем worktree $(git -C "$root" rev-parse --short "$commit")"
-    # Переменные make из окружения пушащего (MAKEFLAGS=i, MAKEFILES, MAKECMDGOALS, MAKE…) до гейта не
-    # доходят: каждая из них меняет шаги или выключает его самозащиту. stdin гейта — не список ref'ов,
-    # его дочитывает цикл.
-    drop=()
-    while IFS= read -r -d '' entry; do
-        if [[ ${entry%%=*} =~ ^(MAKE.*|MFLAGS|GNUMAKEFLAGS)$ ]]; then
-            drop+=(-u "${entry%%=*}")
-        fi
-    done < <(env -0)
-    env ${drop[@]+"${drop[@]}"} make -C "$tmp" check </dev/null
+    # stdin гейта — не список ref'ов: его дочитывает цикл.
+    make -C "$tmp" check </dev/null
     cleanup
 done
