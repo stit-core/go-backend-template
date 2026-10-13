@@ -1,0 +1,58 @@
+package archtest
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+// TestNewDomainRefusesOrRollsBack: make new-domain с именем, на котором срез не собрался бы, и с таблицей,
+// которую уже создаёт миграция, отказывает до первой правки, а сбой после первой правки (здесь — make gen
+// без Makefile) откатывает все правки скрипта: дерево — как до запуска. Песочница — git-репо со скриптом,
+// go.mod, cmd/api, конфигами генераторов и миграциями репо; инструменты — заглушки.
+func TestNewDomainRefusesOrRollsBack(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	files := readFiles(t, root, "scripts/new-domain.sh", "go.mod", "cmd/api/main.go", "cmd/api/http.go", "sqlc.yaml", ".mockery.yml", "openapi.json")
+	migrations, err := os.ReadDir(filepath.Join(root, "migrations"))
+	require.NoError(t, err)
+	for _, m := range migrations {
+		files = union(files, readFiles(t, root, "migrations/"+m.Name()))
+	}
+	bin := stubTools(t, "sqlc", "mockery")
+	gofumpt, err := exec.LookPath("true")
+	require.NoError(t, err)
+	require.NoError(t, os.Symlink(gofumpt, filepath.Join(bin, "gofumpt")))
+	for _, tc := range []struct {
+		name   string
+		domain string
+		want   string
+	}{
+		{name: "a local of the slice tests", domain: "repo", want: "имя из кода среза"},
+		{name: "a parameter of the slice", domain: "id", want: "имя из кода среза"},
+		{name: "a local of the slice code", domain: "row", want: "имя из кода среза"},
+		{name: "a keyword", domain: "func", want: "ключевое слово"},
+		{name: "a declaration of the domain package", domain: "repository", want: "имя из кода среза"},
+		{name: "an occupied table", domain: "password_reset", want: "таблицу password_resets уже создаёт миграция"},
+		{name: "a failure after the first edit", domain: "order", want: "правки откатаны"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			writeFiles(t, repo, files)
+			git(t, repo, "init", "-q", "-b", "main")
+			commitAll(t, repo)
+
+			cmd := exec.CommandContext(t.Context(), "bash", "scripts/new-domain.sh", tc.domain)
+			cmd.Dir = repo
+			cmd.Env = callerEnv("PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH"))
+			out, err := cmd.CombinedOutput()
+			require.Error(t, err, "new-domain %s must fail here:\n%s", tc.domain, out)
+			require.Contains(t, string(out), tc.want)
+			require.Empty(t, git(t, repo, "status", "--porcelain", "--untracked-files=all"), "new-domain %s leaves the tree changed:\n%s", tc.domain, out)
+		})
+	}
+}

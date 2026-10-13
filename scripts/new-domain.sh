@@ -7,8 +7,10 @@
 #
 # Создаёт рабочий срез — миграцию таблицы, sqlc-запросы, репозиторий с integration-тестом,
 # сущность, policy и usecase с тестами, HTTP-операции под cookie-сессией с тестами, fx-модуль —
-# подключает домен в cmd/api, вписывает sqlc.yaml и .mockery.yml, гонит make gen и ставит
-# созданное в индекс: следующий шаг — make check. Дальше домен растёт по skill `scaffold`.
+# подключает домен в cmd/api, вписывает sqlc.yaml и .mockery.yml, гонит make gen, проверяет, что срез
+# собирается (go vet с тегом integration), и ставит созданное в индекс: следующий шаг — make check.
+# Негодное имя и занятая таблица — отказ до первой правки; сбой после неё — откат всех правок скрипта.
+# Дальше домен растёт по skill `scaffold`.
 
 set -euo pipefail
 
@@ -26,19 +28,21 @@ if ! [[ "$NAME" =~ ^[a-z][a-z0-9]*(_[a-z0-9]+)*$ ]]; then
     echo "       получено: '$NAME'" >&2
     exit 1
 fi
-# Пакет домена не может называться ключевым словом или встроенным именем Go, а также именем, которое
-# рядом с ним импортирует или объявляет код среза.
+# Пакет домена не может называться ключевым словом или встроенным именем Go, именем, с которым тип
+# домена совпал бы с объявлением пакета домена (Repository, Usecase…), и именем, которое код среза
+# объявляет или зовёт рядом с пакетом домена (repo, id, got…): срез не собрался бы. Последние берутся из
+# Go-шаблонов этого скрипта — список не отстаёт от шаблонов.
 reserved=(
     break case chan const continue default defer else fallthrough for func go goto if import interface
     map package range return select struct switch type var
     any append bool byte cap clear close comparable complex complex64 complex128 copy delete error false
     float32 float64 imag int int8 int16 int32 int64 iota len make max min new nil panic print println
     real recover rune string true uint uint8 uint16 uint32 uint64 uintptr
-    authgate context db errors fmt fx handlertest http httpkit huma identity identitytest json logkit
-    mock mocks pgkit policy repopath require strings testing testkit time utf8
-    authorizer create create_input created get repository setup usecase usecase_deps
+    authorizer create_input policy repository usecase usecase_deps
 )
-for word in "${reserved[@]}"; do
+template_words=$(awk '/<<EOF$/ && /\.go"/ { go = 1; next } /^EOF$/ { go = 0 } go' "$0" |
+    sed -E 's://.*$::; s/"([^"\\]|\\.)*"//g; s/`[^`]*`//g' | grep -oE '[A-Za-z_][A-Za-z0-9_]*' | grep -E '^[a-z]' | sort -u)
+for word in "${reserved[@]}" $template_words; do
     if [ "$NAME" = "$word" ]; then
         echo "ERROR: '$NAME' — ключевое слово или встроенное имя Go либо имя из кода среза: возьми другое" >&2
         exit 1
@@ -91,8 +95,32 @@ for f in cmd/api/main.go cmd/api/http.go; do
     fi
 done
 
+# Таблица, которую миграции создают и не удаляют, занята: sqlc не соберёт схему с двумя такими.
+last_ddl=$(cat migrations/[0-9][0-9][0-9][0-9]_*.up.sql 2>/dev/null | tr '[:upper:]' '[:lower:]' |
+    grep -oE "(create|drop)[[:space:]]+table[[:space:]]+(if[[:space:]]+(not[[:space:]]+)?exists[[:space:]]+)?${TABLE}([^a-z0-9_]|$)" |
+    tail -1 || true)
+if [[ $last_ddl == create* ]]; then
+    echo "ERROR: таблицу ${TABLE} уже создаёт миграция — возьми другое имя домена" >&2
+    exit 1
+fi
+
 last=$(ls migrations | grep -E '^[0-9]{4}_.*\.up\.sql$' | sort | tail -1 | cut -c1-4)
 MIGRATION="migrations/$(printf '%04d' $((10#${last:-0} + 1)))_${TABLE}"
+
+# Дальше — правки. Сбой любой из них откатывает все: общие файлы — из копий, созданное — удаляется.
+shared=(sqlc.yaml .mockery.yml cmd/api/main.go cmd/api/http.go openapi.json)
+backup=$(mktemp -d)
+for f in "${shared[@]}"; do cp "$f" "$backup/${f//\//_}"; done
+completed=""
+rollback() {
+    if [ -z "$completed" ]; then
+        for f in "${shared[@]}"; do cp "$backup/${f//\//_}" "$f"; done
+        rm -rf "$DOMAIN_DIR" "${MIGRATION}.up.sql" "${MIGRATION}.down.sql"
+        echo "ERROR: срез $NAME не собрался (вывод выше) — правки откатаны, дерево — как до запуска" >&2
+    fi
+    rm -rf "$backup"
+}
+trap rollback EXIT
 
 echo "→ создаю $DOMAIN_DIR/ и ${MIGRATION}.{up,down}.sql"
 
@@ -922,7 +950,7 @@ insert_before() {
         END { exit done ? 0 : 1 }
     ' "$file" >"$tmp"; then
         rm -f "$tmp"
-        echo "ERROR: $file: нет блока «$2» … «$3» — подключи домен вручную (skill scaffold, вариант domain)" >&2
+        echo "ERROR: $file: нет блока «$2» … «$3» — подключение домена в cmd/api по skill scaffold, вариант domain" >&2
         exit 1
     fi
     mv "$tmp" "$file"
@@ -939,6 +967,10 @@ gofumpt -w cmd/api/main.go cmd/api/http.go
 echo "→ make gen"
 make --no-print-directory gen
 
+echo "→ go vet: срез и cmd/api собираются"
+go vet -tags=integration "./$DOMAIN_DIR/..." ./cmd/api/
+
+completed=1
 git add "$DOMAIN_DIR" "${MIGRATION}.up.sql" "${MIGRATION}.down.sql" sqlc.yaml .mockery.yml cmd/api/main.go cmd/api/http.go openapi.json
 
 echo
