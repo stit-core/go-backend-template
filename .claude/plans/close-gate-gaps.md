@@ -59,11 +59,14 @@ blocked-by: —
   - Подтверждено: база — CV01 95,39 %, CV04 99,74 %, CV05 98,58 %, CV15 96,32 % → `✓ check clean`
     (`N/gate/cov-base/`); ветка — те же доли → `FAIL: … < floor 100%` с непокрытыми блоками
     (`N/gate/cov-branch/`); `TestCoverCheck` → PASS
-- [ ] **AC5** — RENF-04, RSECT-07: migrations-check — каталог с файлами не по маске → FAIL (было
+- [x] **AC5** — RENF-04, RSECT-07: migrations-check — каталог с файлами не по маске → FAIL (было
   `OK (пусто)`); `DELETE`, `UPDATE … SET`, `SET NOT NULL`, `CREATE INDEX` без `CONCURRENTLY` по таблице не
   из этого файла, `CREATE EXTENSION`, `DO` без маркера → FAIL; новая таблица с индексом и миграции
   0001–0005 → OK. Проверка: `go test ./internal/archtest -run TestMigrationsCheck` → PASS; `make check` →
   migrations OK
+  - Подтверждено: на скрипте базы `TestMigrationsCheck` — 10 из 17 случаев FAIL (нет каталога, три
+    формы имён, DELETE, UPDATE, SET NOT NULL, индекс по существующей таблице, расширение, DO;
+    `N/gate/s5-red.txt`), на ветке — 17 из 17 PASS; `make check` → `OK: migrations (5 пар…)`
 - [ ] **AC6** — RENF-05, RENF-06: неотслеживаемый слабый `.golangci.toml` больше не заслоняет
   `.golangci.yml`; `// #nosec` и `//revive:disable` ничего не глушат (N-n-nosec, N-n-revive на базе —
   `✓`). Проверка: инъекции → `make lint` FAIL и archtest FAIL
@@ -109,8 +112,12 @@ blocked-by: —
   - Сделано: `COVER_FLOOR := 100`; в `cover.sh` — список непокрываемого (пуст: «<файл>:<текст блока>» с
     причиной, запись без неисполненного блока — отказ), отказ называет блоки; `TestCoverCheck` (новый
     `steps_test.go` — тесты шагов гейта); правило `tests-pipeline`, CLAUDE.md § Команды; `make check` → ✓
-- [ ] **S5** — migrations-check: имена не по маске, каталог, классы эффекта RSECT-07; правило и reference
+- [x] **S5** — migrations-check: имена не по маске, каталог, классы эффекта RSECT-07; правило и reference
   - Проверка: `TestMigrationsCheck` RED → GREEN; `make check` → ✓ · Закрывает: AC5 · Зависит от: —
+  - Сделано: «пусто» — только пустой каталог, нет каталога — FAIL со строкой, вне маски — и каталоги;
+    классы эффекта RSECT-07 и `DO`; выпущенные 0001 и 0003 — списком (только разрушительное); rule
+    `sqlc-and-migrations`, `infra-impact`, `scaffold/references/migration.md` (пример индекса —
+    `CONCURRENTLY` своей миграцией); `make check` → ✓
 - [ ] **S6** — lint: `--config .golangci.yml`, gosec без `#nosec`, директивы revive — отказ archtest
   - Проверка: N-n-nosec, N-n-revive, слабый `.golangci.toml` — красные; `make check` → ✓ · Закрывает: AC6 · Зависит от: —
 - [ ] **S7** — gen-check сверяет моки с деревом до прогона mockery; `MOCKERY_*` окружения — не для шага
@@ -133,6 +140,12 @@ blocked-by: —
 - Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
   у хуков, которые git запускает сам. Хуки перезапускают себя без переменных make и оболочки (без маркера:
   условие — сами переменные), а не чистят окружение каждой проверки.
+- migrations-check: индекс по таблице, созданной в том же файле, — не эффект (иначе маркер у каждой новой
+  таблицы); `CONCURRENTLY` — не эффект (рецепт `migration.md`); `DO` — эффект: его код машина не видит.
+  Выпущенные 0001 (`CREATE EXTENSION`) и 0003 (индекс по существующей таблице) — списком имён в скрипте:
+  существующие миграции не правим; у них — только разрушительные операторы.
+- `.claude/rules/infra-impact.md` (вне таблицы владения): строка «машина держит одно…» — под новые классы,
+  иначе правило врёт о машине.
 - Непокрываемое — запись «<файл>:<текст из строк блока>» в `cover.sh`, а не позиция блока: правка выше в
   файле её не ломает; блок из списка идёт исполненным (функция из одних таких блоков — не «без тестов»).
 - Правило ограничений сборки — в `generated_test.go` рядом с `TestGeneratedHeaderOnlyInGeneratorOutput`
@@ -147,7 +160,7 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S4 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки не выводят файлы
+S1–S5 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки не выводят файлы
 из гейта, порог покрытия — 100. Эксперименты: база — worktree `N/wt-gate-x` (e8ea150, снять в S13), срез
 ветки с незакоммиченным шагом — временный `N/wt-gate-y` (раннеры аудитора откатывают дерево к HEAD).
-Следующее: S5 — migrations-check (`TestMigrationsCheck` RED на базе).
+S5 закрыт (migrations-check). Следующее: S6 — lint: `--config`, gosec без `#nosec`, директивы revive.

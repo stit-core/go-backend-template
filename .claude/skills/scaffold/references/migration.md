@@ -45,7 +45,9 @@ Snake_case описывающий что делает:
 ```sql
 -- Добавить колонку
 ALTER TABLE users ADD COLUMN last_login_at TIMESTAMPTZ;
-CREATE INDEX idx_users_last_login_at ON users(last_login_at);
+
+-- Индекс по существующей таблице — своей миграцией, единственным оператором файла
+CREATE INDEX CONCURRENTLY idx_users_last_login_at ON users (last_login_at);
 
 -- FK
 ALTER TABLE payments
@@ -66,9 +68,11 @@ CREATE TABLE orders (
 CREATE INDEX idx_orders_user_id ON orders(user_id);
 ```
 
-Миграция с эффектом для выкатки (разрушительный оператор, backfill, долгий lock, расширение) —
-добавь в up строку `-- infra-handoff: <что сделать инфре>` и оформи блок (skill
-`infra-handoff`); разрушительный оператор без неё не пропустит migrations-check.
+Миграция с эффектом для выкатки (разрушительный оператор, правка данных, долгий lock, расширение) —
+добавь в up строку `-- infra-handoff: <что сделать инфре>` и оформи блок (skill `infra-handoff`).
+Без неё migrations-check не пропустит `DROP`, `TRUNCATE`, `RENAME`, `ALTER … TYPE`, `DELETE`,
+`UPDATE … SET`, `DO`, `SET NOT NULL`, `CREATE INDEX` без `CONCURRENTLY` по существующей таблице и
+`CREATE EXTENSION`; индекс по таблице, созданной в том же файле, эффектом не считается.
 
 ### 4. Down-миграция
 
@@ -76,8 +80,10 @@ CREATE INDEX idx_orders_user_id ON orders(user_id);
 
 ```sql
 -- Откат колонки
-DROP INDEX IF EXISTS idx_users_last_login_at;
 ALTER TABLE users DROP COLUMN IF EXISTS last_login_at;
+
+-- Откат индекса по существующей таблице
+DROP INDEX CONCURRENTLY IF EXISTS idx_users_last_login_at;
 
 -- Откат FK
 ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_fk;

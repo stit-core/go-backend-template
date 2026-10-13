@@ -3,6 +3,7 @@ package archtest
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -58,6 +59,72 @@ func TestCoverCheck(t *testing.T) {
 				return
 			}
 			require.Error(t, err, out)
+		})
+	}
+}
+
+// TestMigrationsCheck: migrations-check пропускает только каталог по конвенции, а up с эффектом для выкатки
+// — разрушительный, правку данных, долгий lock, расширение, код DO — только с маркером
+// `-- infra-handoff:`. Индекс по таблице этого же файла и CONCURRENTLY, действия FK и триггер на UPDATE —
+// не эффект; выпущенные миграции репо проходят как есть.
+func TestMigrationsCheck(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	script := filepath.Join(root, "scripts", "tools", "migrations-check.sh")
+	require.FileExists(t, script) // скрипт читает bash: без этого кеш go test не видит его правок
+	users := map[string]string{
+		"0001_users.up.sql":   "CREATE TABLE users (id UUID PRIMARY KEY, name TEXT, role TEXT);\n",
+		"0001_users.down.sql": "DROP TABLE users;\n",
+	}
+	second := func(up string) map[string]string {
+		return union(users, map[string]string{"0002_change.up.sql": up, "0002_change.down.sql": "-- noop: данные не возвращаются\n"})
+	}
+	for _, tc := range []struct {
+		name  string
+		files map[string]string // nil — каталога нет
+		dir   string            // каталог вместо files
+		want  string
+		ok    bool
+	}{
+		{name: "migrations of the repo", dir: filepath.Join(root, "migrations"), want: "OK: migrations (", ok: true},
+		{name: "empty directory", files: map[string]string{}, want: "OK: migrations (пусто)", ok: true},
+		{name: "no directory", want: "FAIL: migrations: нет каталога"},
+		{name: "three-digit names", files: map[string]string{"001_init.up.sql": "DROP TABLE users;\n", "001_init.down.sql": ""}, want: "вне конвенции"},
+		{name: "timestamp names", files: map[string]string{"20261010120000_init.up.sql": "DROP TABLE users;\n", "20261010120000_init.down.sql": ""}, want: "вне конвенции"},
+		{name: "a subdirectory only", files: map[string]string{"v2/0001_init.up.sql": "DROP TABLE users;\n", "v2/0001_init.down.sql": ""}, want: "  v2"},
+		{name: "a new table with an index", files: map[string]string{
+			"0001_orders.up.sql":   "CREATE TABLE orders (\n    id UUID PRIMARY KEY,\n    user_id UUID NOT NULL\n);\nCREATE INDEX orders_user_id_idx ON orders(user_id);\nCREATE UNIQUE INDEX IF NOT EXISTS orders_id_uq ON ONLY orders (id);\n",
+			"0001_orders.down.sql": "DROP TABLE orders;\n",
+		}, want: "OK: migrations (1 пар", ok: true},
+		{name: "an index concurrently", files: second("CREATE INDEX CONCURRENTLY users_name_idx ON users (name);\n"), want: "OK: migrations (2 пар", ok: true},
+		{name: "FK actions and an update trigger", files: second("CREATE TABLE notes (\n    id UUID PRIMARY KEY,\n    user_id UUID REFERENCES users(id) ON DELETE CASCADE ON UPDATE SET NULL\n);\nCREATE TRIGGER notes_upd BEFORE UPDATE ON notes FOR EACH ROW EXECUTE FUNCTION set_updated_at();\n"), want: "OK: migrations (2 пар", ok: true},
+		{name: "DROP COLUMN", files: second("ALTER TABLE users DROP COLUMN role;\n"), want: "alter table users drop column role"},
+		{name: "DELETE", files: second("DELETE FROM users WHERE role = 'x';\n"), want: "delete from users"},
+		{name: "UPDATE … SET", files: second("UPDATE ONLY users u SET role = 'admin';\n"), want: "update only users u set role ="},
+		{name: "SET NOT NULL", files: second("ALTER TABLE users ALTER COLUMN name SET NOT NULL;\n"), want: "set not null"},
+		{name: "an index on an existing table", files: second("CREATE INDEX users_name_idx ON users (name);\n"), want: "create index users_name_idx on users"},
+		{name: "CREATE EXTENSION", files: second("CREATE EXTENSION IF NOT EXISTS citext;\n"), want: "create extension if not exists citext"},
+		{name: "DO", files: second("DO $$ BEGIN EXECUTE 'DROP TABLE users'; END $$;\n"), want: "do $$ begin execute"},
+		{name: "an effect with the marker", files: second("-- infra-handoff: роли пересчитываются — окно выкатки\nUPDATE users SET role = 'client';\n"), want: "OK: migrations (2 пар", ok: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := tc.dir
+			if dir == "" {
+				dir = filepath.Join(t.TempDir(), "migrations")
+				if tc.files != nil {
+					require.NoError(t, os.MkdirAll(dir, 0o755))
+					writeFiles(t, dir, tc.files)
+				}
+			}
+			out, err := step(t, root, script, dir)
+			require.Contains(t, out, tc.want)
+			if tc.ok {
+				require.NoError(t, err, out)
+				return
+			}
+			require.Error(t, err, out)
+			require.Contains(t, out, "FAIL: migrations")
 		})
 	}
 }
