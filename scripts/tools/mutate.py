@@ -54,13 +54,20 @@ def git(*args, cwd=ROOT):
 
 
 def run(cmd):
-    """Код выхода и вывод команды в worktree раннера; None — таймаут."""
+    """Код выхода и вывод команды в worktree раннера; None — таймаут. Команда — своя группа процессов: таймаут и
+    обрыв прогона снимают её целиком, с тестовыми бинарями go test, а не один go."""
+    p = subprocess.Popen(cmd, cwd=WT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                         env=ENV, start_new_session=True)
     try:
-        r = subprocess.run(cmd, cwd=WT, capture_output=True, text=True, errors="replace", timeout=STAGE_TIMEOUT, env=ENV)
-        return r.returncode, r.stdout + r.stderr
-    except subprocess.TimeoutExpired as e:
-        out = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-        return None, out + "\nTIMEOUT"
+        out = p.communicate(timeout=STAGE_TIMEOUT)[0]
+        return p.returncode, out
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL)
+        return None, p.communicate()[0] + "\nTIMEOUT"
+    except BaseException:
+        os.killpg(p.pid, signal.SIGKILL)
+        p.wait()
+        raise
 
 
 def parse(text):
