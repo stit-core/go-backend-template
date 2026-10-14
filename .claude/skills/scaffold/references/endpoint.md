@@ -35,7 +35,7 @@
 
 Если в `policy.go` нет метода для этого действия — добавь `Can<Verb>` в interface `Authorizer` и в `Policy`. Не забудь `policy_test.go`.
 
-Операция под `Security`: метод usecase спрашивает policy (`uc.d.Policy.Can<Verb>`) — сам или своим методом; без policy — только чтение самого вызывающего, когда ключ порта — его `UserID` из `identity.From` (как `Me`). Иначе отказ archtest `TestSecuredOperationsAskPolicy`: операция отдала бы ресурс любому вошедшему.
+Операция под `Security`: метод usecase спрашивает policy (`uc.d.Policy.Can<Verb>`) — сам или своим методом; без policy — только чтение самого вызывающего, когда его `UserID` из `identity.From` — аргумент порта зависимостей (`uc.d.Repo.GetByID`, как `Me`), а не лога или текста ошибки. Иначе отказ archtest `TestSecuredOperationsAskPolicy`: операция отдала бы ресурс любому вошедшему.
 
 ### 3. Обновить порт `Usecase` в `delivery/http/handler.go`
 

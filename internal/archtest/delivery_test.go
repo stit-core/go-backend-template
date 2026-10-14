@@ -210,11 +210,7 @@ func rootServices(t *testing.T, domain string) map[string]bool {
 				case *ast.InterfaceType:
 					services[ts.Name.Name] = true
 				case *ast.StructType:
-					for _, field := range typ.Fields.List {
-						if len(field.Names) == 0 && isSelector(field.Type, byName, "go.uber.org/fx", "In") {
-							services[ts.Name.Name] = true
-						}
-					}
+					services[ts.Name.Name] = embedsFxIn(typ, byName)
 				}
 			}
 		}
@@ -330,7 +326,8 @@ func usecaseClosure(fn *ast.FuncType, body *ast.BlockStmt, byName map[string]str
 
 // TestSecuredOperationsAskPolicy: метод usecase за операцией под Security (не httpkit.Public) спрашивает policy
 // (…Policy.Can…) — сам или своим методом; без policy — только чтение самого вызывающего: его UserID из
-// identity.From — аргумент вызова (Me). Иначе операция отдала бы ресурс любому вошедшему.
+// identity.From — аргумент вызова порта зависимостей (uc.d.Repo.GetByID — Me), а не лога, кита или функции пакета.
+// Иначе операция отдала бы ресурс любому вошедшему.
 func TestSecuredOperationsAskPolicy(t *testing.T) {
 	t.Parallel()
 	byDomain := map[string][]goFile{} // домен → не-тестовые файлы delivery/http
@@ -340,7 +337,7 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 		}
 	}
 	for domain, files := range byDomain {
-		methods := usecaseMethods(t, domain)
+		root := loadPolicyRoot(t, domain)
 		parsed := make([]*ast.File, len(files))
 		ifaces := map[string]bool{}
 		funcs := map[string]*ast.FuncDecl{} // методы и функции пакета
@@ -389,12 +386,12 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 					t.Errorf("%s: operation %s under Security calls no usecase method: the handler reaches its domain through the usecase", files[i].path, op)
 				}
 				for _, name := range called {
-					m, ok := methods[name]
+					m, ok := root.methods[name]
 					switch {
 					case !ok:
 						t.Errorf("%s: operation %s under Security calls %s, which *%s.Usecase does not declare", files[i].path, op, name, domain)
-					case !asksPolicy(m, methods, map[string]bool{}):
-						t.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor reads by the caller's UserID: any signed-in caller would get it (rule domain-architecture)", files[i].path, op, domain, name)
+					case !root.asks(m, map[*ast.FuncDecl]bool{}):
+						t.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor passes the caller's UserID to a port of its dependencies (uc.d.Repo…): any signed-in caller would get it (rule domain-architecture)", files[i].path, op, domain, name)
 					}
 				}
 				return true
@@ -477,18 +474,25 @@ func usecaseCalls(body *ast.BlockStmt, funcs map[string]*ast.FuncDecl, ports, se
 	return out
 }
 
-// usecaseMethod — метод *Usecase корня домена и импорты его файла.
-type usecaseMethod struct {
-	decl   *ast.FuncDecl
-	byName map[string]string
+// policyRoot — что правило policy знает о корне домена: методы Usecase, импорты их файлов и поля зависимостей
+// (структур с fx.In) с интерфейсом корня — порты; порт policy — поле Policy или интерфейс из одних Can….
+type policyRoot struct {
+	methods      map[string]*ast.FuncDecl
+	byName       map[*ast.FuncDecl]map[string]string
+	portFields   map[string]bool
+	policyFields map[string]bool
 }
 
-// usecaseMethods — методы Usecase корня домена по имени.
-func usecaseMethods(t *testing.T, domain string) map[string]usecaseMethod {
+func loadPolicyRoot(t *testing.T, domain string) policyRoot {
 	t.Helper()
 	paths, err := filepath.Glob(filepath.Join(repoRoot(t), "internal", "domain", domain, "*.go"))
 	require.NoError(t, err)
-	out := map[string]usecaseMethod{}
+	root := policyRoot{
+		methods: map[string]*ast.FuncDecl{}, byName: map[*ast.FuncDecl]map[string]string{},
+		portFields: map[string]bool{}, policyFields: map[string]bool{},
+	}
+	ifaces := map[string]*ast.InterfaceType{}
+	var deps []*ast.StructType
 	for _, p := range paths {
 		if strings.HasSuffix(p, "_test.go") {
 			continue
@@ -497,32 +501,73 @@ func usecaseMethods(t *testing.T, domain string) map[string]usecaseMethod {
 		byName := importsByName(file)
 		for _, decl := range file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && receiverName(fn) == "Usecase" {
-				out[fn.Name.Name] = usecaseMethod{fn, byName}
+				root.methods[fn.Name.Name], root.byName[fn] = fn, byName
+			}
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			if ts, ok := n.(*ast.TypeSpec); ok {
+				switch typ := ts.Type.(type) {
+				case *ast.InterfaceType:
+					ifaces[ts.Name.Name] = typ
+				case *ast.StructType:
+					if embedsFxIn(typ, byName) {
+						deps = append(deps, typ)
+					}
+				}
+			}
+			return true
+		})
+	}
+	for _, st := range deps {
+		for _, field := range st.Fields.List {
+			id, ok := field.Type.(*ast.Ident)
+			if !ok || ifaces[id.Name] == nil {
+				continue
+			}
+			for _, name := range field.Names {
+				root.portFields[name.Name] = true
+				root.policyFields[name.Name] = name.Name == "Policy" || onlyCan(ifaces[id.Name])
 			}
 		}
 	}
-	return out
+	return root
+}
+
+// embedsFxIn — структура встраивает fx.In: это зависимости, которые собирает граф.
+func embedsFxIn(st *ast.StructType, byName map[string]string) bool {
+	return slices.ContainsFunc(st.Fields.List, func(f *ast.Field) bool {
+		return len(f.Names) == 0 && isSelector(f.Type, byName, "go.uber.org/fx", "In")
+	})
+}
+
+// onlyCan — у интерфейса есть методы, и все они Can…: это порт policy.
+func onlyCan(iface *ast.InterfaceType) bool {
+	methods := iface.Methods.List
+	return len(methods) > 0 && !slices.ContainsFunc(methods, func(m *ast.Field) bool {
+		return len(m.Names) != 1 || !strings.HasPrefix(m.Names[0].Name, "Can")
+	})
 }
 
 const identityPath = module + "/internal/platform/identity"
 
-// asksPolicy — метод зовёт …Policy.Can…(…) или передаёт вызову UserID вызывающего из identity.From — сам или
-// своим методом.
-func asksPolicy(m usecaseMethod, methods map[string]usecaseMethod, seen map[string]bool) bool {
-	if seen[m.decl.Name.Name] || m.decl.Body == nil {
+// asks — метод зовёт Can… порта policy (uc.d.Policy.Can…) или передаёт порту зависимостей (uc.d.Repo.GetByID)
+// UserID вызывающего из identity.From — сам или своим методом. Вызов лога, кита или функции пакета с UserID —
+// не ключ: операция по-прежнему отдала бы чужое.
+func (r policyRoot) asks(fn *ast.FuncDecl, seen map[*ast.FuncDecl]bool) bool {
+	if fn == nil || fn.Body == nil || seen[fn] {
 		return false
 	}
-	seen[m.decl.Name.Name] = true
+	seen[fn] = true
 	recv := ""
-	if names := m.decl.Recv.List[0].Names; len(names) > 0 {
+	if names := fn.Recv.List[0].Names; len(names) > 0 {
 		recv = names[0].Name
 	}
 	callers := map[string]bool{} // переменные с вызывающим из identity.From
 	asked := false
-	ast.Inspect(m.decl.Body, func(n ast.Node) bool {
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.AssignStmt:
-			if call, ok := x.Rhs[0].(*ast.CallExpr); ok && len(x.Rhs) == 1 && isSelector(call.Fun, m.byName, identityPath, "From") {
+			if call, ok := x.Rhs[0].(*ast.CallExpr); ok && len(x.Rhs) == 1 && isSelector(call.Fun, r.byName[fn], identityPath, "From") {
 				if id, ok := x.Lhs[0].(*ast.Ident); ok && id.Name != "_" {
 					callers[id.Name] = true
 				}
@@ -532,21 +577,25 @@ func asksPolicy(m usecaseMethod, methods map[string]usecaseMethod, seen map[stri
 			if !ok {
 				return true
 			}
-			if field, ok := sel.X.(*ast.SelectorExpr); ok && field.Sel.Name == "Policy" && strings.HasPrefix(sel.Sel.Name, "Can") {
-				asked = true
-			}
-			for _, arg := range x.Args {
-				if key, ok := arg.(*ast.SelectorExpr); ok && key.Sel.Name == "UserID" {
-					if id, ok := key.X.(*ast.Ident); ok && callers[id.Name] {
-						asked = true
-					}
-				}
-			}
-			if next, ok := methods[sel.Sel.Name]; ok && isIdent(sel.X, recv) && asksPolicy(next, methods, seen) {
+			field, viaField := sel.X.(*ast.SelectorExpr)
+			switch {
+			case viaField && r.policyFields[field.Sel.Name] && strings.HasPrefix(sel.Sel.Name, "Can"),
+				viaField && r.portFields[field.Sel.Name] && slices.ContainsFunc(x.Args, func(a ast.Expr) bool { return callerID(a, callers) }),
+				isIdent(sel.X, recv) && r.asks(r.methods[sel.Sel.Name], seen):
 				asked = true
 			}
 		}
 		return !asked
 	})
 	return asked
+}
+
+// callerID — выражение <вызывающий>.UserID, где вызывающий — из identity.From.
+func callerID(expr ast.Expr, callers map[string]bool) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "UserID" {
+		return false
+	}
+	id, ok := sel.X.(*ast.Ident)
+	return ok && callers[id.Name]
 }
