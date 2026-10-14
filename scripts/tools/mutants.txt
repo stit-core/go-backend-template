@@ -22,9 +22,9 @@ internal/domain/user/entity.go
 - 	}
 
 ## E01 entity — NewUser: адрес ровно в 254 байта отвергнут (граница)
-internal/domain/user/entity.go
-- err != nil || len(email) > maxEmailLen {
-+ err != nil || len(email) >= maxEmailLen {
+internal/domain/user/policy.go
+- const maxEmailLen = 254
++ const maxEmailLen = 253
 
 ## E02 entity — NewUser: роль по умолчанию — admin
 internal/domain/user/entity.go
@@ -57,8 +57,8 @@ internal/domain/user/entity.go
 
 ## E07 entity — validName: NUL в имени пропускается (500 на записи)
 internal/domain/user/policy.go
-- return !strings.ContainsRune(name, 0) }
-+ return !strings.ContainsRune(name, 1) }
+- !strings.ContainsRune(name, 0)
++ !strings.ContainsRune(name, 1)
 
 ## E08 entity — Rename: имя не проверяется
 internal/domain/user/entity.go
@@ -739,11 +739,13 @@ internal/domain/auth/usecase.go
 
 ## M09d usecase/auth — Login: неудача прощается (RecordSuccess на неверном пароле — счётчик не копится)
 internal/domain/auth/usecase.go
-- 	if ok, err := uc.d.Hasher.Verify(ctx, in.Password, u.PasswordHash); err != nil || !ok {
-+ 	if ok, err := uc.d.Hasher.Verify(ctx, in.Password, u.PasswordHash); err != nil || !ok {
+- 		uc.auditLoginFailed(ctx, u.ID, resultInvalidLogin)
+- 		return nil, resultInvalidLogin, ErrInvalidCredentials
 + 		if rerr := uc.d.Guard.RecordSuccess(ctx, in.Email, ip); rerr != nil {
 + 			uc.d.Log.Error(ctx, "guard record success", "err", rerr)
 + 		}
++ 		uc.auditLoginFailed(ctx, u.ID, resultInvalidLogin)
++ 		return nil, resultInvalidLogin, ErrInvalidCredentials
 
 ## M10 usecase/auth — Refresh: пользователь — не владелец сессии (не next.Subject)
 internal/domain/auth/usecase.go
@@ -812,8 +814,8 @@ internal/domain/auth/usecase.go
 
 ## A05 usecase/auth — Login: неверный пароль принимается
 internal/domain/auth/usecase.go
-- in.Password, u.PasswordHash); err != nil || !ok {
-+ in.Password, u.PasswordHash); err != nil && !ok {
+- 		uc.auditLoginFailed(ctx, u.ID, resultInvalidLogin)
+- 		return nil, resultInvalidLogin, ErrInvalidCredentials
 
 ## A06 usecase/auth — Login: у RecordSuccess перепутаны subject и IP
 internal/domain/auth/usecase.go
@@ -1033,13 +1035,14 @@ internal/domain/verification/infra/bruteforce/limiter.go
 
 ## VI2 infra — лимитер сброса: без префикса счётчика
 internal/domain/verification/infra/bruteforce/limiter.go
-- l.guard.Attempt(ctx, subjectPrefix+userID, ip)
-+ l.guard.Attempt(ctx, userID, ip)
+- l.guard.Attempt(ctx, subjectPrefix+
++ l.guard.Attempt(ctx,
 
 ## VI3 infra — лимитер сброса: IP не учитывается
 internal/domain/verification/infra/bruteforce/limiter.go
-- l.guard.Attempt(ctx, subjectPrefix+userID, ip)
-+ l.guard.Attempt(ctx, subjectPrefix+userID, "")
+- lock, err := l.guard.Attempt(ctx,
++ ip = ""
++ 	lock, err := l.guard.Attempt(ctx,
 
 ## VI4 infra — лог-mailer поднимается вне dev (письма молча не уходят в проде)
 internal/domain/verification/infra/logmail/logmail.go
@@ -1558,12 +1561,10 @@ internal/domain/verification/usecase.go
 - uc.d.Repo.UpsertEmailVerification(txCtx, userID,
 + uc.d.Repo.UpsertEmailVerification(ctx, userID,
 
-## V11 usecase/verification — RequestPasswordReset: сброс выпускается заблокированному
+## V11 usecase/verification — сброс выпускается заблокированному
 internal/domain/verification/usecase.go
-- 	case !u.CanLogin:
-- 		return resultInactive, nil
-- 	}
-+ 	}
+- case !u.CanLogin:
++ case !u.CanLogin && false:
 
 ## V12 usecase/verification — RequestPasswordReset: сбой после поиска уходит ответом (500 выдаёт учётную запись)
 internal/domain/verification/usecase.go
@@ -1593,8 +1594,8 @@ internal/domain/verification/usecase.go
 
 ## V16 usecase/verification — сброс: в БД сырой токен вместо хэша
 internal/domain/verification/usecase.go
-- InsertPasswordReset(txCtx, u.ID, authnkit.HashToken(token), uc.d.Clock.Now().Add(passwordResetTTL))
-+ InsertPasswordReset(txCtx, u.ID, token, uc.d.Clock.Now().Add(passwordResetTTL))
+- authnkit.HashToken(token),
++ token,
 
 ## V17 usecase/verification — событие сброса несёт сырой токен
 internal/domain/verification/usecase.go
@@ -1706,10 +1707,10 @@ internal/domain/verification/policy.go
 - passwordResetTTL     = time.Hour
 + passwordResetTTL     = 24 * time.Hour
 
-## V33 usecase/verification — subject события сброса сменил версию молча
+## V33 usecase/verification — subject события сброса сменился молча
 internal/domain/verification/events.go
-- subjectPasswordResetRequested     = "verification.events.password_reset_requested.v2"
-+ subjectPasswordResetRequested     = "verification.events.password_reset_requested.v3"
+- "verification.events.password_reset_requested.v
++ "verification.events.password_reset_requested.x
 
 ## V34 usecase/verification — метрика сброса считает запрос дважды
 internal/domain/verification/metrics.go
@@ -1728,10 +1729,10 @@ internal/domain/verification/usecase.go
 
 ## V37 usecase/verification — IssueEmailVerification: пользователя ищут по адресу вместо ID
 internal/domain/verification/usecase.go
-- u, err := uc.d.Users.GetByID(ctx, userID)
-- 	if errors.Is(err, ErrUserNotFound) {
-+ u, err := uc.d.Users.GetByEmail(ctx, userID)
-+ 	if errors.Is(err, ErrUserNotFound) {
+- func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) error {
+- 	u, err := uc.d.Users.GetByID(ctx, userID)
++ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) error {
++ 	u, err := uc.d.Users.GetByEmail(ctx, userID)
 
 ## M33 nats — onUserRegistered: ошибка логируется и проглатывается (нет повтора доставки)
 internal/domain/verification/delivery/nats/handler.go
@@ -1761,8 +1762,8 @@ internal/domain/verification/delivery/nats/handler.go
 
 ## VN5 nats — durable переименован (в проде — повторная доставка всего стрима)
 internal/domain/verification/delivery/nats/handler.go
-- durableName = "verification-user-registered-v2"
-+ durableName = "verification-user-registered-v3"
+- "verification-user-registered-v2"
++ "verification-user-registered-v3"
 
 ## VN6 nats — прежний subject не дочитывается (письма событий до .v2 теряются)
 internal/domain/verification/delivery/nats/handler.go
@@ -2052,6 +2053,7 @@ cmd/api/http.go
 - 	fx.Invoke(registerHTTP),
 
 ## K09 cmd/api — порядок графа: httpModule первым
+= httpModule — fx.Module: его Invoke fx выполняет раньше корневого хука сервера httpkit, где бы модуль ни стоял в графе (cmd/api/http.go); HTTP стартует последним — TestBoot
 cmd/api/main.go
 - 	infraModules,
 - 	platformModules,
