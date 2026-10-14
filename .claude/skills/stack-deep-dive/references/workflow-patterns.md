@@ -136,7 +136,7 @@ manifest, заметки про env'ы, описание интеграций, �
 | ситуация | формат |
 |---|---|
 | anti-pattern (`config` объявил secret в plain-env, `messaging` оставил `Delivery: none` при at-least-once-требовании) | бинарные опции «соответствует anti-pattern» / «нет, вот почему» (Other) |
-| enum-поле (`Log format`, `Delivery`, `Ordering`, `Authn type`, `Migration strategy`, `Source` для env) | по опции на каждое значение enum |
+| enum-поле (`Log format`, `Delivery`, `Ordering`, `Authn type`, `Migration strategy`, «где живёт» у env) | по опции на каждое значение enum |
 | тест-критерий из `references/draft-stable.md` | опции из ✅/❌-примеров, архитектор соотносит |
 | выбор kit'а golibinfra (`auth` → какой authnkit-примитив) | по опции на kit + «не нужен» |
 | выбор существующего subject'а (cross-kind) | по опции на каждый из объявленных в messaging |
@@ -152,7 +152,6 @@ manifest, заметки про env'ы, описание интеграций, �
 | текст `Generates` — пути и имена в коде | архитектор пишет точный контракт для de-template |
 | описание интеграции (`External runtime deps`) | бизнес-семантика провайдера |
 | capacity (CPU/RAM/replicas) | оценка архитектора |
-| `Architecture notes` стека | формулировка архитектора |
 
 ### Чего не делать
 

@@ -59,9 +59,14 @@ blocked-by: —
     `TestGuardWired`, CTRL — зелёный; matcher `Bash|Write` — зелёный (регулярное выражение с Bash); проба
     проекта с внешней идентичностью (пути `.template/identity` удалены, `identity: external`) — новые тесты
     зелёные, с `identity: own` — 9 пустых glob'ов
-- [ ] **AC4** — RHAR-08: утверждения п. 1, 2, 4 (smartdev, triage-failure, stack-deep-dive) и заголовки
+- [x] **AC4** — RHAR-08: утверждения п. 1, 2, 4 (smartdev, triage-failure, stack-deep-dive) и заголовки
   smartdev с «(фикс …)» поправлены; п. 3 правда (`make new-domain NAME=repo` — отказ до правки);
   п. 5 — в Handoff. Проверка: `exp.py` G03–G06 → на базе «да», на ветке «нет»; N01 → «отказ до правки»
+  - Подтверждено: база — G03–G06 «да», ветка — «нет»; N01 — «отказ до правки» на базе и ветке (п. 3
+    закрыл трек gate: имена из кода среза, `TestNewDomainRefusesOrRollsBack`); `ATTENTION:` печатает
+    только `status.sh` — hooks, build, sqlc-drift, migrations, infra-touch, lint (`A=--full`), тестов он
+    не гоняет; enum env — «где живёт» (`field-checklists.md`), секции `Architecture notes` у шаблонов
+    `docs/stack/_templates/` нет
 - [ ] **AC5** — T6: поля нового домена — одним способом в `scaffold/references/domain.md § 4` и в выводе
   `make new-domain`. Проверка: `exp.py` G07 → на базе «да», на ветке «нет»; текст обоих мест
 - [ ] **AC6** — `/release`: шаг `make mutate A=--strict` перед релизом; на коде ветки он даёт код 0.
@@ -89,8 +94,12 @@ blocked-by: —
     существующими правилами; `TestGuardWired` — guard-bash — хук PreToolUse инструмента Bash, хуки не
     выключены, deny держит каждый запрет списка; triage-failure получил «Шаг 0» (`tests-pipeline`);
     `exp.py` — как в AC3; `make check` → `✓ check clean`
-- [ ] **S4** — RHAR-08: неточные утверждения smartdev, triage-failure, stack-deep-dive
+- [x] **S4** — RHAR-08: неточные утверждения smartdev, triage-failure, stack-deep-dive
   - Проверка: `exp.py` G03–G06, N01; `make check` → `✓ check clean` · Закрывает: AC4 · Зависит от: —
+  - Сделано: smartdev — строка `ATTENTION:` называет сигналы `make status` (build, sqlc-drift, migrations,
+    lint), красный `make check` или тест — отдельно, заголовки без «(фикс …)»; triage-failure — `ATTENTION:`
+    даёт `make status`; stack-deep-dive — «где живёт» у env вместо `Source`, строка `Architecture notes`
+    снята (такой секции нет); `exp.py` — как в AC4; `make check` → `✓ check clean`
 - [ ] **S5** — T6: поля нового домена — одним способом
   - Проверка: `exp.py` G07; `make check` → `✓ check clean` · Закрывает: AC5 · Зависит от: —
 - [ ] **S6** — шаг `make mutate A=--strict` в `/release`
@@ -132,7 +141,8 @@ blocked-by: —
   545–1012 строк, код — до 303.
 
 ## Где мы сейчас
-S1–S3 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
-самопроверка прозы видит имена тестов, доставку правил и подключение guard. Полный
-`make mutate A=--strict` на `f825fac` прерван на 101/356 ради гейта шагов, результаты — в
-`N/wt-harness-mut/.cache/mutate/`, прогон продолжится с места. Следующий шаг — S4 (RHAR-08).
+S1–S4 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
+самопроверка прозы видит имена тестов, доставку правил и подключение guard; S4 — правда прозы
+smartdev, triage-failure, stack-deep-dive. Полный `make mutate A=--strict` на `f825fac` прерван на 101/356
+ради гейта шагов, результаты — в `N/wt-harness-mut/.cache/mutate/`, прогон продолжится с места.
+Следующий шаг — S5 (T6).
