@@ -19,12 +19,18 @@ paths:
   `errors.go` (все sentinel и error-типы домена — только здесь) · `policy.go` (authorization
   + чистые правила, без I/O) · `usecase.go` (логика, зависимости через порты) · `trusted.go`
   (операции для других доменов без policy) · `events.go` (payload + unexported subject-const) ·
-  `metrics.go` (`biz_<domain>_*` под алерт, nil-safe) · `delivery/{http,nats}/` · `infra/postgres/` ·
+  `metrics.go` (`biz_<domain>_*` под алерт, nil-safe) · `delivery/{http,nats}/` (вход — один пакет на
+  транспорт, подпакет — только `mocks`; archtest) · `infra/postgres/` ·
   `infra/<kit>/` (адаптер порта к киту, внешнему каналу или клиенту из `pkg/`) · `module/`. Файл существует
   только вместе со своим содержимым (таблица обязательности — architecture.md); мёртвые
   типы/файлы удаляются.
 - **Логика — в usecase и policy, края тонкие.** Хендлер: разбор входа → вызов usecase →
   `<домен>Errors.Map` и view, без ветвлений бизнес-правил и без repo или кита мимо usecase.
+  Вход (`delivery/*`) зовёт usecase своего домена портом пакета, его привязывает только
+  `func(u *<домен>.Usecase) <порт> { return u }` в своём `module/`; из корня вход берёт данные (сущности,
+  DTO, ошибки), а не порты, usecase, `Trusted` и их зависимости, из golibinfra — транспорт, лог и
+  helpers без I/O, драйверов БД не держит (archtest `TestDeliveryReachesUsecaseOnly`,
+  `TestDeliveryPortsBoundToUsecase`).
   Репозиторий и SQL — CRUD, фильтры и условия атомарности (`WHERE version = $2`,
   `used_at IS NULL`): кому что видно, решает usecase и передаёт параметром, `CASE` по ролям в SQL
   нет. Адаптер `module/` — только перевод типов и ошибок.
@@ -67,7 +73,9 @@ paths:
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
   Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)` и
   строкой в `publicOperations` (`cmd/api/api_test.go`): без того и другого сервис не стартует (httpkit),
-  без строки — красный `TestHTTPOperations`; регистрация — в `registerHTTP`
+  без строки — красный `TestHTTPOperations`. Операцию регистрирует `huma.Register` в `delivery/http` своего
+  домена с хендлером этого пакета (коротких форм `huma.Get`… нет), подписку — `natskit` в `delivery/nats`
+  (archtest `TestInputsRegisterInDelivery`); `Register` доменов зовёт `registerHTTP`
   (`cmd/api/http.go`). Ошибки — таблица домена `<домен>Errors`: правило на каждую ошибку `errors.go`,
   хендлер отдаёт `<домен>Errors.Map(err)`, таблица операции из тех же правил — `Declare` при
   регистрации (оба — archtest `TestDomainErrorTables`); ошибка поля — 422 с `Field`.

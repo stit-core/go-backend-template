@@ -81,9 +81,12 @@ Generic-примитив, нужный не только этому сервис
 | `errors.go` | всё, кроме sentinel-`var` и error-типов домена (отказ policy — общий `policy.ForbiddenError` из `pkg/policy`) |
 | `events.go` | всё, кроме payload-типов и unexported subject-констант |
 | `usecase.go` | прямой транспорт: `httpkit`/`natskit`/huma/`net/http`; ctx-геттеры транспорта — только через `internal/platform/identity`; inline-константы правил (место — `policy.go`) |
-| `delivery/*` | бизнес-решения (все ветвления — в usecase), импорт чужих доменов и своего `infra/` (archtest) |
+| `delivery/*` | бизнес-решения (все ветвления — в usecase), импорт чужих доменов и своего `infra/`; из своего корня — порты, usecase, `Trusted` и их зависимости (данные — можно); пакеты golibinfra, кроме транспорта, лога и helpers без I/O, `database/sql` и pgx; подпакеты, кроме `mocks` (archtest) |
 | `infra/postgres` | бизнес-логика в SQL (сложные CASE-ветвления политик); запросы держат CRUD/фильтры |
 | `module/` | бизнес-логика и обёртки китов (место — `infra/<kit>/`); только wiring + маппинг типов/ошибок между доменами |
+
+Правила входа archtest читают импорты и имена корня (`TestDeliveryReachesUsecaseOnly`): хранилище, которое
+прячет пакет `internal/platform` или `pkg/`, они не видят — его держит ревью.
 
 ### Канон именования
 
@@ -190,7 +193,10 @@ DTO в порте — локальные (не re-export из B).
   (repository, policy, адаптер); тип, который реализует несколько портов или приходит из кита,
   привязывает identity-closure (`func(u *user.Usecase) userhttp.Usecase { return u }`,
   `func(j *authnkit.HS256JWT) authnkit.JWTSigner { return j }`). `fx.As` не используется
-  (archtest), `fx.Annotate` — только для тегов `name:` и `group:`.
+  (archtest), `fx.Annotate` — только для тегов `name:` и `group:`. Порт входа (интерфейс пакета
+  `delivery/<транспорт>`) получает только usecase своего домена — такой closure в его `module/`: порт над
+  репозиторием, `Trusted` или хранилищем кита отдал бы входу операции мимо policy (archtest
+  `TestDeliveryPortsBoundToUsecase`).
 - **Конфиги** — конфиг кита читает его `<kit>.NewConfig` (`kitConfigs` в `cmd/api`), конфиги
   самого приложения — структура `App` (`internal/platform/config`). Вне `APP_ENV=dev` старт не
   пускает небезопасное: cookie без Secure, логи без маскирования, docs и access-токены без
@@ -231,7 +237,12 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 гарантирует уникальность Body. Префикс домена, уникальность и envelope `data` экспортируемых
 типов `delivery/http` (кроме `Handler` и `Usecase`) держит archtest `TestHTTPTypes`.
 
-Операции всех доменов регистрирует одна функция — `registerHTTP` в `cmd/api/http.go`. Открытая
+Операцию регистрирует `huma.Register` в `delivery/http` своего домена, хендлер — метод или функция этого
+пакета: правила таблиц ошибок и policy читают его, а операция в `internal/platform`, подпакете или с
+хендлером из другого пакета их бы обошла. Короткие формы huma (`huma.Get` и соседи) не используются,
+подписку на события заводит `natskit` в `delivery/nats` (archtest `TestInputsRegisterInDelivery`,
+`TestDeliveryPackages`); подписку методом шины мимо функций natskit archtest не видит — ревью.
+`Register` пакетов доменов зовёт одна функция — `registerHTTP` в `cmd/api/http.go`. Открытая
 операция помечена `httpkit.Public(op)`: операция без `Security` и без пометки, дубль метода и пути
 (huma и chi молча перезаписали бы маршрут) — ошибка старта (httpkit, `Server.CheckRoutes`), дубль
 `OperationID` — паника huma. По `registerHTTP` же `cmd/api/api_test.go` собирает API без БД и брокера:

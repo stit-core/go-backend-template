@@ -48,6 +48,10 @@ type Usecase interface {
 
 После этого `make gen` (mockery поднимет порт из `.mockery.yml`, мок-файл регенерируется).
 
+Хендлер зовёт домен только этим портом, а `module/` привязывает его только к `*<name>.Usecase`: репозиторий,
+`Trusted` или хранилище кита в `Handler` и порт входа над ними — отказ archtest
+(`TestDeliveryReachesUsecaseOnly`, `TestDeliveryPortsBoundToUsecase`).
+
 ### 4. DTO в `delivery/http/dto.go`
 
 Имена — `<Domain><Op>Input/Output` (huma собирает все DTO в одну OpenAPI-registry по имени типа;
@@ -98,6 +102,9 @@ huma.Register(api, newMethodErrors.Declare(authgate.Secured(huma.Operation{
     Summary:       "Краткое описание для OpenAPI",
 })), h.newMethod)
 ```
+
+Операция живёт в `delivery/http` своего домена: `huma.Register` и хендлер — в этом пакете, без подпакетов
+(`delivery/http/admin`) и коротких форм `huma.Get`… — иначе отказ archtest `TestInputsRegisterInDelivery`.
 
 `authgate.Secured` — операция под cookie: `Security` и коды 401 сессии в OpenAPI. Публичная
 операция — `httpkit.Public(huma.Operation{…})` и её `OperationID` в `publicOperations`
@@ -161,7 +168,7 @@ make build
 ## Anti-patterns
 
 - ❌ Бизнес-логика в handler-методе. Handler только: парсит вход, вызывает usecase, мапит ошибки.
-- ❌ Прямое использование `pgx`/`sqlc` из handler. Только через usecase.
+- ❌ Прямое использование `pgx`/`sqlc`, репозитория или кита из handler. Только через usecase (archtest).
 - ❌ Свой формат ошибок мимо `httpkit.ErrorMap` — нарушит единый контракт ошибок (problem+json с `code`).
 - ❌ Открыть авторизованный endpoint пометкой `httpkit.Public` вместо `authgate.Secured` — он публичен в рантайме; операцию без того и другого не пропустит старт сервиса (`TestHTTPOperations` в `cmd/api`).
 - ❌ `_, _ = ctx, in` в handler без вызова usecase — компилятор пропустит, но это dead-handler.

@@ -82,7 +82,7 @@ err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
 
 ### 4. Subscriber in-domain (`internal/domain/<consumer>/delivery/nats/`)
 
-Subscriber лежит **внутри** потребляющего домена, рядом с `delivery/http/`. archtest не пускает прямой импорт `<source>`-домена из `<consumer>` — поэтому payload-тип события объявляется **локально** в `delivery/nats/dto.go`, даже если он 1:1 совпадает с типом из источника. Subject — тоже локальная константа.
+Subscriber лежит **внутри** потребляющего домена, рядом с `delivery/http/`: подписку функциями natskit заводит только `delivery/nats` (не `module/` и не подпакет), обработчик зовёт домен портом `Usecase`, его `module/` привязывает к `*<consumer>.Usecase` (archtest `TestInputsRegisterInDelivery`, `TestDeliveryPortsBoundToUsecase`). archtest не пускает прямой импорт `<source>`-домена из `<consumer>` — поэтому payload-тип события объявляется **локально** в `delivery/nats/dto.go`, даже если он 1:1 совпадает с типом из источника. Subject — тоже локальная константа.
 
 ```go
 // internal/domain/<consumer>/delivery/nats/dto.go

@@ -44,13 +44,20 @@ blocked-by: —
 - `TestTestsAssert`, правило тегов сборки, rule `tests-pipeline` — трек gate.
 
 ## Критерии приёмки
-- [ ] **AC1** — RADP-02, вход только через свой usecase: кейсы `n12-h-repo-port` (порт корня
+- [x] **AC1** — RADP-02, вход только через свой usecase: кейсы `n12-h-repo-port` (порт корня
   `user.Repository` в хендлере), `n37-h-subpkg-admin` (хендлеры в `delivery/http/admin`),
   `n38-biz-in-platform` (операция в `internal/platform/reports`), `n70-sub-raw-sql` (`pgkit.DB` и SQL в
   подписчике), `b14-trusted-via-ctor` (`user.NewTrusted` к порту своего входа) на базе — `✓ check clean`, на
   ветке — отказ archtest, который называет файл и правило. Проверка: база —
   `python3 N/boundaries/exp/batch.py <wt базы> … ` → `check=clean`; ветка — `run.py <wt ветки> --no-full <кейс>`
   → `CAUGHT unit[Test…]`
+  - Подтверждено: база — сводный прогон A `check=clean` (`N/boundaries/exp/base.tsv`); ветка
+    (`exp/branch-s1.tsv`): `n12` — `TestDeliveryReachesUsecaseOnly` (`user.Repository` в хендлере), `n37` —
+    `TestDeliveryPackages` и `TestInputsRegisterInDelivery`, `n38` — `TestInputsRegisterInDelivery`, `n70` —
+    `TestDeliveryReachesUsecaseOnly` (импорт `pgkit`), `b14` — `TestDeliveryPortsBoundToUsecase`; обходы
+    второго шага `x02a`–`x02f` (`exp/cases_bnd.py`: порт входа над `user.Repository`, `session.Store` в
+    хендлере, хендлер из `internal/platform`, `huma.Get`, `huma.Register[I, O]` в platform, подписка natskit в
+    `module/`) — отказ своим правилом
 - [ ] **AC2** — RADP-03, ошибка домена — только через таблицу, перевод — по методам типа: `n16p` (sentinel в
   `usecase.go`), `n18p` (`errors.New` в usecase), `n15` (своя функция перевода в хендлере), `n34` (метод
   адаптера без перевода), `n35` (метод `Trusted` вне перечня теста), `b15` (порт — структура со встроенным
@@ -71,12 +78,17 @@ blocked-by: —
   держит тест. Проверка: ручная сверка текста с тестами; `make check` → `✓ check clean`
 
 ## Шаги
-- [ ] **S1** — RADP-02: archtest — пакеты входа `delivery/<транспорт>` без подпакетов (кроме `mocks`);
+- [x] **S1** — RADP-02: archtest — пакеты входа `delivery/<транспорт>` без подпакетов (кроме `mocks`);
   `huma.Register` — только в `delivery/http` с хендлером оттуда, подписка `natskit` — только в
   `delivery/nats`; вход берёт из корня своего домена данные, а не порты, usecase, `Trusted` и их зависимости,
   и не держит хранилищ, клиентов и драйверов; порт входа привязывает только identity-closure над
   `*<домен>.Usecase` в своём `module/`. Проза
   - Проверка: n12, n37, n38, n70, b14 на ветке → отказ; `make check` → ✓ · Закрывает: AC1, AC6 · Зависит от: —
+  - Сделано: `internal/archtest/delivery_test.go` — `TestDeliveryPackages`, `TestInputsRegisterInDelivery`,
+    `TestDeliveryReachesUsecaseOnly`, `TestDeliveryPortsBoundToUsecase`; эталон и код identity — без отказов;
+    кейсы AC1 и обходы `x02a`–`x02f` — отказ; rule `domain-architecture`, `architecture.md` (§ Что запрещено,
+    § fx, § HTTP DTO naming, предел — хранилище за `internal/platform`), `endpoint.md`, `event.md`, комментарий
+    пакета archtest; `make check` → ✓
 - [ ] **S2** — RADP-03: archtest — в корне домена ошибки и их типы только в `errors.go` (тип — с `Unwrap` в
   sentinel), `fmt.Errorf` — с `%w`; хендлер отдаёт `nil` или `<домен>Errors.Map(…)`; структура `module/` не
   встраивает тип чужого домена; тесты адаптеров и `Trusted` сверяют перечень `calls` с методами типа. Проза
@@ -100,8 +112,20 @@ blocked-by: —
 - `NewTrusted` «только элементом `fx.Provide`» (пункт (г) аудитора) отдельным правилом не держим: `b14`
   ловит правило привязки порта входа (вход получает только `*<домен>.Usecase`), а оно шире — и для
   репозитория, и для хранилища кита за локальным портом входа.
+- «Не данные» корня домена узнаются по форме, а не по именам: интерфейсы, структуры с `fx.In`, типы с полем
+  такого типа и функции с ними в сигнатуре (`Usecase`, `Trusted`, `NewPolicy` и сервис форка под другим
+  именем); переменные (`Err*`, `TrustedErrors`) — данные.
+- Пакеты golibinfra во входе — перечнем разрешённого (транспорт `httpkit`, `natskit`, `grpckit`, лог и helpers
+  без I/O `clockkit`, `idkit`, `ptrkit`, `mapkit`, `tzkit`), а не запретом хранилищ: новый кит с I/O во входе
+  краснеет без правки правила; драйверы вне golibinfra — `database/sql` и pgx.
+- Подпакет `delivery/<транспорт>/<x>` запрещён (вариант (б) аудитора «запрет глубже»), а не читается
+  правилами: правила HTTP и контракт подписок читают один пакет, неэкспортируемая таблица домена в
+  подпакете недоступна. Хендлер операции — из пакета `delivery/http` (не `<пакет>.<имя>`), подписка natskit —
+  только в `delivery/nats`, dot-импорт huma и natskit — отказ: иначе регистрацию правила не видят.
 
 ## Где мы сейчас
-План записан. База `98e425e`: сводные прогоны кейсов трека — `✓ check clean`: A — `n12`, `n37`, `n38`,
-`n70`, `b14`; B — `n16p`, `n15`, `n34`, `n35`, `b15`, `n22p`, `n36`; C — `n18p` (`N/boundaries/exp/base.tsv`,
-логи — `exp/logs/batch-base-*.log`). Следующий шаг — S1.
+S1 (RADP-02) сделан: правила входа — `internal/archtest/delivery_test.go`. База `98e425e`: сводные прогоны
+кейсов трека — `✓ check clean`: A — `n12`, `n37`, `n38`, `n70`, `b14`; B — `n16p`, `n15`, `n34`, `n35`,
+`b15`, `n22p`, `n36`; C — `n18p` (`N/boundaries/exp/base.tsv`, логи — `exp/logs/batch-base-*.log`).
+Эксперименты ветки — в `N/wt-boundaries-exp` (снимок правил временным коммитом: раннер откатывает дерево к
+HEAD). Следующий шаг — S2 (RADP-03).
