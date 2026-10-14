@@ -84,13 +84,22 @@ blocked-by: —
     `TestSecuredOperationsAskPolicy` («calls user.Usecase.Emails, which neither asks policy…»); обходы `x09a`
     (только проверка, что вызывающий есть), `x09b` (вызывающий прочитан, но не ключ), `x09d` (хендлер под
     Security без usecase) — отказ; законная форма `x09c` (policy своим методом `uc.authorizeList`) — зелёная
-- [ ] **AC5** — Законные формы не краснеют: эталон и законные формы аудитора (`fp01`–`fp05`, `fp08`–`fp15`,
+- [x] **AC5** — Законные формы не краснеют: эталон и законные формы аудитора (`fp01`–`fp05`, `fp08`–`fp15`,
   `fp17`, `fp18`, `fp20`, `fp21p`, `fp22b`) на ветке — `✓ check clean`. Проверка: `batch.py <wt ветки>` →
   `check=clean`
-- [ ] **AC6** — Проза — ровно то, что проверяется: rule `domain-architecture`, `docs/reference/architecture.md`,
+  - Подтверждено: ветка `7ebaa69` (`exp/branch-legit.tsv`): сводный L1 — `fp01`, `fp02`, `fp04p`, `fp05`, `fp08`,
+    `fp09`, `fp10`, `fp11`, `fp12`, `fp13`, `fp14`, `fp15`, `fp17`, `fp18`, `fp20`, `fp21p` — `check=clean`
+    (99,90 %); L2 — `fp03`, L3 — `fp22b` — `check=clean`; законная форма трека `x09c` (policy своим методом) —
+    быстрые шаги зелёные. Вне перечня: `fp16` и `fp07` — правило prune трека lifecycle (RADP-01), `fp10b`,
+    `fp14b` — RADP-11 (бэклог), `fp06` — настройки archkit; правил трека они не касаются
+- [x] **AC6** — Проза — ровно то, что проверяется: rule `domain-architecture`, `docs/reference/architecture.md`,
   `scaffold/references/{endpoint,port,event}.md` и комментарий пакета archtest называют новые правила
   (пометка archtest), пределы — словами; обещание «ни одна ошибка домена не уходит 500» — в форме, которую
   держит тест. Проверка: ручная сверка текста с тестами; `make check` → `✓ check clean`
+  - Подтверждено: сверка диффа прозы с тестами — каждое новое правило названо там, где его ищет агент (rule,
+    `architecture.md`, reference варианта scaffold), с именем теста; пределы — хранилище за `internal/platform`,
+    подписка методом шины, ошибка сущности нового метода `Trusted`, чужая ошибка по тексту, ответ policy без
+    проверки; «не 500» — для ошибок `errors.go` через таблицу, 500 — сбой порта или кита; `make check` → ✓
 
 ## Шаги
 - [x] **S1** — RADP-02: archtest — пакеты входа `delivery/<транспорт>` без подпакетов (кроме `mocks`);
@@ -137,9 +146,13 @@ blocked-by: —
     зовёт `…Policy.Can…` или передаёт вызову `UserID` из `identity.From`; хендлер под Security без вызова
     usecase — отказ; эталон и законные формы — без отказов; rule `domain-architecture`, `architecture.md`
     § Usecase-канон, `endpoint.md`, комментарий пакета archtest; `make check` → ✓
-- [ ] **S5** — Приёмка: эксперименты аудитора на базе и ветке, законные формы, гейт
+- [x] **S5** — Приёмка: эксперименты аудитора на базе и ветке, законные формы, гейт
   - Проверка: `N/boundaries/exp/{base,branch}.tsv`; `make check` → `✓ check clean`
   - Закрывает: AC1, AC2, AC3, AC4, AC5, AC6 · Зависит от: S1, S2, S3, S4
+  - Сделано: на содержимом `7ebaa69` кейсы трека (`exp/branch-final.tsv`) — 14 аудитора (`n12`, `n37`, `n38`,
+    `n70`, `b14`, `n16p`, `n18p`, `n15`, `n34`, `n35`, `b15`, `n17p`, `n22p`, `n36`) и 15 обходов (`x02a`–`x09d`) —
+    отказ, `x09c` — зелёный; законные формы — AC5; пробное слияние с `nine/gate` `02f7845` — без конфликтов
+    (`archtest_test.go` — автослияние), archtest и тесты доменов на слитом дереве — PASS; `make check` → ✓
 
 ## Решения
 - Правила входа — новым файлом `internal/archtest/delivery_test.go`: тема — вход домена, а не граница
@@ -177,14 +190,10 @@ blocked-by: —
   `Policy` с методом `Can…` (канон `UsecaseDeps`).
 
 ## Где мы сейчас
-S1–S4 сделаны (RADP-02, 03, 04, 09): правила входа, подписок и policy — `internal/archtest/delivery_test.go`,
-ошибок — `archtest_test.go` и `crossdomain_test.go`, сверка методов — в тестах адаптеров и `Trusted`, контракт
-подписок — `TestContracts` verification. Быстрые шаги законных форм на снимке S4 — зелёные, кроме `fp16`
-(отказ `TestPruneNamesIdentityDependents` — правило prune трека lifecycle, RADP-01, а не трека;
-`exp/branch-fp-quick.tsv`). База `98e425e`: сводные прогоны
-кейсов трека — `✓ check clean`: A — `n12`, `n37`, `n38`, `n70`, `b14`; B — `n16p`, `n15`, `n34`, `n35`,
-`b15`, `n22p`, `n36`; C — `n18p` (`N/boundaries/exp/base.tsv`, логи — `exp/logs/batch-base-*.log`).
-Эксперименты ветки — в `N/wt-boundaries-exp` (снимок правил временным коммитом: раннер откатывает дерево к
-HEAD). Следующий шаг — S5: законные формы полным `make check` (сводные L1 — `fp01`, `fp02`, `fp04p`, `fp05`,
-`fp08`–`fp15`, `fp17`, `fp18`, `fp20`, `fp21p`; L2 — `fp03`; L3 — `fp22b`), перегон кейсов трека на итоге ветки,
-гейт.
+Трек закончен: S1–S5, критерии AC1–AC6 подтверждены. Правила — `internal/archtest/delivery_test.go` (вход,
+подписки, policy), `archtest_test.go` (ошибки корня, ответ хендлера), `crossdomain_test.go` (встроенный тип
+чужого домена); сверка методов — в тестах адаптеров и `Trusted`; контракт подписок — `TestContracts`
+verification. Эксперименты: база `98e425e` — `N/boundaries/exp/base.tsv`, ветка — `branch-*.tsv`, логи —
+`exp/logs/`, раннер — `exp/run.py` и `exp/batch.py` (`make check` под замком), кейсы трека —
+`exp/cases_port.py` (перенос на базу) и `exp/cases_bnd.py` (обходы). Временные worktree сняты. Следующее —
+валидатор трека, затем перенос на `main` дирижёром (с треком gate — без конфликтов, см. S5).
