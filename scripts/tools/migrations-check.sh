@@ -2,8 +2,9 @@
 # Валидатор migrations/: каждая NNNN — ровно одна пара .up.sql/.down.sql, нумерация непрерывна с 0001,
 # посторонних файлов и каталогов нет; down не пуст; up с эффектом для выкатки — только с маркером
 # `-- infra-handoff: <…>`. Эффект: разрушительный оператор (DROP, TRUNCATE, ALTER … TYPE, RENAME), правка
-# данных (DELETE, UPDATE … SET, код DO), долгий lock (SET NOT NULL, CREATE INDEX без CONCURRENTLY по
-# таблице не из этого файла), расширение (CREATE EXTENSION). Шаг make check.
+# данных (DELETE, UPDATE … SET), код, которого машина не видит (DO, CALL, SELECT верхнего уровня), долгий lock
+# (SET NOT NULL, CREATE INDEX без CONCURRENTLY по таблице не из этого файла), расширение (CREATE EXTENSION).
+# Тело $$…$$ (функция, DO) — не оператор файла: CREATE FUNCTION его только объявляет. Шаг make check.
 set -euo pipefail
 
 dir="${1:-migrations}"
@@ -60,13 +61,22 @@ done
 released=" 0001_users.up.sql 0003_email_verifications_idempotency.up.sql "
 
 # Up с эффектом нужен порядок или окно выкатки: маркер делает это видимым в файле, а INFRA-HANDOFF-блок —
-# в хабе (rule infra-impact). Операторы — по строке, в нижнем регистре, без комментариев и строк в кавычках.
+# в хабе (rule infra-impact). Операторы — по строке, в нижнем регистре, без комментариев, строк в кавычках и
+# тел $$…$$.
 for f in "$dir"/[0-9][0-9][0-9][0-9]_*.up.sql; do
 	[ -e "$f" ] || continue
 	grep -qE '^[[:space:]]*--[[:space:]]*infra-handoff:[[:space:]]*[^[:space:]]' "$f" && continue
 	only_destructive=""
 	[[ $released == *" ${f##*/} "* ]] && only_destructive=1
-	hits=$(sed -e 's/--.*//' -e "s/'[^']*'//g" "$f" | tr '\n' ' ' | tr '[:upper:]' '[:lower:]' | tr ';' '\n' |
+	hits=$(sed -e 's/--.*//' -e "s/'[^']*'//g" "$f" | tr '\n' ' ' | tr '[:upper:]' '[:lower:]' |
+		awk '{
+			out = ""
+			while (match($0, /\$[a-z0-9_]*\$/)) {
+				tag = substr($0, RSTART, RLENGTH); out = out substr($0, 1, RSTART - 1) tag "…" tag
+				$0 = substr($0, RSTART + RLENGTH); i = index($0, tag); $0 = i ? substr($0, i + length(tag)) : ""
+			}
+			print out $0
+		}' | tr ';' '\n' |
 		awk -v only_destructive="$only_destructive" '
 			{
 				stmt[NR] = $0
@@ -78,7 +88,7 @@ for f in "$dir"/[0-9][0-9][0-9][0-9]_*.up.sql; do
 				w = "([^a-z0-9_]|$)"
 				destructive = "(^|[^a-z0-9_])(drop|truncate|rename)" w "|alter[[:space:]]+(column[[:space:]]+)?[^[:space:]]+[[:space:]]+(set[[:space:]]+data[[:space:]]+)?type" w
 				effect = "(^|[^a-z0-9_])delete[[:space:]]+from" w "|(^|[^a-z0-9_])update[[:space:]]+(only[[:space:]]+)?[^[:space:]]+([[:space:]]+(as[[:space:]]+)?[a-z0-9_]+)?[[:space:]]+set" w \
-					"|^[[:space:]]*do" w "|set[[:space:]]+not[[:space:]]+null" w "|create[[:space:]]+extension" w
+					"|^[[:space:]]*(do|call|select)" w "|set[[:space:]]+not[[:space:]]+null" w "|create[[:space:]]+extension" w
 				create_index = "create[[:space:]]+(unique[[:space:]]+)?index[[:space:]]+(concurrently[[:space:]]+)?((if[[:space:]]+not[[:space:]]+exists[[:space:]]+)?[^[:space:]]+[[:space:]]+)?on[[:space:]]+(only[[:space:]]+)?[^[:space:](]+"
 				for (i = 1; i <= NR; i++) {
 					s = stmt[i]

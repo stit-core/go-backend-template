@@ -179,9 +179,9 @@ func TestFmtAppliesLintRules(t *testing.T) {
 }
 
 // TestMigrationsCheck: migrations-check пропускает только каталог по конвенции, а up с эффектом для выкатки
-// — разрушительный, правку данных, долгий lock, расширение, код DO — только с маркером
-// `-- infra-handoff:`. Индекс по таблице этого же файла и CONCURRENTLY, действия FK и триггер на UPDATE —
-// не эффект; выпущенные миграции репо проходят как есть.
+// — разрушительный, правку данных, долгий lock, расширение, код (DO, CALL, SELECT верхнего уровня) — только с
+// маркером `-- infra-handoff:`. Индекс по таблице этого же файла и CONCURRENTLY, действия FK, триггер на UPDATE
+// и UPDATE в теле объявленной функции — не эффект; выпущенные миграции репо проходят как есть.
 func TestMigrationsCheck(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -219,7 +219,10 @@ func TestMigrationsCheck(t *testing.T) {
 		{name: "SET NOT NULL", files: second("ALTER TABLE users ALTER COLUMN name SET NOT NULL;\n"), want: "set not null"},
 		{name: "an index on an existing table", files: second("CREATE INDEX users_name_idx ON users (name);\n"), want: "create index users_name_idx on users"},
 		{name: "CREATE EXTENSION", files: second("CREATE EXTENSION IF NOT EXISTS citext;\n"), want: "create extension if not exists citext"},
-		{name: "DO", files: second("DO $$ BEGIN EXECUTE 'DROP TABLE users'; END $$;\n"), want: "do $$ begin execute"},
+		{name: "DO", files: second("DO $$ BEGIN EXECUTE 'DROP TABLE users'; END $$;\n"), want: "do $$…$$"},
+		{name: "CALL", files: second("CALL refresh_users();\n"), want: "call refresh_users()"},
+		{name: "SELECT of a function declared in the file", files: second("CREATE FUNCTION fill() RETURNS void AS $body$\nBEGIN\n    UPDATE users SET role = 'client';\nEND\n$body$ LANGUAGE plpgsql;\nSELECT fill();\n"), want: "select fill()"},
+		{name: "UPDATE in the body of a declared function", files: second("CREATE FUNCTION touch() RETURNS trigger AS $$\nBEGIN\n    UPDATE users SET name = NEW.name;\n    RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;\n"), want: "OK: migrations (2 пар", ok: true},
 		{name: "an effect with the marker", files: second("-- infra-handoff: роли пересчитываются — окно выкатки\nUPDATE users SET role = 'client';\n"), want: "OK: migrations (2 пар", ok: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

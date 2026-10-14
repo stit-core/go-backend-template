@@ -25,13 +25,13 @@ paths:
   версии и откат источника до нуля со сверкой схемы. Миграция только данных схему не
   меняет — её `down` может быть `-- noop` + WHY-комментарий.
 - Миграция с эффектом для выкатки — разрушительная (`DROP`, `TRUNCATE`, `ALTER … TYPE`, `RENAME`),
-  правка данных (`DELETE`, `UPDATE … SET`, backfill, код `DO`), долгий lock (`SET NOT NULL`, `CREATE
-  INDEX` без `CONCURRENTLY` по существующей таблице), новое расширение (`CREATE EXTENSION`) — только со
-  строкой `-- infra-handoff: <что сделать инфре>` в `up` и INFRA-HANDOFF-блоком (rule `infra-impact`):
-  выкатке нужен порядок или окно. Эти операторы без строки не пропустит migrations-check (индекс по
-  таблице того же файла — не эффект; выпущенные `0001` и `0003` — списком в скрипте); прочее с эффектом
-  (`INSERT … SELECT`, `ADD CONSTRAINT` без `NOT VALID`) держат правило и ревью. По строке миграцию
-  видит `make status`.
+  правка данных (`DELETE`, `UPDATE … SET`, backfill, код `DO`, `CALL`, `SELECT` верхнего уровня), долгий
+  lock (`SET NOT NULL`, `CREATE INDEX` без `CONCURRENTLY` по существующей таблице), новое расширение
+  (`CREATE EXTENSION`) — только со строкой `-- infra-handoff: <что сделать инфре>` в `up` и
+  INFRA-HANDOFF-блоком (rule `infra-impact`): выкатке нужен порядок или окно. Эти операторы без строки не
+  пропустит migrations-check (индекс по таблице того же файла и тело объявленной функции — не эффект;
+  выпущенные `0001` и `0003` — списком в скрипте); прочее с эффектом (`INSERT … SELECT`, `ADD CONSTRAINT`
+  без `NOT VALID`) держат правило и ревью. По строке миграцию видит `make status`.
 - **Не правь уже накатившуюся в боевой среде миграцию.** Только новая.
 - `make migrate-up` / `make migrate-down` (нужна `PG_DSN`); `down` откатывает одну миграцию
   приложения, схему китов ведёт golibinfra. Integration-тесты (`make test-int`, шаг
