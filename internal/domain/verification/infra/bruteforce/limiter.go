@@ -3,6 +3,7 @@ package bruteforce
 
 import (
 	"context"
+	"strings"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
@@ -22,7 +23,9 @@ func NewResetLimiter(g bruteforcekit.Guard) verification.ResetLimiter {
 // Allow: запрос сброса — попытка guard'а без успеха: после BRUTEFORCE_MAX_FAILURES запросов подряд
 // пара (субъект, IP) ждёт BRUTEFORCE_LOCK_DURATION.
 func (l *resetLimiter) Allow(ctx context.Context, subject, ip string) (bool, error) {
-	lock, err := l.guard.Attempt(ctx, subjectPrefix+subject, ip)
+	// Guard обрезает пробелы по краям ключа целиком: у субъекта за приставкой их снимаем сами, иначе адрес
+	// с пробелом впереди — свой счётчик.
+	lock, err := l.guard.Attempt(ctx, subjectPrefix+strings.TrimSpace(subject), ip)
 	if err != nil {
 		return false, err
 	}
