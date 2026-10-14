@@ -251,8 +251,10 @@ blocked-by: —
   - Сделано: `CALL` и `SELECT` верхнего уровня — класс «код», тела `$tag$…$tag$` вырезаются до разбора операторов;
     `TestMigrationsCheck` + 3 случая (на скрипте HEAD: `CALL` проходит, `SELECT f()` ловится лишь `UPDATE` тела,
     тело функции с `UPDATE` — ложный отказ); rule `sqlc-and-migrations`, `migration.md`; `make check` → ✓
-- [ ] **S23** — Forward-only: `Makefile`, `migrations-check.sh`
+- [x] **S23** — Forward-only: `Makefile`, `migrations-check.sh`
   - Проверка: текст — условие, а не история · Закрывает: AC12 · Зависит от: S14
+  - Сделано: порог покрытия — «запас ниже факта пропустил бы…», список выпущенных миграций — по их операторам,
+    без «до классов»; `make check` → ✓
 - [ ] **S24** — Спецификация мутаций под код `main`: V12, V17, VN3, VN6 сняты, V14 — по субъекту
   - Проверка: `make mutate A=--check` → OK · Закрывает: AC13 · Зависит от: S14
 - [ ] **S25** — `.template/paths` и prune: спецификация мутаций — код форка
@@ -325,4 +327,4 @@ blocked-by: —
 
 ## Где мы сейчас
 S1–S13 приняты по существу, валидатор — FAIL на `829481c` (`N/validation-gate.md`): круг фиксов S14–S27. Ветка
-перенесена на `main` `98e425e` (S14), B1–B3, список непокрываемого и `TestTestsAssert`, группа процессов стадии, `--strict`, migrations-check закрыты (S15–S22). Следующее: S23 — forward-only.
+перенесена на `main` `98e425e` (S14), B1–B3, список непокрываемого и `TestTestsAssert`, группа процессов стадии, `--strict`, migrations-check, forward-only закрыты (S15–S23). Следующее: S24 — спецификация под код `main`.
