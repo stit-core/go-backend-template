@@ -97,6 +97,7 @@ var (
 	slashName   = regexp.MustCompile(`^/([a-z][a-z0-9-]*)$`)
 	apiPath     = regexp.MustCompile(`^/api/[a-z0-9/_-]+$`)
 	kebabName   = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+	testName    = regexp.MustCompile(`^Test[A-Z_]\w*$`)
 	// fileName — файл без пути (`Makefile`, `.env.example`, `errors.go`): есть в репо под этим именем.
 	fileName = regexp.MustCompile(`^(Makefile|LICENSE|Dockerfile(\.\w+)?|\.?\w[\w.-]*\.(md|go|sql|ya?ml|json|sh|py|toml|txt|mod|sum|example))$`)
 	// namedBy — слово перед `имя`: rule или правило — .claude/rules/<имя>.md, skill или скилл — скилл;
@@ -108,8 +109,9 @@ var (
 
 // TestProseReferencesExist: в коде прозы (CLAUDE.md, README, docs/, .claude/rules и skills) есть в репо
 // make-цели, пути (от корня репо или, если первый сегмент лежит рядом с документом, — от его каталога) и
-// файлы без пути, скиллы (`/имя`, skill `имя`) и правила (rule `имя`, и каждое имя перечня после) — иначе
-// агент идёт по мёртвой ссылке. Репо — то, что отслеживает git: локальное (test/.venv, неотслеживаемый
+// файлы без пути, скиллы (`/имя`, skill `имя`), правила (rule `имя`, и каждое имя перечня после) и тесты
+// (`TestИмя` — функция *_test.go) — иначе агент идёт по мёртвой ссылке, а инвариант с пометкой теста
+// кажется машинным. Репо — то, что отслеживает git: локальное (test/.venv, неотслеживаемый
 // файл) есть не в каждом клоне. Плейсхолдеры (<d>, NNNN, *) — не ссылки; артефакт docs/stack/<kind>.md —
 // по его шаблону; /имя, которое не скилл, — путь контракта openapi.json, встроенная команда или корень
 // файловой системы; путь /api/… — операция openapi.json; правило с именем включённого линтера — его
@@ -139,6 +141,7 @@ func TestProseReferencesExist(t *testing.T) {
 		}
 	}
 	api := openAPIPaths(t, root)
+	tests := testFuncs(t, root, files)
 	skill := func(name string) bool {
 		return repo[".claude/skills/"+name+"/SKILL.md"] || slices.Contains(notRepoSkills, name)
 	}
@@ -207,6 +210,13 @@ func TestProseReferencesExist(t *testing.T) {
 					}
 					continue
 				}
+				// Тест — функция *_test.go; тесты доменов внешней идентичности ушли вместе с ними.
+				if testName.MatchString(ref) {
+					if !tests[ref] && pruned == nil {
+						dead = append(dead, doc+": "+ref)
+					}
+					continue
+				}
 				top, _, isPath := strings.Cut(ref, "/")
 				near := path.Join(path.Dir(doc), top) // первый сегмент рядом с документом: references/…, stack/…
 				switch {
@@ -226,7 +236,27 @@ func TestProseReferencesExist(t *testing.T) {
 			}
 		}
 	}
-	proseAllowlist.Check(t, dead, "the prose points to a missing make target, path, file, skill or rule")
+	proseAllowlist.Check(t, dead, "the prose points to a missing make target, path, file, skill, rule or test")
+}
+
+// testFuncs — функции Test… файлов *_test.go репо.
+func testFuncs(t *testing.T, root string, files []string) map[string]bool {
+	t.Helper()
+	tests := map[string]bool{}
+	for _, f := range files {
+		if !strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, f), nil, parser.SkipObjectResolution)
+		require.NoError(t, err)
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && testName.MatchString(fn.Name.Name) {
+				tests[fn.Name.Name] = true
+			}
+		}
+	}
+	require.NotEmpty(t, tests)
+	return tests
 }
 
 // openAPIPaths — пути контракта API (openapi.json в корне репо).

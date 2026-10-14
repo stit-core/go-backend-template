@@ -46,9 +46,11 @@ blocked-by: —
     «принято», G01, G02 «да»; `TestCommitMsgHook` → PASS (66 случаев), на хуке базы — 7 случаев Review
     красные; настоящий `git commit` с хуком ветки: `feat` без строки — отказ, `-m … -m 'Review: …'` и
     `-F -` с трейлерами — коммит
-- [ ] **AC2** — RHAR-02: имя теста в коде прозы, которого нет функцией `*_test.go` репо, — отказ
+- [x] **AC2** — RHAR-02: имя теста в коде прозы, которого нет функцией `*_test.go` репо, — отказ
   `TestProseReferencesExist`. Проверка: `exp.py` M07, M07b, M07c → на базе «не поймано», на ветке
   «поймано» этим тестом; CTRL — зелёный
+  - Подтверждено: база — M07, M07b, M07c «не поймано»; ветка — «поймано» `TestProseReferencesExist`
+    («….md: TestHTTPTypez: the prose points to a missing … test»), CTRL — зелёный
 - [ ] **AC3** — RHAR-03: glob `paths:`, который ни на что не ложится, правило без `paths:`, `name:`
   скилла не по каталогу, reference scaffold без «Шаг 0», снятый deny `.claude/settings.json`, отвязанный,
   подменённый или выключенный хук guard — отказ archtest. Проверка: `exp.py` M17, M17b, M17c, M18, M19,
@@ -70,8 +72,12 @@ blocked-by: —
     коммитит и отдаёт ей дифф, след — `Review:` в теле или в «Сделано», права — в списке
     `/security-review`; хук отвергает `feat`/`fix` без строки `Review: <текст>` в начале строки тела;
     `exp.py` и `TestCommitMsgHook` — как в AC1; `make check` → `✓ check clean`
-- [ ] **S2** — RHAR-02: самопроверка прозы сверяет имена тестов с функциями `*_test.go`
+- [x] **S2** — RHAR-02: самопроверка прозы сверяет имена тестов с функциями `*_test.go`
   - Проверка: `exp.py` CTRL, M07, M07b, M07c; `make check` → `✓ check clean` · Закрывает: AC2 · Зависит от: —
+  - Сделано: `TestProseReferencesExist` сверяет слово `Test…` кода прозы с функциями `Test…` файлов
+    `*_test.go` индекса git (разбор go/parser); плейсхолдеры `TestX`, `TestNew` скилла triage-failure —
+    `Test<Name>`, списка исключений нет; `docs/contributing.md` § Кто что enforce'ит называет проверку;
+    `exp.py` — как в AC2; `make check` → `✓ check clean`
 - [ ] **S3** — RHAR-03: тесты доставки правил и скиллов и подключения guard и deny
   - Проверка: `exp.py` CTRL, M17–M31c; `make check` → `✓ check clean` · Закрывает: AC3 · Зависит от: —
 - [ ] **S4** — RHAR-08: неточные утверждения smartdev, triage-failure, stack-deep-dive
@@ -93,6 +99,9 @@ blocked-by: —
   сообщения самого git (`Revert`, `fixup!` …) — без строки.
 - Чужой файл `docs/contributing.md` (в волне 2 ничей): строки хука `commit-msg` в «Кто что enforce'ит» и
   в troubleshooting называют `Review:` — шаг меняет поведение хука, которое они описывают.
+- Имя теста в прозе проверяется без списка плейсхолдеров: плейсхолдер — `Test<Name>` (угловые скобки
+  уже не ссылка); у проекта с внешней идентичностью проверка имён тестов, как и путей API, молчит — тесты
+  её доменов (`TestIdentity`, `TestErrorMaps`) ушли вместе с ними.
 
 ## Handoff
 - Дирижёру при слиянии: RHAR-08, п. 5 — в rule `domain-architecture` («Файл > ~400 строк») и
@@ -100,6 +109,7 @@ blocked-by: —
   545–1012 строк, код — до 303.
 
 ## Где мы сейчас
-S1 закрыт: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`. Полный
-`make mutate A=--strict` на `f825fac` прерван на 101/356 ради гейта шагов, результаты — в
-`N/wt-harness-mut/.cache/mutate/`, прогон продолжится с места. Следующий шаг — S2 (RHAR-02).
+S1, S2 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
+самопроверка прозы видит имена тестов. Полный `make mutate A=--strict` на `f825fac` прерван на 101/356
+ради гейта шагов, результаты — в `N/wt-harness-mut/.cache/mutate/`, прогон продолжится с места.
+Следующий шаг — S3 (RHAR-03).

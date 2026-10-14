@@ -25,9 +25,9 @@ description: Разбор падения — красный тест, lint, buil
 |---|---|---|
 | **Build** | `cannot find package`, `undefined: ...`, `cannot use ... as ...` | `make build` — первая ошибка обычно главная |
 | **Lint** | `golangci-lint` сообщения с `(linter)` в конце строки; `FAIL: golangci-lint exit N` — линтер не отработал | `make lint` — по строке на замечание, `FORMAT=detailed` — все, со строками кода |
-| **Unit test** | `--- FAIL: TestX`, assertion failure | `make test PKG=<pkg> FORMAT=detailed` |
+| **Unit test** | `--- FAIL: Test<Name>`, assertion failure | `make test PKG=<pkg> FORMAT=detailed` |
 | **Integration test** | падает только под `make test-int` | проблемы в БД-state, миграциях, testcontainers |
-| **Race** | `WARNING: DATA RACE` | `go test -race -run TestX` — стек двух горутин |
+| **Race** | `WARNING: DATA RACE` | `go test -race -run Test<Name>` — стек двух горутин |
 | **Panic** | `goroutine N [running]: …` | nil-deref / index OOB / closed channel |
 | **Drift** | `make gen-check` падает | сгенерированный код не пересобрали после правки источника (`make gen`) |
 
@@ -42,8 +42,8 @@ description: Разбор падения — красный тест, lint, buil
 
 Если воспроизводится локально — гоняй точечно, не `make test` на всём:
 ```bash
-go test -run TestX -count=1 ./path/to/pkg
-go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
+go test -run Test<Name> -count=1 ./path/to/pkg
+go test -race -run Test<Name> -count=10 ./path/to/pkg   # для flaky/race
 ```
 
 ### 2. Прочитать сообщение целиком
@@ -73,12 +73,12 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 1. **Напиши падающий тест**, воспроизводящий баг.
    - Имя: `Test<Behavior>` или `Test<Method>_<Scenario>`.
    - Тест должен падать по той же причине что и production-баг — иначе ты тестируешь что-то другое.
-2. `go test -run TestNew ./pkg` → red. Подтверди что red — твой red, не тестовая инфра.
+2. `go test -run Test<Name> ./pkg` → red. Подтверди что red — твой red, не тестовая инфра.
 3. Только теперь правь продакшен-код.
-4. `go test -run TestNew ./pkg` → green.
+4. `go test -run Test<Name> ./pkg` → green.
 5. `make test PKG=./pkg` → весь пакет green (не сломал соседние тесты).
 6. Коммит: оба файла одним `fix(<scope>): <one-liner>`; в теле — строка красного прогона из п. 2
-   (`--- FAIL: TestNew …`), чтобы RED-first был виден в истории, и строка `Review:` (CLAUDE.md
+   (`--- FAIL: Test<Name> …`), чтобы RED-first был виден в истории, и строка `Review:` (CLAUDE.md
    § Готово).
 
 ### 5. Не-баг-флоу (build / lint / drift / race)
@@ -119,7 +119,7 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 ```bash
 make test PKG=./pkg                  # на свой пакет
 make lint PKG=./pkg                  # на свой пакет
-go test -run TestX -count=20 ./pkg   # для flaky — 20 прогонов подряд
+go test -run Test<Name> -count=20 ./pkg   # для flaky — 20 прогонов подряд
 ```
 
 Готово и коммит — по CLAUDE.md § Готово.
