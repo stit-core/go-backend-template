@@ -1566,26 +1566,15 @@ internal/domain/verification/usecase.go
 - case !u.CanLogin:
 + case !u.CanLogin && false:
 
-## V12 usecase/verification — RequestPasswordReset: сбой после поиска уходит ответом (500 выдаёт учётную запись)
-internal/domain/verification/usecase.go
-- 	return result, nil
-- }
--
-- func (uc *Usecase) issuePasswordReset
-+ 	return result, err
-+ }
-+
-+ func (uc *Usecase) issuePasswordReset
-
 ## V13 usecase/verification — RequestPasswordReset: лимит запросов не действует
 internal/domain/verification/usecase.go
 - 	case !allowed:
 + 	case !allowed && u.ID == "":
 
-## V14 usecase/verification — RequestPasswordReset: лимит считается по адресу, а не по ID
+## V14 usecase/verification — RequestPasswordReset: лимит считает учётную запись (у неизвестного адреса — общий счётчик), а не адрес
 internal/domain/verification/usecase.go
-- uc.d.Limiter.Allow(ctx, u.ID, identity.IPFrom(ctx))
-+ uc.d.Limiter.Allow(ctx, u.Email, identity.IPFrom(ctx))
+- uc.d.Limiter.Allow(ctx, email, identity.IPFrom(ctx))
++ uc.d.Limiter.Allow(ctx, userID, identity.IPFrom(ctx))
 
 ## V15 usecase/verification — сброс: в письме хэш вместо токена
 internal/domain/verification/usecase.go
@@ -1596,11 +1585,6 @@ internal/domain/verification/usecase.go
 internal/domain/verification/usecase.go
 - authnkit.HashToken(token),
 + token,
-
-## V17 usecase/verification — событие сброса несёт сырой токен
-internal/domain/verification/usecase.go
-- PasswordResetRequested{TokenID: tokenID, UserID: u.ID,
-+ PasswordResetRequested{TokenID: tokenID[:0] + token, UserID: u.ID,
 
 ## V18 usecase/verification — ConfirmPasswordReset: ссылка негодна в последний миг срока (граница)
 internal/domain/verification/usecase.go
@@ -1750,11 +1734,6 @@ internal/domain/verification/delivery/nats/dto.go
 - SubjectUserRegistered   = "user.events.registered.v2"
 + SubjectUserRegistered   = "user.events.registered.v3"
 
-## VN3 nats — прежний subject — тем же durable, что новый
-internal/domain/verification/delivery/nats/handler.go
-- subscribe(subjectUserRegisteredV1, durableNameV1)
-+ subscribe(subjectUserRegisteredV1, durableName)
-
 ## VN4 nats — подписка на несуществующий стрим
 internal/domain/verification/delivery/nats/handler.go
 - streamUser  = "user"
@@ -1764,10 +1743,6 @@ internal/domain/verification/delivery/nats/handler.go
 internal/domain/verification/delivery/nats/handler.go
 - "verification-user-registered-v2"
 + "verification-user-registered-v3"
-
-## VN6 nats — прежний subject не дочитывается (письма событий до .v2 теряются)
-internal/domain/verification/delivery/nats/handler.go
-- 	subscribe(subjectUserRegisteredV1, durableNameV1)
 
 ## VN7 nats — onUserRegistered: ошибка usecase глотается, пока ctx жив (повтора доставки нет)
 internal/domain/verification/delivery/nats/handler.go
