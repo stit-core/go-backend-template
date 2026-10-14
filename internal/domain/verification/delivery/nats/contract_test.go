@@ -3,6 +3,7 @@ package nats_test
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	verifmocks "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/mocks"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
+	"git.stit.tech/stit-core/golibinfra/natskit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/natstest"
@@ -25,11 +27,31 @@ import (
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
 )
 
-// Контракт события регистрации между поставщиком и потребителем: что публикует регистрация user, то
-// подписка verification принимает и разбирает своей схемой — тот же subject, тот же ID. Outbox отдаёт
-// payload брокеру в JSON (outboxkit.Bus) — так его и доставляет тест.
-func TestUserRegisteredContract(t *testing.T) {
+// Контракт подписок verification с поставщиками: событие, которое публикует настоящий usecase поставщика, — в
+// JSON, как его отдаёт outbox (outboxkit.Bus), — доставляется подпискам Register и разбирается их схемой: тот же
+// subject, те же поля. Подписка, которой здесь не досталось события поставщика, — отказ: её схему ничто не сверило.
+func TestContracts(t *testing.T) {
 	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	events := slices.Concat(userRegistered(t, uc), passwordResetRequested(t, uc))
+	bus := natstest.New(natstest.WithStream("user"), natstest.WithStream("verification"))
+	lc := fxtest.NewLifecycle(t)
+	verifnats.Register(lc, bus, verifnats.NewHandler(uc, logkit.Nop()))
+	lc.RequireStart()
+	t.Cleanup(lc.RequireStop)
+
+	for _, e := range events {
+		require.NoError(t, bus.Deliver(context.Background(), e.Subject, e.Payload), e.Subject)
+	}
+	for _, filter := range bus.Subscriptions() {
+		require.True(t, slices.ContainsFunc(events, func(e outboxtest.Event) bool { return natskit.SubjectMatches(filter, e.Subject) }),
+			"subscription %s gets no event of a provider usecase here: nothing checks its schema", filter)
+	}
+}
+
+// userRegistered — событие регистрации user; подписка verification выпускает подтверждение адреса по ID из него.
+func userRegistered(t *testing.T, uc *mocks.MockUsecase) []outboxtest.Event {
+	t.Helper()
 	repo := usermocks.NewMockRepository(t)
 	repo.EXPECT().Insert(mock.Anything, mock.Anything).RunAndReturn(func(_ context.Context, u *user.User) error {
 		u.ID = "u1"
@@ -48,26 +70,14 @@ func TestUserRegisteredContract(t *testing.T) {
 	})
 	_, err := registration.Register(context.Background(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
 	require.NoError(t, err)
-
-	verification := mocks.NewMockUsecase(t)
-	verification.EXPECT().IssueEmailVerification(mock.Anything, "u1").Return(nil).Once()
-	bus := natstest.New(natstest.WithStream("user"), natstest.WithStream("verification"))
-	lc := fxtest.NewLifecycle(t)
-	verifnats.Register(lc, bus, verifnats.NewHandler(verification, logkit.Nop()))
-	lc.RequireStart()
-	t.Cleanup(lc.RequireStop)
-
-	events := published.All()
-	require.NotEmpty(t, events)
-	for _, e := range events {
-		require.NoError(t, bus.Deliver(context.Background(), e.Subject, e.Payload), e.Subject)
-	}
+	uc.EXPECT().IssueEmailVerification(mock.Anything, "u1").Return(nil).Once()
+	return published.All()
 }
 
-// Контракт своего события: что публикует запрос сброса verification, то её подписка принимает и разбирает
-// своей схемой — тот же subject, тот же ID запроса, учётная запись и время.
-func TestPasswordResetRequestedContract(t *testing.T) {
-	t.Parallel()
+// passwordResetRequested — своё событие запроса сброса; подписка verification выпускает ссылку по ID запроса,
+// учётной записи и времени из него.
+func passwordResetRequested(t *testing.T, uc *mocks.MockUsecase) []outboxtest.Event {
+	t.Helper()
 	users := verifmocks.NewMockUserReader(t)
 	users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil).Once()
 	limiter := verifmocks.NewMockResetLimiter(t)
@@ -82,14 +92,6 @@ func TestPasswordResetRequestedContract(t *testing.T) {
 	require.Len(t, events, 1)
 	var sent struct{ RequestID string }
 	require.NoError(t, json.Unmarshal(events[0].Payload, &sent))
-
-	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().IssuePasswordReset(mock.Anything, sent.RequestID, "u1", at).Return(nil).Once()
-	bus := natstest.New(natstest.WithStream("user"), natstest.WithStream("verification"))
-	lc := fxtest.NewLifecycle(t)
-	verifnats.Register(lc, bus, verifnats.NewHandler(uc, logkit.Nop()))
-	lc.RequireStart()
-	t.Cleanup(lc.RequireStop)
-
-	require.NoError(t, bus.Deliver(context.Background(), events[0].Subject, events[0].Payload), events[0].Subject)
+	return events
 }

@@ -45,7 +45,8 @@ paths:
 - Объявляют локальный payload-DTO (`delivery/nats/dto.go`) — прямой импорт домена-
   источника запрещён archtest. Регистрируются в `module/module.go` потребителя. Схему с поставщиком
   сверяет контракт-тест потребителя `delivery/nats/contract_test.go`: событие настоящего usecase
-  поставщика в JSON (как его отдаёт outbox) доставляется подпискам `Register` — subject и поля сходятся.
+  поставщика в JSON (как его отдаёт outbox) доставляется подпискам `Register` — subject и поля сходятся;
+  подписка без события поставщика в нём — отказ теста, `delivery/nats` без такого теста — отказ archtest.
 - **Идемпотентность обязательна** (at-least-once), и она — свойство схемы, не удачи:
   unique-индекс под natural key (`INSERT … ON CONFLICT`), либо `UPDATE … WHERE
   status='pending'`, либо idempotency-key из payload. Внешний эффект (письмо, вебхук) схема

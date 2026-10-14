@@ -69,10 +69,15 @@ blocked-by: —
     (`Rename`), `b15` — `TestModulesEmbedNoForeignTypes`, `n17p` — `TestDomainErrorTables`; обходы `x03a`–`x03d`
     (`fmt.Errorf` без `%w`, тип ошибки в `usecase.go`, тип в `errors.go` без `Unwrap`, `huma.Error404NotFound`
     из хендлера) — отказ
-- [ ] **AC3** — RADP-04, подписка без события поставщика — отказ: `n22p` (подписка на `user.events.updated`
+- [x] **AC3** — RADP-04, подписка без события поставщика — отказ: `n22p` (подписка на `user.events.updated`
   со схемой `UserID` вместо `ID`, без контракт-теста) на базе — `✓ check clean`, на ветке — отказ
   контракт-теста; домен с подпиской без `delivery/nats/contract_test.go`, который сверяет подписки
   `Register`, — отказ archtest. Проверка: та же; второе — ручная инъекция в worktree ветки → отказ
+  - Подтверждено: база — сводный прогон B `check=clean`; ветка (`exp/branch-s3.tsv`): `n22p` — `TestContracts`
+    («subscription user.events.updated gets no event of a provider usecase»); `x04a` (подписка
+    `user/delivery/nats`, подключена в `module/`, без `contract_test.go`) — `TestSubscriptionsHaveContractTest`;
+    `x04b` (`n22p` + сценарий поставщика `user.Update` в `TestContracts`) — отказ: подписка разбирает `UserID`
+    вместо `ID` поставщика и зовёт порт с пустым ID
 - [ ] **AC4** — RADP-09, операция под Security спрашивает policy: `n36-uc-no-policy` (`GET /api/users/emails`
   отдаёт адреса всех любому вошедшему) на базе — `✓ check clean`, на ветке — отказ archtest. Проверка: та же
 - [ ] **AC5** — Законные формы не краснеют: эталон и законные формы аудитора (`fp01`–`fp04`, `fp09`–`fp13`,
@@ -109,10 +114,16 @@ blocked-by: —
     `TestTrusted_ErrorsAreDeclared` — `calls` картой, ключи сверены с методами типа (`reflect`); rule
     `domain-architecture`, `architecture.md` (§ Контракт ошибок API — обещание в проверяемой форме и
     пределы, § Ports & adapters), `endpoint.md`, `port.md`, комментарий пакета archtest; `make check` → ✓
-- [ ] **S3** — RADP-04: контракт-тест verification — одна сверка: каждой подписке `Register` — событие
+- [x] **S3** — RADP-04: контракт-тест verification — одна сверка: каждой подписке `Register` — событие
   настоящего usecase поставщика; archtest — домен с подпиской держит такой `contract_test.go`. Проза
   - Проверка: n22p на ветке → отказ; инъекция подписки без контракт-теста → отказ; `make check` → ✓ ·
     Закрывает: AC3, AC6 · Зависит от: S1
+  - Сделано: `verification/delivery/nats/contract_test.go` — один `TestContracts`: сценарии поставщиков
+    (`userRegistered`, `passwordResetRequested`) публикуют события настоящими usecase и ставят ожидания
+    порта, события доставляются подпискам `Register`, каждая подписка `bus.Subscriptions()` получила событие
+    поставщика; `TestSubscriptionsHaveContractTest` (`delivery_test.go`): `delivery/nats` с подпиской держит
+    `contract_test.go` со сверкой `Subscriptions()`; `event.md` (тест и прежние версии subject'а),
+    `architecture.md` § События, rule `events-and-messaging`, комментарий пакета archtest; `make check` → ✓
 - [ ] **S4** — RADP-09: archtest — метод usecase за операцией под Security спрашивает policy
   (`uc.d.Policy.Can…`, в том числе через свои методы); `user.Me` спрашивает `CanGetByID` своего id. Проза
   - Проверка: n36 на ветке → отказ; `make check` → ✓ · Закрывает: AC4, AC6 · Зависит от: S1
@@ -144,11 +155,17 @@ blocked-by: —
   golibinfra в треке не трогаем.
 - Сверка `calls` с методами — картой «метод → вызов» и `reflect.TypeFor[…]().Methods()` в самом тесте, без
   общего хелпера: тест адаптера копируют с канона, сверка едет вместе с ним (`port.md`).
+- Контракт подписок — один тест со сценариями поставщиков, а не тест на подписку: сверке подписок нужны все
+  события сразу. Перечня прежних версий subject'а в коде нет — прежних подписок у verification нет, пустой
+  перечень был бы мёртвым кодом; его форму и место описывает `event.md` § Versioning.
+- Чужой файл: rule `events-and-messaging` (владелец волны 1 — трек identity, в волне 2 не назначен) — одна
+  строка: отказ теста и archtest у подписки без события поставщика, иначе правило молчало бы о машине.
 
 ## Где мы сейчас
-S1 (RADP-02) и S2 (RADP-03) сделаны: правила входа — `internal/archtest/delivery_test.go`, ошибок —
-`archtest_test.go` и `crossdomain_test.go`, сверка методов — в тестах адаптеров и `Trusted`. База `98e425e`: сводные прогоны
+S1 (RADP-02), S2 (RADP-03) и S3 (RADP-04) сделаны: правила входа и подписок — `internal/archtest/delivery_test.go`,
+ошибок — `archtest_test.go` и `crossdomain_test.go`, сверка методов — в тестах адаптеров и `Trusted`, контракт
+подписок — `TestContracts` verification. База `98e425e`: сводные прогоны
 кейсов трека — `✓ check clean`: A — `n12`, `n37`, `n38`, `n70`, `b14`; B — `n16p`, `n15`, `n34`, `n35`,
 `b15`, `n22p`, `n36`; C — `n18p` (`N/boundaries/exp/base.tsv`, логи — `exp/logs/batch-base-*.log`).
 Эксперименты ветки — в `N/wt-boundaries-exp` (снимок правил временным коммитом: раннер откатывает дерево к
-HEAD). Следующий шаг — S3 (RADP-04).
+HEAD). Следующий шаг — S4 (RADP-09).

@@ -3,6 +3,7 @@ package archtest
 import (
 	"go/ast"
 	"go/types"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -72,6 +73,35 @@ func TestInputsRegisterInDelivery(t *testing.T) {
 			}
 			return true
 		})
+	}
+}
+
+// TestSubscriptionsHaveContractTest: схему подписки со схемой поставщика сверяет контракт-тест потребителя
+// delivery/nats/contract_test.go — каждой подписке Register (bus.Subscriptions()) событие настоящего usecase
+// поставщика. Без него схема подписки держится только на её собственном тесте, а он пишет payload сам.
+func TestSubscriptionsHaveContractTest(t *testing.T) {
+	t.Parallel()
+	subscribers := map[string]bool{} // пакеты delivery/nats с подпиской
+	for _, f := range goFiles(t) {
+		if _, sub, ok := splitDomain(f.pkg); ok && sub == "delivery/nats" && !f.test && slices.Contains(f.imports, natskitPath) {
+			subscribers[f.pkg] = true
+		}
+	}
+	for pkg := range subscribers {
+		contract := pkg + "/contract_test.go"
+		if _, err := os.Stat(filepath.Join(repoRoot(t), contract)); err != nil {
+			t.Errorf("%s subscribes to events without %s: the contract test delivers every subscription an event of the provider's usecase (rule events-and-messaging)", pkg, contract)
+			continue
+		}
+		checked := false
+		ast.Inspect(parseGo(t, contract), func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			checked = checked || ok && sel.Sel.Name == "Subscriptions"
+			return !checked
+		})
+		if !checked {
+			t.Errorf("%s does not check the subscriptions of Register against the provider events it delivers (bus.Subscriptions()): a subscription without an event would pass", contract)
+		}
 	}
 }
 

@@ -202,7 +202,7 @@ JetStream доставляет at-least-once, поэтому идемпотен�
 
 - В домене-публикаторе: `usecase_test.go` с фейком `golibinfra/testkit/outboxtest.Recorder` в `UsecaseDeps.Events` и `pgtest.Identity{}` (`golibinfra/testkit/pgtest`) в `Tx` — payload по subject — `Recorder.Last(subject)`, лишних событий нет — `Count()`. Публикация мимо транзакции даёт `outboxkit.ErrNoTx`, как в проде.
 - Subscriber: unit-тест на handler-метод с моком `Usecase`-порта (добавь `delivery/nats` в `.mockery.yml` → `make gen`): happy path, error path (usecase вернул err → handler вернул err, сообщение уйдёт на redelivery) и дубль-доставка.
-- Контракт (у потребителя, `delivery/nats/contract_test.go`): событие, которое публикует настоящий usecase поставщика, — в JSON, как его отдаёт outbox, — доставь подпискам `Register` через `natstest` и жди вызов usecase-порта с нужным ID. Переименование поля или subject на одной стороне роняет его, даже если каждая сторона поправила свои тесты. Образец — `internal/domain/verification/delivery/nats/contract_test.go`.
+- Контракт (у потребителя, `delivery/nats/contract_test.go`, один тест `TestContracts`): сценарий поставщика — его настоящий usecase публикует событие в `outboxtest.Recorder` (JSON, как его отдаёт outbox) и ставит ожидание usecase-порта потребителя с ID из события; события всех сценариев доставь подпискам `Register` через `natstest`, затем каждая подписка (`bus.Subscriptions()`) должна получить событие поставщика — подписка без него роняет тест. Новая подписка — новый сценарий. Переименование поля или subject на одной стороне роняет его, даже если каждая сторона поправила свои тесты. `delivery/nats` с подпиской без такого теста — отказ archtest `TestSubscriptionsHaveContractTest`. Образец — `internal/domain/verification/delivery/nats/contract_test.go`.
 - Integration: если есть end-to-end — отдельный тест под `//go:build integration` с реальным NATS через testcontainers.
 
 ### 8. Верификация
@@ -231,7 +231,9 @@ make gen-check  # если добавил интерфейс из .mockery.yml
 новым durable, а старый subject ещё один релиз — прежним durable тем же обработчиком (локальный DTO
 без убранного поля читает обе версии): так доходят события, записанные в outbox до выкатки, и
 недоставленные прежнему консьюмеру. Следующий релиз снимает эту подписку, durable удаляет инфра
-(INFRA-HANDOFF). Не правь существующий тип события без breaking-version-bump.
+(INFRA-HANDOFF). Прежнюю версию поставщик уже не публикует: контракт-тест доставляет её подписке
+записанный payload прежней схемы, а сверка подписок пропускает её subject только перечнем прежних версий —
+с релизом, который снимет подписку. Не правь существующий тип события без breaking-version-bump.
 
 ## Anti-patterns
 
