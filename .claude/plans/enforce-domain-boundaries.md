@@ -215,8 +215,11 @@ blocked-by: —
     `f09c`, `x09c`, `fp20` — зелёные, `f09b` — archtest молчит (красный лишь тест кейса `TestEmails`: клиенту
     адреса по n36), `v09a`, `v09b`, `n36`, `x09a`, `x09b`, `x09d` — отказ; `architecture.md` § Usecase-канон —
     форма, которую читает правило; `make check` → ✓
-- [ ] **S12** — N5: перечень китов входа — в настройках сервиса `layout_settings_test.go`
+- [x] **S12** — N5: перечень китов входа — в настройках сервиса `layout_settings_test.go`
   - Проверка: `make check` → ✓ · Закрывает: AC8 · Зависит от: S6
+  - Сделано: `deliveryKits` — в `internal/archtest/layout_settings_test.go` (файл сервиса, `:(exclude)` в
+    `.template/paths`); `architecture.md` — место перечня, skill `upgrade` — файл настроек держит и `deliveryKits`;
+    строка аннотации тега — «Handoff»; `make check` → ✓
 - [ ] **S13** — N6, N7: `event.md` — строка prune контракт-теста потребителя события `user`, прежняя версия — сценарием
   - Проверка: `make check` → ✓ · Закрывает: AC8 · Зависит от: S6
 - [ ] **S14** — O1: `TestNewDomainRefusesOrRollsBack` берёт свободное имя домена
@@ -270,8 +273,19 @@ blocked-by: —
   ветка отказа была бы недостижимой — при пороге покрытия 100 трека gate красный cover-check; «policy или
   `identity.From`» аудитора слабее: проверка «вызывающий есть» без решения (`x09a`) прошла бы. Policy — поле
   `Policy` с методом `Can…` (канон `UsecaseDeps`).
+- N5: перечень китов входа — в файле сервиса `layout_settings_test.go`, по образцу `layout` (archkit держит корневые
+  библиотеки там же), а не в файле шаблона: кит, законно нужный входу форка, — строкой у себя, без конфликтов
+  `make template-update`. Цена — у форка после переноса обвязки пакет не соберётся без новой переменной; процедуру
+  «возьми образец и сведи» skill `upgrade` уже ведёт, строка — в аннотацию тега («Handoff»).
+- Чужие файлы круга: skill `upgrade` (волна 1 — трек lifecycle, в волне 2 не назначен) — строка о `deliveryKits`;
+  файлы трека gate в `main` (`newdomain_test.go`, `mutants.txt`) — O1–O3, минимально.
+
+## Handoff
+- В аннотацию `template/v1.2.0`, Breaking: `internal/archtest/layout_settings_test.go` (файл форка) держит и
+  `deliveryKits` — перечень китов входа; после `make template-update` пакет `internal/archtest` без неё не
+  собирается — скопировать из шаблона (`git show template/v1.2.0:internal/archtest/layout_settings_test.go`).
 
 ## Где мы сейчас
-S7–S11 (B1, N1–N4) и S19 (RHAR-08 п. 5) сделаны; у `fix(...)` круга — строка `Review:`. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
-Следующий шаг — S12 (N5); затем S13–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
+S7–S12 (B1, N1–N5) и S19 (RHAR-08 п. 5) сделаны; у `fix(...)` круга — строка `Review:`. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
+Следующий шаг — S13 (N6, N7); затем S14–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
 валидатора — `cases_val.py`), worktree экспериментов — `N/wt-boundaries-exp`.

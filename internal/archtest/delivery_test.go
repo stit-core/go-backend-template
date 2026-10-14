@@ -185,10 +185,6 @@ func kitCall(call *ast.CallExpr, byName map[string]string) (string, string) {
 	return byName[id.Name], sel.Sel.Name
 }
 
-// deliveryKits — пакеты golibinfra, которые видит вход: транспорт, лог и helpers без I/O. Хранилища, клиенты,
-// хэшер, аудит и метрики домена — за портами usecase.
-var deliveryKits = []string{"httpkit", "natskit", "grpckit", "logkit", "clockkit", "idkit", "ptrkit", "mapkit", "tzkit"}
-
 // TestDeliveryReachesUsecaseOnly: вход домена зовёт usecase своего домена портом пакета. Из корня он берёт
 // данные — сущности, DTO, ошибки, — а не порты, usecase, Trusted и их зависимости, и не держит хранилищ,
 // клиентов и драйверов: иначе операция прошла бы мимо usecase и его policy.

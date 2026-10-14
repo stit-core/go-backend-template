@@ -31,3 +31,8 @@ var layout = []archkit.Option{
 	// Известное нарушение — «нарушение из строки отказа → ID находки»; запись без нарушения — отказ.
 	archkit.WithKnownViolations(map[string]string{}),
 }
+
+// deliveryKits — пакеты golibinfra, которые видит вход домена (TestDeliveryReachesUsecaseOnly): транспорт, лог и
+// helpers без I/O. Хранилища, клиенты, хэшер, аудит и метрики домена — за портами usecase; кит, который законно
+// нужен входу сервиса, — строкой здесь.
+var deliveryKits = []string{"httpkit", "natskit", "grpckit", "logkit", "clockkit", "idkit", "ptrkit", "mapkit", "tzkit"}
