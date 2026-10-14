@@ -28,7 +28,8 @@
    скилла `de-template`): кит, которого нет в `docs/stack/dependencies.md § golibinfra kits` (аудит —
    `auditpg.Module` в `cmd/api/main.go` и `auditpg.Migrations` в `cmd/migrate/sources/sources.go`), —
    вон из графа и из источников миграций, импорты — `go mod tidy`.
-4. **Генерация** — блоки удалённых доменов в `sqlc.yaml` и `.mockery.yml`.
+4. **Генерация и мутации** — блоки удалённых доменов в `sqlc.yaml` и `.mockery.yml`; в спецификации мутаций
+   `scripts/tools/mutants.txt` — блоки удалённых путей и строк подключения (`make mutate A=--check` их называет).
 5. **Миграции** — свои — номерами подряд с `0001` (`git mv` с сохранением порядка: migrations-check
    ждёт нумерацию с 0001, прод-БД у проекта ещё нет). Расширение `pgcrypto` и функция `set_updated_at()`
    из `0001_users` уходят с ней: своя миграция, которой они нужны, заводит их сама.
@@ -40,7 +41,7 @@
    `archkit.WithUncheckedPackages("internal/platform/identity")` убери, если корень ни одного своего
    домена не берёт `internal/platform/identity` (сам или через `pkg/`): лишняя запись — `TestLayout`
    красный с подсказкой `remove it`.
-8. `make gen` → `make check` → `✓ check clean`.
+8. `make gen` → `make check` → `✓ check clean`; `make mutate A=--check` → OK.
 
 ## Что остаётся
 

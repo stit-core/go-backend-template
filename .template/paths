@@ -8,6 +8,7 @@ CLAUDE.md
 :(exclude).claude/skills/stack-deep-dive/state
 Makefile
 scripts
+:(exclude)scripts/tools/mutants.txt
 Dockerfile
 Dockerfile.migrate
 .dockerignore

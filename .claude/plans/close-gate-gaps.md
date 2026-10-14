@@ -259,8 +259,11 @@ blocked-by: —
   - Проверка: `make mutate A=--check` → OK · Закрывает: AC13 · Зависит от: S14
   - Сделано: патч `N/gate/mutants-after-identity.patch`; V14 — под `376d2bb` (лимит считает адрес): мутация
     отдаёт лимиту учётную запись; `make mutate A=--check` → якоря 356 — по одному месту; `make check` → ✓
-- [ ] **S25** — `.template/paths` и prune: спецификация мутаций — код форка
+- [x] **S25** — `.template/paths` и prune: спецификация мутаций — код форка
   - Проверка: `TestTemplatePaths` → PASS · Закрывает: AC13 · Зависит от: S14
+  - Сделано: `:(exclude)scripts/tools/mutants.txt` в `.template/paths`; prune — блоки удалённых путей и строк
+    подключения из спецификации, итог — `make mutate A=--check` → OK; rule `tests-pipeline` § Мутации;
+    `make check` → ✓
 - [ ] **S26** — Флак `TestReleaseBuildForwardsSSHAgent`: заглушка пишется без чужого fork
   - Проверка: тест ×N под нагрузкой → PASS · Закрывает: AC13 · Зависит от: S14
 - [ ] **S27** — Полный `make mutate` на итоге ветки и гейт
@@ -290,9 +293,9 @@ blocked-by: —
   считает адрес, мутация — учётную запись.
 - Спецификация мутаций — рядом с раннером, в `scripts/tools/`: строка «=» и снятый блок ослабляют проверку,
   и правку `scripts/`, после которой проверяется меньше, CLAUDE.md уже отдаёт «сначала спросить» — как
-  список непокрываемого `cover.sh`. Описывает она код сервиса, а `.template/paths` переносит `scripts`
-  в форк целиком: строка `:(exclude)scripts/tools/mutants.txt` (как у `layout_settings_test.go`) — файл
-  трека lifecycle, в отчёт дирижёру.
+  список непокрываемого `cover.sh`. Описывает она код сервиса — форк получает её затравкой:
+  `:(exclude)scripts/tools/mutants.txt` в `.template/paths` (как у `layout_settings_test.go`) и шаг prune
+  (`init-service/references/prune.md`) — файлы трека lifecycle (слит), правки минимальные (S25).
 - RCOD-06: имена из шаблонов — надмножество (и поля таблиц тестов: `status`, `code`), лишний отказ дешевле
   полусостояния; занятая таблица — по последнему `CREATE`/`DROP TABLE` в миграциях (созданная и
   удалённая, как `refresh_sessions`, свободна); любой иной сбой после первой правки — откат.
@@ -330,5 +333,5 @@ blocked-by: —
 
 ## Где мы сейчас
 S1–S13 приняты по существу, валидатор — FAIL на `829481c` (`N/validation-gate.md`): круг фиксов S14–S27. Ветка
-перенесена на `main` `98e425e` (S14), B1–B3, список непокрываемого и `TestTestsAssert`, группа процессов стадии, `--strict`, migrations-check, forward-only закрыты (S15–S23), спецификация — под код `main` (S24). Следующее: S25 —
-`.template/paths` и prune.
+перенесена на `main` `98e425e` (S14); B1–B3 и неблокирующие закрыты (S15–S23); спецификация — под код `main`, она
+— код форка (S24, S25). Следующее: S26 — флак `TestReleaseBuildForwardsSSHAgent`.
