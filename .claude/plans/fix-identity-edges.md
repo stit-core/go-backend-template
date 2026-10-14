@@ -124,7 +124,8 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     `make check` → `✓ check clean`. Фикс валидации B2: пробелы Unicode по краям разбор оставляет в адресе, а
     guard и поиск их снимают — `validEmail` ещё сверяет адрес с `strings.TrimSpace`; RED → GREEN кейсов
     `TestNewUser`, сидов `FuzzNewUser` с U+00A0 и U+2003, `TestRun_RejectsAdminOutsideUserRules`
-    (`N/identity/b2-red-*.log`); фраза rule `domain-architecture` — о том же
+    (`N/identity/b2-red-*.log`); фраза rule `domain-architecture` — о том же. Пробелы Unicode в тестах `user` и
+    `seed-admin` — escape-записью (`\u00a0`), а не невидимыми символами (перепроверка)
 - [x] **S2** — name-max-length: предел 200 символов в сущности и `maxLength` в DTO, `make gen`; INFRA-HANDOFF
   - Проверка: RED → GREEN тестов `user`; `make gen-check`; E6 → 422 · Закрывает: AC2 · Зависит от: —
   - Сделано: `validName` — не пустое после обрезки, до 200 символов (`maxNameLen`), без NUL, как скелет;
@@ -290,5 +291,5 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 ## Где мы сейчас
 S1–S14 закрыты; ветка перенесена на `main` с треком lifecycle (S14 — `7d54c44`). Первый круг фиксов
 (B1–B3, N1–N7) — коммитами `7d54c44..003f08e`, подтверждён. Второй круг (`N/validation-identity.md`
-§ Перепроверка 003f08e): B4, K12, K13, SD2 и N8 закрыты. Следующее: escape-запись пробелов в тестах, затем
-`make e2e` на итоге и перепроверка.
+§ Перепроверка 003f08e) закрыт: B4, K12, K13, SD2, N8, escape-запись пробелов в тестах, следствие часов
+в решении N1. Следующее — перепроверка валидатором, затем ревью и слияние дирижёром.

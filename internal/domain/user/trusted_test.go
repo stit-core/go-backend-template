@@ -50,7 +50,7 @@ func TestTrusted_Lookup(t *testing.T) {
 // Поиск по адресу и guard входа считают один адрес одним субъектом: ключ поиска — ключ guard'а
 // (bruteforcekit.NormalizeKey) без нижнего регистра, его снимает LOWER(email) запроса.
 func FuzzTrusted_LookupByEmail(f *testing.F) {
-	for _, seed := range []string{"a@b.com", " a@b.com", "A@B.com\t", " a@b.com\n", "a b@c.d", ""} {
+	for _, seed := range []string{"a@b.com", " a@b.com", "A@B.com\t", "\u00a0a@b.com\n", "a b@c.d", ""} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, email string) {

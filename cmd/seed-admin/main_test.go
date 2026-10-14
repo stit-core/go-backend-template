@@ -79,7 +79,7 @@ func TestRun_RejectsAdminOutsideUserRules(t *testing.T) {
 	for _, tc := range []struct{ name, email, adminName string }{
 		{"space before the address", " admin@example.com", "Admin"},
 		{"tab after the address", "admin@example.com\t", "Admin"},
-		{"no-break space after the address", "admin@example.com ", "Admin"},
+		{"no-break space after the address", "admin@example.com\u00a0", "Admin"},
 		{"address with a display name", "Admin <admin@example.com>", "Admin"},
 		{"not an address", "not an address", "Admin"},
 		{"name over 200 characters", "admin@example.com", strings.Repeat("я", 201)},
