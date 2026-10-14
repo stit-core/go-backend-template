@@ -228,7 +228,7 @@ test-bench: ## Бенчмарки
 # Силу тестов держат мутации, а не процент покрытия: правки «было → стало» scripts/tools/mutants.txt по
 # одной в своём worktree .cache/mutate/wt по HEAD, итог — выжившие списком (scripts/tools/mutate.py, rule
 # tests-pipeline).
-mutate: ## Мутационный прогон вне гейта, нужен Docker (A="<id> …" — эти мутации заново, A=--check — только якоря)
+mutate: ## Мутационный прогон вне гейта, нужен Docker (A="<id> …" — эти мутации заново, A=--check — только якоря, A=--strict — устаревший якорь тоже код 1)
 	@python3 -I scripts/tools/mutate.py $(A)
 
 # Покрытие — профиль одного прогона юнит + integration (make test-int) по internal/ и pkg/ без

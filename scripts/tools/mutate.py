@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make mutate — мутационный прогон по scripts/tools/mutants.txt (формат — шапка файла).
 
-Использование: make mutate [A="<id> …" | A=--check]
+Использование: make mutate [A="[--strict] <id> …" | A=--check]
 
 Мутации идут по HEAD в своём worktree .cache/mutate/wt: дерево разработчика прогон не трогает, незакоммиченное в
 прогон не входит. Сначала базовый прогон тестов: красный — отказ (мутации без смысла), а кеш go test после него
@@ -12,9 +12,10 @@
 держит гейт.
 
 Итог — убитые по стадиям и выжившие: известные эквивалентные (строка «=» в спецификации) и новые; ещё — мутации с
-устаревшим якорем и несобравшиеся (их правят в спецификации). Код 1 — есть новые выжившие или таймауты. Результаты —
-.cache/mutate/<HEAD>.tsv: оборванный прогон на том же коммите продолжается с места. A="<id> …" — эти мутации
-заново, A=--check — только якоря спецификации рабочего дерева.
+устаревшим якорем и несобравшиеся (их правят в спецификации). Код 1 — есть новые выжившие или таймауты; с --strict —
+ещё устаревшие якоря и несобравшиеся правки: спецификация, разошедшаяся с кодом, меряет меньше (шаг релиза).
+Результаты — .cache/mutate/<HEAD>.tsv: оборванный прогон на том же коммите продолжается с места. A="<id> …" — эти
+мутации заново, A=--check — только якоря спецификации рабочего дерева.
 """
 import fcntl
 import os
@@ -179,6 +180,8 @@ def mutate(m, log):
 
 
 def main(args):
+    strict = "--strict" in args
+    args = [a for a in args if a != "--strict"]
     if args == ["--check"]:
         mutants = parse((ROOT / SPEC).read_text())
         bad = [(m["id"], stale(m, ROOT)) for m in mutants]
@@ -241,15 +244,16 @@ def main(args):
         finally:
             reset(head)
         dt = int(time.time() - t0)
+        detail = " ".join(detail.split())
         (logs / f"{m['id']}.log").write_text("\n\n".join(log))
         done[m["id"]] = (verdict, detail)
         with results.open("a") as f:
-            f.write("\t".join([m["id"], verdict, f"{dt}s", detail.replace("\t", " ").replace("\n", " ")]) + "\n")
+            f.write("\t".join([m["id"], verdict, f"{dt}s", detail]) + "\n")
         print(f"[{k}/{len(todo)}] {m['id']} {m['layer']} — {verdict} {dt}s {detail[:120]}".rstrip(), flush=True)
-    return summary(selected, done, head)
+    return summary(selected, done, head, strict)
 
 
-def summary(selected, done, head):
+def summary(selected, done, head, strict):
     groups = {}
     for m in selected:
         verdict = done.get(m["id"], ("", ""))[0]
@@ -276,10 +280,12 @@ def summary(selected, done, head):
             for m in groups[key]:
                 detail = done[m["id"]][1]
                 print(f"  {m['id']} {m['layer']} — {m['note']}" + (f" [{detail}]" if detail else ""))
-    bad = len(groups.get("new", [])) + len(groups.get("timeout", []))
+    counts = {key: len(groups.get(key, [])) for key in ("new", "timeout", "stale", "invalid")}
+    bad = counts["new"] + counts["timeout"] + (counts["stale"] + counts["invalid"] if strict else 0)
     if bad:
-        fail(f"новых выживших — {len(groups.get('new', []))}, таймаутов — {len(groups.get('timeout', []))}")
-    print("OK: новых выживших нет")
+        fail(f"новых выживших — {counts['new']}, таймаутов — {counts['timeout']}"
+             + (f", устаревших якорей — {counts['stale']}, несобравшихся — {counts['invalid']} (--strict)" if strict else ""))
+    print("OK: новых выживших нет" + (", спецификация совпадает с кодом" if strict else ""))
     return 0
 
 
