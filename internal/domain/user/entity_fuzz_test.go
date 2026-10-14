@@ -20,6 +20,8 @@ func FuzzNewUser(f *testing.F) {
 	f.Add("ok@example.com", "h", "a\x00b", "client")
 	f.Add(" ok@example.com", "h", "n", "client")
 	f.Add("ok@example.com\t", "h", "n", "client")
+	f.Add("ok@example.com ", "h", "n", "client")
+	f.Add(" ok@example.com", "h", "n", "client")
 	f.Add("Bob <ok@example.com>", "h", "n", "client")
 	f.Add("ok@example.com", "h", " ", "client")
 	f.Add("ok@example.com", "h", strings.Repeat("я", 201), "client")
@@ -29,7 +31,7 @@ func FuzzNewUser(f *testing.F) {
 		u, err := user.NewUser(email, ph, name, role)
 
 		addr, mailErr := mail.ParseAddress(email)
-		validEmail := mailErr == nil && addr.Name == "" && addr.Address == email && len(email) <= 254
+		validEmail := mailErr == nil && addr.Name == "" && addr.Address == email && strings.TrimSpace(email) == email && len(email) <= 254
 		validName := strings.TrimSpace(name) != "" && utf8.RuneCountInString(name) <= 200 && !strings.ContainsRune(name, 0)
 		validRole := role == identity.RoleAdmin || role == identity.RoleClient || role == identity.RoleUnknown
 

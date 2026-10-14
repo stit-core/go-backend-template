@@ -13,12 +13,13 @@ import (
 // maxEmailLen — предел адреса по RFC 5321 в байтах: длиннее не учтёт guard входа, и вход не состоится.
 const maxEmailLen = 254
 
-// validEmail — адрес ровно в той форме, в какую его разбирает mail.ParseAddress: без имени, скобок,
-// комментария и пробелов по краям. Их отбрасывают guard входа и поиск по адресу — с ними у одного ящика
-// было бы несколько учётных записей; регистр снимает индекс LOWER(email).
+// validEmail — адрес ровно в той форме, в какую его разбирает mail.ParseAddress (без имени, скобок и
+// комментария), и без пробелов по краям — пробелы Unicode разбор оставляет в адресе. Всё это отбрасывают guard
+// входа и поиск по адресу: с ними у одного ящика было бы несколько учётных записей; регистр снимает LOWER(email).
 func validEmail(email string) bool {
 	addr, err := mail.ParseAddress(email)
-	return err == nil && addr.Name == "" && addr.Address == email && len(email) <= maxEmailLen
+	return err == nil && addr.Name == "" && addr.Address == email && strings.TrimSpace(email) == email &&
+		len(email) <= maxEmailLen
 }
 
 // emailKey — адрес для поиска: без пробелов по краям, как ключ guard'а входа (bruteforcekit.NormalizeKey).
@@ -27,7 +28,8 @@ func emailKey(email string) string { return strings.TrimSpace(email) }
 // maxNameLen — предел имени в символах; его же держит maxLength полей name в delivery/http.
 const maxNameLen = 200
 
-// validName: NUL Postgres в TEXT не хранит — имя с ним упало бы на записи ошибкой драйвера (500).
+// validName — не пустое после обрезки пробелов (minLength схемы пробелы не ловит), до maxNameLen символов и без
+// NUL: его Postgres в TEXT не хранит, запись упала бы ошибкой драйвера (500).
 func validName(name string) bool {
 	return strings.TrimSpace(name) != "" && utf8.RuneCountInString(name) <= maxNameLen && !strings.ContainsRune(name, 0)
 }

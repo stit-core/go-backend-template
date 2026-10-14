@@ -30,6 +30,9 @@ func TestNewUser(t *testing.T) {
 		{"space before the address", " a@b.com", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"space after the address", "a@b.com ", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"tab before the address", "\ta@b.com", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
+		// Пробел Unicode разбор оставляет в адресе, а guard входа и поиск по адресу его отбрасывают.
+		{"no-break space after the address", "a@b.com ", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
+		{"ideographic space before the address", "　a@b.com", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"display name", "Bob <bob@example.com>", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"angle brackets", "<bob@example.com>", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"comment", "bob@example.com (comment)", "h", "A", identity.RoleClient, user.ErrInvalidEmail},

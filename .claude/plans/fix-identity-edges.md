@@ -42,7 +42,8 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   fuzz-свойства сущности и поиска → PASS
   - Подтверждено: E2 на ветке → 201, 422, 422, 422, 409, учётная запись ящика одна, письмо одно, вход адресом с
     пробелом — 200 в ту же учётную запись (`N/identity/s1-e2.log`); `FuzzNewUser`, `FuzzTrusted_LookupByEmail`
-    по 15 с → PASS
+    по 15 с → PASS; пробелы Unicode по краям (U+00A0, U+2003, U+3000, U+0085, U+2028) сущность отвергает, и
+    `seed-admin` с ними — код 1 (фикс B2, `N/identity/b2-*.log`); `FuzzNewUser` с их сидами 20 с → PASS
 - [x] **AC2** — Имя ограничено: регистрация и правка с именем длиннее 200 символов — 422 `VALIDATION_FAILED`
   (`maxLength` в `openapi.json`); сущность отвергает имя длиннее 200 символов, пустое после обрезки пробелов
   и с NUL, как скелет `make new-domain`. На базе (E6) имя в 100 000 символов — 201. Проверка: E6 на ветке →
@@ -118,13 +119,17 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     краям) в `Trusted.LookupByEmail`, `seed-admin` проверяет адрес и имя `user.NewUser`; RED на базе — кейсы
     `TestNewUser`, fuzz-сиды, `TestSessions/a_padded_address_is_the_same_mailbox`,
     `TestRun_RejectsAddressOutsideUserRules` (`N/identity/s1-red-*.log`), GREEN; блок в накопителе;
-    `make check` → `✓ check clean`
+    `make check` → `✓ check clean`. Фикс валидации B2: пробелы Unicode по краям разбор оставляет в адресе, а
+    guard и поиск их снимают — `validEmail` ещё сверяет адрес с `strings.TrimSpace`; RED → GREEN кейсов
+    `TestNewUser`, сидов `FuzzNewUser` с U+00A0 и U+2003, `TestRun_RejectsAdminOutsideUserRules`
+    (`N/identity/b2-red-*.log`); фраза rule `domain-architecture` — о том же
 - [x] **S2** — name-max-length: предел 200 символов в сущности и `maxLength` в DTO, `make gen`; INFRA-HANDOFF
   - Проверка: RED → GREEN тестов `user`; `make gen-check`; E6 → 422 · Закрывает: AC2 · Зависит от: —
   - Сделано: `validName` — не пустое после обрезки, до 200 символов (`maxNameLen`), без NUL, как скелет;
     `maxLength:"200"` у name в DTO, `make gen`; RED на базе — кейсы `TestNewUser`, `TestUser_Rename`, сиды
     fuzz, `TestRegister_NameTooLong`, `TestUpdate_InvalidBody`, имя `seed-admin` (`N/identity/s2-red-*.log`),
-    GREEN; блок в накопителе; `make check` → `✓ check clean`
+    GREEN; блок в накопителе; `make check` → `✓ check clean`. Комментарий `validName` называет все три правила
+    (N4 валидации)
 - [x] **S3** — login-hasher-failure: сбой `Verify` — ошибка сервера, неверный пароль — `!ok` и предел
   - Проверка: RED → GREEN `TestLogin_HasherFailure`; integration «нечитаемый хэш» → PASS · Закрывает: AC3
   - Сделано: `login` — `switch` по итогу `Verify`: `ErrPasswordTooLong` и `!ok` — неверный пароль, прочая ошибка —
@@ -243,4 +248,5 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 
 ## Где мы сейчас
 S1–S14 закрыты; ветка перенесена на `main` с треком lifecycle. Идёт круг фиксов по отчёту валидатора
-(`N/validation-identity.md`): B1 закрыт. Следующее: B2, B3, N1–N7, затем перепроверка валидатором.
+(`N/validation-identity.md`): B1, B2 и N4 закрыты. Следующее: B3, N1–N3, N5–N7, затем перепроверка
+валидатором.
