@@ -61,11 +61,14 @@ fmt-check: ## Проверка форматирования без мутаци�
 # Makefile: -f вызывающего в под-make не переходит, а GNUmakefile make прочёл бы первым.
 GATE = $(MAKE) -f Makefile --no-print-directory PKG= VERBOSE= FORMAT=
 
-# Цели и список makefile'ов задаёт сам make. MAKECMDGOALS из командной строки, окружения или makefile'а,
-# прочитанного раньше, выключил бы отказы гейта ниже (они включаются по цели), MAKEFILE_LIST из командной
-# строки — сверку makefile'ов: с такими переменными Makefile не читается ни для какой цели.
+# Цели, список makefile'ов и переменные командной строки под-make задаёт сам make. MAKECMDGOALS из командной
+# строки, окружения или makefile'а, прочитанного раньше, выключил бы отказы гейта ниже (они включаются по цели),
+# MAKEFILE_LIST из командной строки — сверку makefile'ов, MAKEOVERRIDES не от make дошёл бы до под-make шагов
+# их переменными командной строки (SHELL=/bin/true — шаг не исполняется): с такими переменными Makefile не
+# читается ни для какой цели.
 override gate_forged := $(if $(filter-out default undefined,$(origin MAKECMDGOALS)),MAKECMDGOALS) \
-	$(if $(filter command% environment% override,$(origin MAKEFILE_LIST)),MAKEFILE_LIST)
+	$(if $(filter command% environment% override,$(origin MAKEFILE_LIST)),MAKEFILE_LIST) \
+	$(if $(filter-out default undefined,$(origin MAKEOVERRIDES)),MAKEOVERRIDES)
 ifneq (,$(strip $(gate_forged)))
 $(error make не запускается с переменной $(strip $(gate_forged)) — её задаёт сам make)
 endif
@@ -89,9 +92,11 @@ endif
 
 # Второй makefile (make -f Makefile -f extra.mk, MAKEFILES) подменил бы гейт. Рецепт check — правило «::»:
 # чужое «check:» — ошибка разбора, чужое «check::» идёт после этого, а его первая строка повторяет отказы,
-# когда прочитаны все makefile'ы, — до первого шага гейта и при любых флагах make.
+# когда прочитаны все makefile'ы, — до первого шага гейта и при любых флагах make. Профиль покрытия —
+# только этого прогона: coverage.out прежнего снят до шагов, и cover-check без test-int не читает чужой.
 check:: ## Канонический gate (pre-push) по всему дереву; состав — CLAUDE.md § Команды
 	$(gate_refuse)
+	@rm -f coverage.out
 	@echo "→ make fmt-check"
 	@$(GATE) fmt-check
 	@echo "→ go vet -tags=integration ./..."

@@ -60,13 +60,14 @@ func shellForgeries(t *testing.T) map[string][]string {
 // TestMakeCheckCannotBeForged: флаги make, переменные вызывающего (командная строка и окружение) и лишний
 // makefile (check: или check::, до или после Makefile, MAKEFILES) не подделывают «✓ check clean». Makefile
 // под подделку (переприсваивает MAKEFILE_LIST) обходит любую сверку внутри make — это правка гейта, вердикт
-// для remote — pre-push. Инструменты гейта здесь — заглушки: gofumpt роняет первый шаг, а go отвечает только
-// на go env. Форма, прошедшая самозащиту, с -i дошла бы до test-int, а он снова запустил бы этот тест; без
-// go шаги падают сразу, и подделка видна за секунды.
+// для remote — pre-push. Makefile — копия репо в песочнице: гейт снимает coverage.out, а test-int вокруг
+// этого теста пишет его в дерево репо. Инструменты гейта здесь — заглушки: gofumpt роняет первый шаг, а go
+// отвечает только на go env. Форма, прошедшая самозащиту, с -i дошла бы до test-int, а он снова запустил бы
+// этот тест; без go шаги падают сразу, и подделка видна за секунды.
 func TestMakeCheckCannotBeForged(t *testing.T) {
 	t.Parallel()
-	root := repoRoot(t)
-	require.FileExists(t, filepath.Join(root, "Makefile")) // make читает его сам: без этого кеш go test не видит правок
+	repo := t.TempDir()
+	writeFiles(t, repo, readFiles(t, repoRoot(t), "Makefile"))
 	bin, fakes := stubTools(t, "gofumpt", "golangci-lint", "sqlc", "mockery"), t.TempDir()
 	shell := shellForgeries(t)
 	writeFiles(t, fakes, map[string]string{
@@ -125,6 +126,10 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 		{name: "MAKEFILE_LIST on the command line", args: []string{"-f", "Makefile", "-f", double, "check", "MAKEFILE_LIST=Makefile"}},
 		{name: "-i behind a goal alias from --eval", args: []string{"-i", "--eval", "x: check", "x"}},
 		{name: "-k behind a goal alias and a second makefile", args: []string{"-k", "-f", "Makefile", "-f", double, "--eval", "x: check", "x"}},
+		// MAKEOVERRIDES make передаёт под-make шагов переменными их командной строки.
+		{name: "MAKEOVERRIDES in env", args: []string{"check"}, env: []string{"MAKEOVERRIDES=SHELL=/bin/true"}},
+		{name: "MAKEOVERRIDES in env and a variable on the command line", args: []string{"check", "PKG=./pkg/..."}, env: []string{"MAKEOVERRIDES=SHELL=/bin/true"}},
+		{name: "MAKEOVERRIDES on the command line", args: []string{"check", "MAKEOVERRIDES=SHELL=/bin/true"}},
 
 		{name: "-o of a step", args: []string{"-o", "fmt-check", "-o", "lint", "check"}, gate: true},
 		{name: "two goals", args: []string{"check", "lint"}, gate: true},
@@ -137,7 +142,7 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			cmd := exec.CommandContext(t.Context(), "make", tc.args...)
-			cmd.Dir = root
+			cmd.Dir = repo
 			cmd.Env = callerEnv(append([]string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, tc.env...)...)
 			data, err := cmd.CombinedOutput()
 			out := string(data)
@@ -151,6 +156,33 @@ func TestMakeCheckCannotBeForged(t *testing.T) {
 			require.NotContains(t, out, "→ go vet", "make %v went past the failed step", tc.args)
 		})
 	}
+}
+
+// TestCheckCoversItsOwnRun: cover-check гейта читает профиль своего test-int — coverage.out прежнего прогона
+// гейт снимает до шагов, и test-int, который профиля не написал, чужим не прикрыть. Шаги здесь — зелёные
+// заглушки, cover.sh — настоящий.
+func TestCheckCoversItsOwnRun(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	repo, bin := t.TempDir(), t.TempDir()
+	tools, err := os.ReadDir(filepath.Join(root, "scripts", "tools"))
+	require.NoError(t, err)
+	files := map[string]string{"coverage.out": "mode: atomic\nprofile of an earlier run\n"}
+	for _, tool := range tools {
+		files["scripts/tools/"+tool.Name()] = "exit 0\n"
+	}
+	ok, err := exec.LookPath("true")
+	require.NoError(t, err)
+	for _, tool := range []string{"gofumpt", "go", "sqlc", "mockery"} {
+		require.NoError(t, os.Symlink(ok, filepath.Join(bin, tool)))
+	}
+	writeFiles(t, repo, union(files, readFiles(t, root, "Makefile", "scripts/tools/cover.sh")))
+	git(t, repo, "init", "-q")
+
+	out, err := runEnv(t, repo, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, "make", "check")
+	require.Error(t, err, "the gate must fail without a profile of its own test-int:\n%s", out)
+	require.Contains(t, out, "FAIL: нет профиля coverage.out", "cover-check read the profile of an earlier run:\n%s", out)
+	require.NotContains(t, out, "✓ check clean")
 }
 
 // TestPrePushGatesPushedCommit: pre-push гоняет make check верхнего коммита пушимого ref'а в свежем

@@ -117,6 +117,12 @@ blocked-by: —
     у аудитора — он брал `unshare`); `altconfig*.sh` — `.golangci.toml` и `.json` не заслоняют `.yml`;
     `gen-roundtrip.sh` — три пути после `make gen` без `git add` → OK
 
+- [ ] **AC12** — Круг фиксов валидатора (`N/validation-gate.md`): формы B1 (`MAKEOVERRIDES`), B2 (`make mutate` в
+  дереве разработчика), B3 (`.mockery.yaml`) не проходят; неблокирующие из задания дирижёра закрыты или отклонены
+  в «Решениях». Проверка: воспроизведения валидатора на ветке → отказ или дерево чистое; тесты archtest → PASS
+- [ ] **AC13** — Ветка на `main` (`98e425e`, слиты lifecycle и identity): спецификация мутаций — под код `main`,
+  `.template/paths` и prune держат её кодом форка, флака `TestReleaseBuildForwardsSSHAgent` нет; полный
+  `make mutate` → код 0. Проверка: `make check` → ✓; полный прогон под замком → код 0
 ## Шаги
 - [x] **S1** — Самозащита `make check` не зависит от `MAKECMDGOALS`: `MAKECMDGOALS` и `MAKEFILE_LIST`
   вызывающего — отказ make, отказы гейта — при разборе и первой строкой рецепта; pre-push снимает `MAKE*`
@@ -197,6 +203,41 @@ blocked-by: —
     временное слияние с `nine/identity` `b4fa321` с патчем спецификации: 356 мутаций, убиты 343, эквивалентные
     10, новые — K12, K13, SD2, код 1 (`s13m-mutate-8.log`, `mutate-merge/`); кейсы enforcement — AC11;
     `make check` → ✓; `N/wt-gate-{x,y,m,z}` сняты
+- [x] **S14** — Перенос на `main` (`98e425e`)
+  - Проверка: `make check` → ✓ · Закрывает: AC13 · Зависит от: S1–S13
+  - Сделано: rebase, конфликт — комментарий пакета archtest (обе стороны); новые проверки гейта видят код
+    identity — `make check` → ✓, 795/795
+- [x] **S15** — B1: `MAKEOVERRIDES` не от make — отказ make; `coverage.out` снят в начале `check::`
+  - Проверка: три формы `MAKEOVERRIDES` и `TestCheckCoversItsOwnRun` — RED на Makefile до правки, GREEN после ·
+    Закрывает: AC12 · Зависит от: S14
+  - Сделано: `gate_forged` — и `MAKEOVERRIDES` (законное происхождение — `default`); `rm -f coverage.out` первой
+    строкой шагов; `TestMakeCheckCannotBeForged` — в песочнице с копией Makefile (гейт снимает `coverage.out`,
+    а test-int вокруг теста пишет его в дерево репо); `docs/contributing.md`; `make check` → ✓
+- [ ] **S16** — B2: `make mutate` правит свой worktree `.cache/mutate/wt`, а не дерево разработчика
+  - Проверка: SIGTERM, SIGHUP, SIGKILL посреди мутации → дерево разработчика чистое, повтор — с места ·
+    Закрывает: AC12 · Зависит от: S14
+- [ ] **S17** — B3: mockery — только `--config .mockery.yml` (gen и gen-check)
+  - Проверка: `.mockery.yaml` рядом — gen-check FAIL, случай теста · Закрывает: AC12 · Зависит от: S14
+- [ ] **S18** — Список непокрываемого `cover.sh`: запись — ровно один свой блок, пустой текст — отказ
+  - Проверка: случаи `TestCoverCheck` · Закрывает: AC12 · Зависит от: S14
+- [ ] **S19** — `TestTestsAssert` вне доменов: засчитывается хелпер, который утверждает, а не любой вызов с `t`
+  - Проверка: `fmt.Println(t)` → отказ · Закрывает: AC12 · Зависит от: S14
+- [ ] **S20** — `make mutate`: таймаут и обрыв снимают группу процессов стадии с тестовыми бинарями
+  - Проверка: таймаут стадии → процессов стадии нет · Закрывает: AC12 · Зависит от: S16
+- [ ] **S21** — `make mutate A=--strict`: устаревший якорь и несобираемая правка — код 1 (шаг `/release`)
+  - Проверка: песочница → код 1 · Закрывает: AC12 · Зависит от: S16
+- [ ] **S22** — migrations-check: `CALL` и `SELECT` — код без маркера, тело `$$…$$` — не эффект
+  - Проверка: случаи `TestMigrationsCheck` · Закрывает: AC12 · Зависит от: S14
+- [ ] **S23** — Forward-only: `Makefile`, `migrations-check.sh`
+  - Проверка: текст — условие, а не история · Закрывает: AC12 · Зависит от: S14
+- [ ] **S24** — Спецификация мутаций под код `main`: V12, V17, VN3, VN6 сняты, V14 — по субъекту
+  - Проверка: `make mutate A=--check` → OK · Закрывает: AC13 · Зависит от: S14
+- [ ] **S25** — `.template/paths` и prune: спецификация мутаций — код форка
+  - Проверка: `TestTemplatePaths` → PASS · Закрывает: AC13 · Зависит от: S14
+- [ ] **S26** — Флак `TestReleaseBuildForwardsSSHAgent`: заглушка пишется без чужого fork
+  - Проверка: тест ×N под нагрузкой → PASS · Закрывает: AC13 · Зависит от: S14
+- [ ] **S27** — Полный `make mutate` на итоге ветки и гейт
+  - Проверка: код 0; `make check` → ✓ · Закрывает: AC13 · Зависит от: S15–S26
 
 ## Решения
 - Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
@@ -258,9 +299,5 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S13 закрыты: самозащита гейта не зависит от окружения вызывающего, ограничения сборки и директивы
-линтеров не выводят код из гейта, порог покрытия — 100, migrations-check и gen-check без fail-open, силу
-тестов меряет `make mutate`; эксперименты трека и полный мутационный прогон приняты, служебные worktree
-сняты. Следующее — валидатор трека; к слиянию с identity — патч спецификации
-`N/gate/mutants-after-identity.patch` и тесты K12, K13, SD2 (трек identity), строка исключения
-спецификации в `.template/paths` (трек lifecycle).
+S1–S13 приняты по существу, валидатор — FAIL на `829481c` (`N/validation-gate.md`): круг фиксов S14–S27. Ветка
+перенесена на `main` `98e425e` (S14), B1 закрыт (S15). Следующее: S16 — B2, мутации в своём worktree.
