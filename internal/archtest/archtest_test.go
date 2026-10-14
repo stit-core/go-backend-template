@@ -455,6 +455,7 @@ func TestDomainErrorsInErrorsGo(t *testing.T) {
 				for _, spec := range gd.Specs {
 					for _, id := range spec.(*ast.ValueSpec).Names {
 						switch named := sentinelName.MatchString(id.Name); {
+						case id.Name == "_": // проверка интерфейса: var _ error = (*LockedError)(nil)
 						case inErrorsGo && named:
 							sentinels[id.Name] = true
 						case inErrorsGo:
