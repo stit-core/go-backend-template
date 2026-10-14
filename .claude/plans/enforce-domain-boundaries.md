@@ -201,8 +201,12 @@ blocked-by: —
     молчит о нерешённом (его отказ — правило регистрации); `exp/round-n2.tsv`: `v02e`, `v02h`, `v02f`, `v02g` (текст —
     «not a method, function or literal of delivery/http») и прежние `x02c`–`x02f`, `n37`, `n38` — отказ; rule
     `domain-architecture`, `architecture.md` § HTTP DTO naming, `endpoint.md`; `make check` → ✓
-- [ ] **S10** — N3: в `errors.go` `errors.New` — только значением `var Err…`; ошибка из `pkg/` — в прозе
+- [x] **S10** — N3: в `errors.go` `errors.New` — только значением `var Err…`; ошибка из `pkg/` — в прозе
   - Проверка: v03c → отказ; `make check` → ✓ · Закрывает: AC8 · Зависит от: S6
+  - Сделано: `TestDomainErrorsInErrorsGo` — `errors.New` только значением `var Err…` уровня пакета `errors.go`;
+    `exp/round-n3.tsv`: `v03c` (конструктор `invalid(…)` в `errors.go`), `n16p`, `n18p`, `x03a` — отказ; общая ошибка
+    `pkg/` (`v03b`) — предел в прозе: правило таблицы и ревью (`architecture.md` § Контракт ошибок API, `endpoint.md`),
+    rule `domain-architecture`; `make check` → ✓
 - [ ] **S11** — N4: правило policy без ложных отказов — операция переменной, policy функцией корня, ключ своим методом
   - Проверка: f09a, f09b, f09c → зелёные; v09a, v09b → отказ; `make check` → ✓ · Закрывает: AC8 · Зависит от: S7
 - [ ] **S12** — N5: перечень китов входа — в настройках сервиса `layout_settings_test.go`
@@ -258,6 +262,6 @@ blocked-by: —
   `Policy` с методом `Can…` (канон `UsecaseDeps`).
 
 ## Где мы сейчас
-S7 (B1), S8 (N1), S9 (N2) сделаны. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
-Следующий шаг — S10 (N3); затем S11–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
+S7–S10 (B1, N1–N3) сделаны. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
+Следующий шаг — S11 (N4); затем S12–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
 валидатора — `cases_val.py`), worktree экспериментов — `N/wt-boundaries-exp`.

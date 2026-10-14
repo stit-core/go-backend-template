@@ -450,14 +450,19 @@ func TestDomainErrorsInErrorsGo(t *testing.T) {
 		byName := importsByName(file)
 		inErrorsGo := path.Base(f.path) == "errors.go"
 		sentinels := map[string]bool{}
+		values := map[ast.Expr]bool{} // значения sentinel'ов errors.go: там errors.New и место
 		for _, decl := range file.Decls {
 			if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == token.VAR {
 				for _, spec := range gd.Specs {
-					for _, id := range spec.(*ast.ValueSpec).Names {
+					vs := spec.(*ast.ValueSpec)
+					for j, id := range vs.Names {
 						switch named := sentinelName.MatchString(id.Name); {
 						case id.Name == "_": // проверка интерфейса: var _ error = (*LockedError)(nil)
 						case inErrorsGo && named:
 							sentinels[id.Name] = true
+							if j < len(vs.Values) {
+								values[vs.Values[j]] = true
+							}
 						case inErrorsGo:
 							t.Errorf("%s declares %s: errors.go holds exported sentinels Err… — an unexported one has no rule in the HTTP table", f.path, id.Name)
 						case named:
@@ -473,8 +478,8 @@ func TestDomainErrorsInErrorsGo(t *testing.T) {
 			switch x := n.(type) {
 			case *ast.CallExpr:
 				switch {
-				case !inErrorsGo && isSelector(x.Fun, byName, "errors", "New"):
-					t.Errorf("%s creates an error with errors.New: a domain error is a sentinel of errors.go, with a rule in the HTTP error table", f.path)
+				case isSelector(x.Fun, byName, "errors", "New") && !values[x]:
+					t.Errorf("%s creates an error with errors.New outside a sentinel var Err… of errors.go: a domain error is such a sentinel, with a rule in the HTTP error table", f.path)
 				case isSelector(x.Fun, byName, "fmt", "Errorf") && !wrapsError(x):
 					t.Errorf("%s calls fmt.Errorf without %%w: the error loses its sentinel or cause — wrap it, a new domain error is a sentinel of errors.go", f.path)
 				}

@@ -129,10 +129,11 @@ var (
 )
 ```
 
-- Новая ошибка домена — sentinel в `errors.go` (свой тип — там же, с `Unwrap` в sentinel) и правило в
-  `userErrors`, иначе archtest красный: ошибка из другого файла корня (`errors.New`, `var Err…`,
-  `fmt.Errorf` без `%w`) — `TestDomainErrorsInErrorsGo`, sentinel без правила — `TestDomainErrorTables`:
-  она ответила бы 500.
+- Новая ошибка домена — sentinel `var Err… = errors.New(…)` в `errors.go` (свой тип — там же, с `Unwrap` в
+  sentinel) и правило в `userErrors`, иначе archtest красный: ошибка из функции или другого файла корня
+  (`errors.New`, `var Err…`, `fmt.Errorf` без `%w`) — `TestDomainErrorsInErrorsGo`, sentinel без правила —
+  `TestDomainErrorTables`: она ответила бы 500. Общая ошибка из `pkg/` — правилом в `userErrors`, как
+  `authgate.ForbiddenRule`: её archtest не видит.
 - Хендлер отдаёт ошибкой только `nil` или `userErrors.Map(err)` — не свою функцию перевода и не
   `huma.Error…` (archtest `TestDomainErrorTables`).
 - Код — `<DOMAIN>_<WHAT>`; разный смысл — разная ошибка домена; ошибка поля запроса — 422 с

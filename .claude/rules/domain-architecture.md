@@ -16,8 +16,8 @@ paths:
 `//nolint` не действует); без пометки — правило и `/code-review`.
 
 - **Раскладка по слоям.** `entity.go` (типы, без I/O) · `dto.go` (`<Op>Input/Output`) ·
-  `errors.go` (все sentinel и error-типы домена — только здесь, тип — с `Unwrap` в sentinel; `fmt.Errorf`
-  корня — с `%w`; archtest `TestDomainErrorsInErrorsGo`) · `policy.go` (authorization
+  `errors.go` (все sentinel и error-типы домена — только здесь: `errors.New` — значением `var Err…`, тип — с
+  `Unwrap` в sentinel; `fmt.Errorf` корня — с `%w`; archtest `TestDomainErrorsInErrorsGo`) · `policy.go` (authorization
   + чистые правила, без I/O) · `usecase.go` (логика, зависимости через порты) · `trusted.go`
   (операции для других доменов без policy) · `events.go` (payload + unexported subject-const) ·
   `metrics.go` (`biz_<domain>_*` под алерт, nil-safe) · `delivery/{http,nats}/` (вход — один пакет на
