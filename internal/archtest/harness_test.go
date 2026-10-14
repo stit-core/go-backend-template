@@ -335,6 +335,102 @@ func proseFiles(files []string) []string {
 	return docs
 }
 
+// readRulesFirst — процедуры, которые пишут код (каталог — каждый его .md): шагом 0 они читают свои правила.
+var readRulesFirst = []string{".claude/skills/scaffold/references", ".claude/skills/triage-failure/SKILL.md"}
+
+var (
+	heading1 = regexp.MustCompile(`(?m)^# .*$`)
+	stepZero = regexp.MustCompile(`^\*\*Шаг 0\*\* — прочитай инструментом Read `)
+	rulePath = regexp.MustCompile("`(\\.claude/rules/[a-z0-9-]+\\.md)`")
+)
+
+// TestRulesAndSkillsLoad: правило приходит в контекст, когда инструмент Read открыл файл под его paths:,
+// скилл зовут по name:, а процедура, которая пишет код, читает свои правила шагом 0 — новый файл пишут
+// Write, и правило по paths: не придёт. Glob, который не ложится ни на один файл репо, правило без paths:
+// (грузится в каждую сессию), name: не по каталогу и процедура без шага 0 ничем не падают: агент работает
+// без правила, и этого никто не видит. Glob без файлов репо — только локальный файл, который игнорирует git;
+// у проекта с внешней идентичностью glob'ы слоёв, которые были только у её доменов (events.go, delivery/nats),
+// пустуют до своих доменов — их проверяет самопроверка шаблона.
+func TestRulesAndSkillsLoad(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	files := trackedFiles(t, root)
+	external := identityExternal(t)
+	for _, f := range files {
+		switch dir := path.Dir(f); {
+		case dir == ".claude/rules" && path.Ext(f) == ".md":
+			globs := frontmatter(t, root, f)["paths"]
+			if len(globs) == 0 {
+				t.Errorf("%s: no paths: — the rule loads into every session", f)
+			}
+			for _, g := range globs {
+				if !external && !globMatches(t, root, g) && (strings.ContainsAny(g, "*?[") || !gitIgnored(t, root, g)) {
+					t.Errorf("%s: paths: %q matches no file of the repo — the rule never loads", f, g)
+				}
+			}
+		case path.Dir(dir) == ".claude/skills" && path.Base(f) == "SKILL.md":
+			if name := frontmatter(t, root, f)["name"]; !slices.Equal(name, []string{path.Base(dir)}) {
+				t.Errorf("%s: name: %q — the skill is called by its directory, %q", f, name, path.Base(dir))
+			}
+		}
+		if path.Ext(f) != ".md" || !slices.ContainsFunc(readRulesFirst, func(p string) bool { return under(f, p) }) {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, f))
+		require.NoError(t, err)
+		text := string(data)
+		var first string
+		if loc := heading1.FindStringIndex(text); loc != nil {
+			first, _, _ = strings.Cut(strings.TrimLeft(text[loc[1]:], "\n"), "\n\n")
+		}
+		rules := rulePath.FindAllStringSubmatch(first, -1)
+		if !stepZero.MatchString(first) || len(rules) == 0 {
+			t.Errorf("%s: the paragraph under the title is not «**Шаг 0** — прочитай инструментом Read <rules>»: the procedure writes code without its rules", f)
+		}
+		for _, r := range rules {
+			if !slices.Contains(files, r[1]) {
+				t.Errorf("%s: step 0 reads %s, which is not in the repo", f, r[1])
+			}
+		}
+	}
+}
+
+// frontmatter — ключи шапки .md между строками "---": значение после «ключ:» и пункты «- …» под ним, без кавычек.
+func frontmatter(t *testing.T, root, rel string) map[string][]string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, rel))
+	require.NoError(t, err)
+	head, ok := strings.CutPrefix(string(data), "---\n")
+	require.True(t, ok, "%s: no frontmatter", rel)
+	head, _, ok = strings.Cut(head, "\n---\n")
+	require.True(t, ok, "%s: the frontmatter is not closed", rel)
+	keys := map[string][]string{}
+	key := ""
+	for _, line := range strings.Split(head, "\n") {
+		if item, ok := strings.CutPrefix(strings.TrimSpace(line), "- "); ok && key != "" {
+			keys[key] = append(keys[key], strings.Trim(item, `"'`))
+			continue
+		}
+		if k, v, ok := strings.Cut(line, ":"); ok {
+			key = k
+			if v = strings.Trim(strings.TrimSpace(v), `"'`); v != "" {
+				keys[key] = append(keys[key], v)
+			}
+		}
+	}
+	return keys
+}
+
+// globMatches — glob ложится на файл индекса git: «**» — любые каталоги, «*» — внутри одного.
+func globMatches(t *testing.T, root, glob string) bool {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "git", "ls-files", "--", ":(glob)"+glob)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	require.NoError(t, err, "git ls-files %s", glob)
+	return len(out) > 0
+}
+
 // TestNolintNamesEnabledLinters: //nolint выключенного линтера ничего не глушит, а nolintlint
 // ловит неиспользуемую директиву только у включённого — мёртвая прошла бы молча.
 func TestNolintNamesEnabledLinters(t *testing.T) {

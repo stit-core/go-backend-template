@@ -51,10 +51,14 @@ blocked-by: —
   «поймано» этим тестом; CTRL — зелёный
   - Подтверждено: база — M07, M07b, M07c «не поймано»; ветка — «поймано» `TestProseReferencesExist`
     («….md: TestHTTPTypez: the prose points to a missing … test»), CTRL — зелёный
-- [ ] **AC3** — RHAR-03: glob `paths:`, который ни на что не ложится, правило без `paths:`, `name:`
+- [x] **AC3** — RHAR-03: glob `paths:`, который ни на что не ложится, правило без `paths:`, `name:`
   скилла не по каталогу, reference scaffold без «Шаг 0», снятый deny `.claude/settings.json`, отвязанный,
   подменённый или выключенный хук guard — отказ archtest. Проверка: `exp.py` M17, M17b, M17c, M18, M19,
   M30, M30b, M31, M31b, M31c → на базе «не поймано», на ветке «поймано»; CTRL — зелёный
+  - Подтверждено: база — все десять «не поймано»; ветка — M17–M19 ловит `TestRulesAndSkillsLoad`, M30–M31c —
+    `TestGuardWired`, CTRL — зелёный; matcher `Bash|Write` — зелёный (регулярное выражение с Bash); проба
+    проекта с внешней идентичностью (пути `.template/identity` удалены, `identity: external`) — новые тесты
+    зелёные, с `identity: own` — 9 пустых glob'ов
 - [ ] **AC4** — RHAR-08: утверждения п. 1, 2, 4 (smartdev, triage-failure, stack-deep-dive) и заголовки
   smartdev с «(фикс …)» поправлены; п. 3 правда (`make new-domain NAME=repo` — отказ до правки);
   п. 5 — в Handoff. Проверка: `exp.py` G03–G06 → на базе «да», на ветке «нет»; N01 → «отказ до правки»
@@ -78,8 +82,13 @@ blocked-by: —
     `*_test.go` индекса git (разбор go/parser); плейсхолдеры `TestX`, `TestNew` скилла triage-failure —
     `Test<Name>`, списка исключений нет; `docs/contributing.md` § Кто что enforce'ит называет проверку;
     `exp.py` — как в AC2; `make check` → `✓ check clean`
-- [ ] **S3** — RHAR-03: тесты доставки правил и скиллов и подключения guard и deny
+- [x] **S3** — RHAR-03: тесты доставки правил и скиллов и подключения guard и deny
   - Проверка: `exp.py` CTRL, M17–M31c; `make check` → `✓ check clean` · Закрывает: AC3 · Зависит от: —
+  - Сделано: `TestRulesAndSkillsLoad` — glob `paths:` ложится на файл индекса git, правило без `paths:` —
+    отказ, `name:` скилла — его каталог, reference scaffold и triage-failure начинаются с «Шаг 0» с
+    существующими правилами; `TestGuardWired` — guard-bash — хук PreToolUse инструмента Bash, хуки не
+    выключены, deny держит каждый запрет списка; triage-failure получил «Шаг 0» (`tests-pipeline`);
+    `exp.py` — как в AC3; `make check` → `✓ check clean`
 - [ ] **S4** — RHAR-08: неточные утверждения smartdev, triage-failure, stack-deep-dive
   - Проверка: `exp.py` G03–G06, N01; `make check` → `✓ check clean` · Закрывает: AC4 · Зависит от: —
 - [ ] **S5** — T6: поля нового домена — одним способом
@@ -102,14 +111,28 @@ blocked-by: —
 - Имя теста в прозе проверяется без списка плейсхолдеров: плейсхолдер — `Test<Name>` (угловые скобки
   уже не ссылка); у проекта с внешней идентичностью проверка имён тестов, как и путей API, молчит — тесты
   её доменов (`TestIdentity`, `TestErrorMaps`) ушли вместе с ними.
+- Glob `paths:` сверяет `git ls-files ':(glob)…'` — те же `**` и `*`, что у Claude Code; без файлов —
+  только литерал, который игнорирует git (`.env.local`). У проекта с внешней идентичностью проверка glob'ов
+  молчит: слои, которые были только у её доменов (`events.go`, `delivery/nats`, outbox), пустуют до своих.
+- Чужой файл rule `infra-impact` (в волне 2 ничей): glob `.env.example.*` снят — файлов под ним нет, и
+  проза таких вариантов не заводит; канон — один `.env.example` (`TestEnvExampleHasRequired`).
+- deny проверяется списком всех запретов `.claude/settings.json`: снять любой — ослабить гейт (CLAUDE.md
+  § Сначала спросить) правкой archtest, новый запрет теста не требует. Matcher хука — имя или регулярное
+  выражение, пусто и `*` — любой инструмент, как у Claude Code.
+- «Шаг 0» у triage-failure (`tests-pipeline`): багфикс начинается с теста, новый файл теста пишет Write — и
+  правило по `paths:` не придёт; список процедур с шагом 0 — `readRulesFirst`.
+- Чужой файл `docs/contributing.md`: строки deny, guard и «Самопроверка обвязки» называют новые проверки.
 
 ## Handoff
+- Дирижёру при слиянии: в комментарий пакета `internal/archtest` (файл трека boundaries) — «доставка
+  правил и скиллов (paths:, name:, шаг 0), подключение guard-bash и deny .claude/settings.json»
+  (`TestRulesAndSkillsLoad`, `TestGuardWired`).
 - Дирижёру при слиянии: RHAR-08, п. 5 — в rule `domain-architecture` («Файл > ~400 строк») и
   `docs/reference/architecture.md` § Разбиение переростков — «файл кода (не `_test.go`)»: тесты доменов —
   545–1012 строк, код — до 303.
 
 ## Где мы сейчас
-S1, S2 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
-самопроверка прозы видит имена тестов. Полный `make mutate A=--strict` на `f825fac` прерван на 101/356
-ради гейта шагов, результаты — в `N/wt-harness-mut/.cache/mutate/`, прогон продолжится с места.
-Следующий шаг — S3 (RHAR-03).
+S1–S3 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
+самопроверка прозы видит имена тестов, доставку правил и подключение guard. Полный
+`make mutate A=--strict` на `f825fac` прерван на 101/356 ради гейта шагов, результаты — в
+`N/wt-harness-mut/.cache/mutate/`, прогон продолжится с места. Следующий шаг — S4 (RHAR-08).

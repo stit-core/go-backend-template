@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -51,4 +52,54 @@ func TestGuardBash(t *testing.T) {
 		})
 	}
 	require.GreaterOrEqual(t, cases, 550, "guard-cases.txt: the list is cut")
+}
+
+// guardCommand — команда хука guard-bash в .claude/settings.json.
+const guardCommand = `bash "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh"`
+
+// barrierDeny — запреты .claude/settings.json: снять любой — ослабить гейт (CLAUDE.md § Сначала спросить).
+var barrierDeny = []string{
+	"Bash(*--no-veri*)", "Bash(*--no-gpg-sign*)", "Bash(git push --force*)", "Bash(git push -f*)",
+	"Bash(git reset --hard*)", "Bash(git checkout -- *)", "Bash(git clean -f*)", "Bash(rm -rf *)",
+	"Read(**/*.pem)", "Read(**/*.key)", "Read(**/.env)", "Read(**/.env.local)",
+	"Edit(**/*.pem)", "Edit(**/*.key)", "Edit(**/infra/postgres/db/**)", "Edit(**/mocks/*.go)",
+	"Edit(go.sum)", "Edit(**/.claude/projects/**/memory/**)",
+}
+
+// TestGuardWired: барьер от случайного обхода держат хук guard-bash и deny .claude/settings.json, пока они
+// подключены. Хук, отвязанный от Bash, подменённый или выключенный (disableAllHooks), и снятый запрет молчат:
+// TestGuardBash проверяет скрипт, а не его подключение.
+func TestGuardWired(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".claude", "settings.json"))
+	require.NoError(t, err)
+	var settings struct {
+		DisableAllHooks bool
+		Permissions     struct{ Deny []string }
+		Hooks           struct {
+			PreToolUse []struct {
+				Matcher string
+				Hooks   []struct{ Type, Command string }
+			}
+		}
+	}
+	require.NoError(t, json.Unmarshal(data, &settings))
+	require.False(t, settings.DisableAllHooks, ".claude/settings.json: disableAllHooks switches guard-bash off")
+	wired := false
+	for _, entry := range settings.Hooks.PreToolUse {
+		// Matcher — имя инструмента или регулярное выражение; пусто и «*» — любой инструмент.
+		bash := entry.Matcher == "" || entry.Matcher == "*"
+		if !bash {
+			re, err := regexp.Compile("^(?:" + entry.Matcher + ")$")
+			require.NoError(t, err, ".claude/settings.json: matcher %q", entry.Matcher)
+			bash = re.MatchString("Bash")
+		}
+		for _, h := range entry.Hooks {
+			wired = wired || bash && h.Type == "command" && h.Command == guardCommand
+		}
+	}
+	require.True(t, wired, ".claude/settings.json: no PreToolUse hook of Bash runs %s — the guard is off", guardCommand)
+	for _, rule := range barrierDeny {
+		require.Contains(t, settings.Permissions.Deny, rule, ".claude/settings.json: deny lost %s — that weakens the gate (CLAUDE.md § Сначала спросить)", rule)
+	}
 }
