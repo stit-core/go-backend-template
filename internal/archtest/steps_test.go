@@ -21,33 +21,43 @@ func step(t *testing.T, dir, script string, args ...string) (string, error) {
 }
 
 // TestCoverCheck: порог покрытия — факт (100), блок, который тесты не исполнят по построению, идёт
-// исполненным только по записи списка непокрываемого cover.sh, а запись без такого блока — отказ. Модуль
-// игрушечный: ветка G с паникой тестами не исполняется, профиль — настоящий go test.
+// исполненным только по записи списка непокрываемого cover.sh — ровно одной своей: запись без текста, без
+// такого блока или подходящая к двум блокам — отказ. Модуль игрушечный: ветка G с паникой тестами не
+// исполняется (с h.go — и такая же ветка H), профиль — настоящий go test.
 func TestCoverCheck(t *testing.T) {
 	t.Parallel()
 	script := readFiles(t, repoRoot(t), "scripts/tools/cover.sh")["scripts/tools/cover.sh"]
 	const list = "    cat <<'LIST'\nLIST\n"
 	require.Equal(t, 1, strings.Count(script, list), "anchor of the uncoverable list in cover.sh")
+	// h.go — H и H2 с одинаковой веткой паники: запись по её тексту подошла бы к обеим.
+	h := map[string]string{
+		"internal/p/h.go": "package p\n\n// H — как G.\nfunc H(err error) string {\n\tif err != nil {\n\t\tpanic(\"unreachable: H never gets an error\")\n\t}\n\treturn \"ok\"\n}\n\n" +
+			"// H2 — ещё одна такая ветка.\nfunc H2(err error) {\n\tif err != nil {\n\t\tpanic(\"unreachable: H2 never gets an error\")\n\t}\n}\n",
+		"internal/p/h_test.go": "package p\n\nimport \"testing\"\n\nfunc TestH(t *testing.T) {\n\tH2(nil)\n\tif H(nil) != \"ok\" {\n\t\tt.Fatal(\"h\")\n\t}\n}\n",
+	}
 	for _, tc := range []struct {
 		name  string
-		entry string // запись списка непокрываемого
+		entry string            // запись списка непокрываемого
+		files map[string]string // файлы модуля поверх p.go
 		want  string
 		ok    bool
 	}{
 		{name: "an uncovered block", want: "  internal/p/p.go:13."},
 		{name: "the block is listed", entry: "internal/p/p.go:panic(\"unreachable", want: "непокрываемое списком — 1", ok: true},
 		{name: "an entry without an uncovered block", entry: "internal/p/p.go:return 1", want: "запись непокрываемого без неисполненного блока"},
+		{name: "an entry without a text", entry: "internal/p/p.go:", want: "запись непокрываемого без текста блока"},
+		{name: "an entry over two blocks", entry: "internal/p/h.go:panic(\"unreachable", files: h, want: "подходит к нескольким неисполненным блокам"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo := t.TempDir()
-			writeFiles(t, repo, map[string]string{
+			writeFiles(t, repo, union(map[string]string{
 				"go.mod":                 "module example.com/cov\n\ngo 1.26\n",
 				"pkg/doc.txt":            "\n",
 				"internal/p/p.go":        "package p\n\n// F — покрытая.\nfunc F(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n\n// G — ошибки тесты не дают.\nfunc G(err error) string {\n\tif err != nil {\n\t\tpanic(\"unreachable: G never gets an error\")\n\t}\n\treturn \"ok\"\n}\n",
 				"internal/p/p_test.go":   "package p\n\nimport \"testing\"\n\nfunc TestP(t *testing.T) {\n\tif F(1) != 1 || F(0) != 0 || G(nil) != \"ok\" {\n\t\tt.Fatal(\"p\")\n\t}\n}\n",
 				"scripts/tools/cover.sh": strings.Replace(script, list, "    cat <<'LIST'\n"+tc.entry+"\nLIST\n", 1),
-			})
+			}, tc.files))
 			git(t, repo, "init", "-q", "-b", "main")
 			out, err := runIn(t, repo, "go", "test", "-coverprofile=coverage.out", "./...")
 			require.NoError(t, err, out)

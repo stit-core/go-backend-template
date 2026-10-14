@@ -45,9 +45,10 @@ scoped=$(mktemp) || exit 1
 trap 'rm -f "$scoped"' EXIT
 
 # Непокрываемое — блок, который тесты не исполнят по построению: строка «<файл от корня репо>:<текст из
-# строк блока>», над ней — комментарий «# почему». Неисполненный блок этого файла, в строках которого есть
-# текст, идёт исполненным; запись без такого блока — отказ: список не копит устаревшее. Пополнить список —
-# ослабить гейт (CLAUDE.md § Сначала спросить).
+# строк блока>», над ней — комментарий «# почему». Запись покрывает ровно один неисполненный блок этого файла —
+# тот, в строках которого есть её текст; запись без текста, без такого блока или с несколькими — отказ: список
+# не копит устаревшее, и новый неисполненный блок с тем же текстом за старой записью не прячется. Пополнить
+# список — ослабить гейт (CLAUDE.md § Сначала спросить).
 uncoverable=$(
     cat <<'LIST'
 LIST
@@ -58,7 +59,13 @@ LIST
 # там блок пустого тела считается за statement: иначе -func даёт исполненной пустой функции 0.0% (0 из 0).
 report=$(LC_ALL=C awk -v module="$module/" -v testkit="$module/internal/testkit/" -v scoped="$scoped" '
     FNR == 1 { part++ }
-    part == 1 { if ($0 !~ /^[[:space:]]*(#|$)/) { i = index($0, ":"); efile[++ne] = substr($0, 1, i - 1); etext[ne] = substr($0, i + 1) }; next }
+    part == 1 {
+        if ($0 !~ /^[[:space:]]*(#|$)/) {
+            i = index($0, ":"); efile[++ne] = substr($0, 1, i - 1); etext[ne] = substr($0, i + 1)
+            if (etext[ne] ~ /^[[:space:]]*$/) etext[ne] = ""
+        }
+        next
+    }
     part == 2 { if ($0 != "") gen[$0] = 1; next }
     FNR == 1 { head = $0; next }
     {
@@ -68,22 +75,24 @@ report=$(LC_ALL=C awk -v module="$module/" -v testkit="$module/internal/testkit/
         if (!($1 in stmts)) { stmts[$1] = $2; fileOf[$1] = substr(file, length(module) + 1); order[++n] = $1 }
         if ($3 > 0) hit[$1] = 1
     }
-    # listed — номер записи непокрываемого, текст которой есть в строках блока b, или 0.
-    function listed(b,   se, from, to, e, l, ln, found) {
+    # inblock — текст записи e есть в строках блока b.
+    function inblock(b, e,   se, from, to, l, ln, found) {
         split(substr(b, index(b, ":") + 1), se, ","); from = int(se[1]); to = int(se[2])
-        for (e = 1; e <= ne; e++) {
-            if (efile[e] != fileOf[b]) continue
-            ln = 0; found = 0
-            while ((getline l < efile[e]) > 0) if (++ln >= from && ln <= to && index(l, etext[e])) found = 1
-            close(efile[e])
-            if (found) return e
-        }
-        return 0
+        ln = 0; found = 0
+        while ((getline l < efile[e]) > 0) if (++ln >= from && ln <= to && index(l, etext[e])) found = 1
+        close(efile[e])
+        return found
     }
     END {
         for (i = 1; i <= n; i++) {
             b = order[i]
-            if (!(b in hit) && (e = listed(b))) { hit[b] = 1; used[e] = 1; excluded += stmts[b] }
+            if (b in hit) continue
+            for (e = 1; e <= ne; e++) if (etext[e] != "" && efile[e] == fileOf[b] && inblock(b, e)) { blocks[e]++; blockOf[e] = b }
+        }
+        for (e = 1; e <= ne; e++) {
+            if (etext[e] == "") printf "EMPTY %s:\n", efile[e]
+            else if (blocks[e] > 1) printf "WIDE %s:%s — блоков %d\n", efile[e], etext[e], blocks[e]
+            else if (blocks[e] == 1 && !(blockOf[e] in hit)) { hit[blockOf[e]] = 1; excluded += stmts[blockOf[e]] }
         }
         print head > scoped
         for (i = 1; i <= nl; i++) {
@@ -97,7 +106,7 @@ report=$(LC_ALL=C awk -v module="$module/" -v testkit="$module/internal/testkit/
             if (b in hit) { covered += stmts[b]; continue }
             printf "BLOCK %s%s %d\n", fileOf[b], substr(b, index(b, ":")), stmts[b]
         }
-        for (e = 1; e <= ne; e++) if (!(e in used)) printf "STALE %s:%s\n", efile[e], etext[e]
+        for (e = 1; e <= ne; e++) if (etext[e] != "" && !blocks[e]) printf "STALE %s:%s\n", efile[e], etext[e]
         printf "TOTAL %d %d %d\n", covered, total, excluded
     }' <(printf '%s\n' "$uncoverable") <(printf '%s\n' "$generated") "$profile")
 
@@ -106,12 +115,17 @@ if [ "${total:-0}" -eq 0 ]; then
     echo "FAIL: в профиле $profile нет statement'ов scope (internal/, pkg/)"
     exit 1
 fi
-stale=$(sed -n 's/^STALE //p' <<<"$report")
-if [ -n "$stale" ]; then
-    sed 's/^/  /' <<<"$stale"
-    echo "FAIL: запись непокрываемого без неисполненного блока — убери её из scripts/tools/cover.sh"
+for kind in EMPTY WIDE STALE; do
+    entries=$(sed -n "s/^$kind //p" <<<"$report")
+    [ -n "$entries" ] || continue
+    sed 's/^/  /' <<<"$entries"
+    case $kind in
+        EMPTY) echo "FAIL: запись непокрываемого без текста блока — сняла бы весь файл: впиши текст из строк блока" ;;
+        WIDE) echo "FAIL: запись непокрываемого подходит к нескольким неисполненным блокам — текст должен быть из одного" ;;
+        STALE) echo "FAIL: запись непокрываемого без неисполненного блока — убери её из scripts/tools/cover.sh" ;;
+    esac
     exit 1
-fi
+done
 funcs=$(go tool cover -func="$scoped") || { echo "FAIL: go tool cover -func"; exit 1; }
 untested=$(awk '$1 != "total:" && $NF == "0.0%" {print $1, $2}' <<<"$funcs")
 
