@@ -13,16 +13,21 @@ import (
 // TestNewDomainRefusesOrRollsBack: make new-domain с именем, на котором срез не собрался бы, и с таблицей,
 // которую уже создаёт миграция, отказывает до первой правки, а сбой после первой правки (здесь — make gen
 // без Makefile) откатывает все правки скрипта: дерево — как до запуска. Песочница — git-репо со скриптом,
-// go.mod, cmd/api, конфигами генераторов и миграциями репо; инструменты — заглушки.
+// go.mod, cmd/api, конфигами генераторов, миграциями репо и своей миграцией с занятой таблицей (у форка после prune
+// таблиц доменов идентичности нет); инструменты — заглушки.
 func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	files := readFiles(t, root, "scripts/new-domain.sh", "go.mod", "cmd/api/main.go", "cmd/api/http.go", "sqlc.yaml", ".mockery.yml", "openapi.json")
 	migrations, err := os.ReadDir(filepath.Join(root, "migrations"))
-	require.NoError(t, err)
+	if !os.IsNotExist(err) {
+		require.NoError(t, err)
+	}
 	for _, m := range migrations {
 		files = union(files, readFiles(t, root, "migrations/"+m.Name()))
 	}
+	files["migrations/9000_occupied.up.sql"] = "CREATE TABLE probe_items (id UUID PRIMARY KEY);\n"
+
 	bin := stubTools(t, "sqlc", "mockery")
 	gofumpt, err := exec.LookPath("true")
 	require.NoError(t, err)
@@ -37,7 +42,7 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 		{name: "a local of the slice code", domain: "row", want: "имя из кода среза"},
 		{name: "a keyword", domain: "func", want: "ключевое слово"},
 		{name: "a declaration of the domain package", domain: "repository", want: "имя из кода среза"},
-		{name: "an occupied table", domain: "password_reset", want: "таблицу password_resets уже создаёт миграция"},
+		{name: "an occupied table", domain: "probe_item", want: "таблицу probe_items уже создаёт миграция"},
 		{name: "a failure after the first edit", domain: freeDomain(files), want: "правки откатаны"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
