@@ -71,7 +71,7 @@ func TestPasswordResetRequestedContract(t *testing.T) {
 	users := verifmocks.NewMockUserReader(t)
 	users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(&verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil).Once()
 	limiter := verifmocks.NewMockResetLimiter(t)
-	limiter.EXPECT().Allow(mock.Anything, "u1", mock.Anything).Return(true, nil).Once()
+	limiter.EXPECT().Allow(mock.Anything, "a@b.com", mock.Anything).Return(true, nil).Once()
 	published := &outboxtest.Recorder{}
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	request := verification.NewUsecase(verification.UsecaseDeps{

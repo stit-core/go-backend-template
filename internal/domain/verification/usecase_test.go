@@ -321,28 +321,27 @@ func requested(t *testing.T, f ucFixture) requestedEvent {
 	return e
 }
 
-// Запрос сброса делает одну и ту же работу для любого адреса — поиск, лимит, событие в транзакции, — и письма
-// не шлёт: его шлёт подписчик события. Ни ответ, ни его время не выдают, есть ли учётная запись и пускают ли её;
-// исход — в метрику.
+// Запрос сброса делает одну и ту же работу для любого адреса — поиск, лимит по адресу, событие в транзакции, — и
+// письма не шлёт: его шлёт подписчик события. Ни ответ, ни его время не выдают, есть ли учётная запись и пускают
+// ли её: ключ лимита — адрес и для учётной записи; исход — в метрику.
 func TestRequestPasswordReset_SameWorkForAnyAddress(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name    string
 		found   *verification.User
 		lookErr error
-		subject string // ключ лимита: учётная запись, а без неё — адрес
 		userID  string
 		result  string
 	}{
-		{"account that can log in", &verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil, "u1", "u1", "ok"},
-		{"account that cannot log in", &verification.User{ID: "u1", Email: "a@b.com"}, nil, "u1", "u1", "inactive"},
-		{"unknown address", nil, verification.ErrUserNotFound, "a@b.com", "", "user_not_found"},
+		{"account that can log in", &verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil, "u1", "ok"},
+		{"account that cannot log in", &verification.User{ID: "u1", Email: "a@b.com"}, nil, "u1", "inactive"},
+		{"unknown address", nil, verification.ErrUserNotFound, "", "user_not_found"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			p := metrictest.NewProvider()
-			f := newUC(t, withUsers(userByEmail(t, tc.found, tc.lookErr)), withLimiter(limiter(t, tc.subject, true, nil)),
+			f := newUC(t, withUsers(userByEmail(t, tc.found, tc.lookErr)), withLimiter(limiter(t, "a@b.com", true, nil)),
 				withMetrics(verification.NewMetrics(p.Meter("test"))))
 
 			require.NoError(t, f.uc.RequestPasswordReset(identitytest.Anon(), "a@b.com"))
@@ -360,7 +359,7 @@ func TestRequestPasswordReset_SameWorkForAnyAddress(t *testing.T) {
 func TestRequestPasswordReset_Throttled(t *testing.T) {
 	t.Parallel()
 	p := metrictest.NewProvider()
-	f := newUC(t, withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, nil)), withMetrics(verification.NewMetrics(p.Meter("test"))))
+	f := newUC(t, withUsers(activeUser(t)), withLimiter(limiter(t, "a@b.com", false, nil)), withMetrics(verification.NewMetrics(p.Meter("test"))))
 
 	require.NoError(t, f.uc.RequestPasswordReset(identitytest.Anon(), "a@b.com"))
 	require.Zero(t, f.bus.Count())
@@ -379,10 +378,10 @@ func TestRequestPasswordReset_Failure(t *testing.T) {
 	}{
 		{"lookup", func(t *testing.T) []ucOption { return []ucOption{withUsers(userByEmail(t, nil, errDown))} }, errDown},
 		{"limiter", func(t *testing.T) []ucOption {
-			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", false, errGuard))}
+			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "a@b.com", false, errGuard))}
 		}, errGuard},
 		{"event not stored", func(t *testing.T) []ucOption {
-			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "u1", true, nil)), withEvents(failingEvents{})}
+			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "a@b.com", true, nil)), withEvents(failingEvents{})}
 		}, errDown},
 	}
 	for _, tc := range cases {

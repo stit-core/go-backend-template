@@ -16,7 +16,7 @@ import (
 
 const ip = "203.0.113.7"
 
-// twoRequests — лимитер на настоящем счётчике guard'а: два запроса пары (субъект, IP), третий — отказ.
+// twoRequests — лимитер на настоящем счётчике guard'а: два запроса пары (адрес, IP), третий — отказ.
 func twoRequests(t *testing.T) verification.ResetLimiter {
 	t.Helper()
 	guard, err := bruteforcetest.NewCounting(bruteforcekit.Config{
@@ -27,7 +27,7 @@ func twoRequests(t *testing.T) verification.ResetLimiter {
 	return bruteforce.NewResetLimiter(guard)
 }
 
-// Запросы сброса одного пользователя с одного адреса идут подряд до лимита, дальше — отказ; у соседа
+// Запросы сброса на один адрес с одного IP идут подряд до лимита, дальше — отказ; у соседнего адреса
 // счётчик свой.
 func TestResetLimiter_Allow(t *testing.T) {
 	t.Parallel()
@@ -35,17 +35,16 @@ func TestResetLimiter_Allow(t *testing.T) {
 	ctx := context.Background()
 
 	for i, want := range []bool{true, true, false} {
-		got, err := l.Allow(ctx, "u1", ip)
+		got, err := l.Allow(ctx, "a@b.com", ip)
 		require.NoError(t, err)
 		require.Equal(t, want, got, "request %d", i+1)
 	}
-	other, err := l.Allow(ctx, "u2", ip)
+	other, err := l.Allow(ctx, "c@d.com", ip)
 	require.NoError(t, err)
-	require.True(t, other, "another user has its own counter")
+	require.True(t, other, "another address has its own counter")
 }
 
-// Адрес без учётной записи — субъект лимита: его формы с пробелами по краям и в другом регистре делят один
-// счётчик, как формы адреса учётной записи — её счётчик. Иначе по работе запроса видно, есть ли учётная запись.
+// Формы адреса — пробелы по краям и регистр — делят его счётчик: иначе лимит обходили бы формой адреса.
 func TestResetLimiter_AddressForms(t *testing.T) {
 	t.Parallel()
 	l := twoRequests(t)
@@ -66,17 +65,17 @@ func TestResetLimiter_Subject(t *testing.T) {
 	t.Parallel()
 	rec := &bruteforcetest.Recorder{}
 
-	allowed, err := bruteforce.NewResetLimiter(rec).Allow(context.Background(), "u1", ip)
+	allowed, err := bruteforce.NewResetLimiter(rec).Allow(context.Background(), "a@b.com", ip)
 
 	require.NoError(t, err)
 	require.True(t, allowed)
-	require.Equal(t, []bruteforcetest.Attempt{{Subject: "password_reset:u1", IP: ip}}, rec.Attempts())
+	require.Equal(t, []bruteforcetest.Attempt{{Subject: "password_reset:a@b.com", IP: ip}}, rec.Attempts())
 }
 
 func TestResetLimiter_GuardError(t *testing.T) {
 	t.Parallel()
 
-	allowed, err := bruteforce.NewResetLimiter(bruteforcetest.Permissive{}).Allow(context.Background(), "u1", "")
+	allowed, err := bruteforce.NewResetLimiter(bruteforcetest.Permissive{}).Allow(context.Background(), "a@b.com", "")
 
 	require.ErrorIs(t, err, bruteforcekit.ErrInvalidKey)
 	require.False(t, allowed)

@@ -57,10 +57,10 @@ type Mailer interface {
 	SendEmailVerification(ctx context.Context, email, token string) error
 }
 
-// ResetLimiter: Allow учитывает запрос сброса пароля субъекта с адреса ip; false — лимит запросов исчерпан,
+// ResetLimiter: Allow учитывает запрос сброса пароля на адрес email с IP ip; false — лимит запросов исчерпан,
 // запрос ничего не делает.
 type ResetLimiter interface {
-	Allow(ctx context.Context, subject, ip string) (bool, error)
+	Allow(ctx context.Context, email, ip string) (bool, error)
 }
 
 type UsecaseDeps struct {
@@ -158,12 +158,9 @@ func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outc
 	case !errors.Is(err, ErrUserNotFound):
 		return outcome.Error, fmt.Errorf("lookup user: %w", err)
 	}
-	// Лимит считает учётную запись, а без неё — адрес: форма адреса лимит учётной записи не обходит.
-	subject := userID
-	if subject == "" {
-		subject = email
-	}
-	allowed, err := uc.d.Limiter.Allow(ctx, subject, identity.IPFrom(ctx))
+	// Лимит считает адрес, как guard входа, и для учётной записи: поиск (LOWER БД) и ключ guard'а (strings.ToLower)
+	// складывают регистр не ASCII по-разному, и ключ по учётной записи выдавал бы её работой запроса.
+	allowed, err := uc.d.Limiter.Allow(ctx, email, identity.IPFrom(ctx))
 	switch {
 	case err != nil:
 		return outcome.Error, fmt.Errorf("limiter: %w", err)
