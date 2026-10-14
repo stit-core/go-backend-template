@@ -77,8 +77,14 @@ blocked-by: —
 ### Волна 1
 - [ ] **S1** — Трек gate (`close-gate-gaps`) принят и слит в `main`
   - Проверка: валидатор с ревью → PASS; `make check` на `main` → `✓ check clean` · Закрывает: AC1 · Зависит от: —
-- [ ] **S2** — Трек identity (`fix-identity-edges`) принят и слит в `main`
+- [x] **S2** — Трек identity (`fix-identity-edges`) принят и слит в `main`
   - Проверка: валидатор с ревью и security → PASS; `make check` → `✓ check clean` · Закрывает: AC1 · Зависит от: —
+  - Сделано: `1acaf61..d5fa709` fast-forward; валидатор с security — FAIL (B1–B3, N1–N7) → фиксы → FAIL (B4:
+    `make e2e` — 429 строгого лимита) → фиксы, тесты на выживших мутантов трека gate (K12, K13, SD2), N8 дирижёра
+    (ключ лимита сброса — адрес, а не id учётной записи) → PASS: гейт в свежем worktree на `0ab22c4` →
+    `✓ check clean`, `make e2e` → 16 passed (`N/validation-identity.md`); ревью — валидатор (корректность,
+    security), дирижёр — ключ лимита запроса сброса (B1, N8); тело последнего коммита переписано (escape-запись
+    вместо невидимых символов), дерево то же; план трека удалён
 - [x] **S3** — Трек lifecycle (`fix-fork-lifecycle`) принят и слит в `main`
   - Проверка: валидатор с ревью → PASS; `make check` → `✓ check clean` · Закрывает: AC1 · Зависит от: —
   - Сделано: `e8ea150..a94979b` fast-forward; валидатор — FAIL (B1, N1–N9) → 8 фиксов → PASS, гейт в свежем
@@ -128,8 +134,13 @@ blocked-by: —
   тег в хабе — `<РЕПО>_TAG` (блок RLIF-04 — в накопителе). Гейт: `make doctor` и `release-preflight env` — FAIL
   без хуков → `make setup`; валидатор stack не считает заглушку решением. Обвязка: `PATHS=` у
   `make template-update`, строка `template:` в doctor, раздел «Безопасность» аннотации, `Dockerfile*` в путях шаблона.
+- Из трека identity (блоки S1, S2, S5, S7, S8 — в накопителе): решения продукта для владельца и хаба — учётные
+  записи-дубли по адресу без пробелов в данных окружений, предел имени 200, лимит `/api/auth/*` 5 rps с запасом 10
+  (`HTTP_TRUST_PROXY_HOPS` за прокси); в аннотацию `template/v1.2.0` — событие
+  `verification.events.password_reset_requested.v3`, миграция `0006` до замены api, env `HTTP_AUTH_RATE_LIMIT_*`.
 
 ## Где мы сейчас
-S3 закрыт: трек lifecycle в `main` (`a94979b`). Gate — приёмка `make mutate` и последний шаг; identity —
-валидатор нашёл три блокирующих (`N/validation-identity.md`), дальше круг фиксов. Следующее: S1 и S2, затем
-волна 2 (boundaries — после S2, harness — после S1).
+S2 и S3 закрыты: identity (`d5fa709`) и lifecycle — в `main`. Gate — у валидатора; после него — перенос на `main`
+и хвосты трека: патч мутаций после identity (`N/gate/mutants-after-identity.patch`), `scripts/tools/mutants.txt`
+вне путей шаблона и в prune, флак `TestReleaseBuildForwardsSSHAgent`, `make mutate` → код 0. Следующее: волна 2 —
+boundaries от `d5fa709`, harness — после S1.

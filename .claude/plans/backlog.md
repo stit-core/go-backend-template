@@ -33,8 +33,9 @@ https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE). Medium-пункты и minor
 - **minor-lifecycle** — minor угла LIF: RLIF-06 образцы после prune — в теге старше дерева форка; 07 порядок
   «golibinfra → обвязка» без переноса кода; 08 INFRA-HANDOFF шаблона форку не едут; 09 de-template: импорты
   после `sed`, `SECURITY.md`, клей идентичности; 10 прерывание переноса; 11 push тега релиза; 12 превью
-  аннотации; 13 прочее; `strategy-schema` — у артефактов strategy нет версии схемы, `domain-mapping.md`
-  сверен вручную. Триггер: первый онбординг форка, правка схемы strategy.
+  аннотации; 13 прочее, в том числе prune оставляет `HTTP_AUTH_RATE_LIMIT_RPS` в `test/stack/compose.yml`;
+  `strategy-schema` — у артефактов strategy нет версии схемы, `domain-mapping.md` сверен вручную. Триггер:
+  первый онбординг форка, правка схемы strategy.
 
 ## Эталон: код и security
 
