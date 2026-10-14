@@ -1,5 +1,5 @@
 #!/bin/bash -p
-# Разрешённые типы описывает CLAUDE.md § Git workflow.
+# Разрешённые типы описывает CLAUDE.md § Git workflow, строку Review: — CLAUDE.md § Готово.
 # Строка интерпретатора — `bash -p`: окружение оболочки коммитящего (BASH_ENV, функции, SHELLOPTS)
 # хук не читает.
 # При смене списка править оба места одним коммитом.
@@ -15,16 +15,25 @@ HEAD_LINE="$(head -n 1 "$COMMIT_MSG_FILE" | sed 's/[[:space:]]*$//')"
 [[ "$HEAD_LINE" =~ $GIT_PATTERN ]] && exit 0
 WHY="первая строка коммита должна быть Conventional Commit"
 if [[ "$HEAD_LINE" =~ $PATTERN ]]; then
+  TYPE=${BASH_REMATCH[1]}
   SUBJECT=${BASH_REMATCH[4]}
   CHARS=${SUBJECT//[$'\x80'-$'\xbf']/}
-  [ ${#CHARS} -le 72 ] && exit 0
-  WHY="subject длиннее 72 символов (${#CHARS})"
+  # След ревью — строка тела: первая строка начинается с типа и строкой Review: не бывает.
+  if [ ${#CHARS} -gt 72 ]; then
+    WHY="subject длиннее 72 символов (${#CHARS})"
+  elif [[ $TYPE != feat && $TYPE != fix ]] || grep -qE '^Review: +[^[:space:]]' "$COMMIT_MSG_FILE"; then
+    exit 0
+  else
+    WHY="у $TYPE в теле нет строки Review: — след ревью"
+  fi
 fi
 echo "ERROR: $WHY"
 echo "Формат: <type>(<scope>)?: <subject>  (≤72 символа)"
 echo "Допустимые types: feat, fix, refactor, docs, test, chore, meta"
+echo "У feat и fix в теле — строка Review: <кто или чем> — <итог> (CLAUDE.md § Готово)"
 echo "Сообщения самого git (Revert \"…\", fixup!/squash!/amend! …) тоже проходят"
 echo "Пример: feat(user): add password reset"
-echo "       meta(rules): align commit-prefix SSOT"
+echo
+echo "        Review: /code-review — находок нет"
 echo "Текущая первая строка: $HEAD_LINE"
 exit 1

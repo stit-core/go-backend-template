@@ -49,7 +49,8 @@ Reference даёт variant-специфичные шаги; этот ритм о
    код до green. Какие файлы/пакеты — в reference.
 5. **Готово** — по CLAUDE.md § Готово. По ходу — `make test PKG=./internal/domain/<name>/...`,
    `make lint PKG=...`.
-6. **Conventional Commit:** `feat(<scope>): <subject>` (точный scope/subject — в reference).
+6. **Conventional Commit:** `feat(<scope>): <subject>` (точный scope/subject — в reference), в
+   теле — строка `Review:` (CLAUDE.md § Готово).
    Тронул инфра-поверхность (env/секрет/миграция-с-эффектом/cross-service-subject/новый
    сетевой порт/go.mod) → оформи INFRA-HANDOFF (skill `infra-handoff`) до коммита.
 

@@ -48,7 +48,8 @@ make check    # канонический gate (состав — CLAUDE.md § К�
   `make gen` (sqlc, mockery, openapi.json). Сгенерированное руками не правим.
 - **Conventional Commits** (хук `commit-msg`): `<type>(<scope>)?: <subject>`,
   subject ≤72. Типы: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `meta`.
-  Пример: `feat(user): add email change endpoint`.
+  Пример: `feat(user): add email change endpoint`. У `feat` и `fix` в теле — строка
+  `Review: <кто или чем> — <итог>`: след ревью (`CLAUDE.md` § Готово).
 
 ## Стиль
 

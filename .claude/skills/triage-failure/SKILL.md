@@ -78,7 +78,8 @@ go test -race -run TestX -count=10 ./path/to/pkg   # для flaky/race
 4. `go test -run TestNew ./pkg` → green.
 5. `make test PKG=./pkg` → весь пакет green (не сломал соседние тесты).
 6. Коммит: оба файла одним `fix(<scope>): <one-liner>`; в теле — строка красного прогона из п. 2
-   (`--- FAIL: TestNew …`), чтобы RED-first был виден в истории.
+   (`--- FAIL: TestNew …`), чтобы RED-first был виден в истории, и строка `Review:` (CLAUDE.md
+   § Готово).
 
 ### 5. Не-баг-флоу (build / lint / drift / race)
 
