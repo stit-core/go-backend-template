@@ -105,7 +105,8 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Подтверждено: SD1, SD5, SD6, SD7 (`cmd/seed-admin`), K01, K04 (`cmd/api`), MI1 (`user/infra/postgres`),
     A36 (`auth`), UH7 (`user/delivery/http`), AD1 (`auth/module`, юнит) → KILLED красным тестом своего пакета
     (`N/identity/mutants/*.log`); на базе они выжили в гейте (Приложение Б `R/template-tests.md`, AD1 ловил
-    только integration `TestSessions`), A36, UH7, AD1 на тестах до S13 → SURVIVED (`*-base.log`)
+    только integration `TestSessions`), A36, UH7, AD1 на тестах до S13 → SURVIVED (`*-base.log`); выжившие полного
+    `make mutate` трека gate на слиянии с ним — K12 → KILLED
 - [x] **AC11** — Гейт зелёный. Проверка: `flock N/gate.lock make check` → `✓ check clean`
   - Подтверждено: на итоге ветки `flock N/gate.lock make check` → `✓ check clean`, покрытие 100 % (798/798)
 
@@ -202,7 +203,9 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
 - [x] **S11** — RTSTT-04: `fx.StopTimeout` графа и граница ⅔ бюджета остановки
   - Проверка: мутанты K01, K04 → красные · Закрывает: AC10
   - Сделано: случай «ровно ⅔» в `TestCheckStopBudget`, `app.StopTimeout() == stopTimeout` в `TestBoot`; K01, K04 →
-    KILLED (`N/identity/mutants/K0*.log`); `make check` → `✓ check clean`
+    KILLED (`N/identity/mutants/K0*.log`); `make check` → `✓ check clean`. Выжившие полного `make mutate` трека
+    gate: K12 — `TestServicePanicIsStartError` (паника Invoke графа — ошибка старта, а не паника `fx.New`);
+    доказан во временном worktree: с мутацией FAIL, без неё PASS (`N/identity/mutants/K12.log`)
 - [x] **S12** — RTSTT-05: триггер `updated_at` держат тесты репозитория user
   - Проверка: мутант MI1 → красный · Закрывает: AC10
   - Сделано: `TestUpdate` и `TestUpdatePassword` — `updated_at` сохранённой строки позже вставленной; MI1 →

@@ -80,6 +80,17 @@ func TestFxGraphHasNoContext(t *testing.T) {
 	require.ErrorContains(t, err, "missing type: context.Context", "the fx graph provides a context.Context to its root")
 }
 
+// Паника в конструкторе или Invoke графа — ошибка старта (fx.RecoverFromPanics), которую main пишет в лог
+// сервиса, а не падение процесса трассой мимо лога. Invoke модуля, объявленного раньше графа, идёт первым.
+func TestServicePanicIsStartError(t *testing.T) {
+	t.Parallel()
+	var app *fx.App
+	require.NotPanics(t, func() {
+		app = fx.New(fx.Module("panicking", fx.Invoke(func() { panic("constructor failed") })), service, fx.NopLogger)
+	})
+	require.ErrorContains(t, app.Err(), "constructor failed")
+}
+
 // envAllowlist — required-переменные конфигов, которых нет в .env.example.
 var envAllowlist = allowlist.List{}
 
