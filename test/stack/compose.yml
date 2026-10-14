@@ -28,6 +28,9 @@ x-app-env: &app-env
 
   BRUTEFORCE_MAX_FAILURES: "5"
   BRUTEFORCE_LOCK_DURATION: 15m
+  # Сценарии шлют вход и регистрацию подряд с одного адреса: строгий лимит /api/auth/* выключен, как в
+  # integration-тестах (его держит TestBoot_AuthRateLimit), и 429 входа — только блокировка антибрутфорса.
+  HTTP_AUTH_RATE_LIMIT_RPS: "0"
 
 services:
   postgres:
