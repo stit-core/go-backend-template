@@ -20,6 +20,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -29,6 +30,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/telemetry"
 	"git.stit.tech/stit-core/golibinfra/testkit"
+	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
 
 	"git.stit.tech/stit-core/go-backend-template/cmd/migrate/sources"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
@@ -266,6 +268,26 @@ func TestBoot_AuthRateLimit(t *testing.T) {
 	require.NotEqual(t, http.StatusTooManyRequests, status, "another client has its own bucket: %s", code)
 	status, code = send(http.MethodGet, "/health", "198.51.100.1")
 	require.Equal(t, http.StatusOK, status, "a path outside /api/auth/ is not limited: %s", code)
+}
+
+// Метрики доменов — под scope app провайдера telemetry: по нему их отличают от метрик китов.
+func TestBoot_DomainMeterScope(t *testing.T) {
+	serviceEnv(t)
+	metrics := metrictest.NewProvider()
+	var meter metric.Meter
+	app := fx.New(service,
+		fx.Decorate(func(p *telemetry.Providers) *telemetry.Providers {
+			tapped := *p
+			tapped.MeterProvider = metrics.MeterProvider
+			return &tapped
+		}),
+		fx.Populate(&meter))
+	require.NoError(t, app.Err())
+
+	counter, err := meter.Int64Counter("probe_total")
+	require.NoError(t, err)
+	counter.Add(t.Context(), 1)
+	require.Equal(t, "app", metrics.Collect(t).Get(t, "probe_total").Scope)
 }
 
 func sourceNames(srcs []pgkit.Source) []string {

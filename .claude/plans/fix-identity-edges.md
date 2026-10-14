@@ -106,7 +106,7 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     A36 (`auth`), UH7 (`user/delivery/http`), AD1 (`auth/module`, юнит) → KILLED красным тестом своего пакета
     (`N/identity/mutants/*.log`); на базе они выжили в гейте (Приложение Б `R/template-tests.md`, AD1 ловил
     только integration `TestSessions`), A36, UH7, AD1 на тестах до S13 → SURVIVED (`*-base.log`); выжившие полного
-    `make mutate` трека gate на слиянии с ним — K12 → KILLED
+    `make mutate` трека gate на слиянии с ним — K12, K13 → KILLED
 - [x] **AC11** — Гейт зелёный. Проверка: `flock N/gate.lock make check` → `✓ check clean`
   - Подтверждено: на итоге ветки `flock N/gate.lock make check` → `✓ check clean`, покрытие 100 % (798/798)
 
@@ -205,7 +205,9 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Сделано: случай «ровно ⅔» в `TestCheckStopBudget`, `app.StopTimeout() == stopTimeout` в `TestBoot`; K01, K04 →
     KILLED (`N/identity/mutants/K0*.log`); `make check` → `✓ check clean`. Выжившие полного `make mutate` трека
     gate: K12 — `TestServicePanicIsStartError` (паника Invoke графа — ошибка старта, а не паника `fx.New`);
-    доказан во временном worktree: с мутацией FAIL, без неё PASS (`N/identity/mutants/K12.log`)
+    доказан во временном worktree: с мутацией FAIL, без неё PASS (`N/identity/mutants/K12.log`); K13 —
+    `TestBoot_DomainMeterScope` (meter доменов из графа пишет под scope `app`): с мутацией FAIL, без неё PASS
+    (`N/identity/mutants/K13.log`)
 - [x] **S12** — RTSTT-05: триггер `updated_at` держат тесты репозитория user
   - Проверка: мутант MI1 → красный · Закрывает: AC10
   - Сделано: `TestUpdate` и `TestUpdatePassword` — `updated_at` сохранённой строки позже вставленной; MI1 →
