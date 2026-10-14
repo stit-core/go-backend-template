@@ -235,8 +235,13 @@ blocked-by: —
   - Сделано: песочница получает свою миграцию `9000_occupied.up.sql` (`probe_items`), случай «занятая таблица» — домен
     `probe_item`; каталога миграций у сервиса может не быть; worktree экспериментов без `migrations/0001`–`0006`: до
     правки — FAIL (`open …/migrations: no such file or directory`), после — PASS; `make check` → ✓
-- [ ] **S16** — O3: контроль эквивалентных мутаций U25 — ID вызывающего через переменную
+- [x] **S16** — O3: контроль эквивалентных мутаций U25 — ID вызывающего через переменную
   - Проверка: `make mutate A="--strict U25"` → код 0; `make check` → ✓ · Закрывает: AC9 · Зависит от: S11
+  - Сделано: U25 в `scripts/tools/mutants.txt` — `id := caller.UserID` и `GetByID(ctx, id)` (правило policy видит
+    ключ и в переменной); прежний `caller.UserID+""` убивает `TestSecuredOperationsAskPolicy` (проверено инъекцией);
+    `make mutate A=--check` → якоря 356 — по одному месту; `make mutate A="--strict U25 UH9"` (временный коммит в
+    worktree экспериментов, под замком) → обе — известные эквивалентные, код 0 (`N/boundaries/o3-mutate.log`);
+    `make check` → ✓
 - [ ] **S17** — Комментарий пакета archtest — перечень по файлам (N9), комментарии правил (N10, N11)
   - Проверка: перечень = тесты пакета; `make check` → ✓ · Закрывает: AC9 · Зависит от: S6
 - [x] **S19** — RHAR-08 п. 5 (от трека harness): предел ~400 строк — у файла кода, не `*_test.go`
@@ -295,6 +300,6 @@ blocked-by: —
   собирается — скопировать из шаблона (`git show template/v1.2.0:internal/archtest/layout_settings_test.go`).
 
 ## Где мы сейчас
-S7–S15 (B1, N1–N7, O1, O2) и S19 (RHAR-08 п. 5) сделаны; у `fix(...)` круга — строка `Review:`. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
-Следующий шаг — S16 (O3); затем S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
+S7–S16 (B1, N1–N7, O1–O3) и S19 (RHAR-08 п. 5) сделаны; у `fix(...)` круга — строка `Review:`. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
+Следующий шаг — S17 (комментарий пакета archtest) по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
 валидатора — `cases_val.py`), worktree экспериментов — `N/wt-boundaries-exp`.

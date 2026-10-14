@@ -342,12 +342,13 @@ internal/domain/user/usecase.go
 - uc.d.Repo.Insert(txCtx, u)
 + uc.d.Repo.Insert(ctx, u)
 
-## U25 usecase/user — Me: ID вызывающего склеен с пустой строкой — тот же ID
-= контроль списка эквивалентных: Me читает тот же ID
+## U25 usecase/user — Me: ID вызывающего — через переменную — тот же ID
+= контроль списка эквивалентных: Me читает тот же ID (archtest видит ключ и в переменной)
 internal/domain/user/usecase.go
 - return uc.d.Repo.GetByID(ctx, caller.UserID)
 - }
-+ return uc.d.Repo.GetByID(ctx, caller.UserID+"")
++ id := caller.UserID
++ return uc.d.Repo.GetByID(ctx, id)
 + }
 
 ## T01 trusted — VerifyPassword: пароль длиннее предела — «совпал»
