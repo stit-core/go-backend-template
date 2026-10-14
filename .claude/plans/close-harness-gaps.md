@@ -118,9 +118,15 @@ blocked-by: —
   - Сделано: Pre-flight `/release` — `make mutate A=--strict` → код 0 (больше часа, в фоне, продолжение с
     места), код 1 — STOP с разбором по rule `tests-pipeline`; прогон — как в AC6; «Шаг 0» triage-failure —
     «багфикс начинается с теста» (build и lint тест не пишут); `make check` → `✓ check clean`
-- [ ] **S7** — приёмка трека: `exp.py` на базе и ветке, гейт
+- [x] **S7** — приёмка трека: `exp.py` на базе и ветке, гейт
   - Проверка: `exp.py` — как в AC1–AC6; `make check` → `✓ check clean` · Закрывает: AC1–AC6 ·
     Зависит от: S1–S6
+  - Сделано: `exp.py` на `f825fac` (`base-exp-f825fac.log`) — 13 порч «не поймано», H01–H10 «принято»,
+    G01, G02, G08 «нет», G03–G07 «да»; на `d332b9e` (`branch-exp-d332b9e.log`) — 13 порч «поймано»
+    своими тестами, CTRL зелёный, H01–H06 «отказ», H07–H10 «принято», G01, G02, G08 «да», G03–G07 «нет»,
+    N01 — отказ до правки; сообщения коммитов ветки — через её хук `commit-msg` (`check-msg.py`) — OK;
+    пробное слияние с `nine/boundaries` (`38cc26c`) — без конфликтов, `make check` → `✓ check clean`,
+    `exp.py` — как на ветке (`trial-merge-exp.log`); `make check` → `✓ check clean`
 
 ## Решения
 - Полный `make mutate A=--strict` — на `f825fac` в своём worktree: код под мутациями (домены, platform,
@@ -161,8 +167,6 @@ blocked-by: —
   545–1012 строк, код — до 303.
 
 ## Где мы сейчас
-S1–S6 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
-самопроверка прозы видит имена тестов, доставку правил и подключение guard; S4 — правда прозы
-smartdev, triage-failure, stack-deep-dive; S5 — поля нового домена одним способом; S6 — шаг
-`make mutate A=--strict` в `/release`, полный прогон на `f825fac` — код 0. Пробное слияние с
-`nine/boundaries` (`acfe446`) — без конфликтов, archtest и `exp.py` зелёные. Следующий шаг — S7 (приёмка).
+Трек закрыт: S1–S7, AC1–AC6 подтверждены, эксперименты и логи — `N/harness/` (`exp.py`, `check-msg.py`,
+`*-exp-*.log`, `check-*.log`, `mutate-strict-f825fac*.log`). Дальше — независимый валидатор трека; при
+слиянии дирижёру — две строки Handoff (комментарий пакета archtest и RHAR-08, п. 5 в файлах boundaries).
