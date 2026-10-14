@@ -85,15 +85,17 @@ func TestLintUsesItsConfig(t *testing.T) {
 // TestGenCheckComparesMocksWithTree: gen-check сверяет моки с деревом до прогона mockery, а не с индексом:
 // свежие моки после make gen — не дрейф, ручная правка мока в дереве — дрейф, новый мок вне индекса —
 // отказ, а MOCKERY_* окружения до mockery не доходят. Инструменты — заглушки: mockery пишет моки v2 (с
-// MOCKERY_CONFIG в окружении — никуда, как вывод мимо mocks/), sqlc и go отвечают успехом.
+// MOCKERY_CONFIG в окружении — никуда, как вывод мимо mocks/) и падает без --config .mockery.yml — свой
+// конфиг mockery ищет сам, и .mockery.yaml рядом заслонил бы .mockery.yml; sqlc и go отвечают успехом.
 func TestGenCheckComparesMocksWithTree(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	bin := t.TempDir()
 	writeFiles(t, bin, map[string]string{
-		"mockery": "#!/bin/sh\n[ -z \"$MOCKERY_CONFIG\" ] || exit 0\nprintf 'package mocks // v2\\n' >p/mocks/m.go\nprintf 'package mocks // n\\n' >p/mocks/n.go\n",
-		"sqlc":    "#!/bin/sh\nexit 0\n",
-		"go":      "#!/bin/sh\nexit 0\n",
+		"mockery": "#!/bin/sh\n[ \"$*\" = \"--config .mockery.yml\" ] || { echo \"mockery $*: not the config of the repo\" >&2; exit 3; }\n" +
+			"[ -z \"$MOCKERY_CONFIG\" ] || exit 0\nprintf 'package mocks // v2\\n' >p/mocks/m.go\nprintf 'package mocks // n\\n' >p/mocks/n.go\n",
+		"sqlc": "#!/bin/sh\nexit 0\n",
+		"go":   "#!/bin/sh\nexit 0\n",
 	})
 	for _, tool := range []string{"mockery", "sqlc", "go"} {
 		require.NoError(t, os.Chmod(filepath.Join(bin, tool), 0o700))

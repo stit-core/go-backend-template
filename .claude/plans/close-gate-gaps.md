@@ -220,8 +220,11 @@ blocked-by: —
     Ctrl-C; откат следа в дереве разработчика (`00c4f5d`) снят. Песочница (`N/gate/r2-sandbox.log`): TERM, HUP —
     дерево разработчика и worktree чистые; KILL — правка только в worktree раннера; правка README после обрыва
     цела, повтор — с места; убитая, эквивалентная, новая (код 1), устаревший якорь — как прежде; `make check` → ✓
-- [ ] **S17** — B3: mockery — только `--config .mockery.yml` (gen и gen-check)
+- [x] **S17** — B3: mockery — только `--config .mockery.yml` (gen и gen-check)
   - Проверка: `.mockery.yaml` рядом — gen-check FAIL, случай теста · Закрывает: AC12 · Зависит от: S14
+  - Сделано: `mockery --config .mockery.yml` в gen и gen-check; заглушка `TestGenCheckComparesMocksWithTree` падает
+    без него (на Makefile до правки — 4 из 4 FAIL); форма валидатора (`.mockery.yaml` с выводом в `mocks2`, метод
+    `Ping` без make gen) — gen-check FAIL с файлом мока; `make check` → ✓
 - [ ] **S18** — Список непокрываемого `cover.sh`: запись — ровно один свой блок, пустой текст — отказ
   - Проверка: случаи `TestCoverCheck` · Закрывает: AC12 · Зависит от: S14
 - [ ] **S19** — `TestTestsAssert` вне доменов: засчитывается хелпер, который утверждает, а не любой вызов с `t`
@@ -304,4 +307,4 @@ blocked-by: —
 
 ## Где мы сейчас
 S1–S13 приняты по существу, валидатор — FAIL на `829481c` (`N/validation-gate.md`): круг фиксов S14–S27. Ветка
-перенесена на `main` `98e425e` (S14), B1 и B2 закрыты (S15, S16). Следующее: S17 — B3, `mockery --config`.
+перенесена на `main` `98e425e` (S14), B1–B3 закрыты (S15–S17). Следующее: S18 — запись списка непокрываемого.

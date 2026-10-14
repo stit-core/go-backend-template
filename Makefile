@@ -116,14 +116,15 @@ check:: ## Канонический gate (pre-push) по всему дереву
 	@echo "✓ check clean"
 
 ##@ GEN
-# mockery читает MOCKERY_CONFIG и MOCKERY_* из окружения поверх .mockery.yml: моки, выведенные мимо
-# каталогов mocks/, gen-check не сверил бы.
+# mockery читает MOCKERY_CONFIG и MOCKERY_* из окружения поверх конфига, а конфиг ищет сам — .mockery.yaml
+# раньше .mockery.yml: моки, выведенные мимо каталогов mocks/, gen-check не сверил бы. Конфиг — только
+# --config .mockery.yml, окружение mockery не достаётся.
 unexport $(filter MOCKERY_%,$(.VARIABLES))
 
 gen: ## Регенерация сгенерированного: sqlc, mockery, openapi.json (без запуска сервиса)
 	sqlc generate
 	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
-	mockery
+	mockery --config .mockery.yml
 	go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 -args -update
 
 # Моки сверяются с деревом до прогона mockery, а не с индексом: свежие моки после make gen, ещё не в
@@ -134,7 +135,7 @@ gen-check: ## Проверка, что sqlc, моки и openapi.json актуа
 	@out=$$(go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 2>&1) || \
 		{ echo "$$out"; echo "FAIL: TestOpenAPISpec — вывод выше (расхождение с openapi.json чинит make gen)"; exit 1; }
 	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
-	@before=$$(git ls-files -co --exclude-standard -- '**/mocks/*.go' | xargs -r cksum) && mockery && \
+	@before=$$(git ls-files -co --exclude-standard -- '**/mocks/*.go' | xargs -r cksum) && mockery --config .mockery.yml && \
 	after=$$(git ls-files -co --exclude-standard -- '**/mocks/*.go' | xargs -r cksum) || \
 		{ echo "FAIL: mockery или чтение моков — вывод выше"; exit 1; }; \
 	if [ "$$before" != "$$after" ]; then \
