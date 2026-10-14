@@ -126,8 +126,12 @@ var (
 )
 ```
 
-- Новая ошибка домена — правило в `userErrors`, иначе archtest `TestDomainErrorTables` красный: она
-  ответила бы 500.
+- Новая ошибка домена — sentinel в `errors.go` (свой тип — там же, с `Unwrap` в sentinel) и правило в
+  `userErrors`, иначе archtest красный: ошибка из другого файла корня (`errors.New`, `var Err…`,
+  `fmt.Errorf` без `%w`) — `TestDomainErrorsInErrorsGo`, sentinel без правила — `TestDomainErrorTables`:
+  она ответила бы 500.
+- Хендлер отдаёт ошибкой только `nil` или `userErrors.Map(err)` — не свою функцию перевода и не
+  `huma.Error…` (archtest `TestDomainErrorTables`).
 - Код — `<DOMAIN>_<WHAT>`; разный смысл — разная ошибка домена; ошибка поля запроса — 422 с
   `Field: "body.<field>"`.
 - 429 — `Retry-After` из метода `RetryAfter() time.Duration` ошибки в цепочке (`auth.LockedError`).
@@ -169,6 +173,6 @@ make build
 
 - ❌ Бизнес-логика в handler-методе. Handler только: парсит вход, вызывает usecase, мапит ошибки.
 - ❌ Прямое использование `pgx`/`sqlc`, репозитория или кита из handler. Только через usecase (archtest).
-- ❌ Свой формат ошибок мимо `httpkit.ErrorMap` — нарушит единый контракт ошибок (problem+json с `code`).
+- ❌ Свой формат ошибок мимо `httpkit.ErrorMap` — нарушит единый контракт ошибок (problem+json с `code`; archtest).
 - ❌ Открыть авторизованный endpoint пометкой `httpkit.Public` вместо `authgate.Secured` — он публичен в рантайме; операцию без того и другого не пропустит старт сервиса (`TestHTTPOperations` в `cmd/api`).
 - ❌ `_, _ = ctx, in` в handler без вызова usecase — компилятор пропустит, но это dead-handler.

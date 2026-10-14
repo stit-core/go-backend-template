@@ -80,6 +80,45 @@ func TestTrustedErrors(t *testing.T) {
 	}
 }
 
+// TestModulesEmbedNoForeignTypes: порт между доменами — типовой адаптер, который объявляет каждый метод и
+// переводит его ошибки. Структура module/ со встроенным типом чужого домена отдала бы порту его методы и
+// sentinel'ы как есть — тот же обход, что identity-closure.
+func TestModulesEmbedNoForeignTypes(t *testing.T) {
+	t.Parallel()
+	for _, f := range goFiles(t) {
+		domain, sub, ok := splitDomain(f.pkg)
+		if !ok || sub != "module" || f.test {
+			continue
+		}
+		file := parseGo(t, f.path)
+		byName := importsByName(file)
+		ast.Inspect(file, func(n ast.Node) bool {
+			st, ok := n.(*ast.StructType)
+			if !ok {
+				return true
+			}
+			for _, field := range st.Fields.List {
+				typ := field.Type
+				if star, ok := typ.(*ast.StarExpr); ok {
+					typ = star.X
+				}
+				sel, ok := typ.(*ast.SelectorExpr)
+				if !ok || len(field.Names) != 0 {
+					continue
+				}
+				id, ok := sel.X.(*ast.Ident)
+				if !ok {
+					continue
+				}
+				if provider, provSub, ok := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/")); ok && provSub == "" && provider != domain {
+					t.Errorf("%s embeds %s.%s: a port between domains is a typed adapter that declares each method and maps its errors", f.path, id.Name, sel.Sel.Name)
+				}
+			}
+			return true
+		})
+	}
+}
+
 // TestNoFxAs: порт привязывает тип результата провайдера или identity-closure (architecture.md § fx);
 // fx.As — вторая идиома, и порт между доменами через неё обошёл бы правило archkit об identity-closure.
 func TestNoFxAs(t *testing.T) {

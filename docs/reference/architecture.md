@@ -80,7 +80,7 @@ Generic-примитив, нужный не только этому сервис
 | `dto.go` | huma-теги, json-теги транспорта (это `delivery/http/dto.go`), методы с I/O |
 | `errors.go` | всё, кроме sentinel-`var` и error-типов домена (отказ policy — общий `policy.ForbiddenError` из `pkg/policy`) |
 | `events.go` | всё, кроме payload-типов и unexported subject-констант |
-| `usecase.go` | прямой транспорт: `httpkit`/`natskit`/huma/`net/http`; ctx-геттеры транспорта — только через `internal/platform/identity`; inline-константы правил (место — `policy.go`) |
+| `usecase.go` | прямой транспорт: `httpkit`/`natskit`/huma/`net/http`; ctx-геттеры транспорта — только через `internal/platform/identity`; inline-константы правил (место — `policy.go`); новые ошибки — `errors.New`, `var Err…`, свой тип, `fmt.Errorf` без `%w` (место — `errors.go`; archtest) |
 | `delivery/*` | бизнес-решения (все ветвления — в usecase), импорт чужих доменов и своего `infra/`; из своего корня — порты, usecase, `Trusted` и их зависимости (данные — можно); пакеты golibinfra, кроме транспорта, лога и helpers без I/O, `database/sql` и pgx; подпакеты, кроме `mocks` (archtest) |
 | `infra/postgres` | бизнес-логика в SQL (сложные CASE-ветвления политик); запросы держат CRUD/фильтры |
 | `module/` | бизнес-логика и обёртки китов (место — `infra/<kit>/`); только wiring + маппинг типов/ошибок между доменами |
@@ -166,17 +166,21 @@ DTO в порте — локальные (не re-export из B).
   решение принял вызывающий. Методы с policy (`Usecase`) — только входам самого домена (HTTP,
   NATS); `Trusted` берут только адаптеры `module/` потребителей, свой `module/` лишь провайдит
   `NewTrusted` (archtest `TestTrustedOnlyInModules`). Ошибки `Trusted` — список `TrustedErrors`: что
-  других нет, держат тест `Trusted` (исходы репозитория) и archtest `TestTrustedErrors` (`return` в
-  `trusted.go`), что каждая переводится — тест адаптера.
+  других нет, держат тест `Trusted` (исходы репозитория на каждом методе — перечень методов теста сверен с
+  типом через `reflect`) и archtest `TestTrustedErrors` (`return` в `trusted.go`), что каждая переводится —
+  тест адаптера. Ошибку сущности, которую новый метод `Trusted` отдаёт на входе вне теста, держит ревью.
 - **Identity-closure** (`func(u *user.Usecase) userhttp.Usecase { return u }`) — только внутри
   домена: delivery-порт своего usecase. Порт между доменами closure не реализует — чужие
   sentinel'ы уйдут потребителю без маппинга (archtest `TestLayout`).
 - **Типовой адаптер** — тип **и его конструктор** в `adapters.go` (не расщеплять между
-  module.go/adapters.go); один тип на домен-поставщика реализует все порты потребителя к нему.
+  module.go/adapters.go); один тип на домен-поставщика реализует все порты потребителя к нему и объявляет
+  каждый метод сам: структура со встроенным типом чужого домена отдала бы порту его методы и ошибки как есть
+  (archtest `TestModulesEmbedNoForeignTypes`).
 - **Sentinel-маппинг исчерпывающий:** каждая ошибка из `TrustedErrors` поставщика → sentinel
   потребителя (`user.ErrConcurrentUpdate` → `auth.ErrConcurrentUpdate`), usecase-потребитель не
   может `errors.Is` по чужим sentinel'ам (archtest); тест адаптера идёт по `TrustedErrors` на каждом
-  методе.
+  методе, перечень его методов сверен с методами адаптера через `reflect` — новый метод без строки роняет
+  тест. Чужую ошибку, узнанную по тексту (`err.Error()`), держит ревью.
 - **Порт переносит решения, не сырьё:** вычисленное свойство — метод сущности поставщика
   (`CanLogin()`), в адаптере нет условий по полям поставщика.
 - Времени в адаптерах нет: `clockkit.Clock` инжектится так же, как в usecase.
@@ -254,9 +258,15 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 Ответ-ошибка — `httpkit.APIError` (problem+json, RFC 9457): машинный `code`, `request_id`, у 422 —
 `errors[]` полей; 5xx — без причины, она в логе сервиса с тем же `request_id` (контракт кита).
 
+- Ошибка домена — sentinel `Err…` или тип из `errors.go`: тип разворачивается (`Unwrap`) в sentinel, и
+  правило sentinel переводит его. В другом файле корня ошибку не создают (`errors.New`, `var Err…`, свой
+  тип), `fmt.Errorf` — только с `%w`: иначе sentinel или причина теряются (archtest
+  `TestDomainErrorsInErrorsGo`).
 - Правило каждой ошибки `errors.go` — одно, переменной `delivery/http`. Таблица домена
-  `<домен>Errors` (`httpkit.ErrorMap`) переводит их все, и хендлер отдаёт ошибку только
-  `<домен>Errors.Map(err)`: ни одна ошибка домена не уходит 500 ни на одной операции. Таблица
+  `<домен>Errors` (`httpkit.ErrorMap`) переводит их все, и хендлер отдаёт ошибкой только `nil` или
+  `<домен>Errors.Map(err)` — не свою функцию перевода и не `huma.Error…`: ошибка домена не уходит 500 ни на
+  одной операции. 500 — сбой порта или кита, который usecase не перевёл в sentinel; перевод держит тест
+  usecase. Таблица
   операции из тех же правил объявляет при регистрации (`Declare`) коды, которые отдаёт её usecase
   (`openapi.json`). Оба правила держит archtest `TestDomainErrorTables`, сверку таблицы операции с
   usecase — ручной список теста; операция без доменных ошибок таблицы операции не заводит.

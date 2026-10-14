@@ -3,6 +3,8 @@ package user_test
 import (
 	"context"
 	"errors"
+	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -140,8 +142,9 @@ func TestTrusted_MarkEmailVerified(t *testing.T) {
 	require.ErrorIs(t, tr.MarkEmailVerified(context.Background(), "gone"), user.ErrNotFound)
 }
 
-// На каждом исходе репозитория методы Trusted отдают только ошибки TrustedErrors и сбои инфраструктуры
+// На каждом исходе репозитория каждый метод Trusted отдаёт только ошибки TrustedErrors и сбои инфраструктуры
 // (свои return — archtest): их переводят адаптеры потребителей, новая ошибка без перевода ушла бы им 500.
+// Новый метод без строки в calls роняет этот тест.
 func TestTrusted_ErrorsAreDeclared(t *testing.T) {
 	t.Parallel()
 	infra := errors.New("db down")
@@ -151,49 +154,51 @@ func TestTrusted_ErrorsAreDeclared(t *testing.T) {
 		}
 		return &user.User{ID: "u1", PasswordHash: "hash:secret-1", Version: 3}
 	}
-	calls := []struct {
-		name string
-		call func(tr *user.Trusted, repo *mocks.MockRepository, sessions *mocks.MockSessions, repoErr error) error
-	}{
-		{"LookupByID", func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
+	calls := map[string]func(tr *user.Trusted, repo *mocks.MockRepository, sessions *mocks.MockSessions, repoErr error) error{
+		"LookupByID": func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
 			repo.EXPECT().GetByID(mock.Anything, "u1").Return(found(repoErr), repoErr).Once()
 			_, err := tr.LookupByID(context.Background(), "u1")
 			return err
-		}},
-		{"LockByID", func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
+		},
+		"LockByID": func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
 			repo.EXPECT().GetByIDForShare(mock.Anything, "u1").Return(found(repoErr), repoErr).Once()
 			_, err := tr.LockByID(context.Background(), "u1")
 			return err
-		}},
-		{"LookupByEmail", func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
+		},
+		"LookupByEmail": func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
 			repo.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(found(repoErr), repoErr).Once()
 			_, err := tr.LookupByEmail(context.Background(), "a@b.com")
 			return err
-		}},
-		{"VerifyPassword", func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
+		},
+		"VerifyPassword": func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
 			repo.EXPECT().GetByID(mock.Anything, "u1").Return(found(repoErr), repoErr).Once()
 			_, err := tr.VerifyPassword(context.Background(), "u1", "secret-1")
 			return err
-		}},
-		{"UpdatePassword", func(tr *user.Trusted, repo *mocks.MockRepository, sessions *mocks.MockSessions, repoErr error) error {
+		},
+		"UpdatePassword": func(tr *user.Trusted, repo *mocks.MockRepository, sessions *mocks.MockSessions, repoErr error) error {
 			repo.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:new", 3).Return(found(repoErr), repoErr).Once()
 			if repoErr == nil {
 				sessions.EXPECT().RevokeAll(mock.Anything, "u1").Return(nil).Once()
 			}
 			return tr.UpdatePassword(context.Background(), "u1", "hash:new", 3)
-		}},
-		{"MarkEmailVerified", func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
+		},
+		"MarkEmailVerified": func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
 			repo.EXPECT().SetEmailVerified(mock.Anything, "u1").Return(repoErr).Once()
 			return tr.MarkEmailVerified(context.Background(), "u1")
-		}},
+		},
 	}
+	var methods []string
+	for m := range reflect.TypeFor[*user.Trusted]().Methods() {
+		methods = append(methods, m.Name)
+	}
+	require.Equal(t, methods, slices.Sorted(maps.Keys(calls)), "every method of Trusted is checked here")
 	outcomes := append([]error{nil, infra}, user.TrustedErrors...)
-	for _, c := range calls {
-		t.Run(c.name, func(t *testing.T) {
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			for _, repoErr := range outcomes {
 				repo, sessions := mocks.NewMockRepository(t), mocks.NewMockSessions(t)
-				err := c.call(newTrusted(t, repo, sessions), repo, sessions, repoErr)
+				err := call(newTrusted(t, repo, sessions), repo, sessions, repoErr)
 				declared := err == nil || errors.Is(err, infra) ||
 					slices.ContainsFunc(user.TrustedErrors, func(e error) bool { return errors.Is(err, e) })
 				require.True(t, declared, "%v is not in user.TrustedErrors", err)

@@ -16,7 +16,8 @@ paths:
 `//nolint` не действует); без пометки — правило и `/code-review`.
 
 - **Раскладка по слоям.** `entity.go` (типы, без I/O) · `dto.go` (`<Op>Input/Output`) ·
-  `errors.go` (все sentinel и error-типы домена — только здесь) · `policy.go` (authorization
+  `errors.go` (все sentinel и error-типы домена — только здесь, тип — с `Unwrap` в sentinel; `fmt.Errorf`
+  корня — с `%w`; archtest `TestDomainErrorsInErrorsGo`) · `policy.go` (authorization
   + чистые правила, без I/O) · `usecase.go` (логика, зависимости через порты) · `trusted.go`
   (операции для других доменов без policy) · `events.go` (payload + unexported subject-const) ·
   `metrics.go` (`biz_<domain>_*` под алерт, nil-safe) · `delivery/{http,nats}/` (вход — один пакет на
@@ -59,11 +60,13 @@ paths:
   в домене-потребителе (`usecase.go`), адаптер — в `<consumer>/module/adapters.go` поверх `Trusted` поставщика
   (`trusted.go`: без policy, ошибки — только `TrustedErrors`, берут только адаптеры `module/` —
   archtest). DTO в порте — локальные; порт возвращает sentinel'ы потребителя (адаптер мапит каждую
-  ошибку `TrustedErrors`, тест — по этому списку на каждом методе) и вычисленные свойства — методы
-  сущности поставщика (`CanLogin()`): в адаптере нет условий по полям поставщика. Identity-closure
-  (`return uc`) — только внутри домена (delivery-порты своего usecase); порт между доменами — типовой
-  адаптер, тип и конструктор в `adapters.go` (archtest). Время во всём домене — инжектированный
-  `clockkit.Clock`, настенных часов нет (archtest `TestLayout`).
+  ошибку `TrustedErrors`, тест — по этому списку на каждом методе, перечень методов теста сверен с
+  типом через `reflect`) и вычисленные свойства — методы сущности поставщика (`CanLogin()`): в адаптере
+  нет условий по полям поставщика. Identity-closure (`return uc`) — только внутри домена (delivery-порты
+  своего usecase); порт между доменами — типовой адаптер (тип и конструктор — в `adapters.go`), а не
+  closure и не структура со встроенным типом чужого домена (archtest `TestLayout`,
+  `TestModulesEmbedNoForeignTypes`). Время во всём домене — инжектированный `clockkit.Clock`, настенных
+  часов нет (archtest `TestLayout`).
 - **DI — fx** (канон — `architecture.md` § fx). Модуль домена — `fx.Module` с именем-путём пакета
   в `module/module.go`, подключён в `cmd/api` (`TestDomainsAreWired`). Порт в графе — тип
   результата провайдера, тип с несколькими портами — identity-closure над своим типом; `fx.As`
@@ -77,8 +80,8 @@ paths:
   домена с хендлером этого пакета (коротких форм `huma.Get`… нет), подписку — `natskit` в `delivery/nats`
   (archtest `TestInputsRegisterInDelivery`); `Register` доменов зовёт `registerHTTP`
   (`cmd/api/http.go`). Ошибки — таблица домена `<домен>Errors`: правило на каждую ошибку `errors.go`,
-  хендлер отдаёт `<домен>Errors.Map(err)`, таблица операции из тех же правил — `Declare` при
-  регистрации (оба — archtest `TestDomainErrorTables`); ошибка поля — 422 с `Field`.
+  хендлер отдаёт ошибкой только `nil` или `<домен>Errors.Map(err)`, таблица операции из тех же правил —
+  `Declare` при регистрации (оба — archtest `TestDomainErrorTables`); ошибка поля — 422 с `Field`.
   Каждая ручка — операция huma в контракте `openapi.json`: сырой маршрут chi (`Router()`) и
   `Hidden: true` в контракт не попадают, `TestBoot` их не пускает. Envelope — `data`;
   префикс, уникальность имён и envelope держит archtest `TestHTTPTypes`.

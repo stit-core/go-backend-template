@@ -58,11 +58,17 @@ blocked-by: —
     второго шага `x02a`–`x02f` (`exp/cases_bnd.py`: порт входа над `user.Repository`, `session.Store` в
     хендлере, хендлер из `internal/platform`, `huma.Get`, `huma.Register[I, O]` в platform, подписка natskit в
     `module/`) — отказ своим правилом
-- [ ] **AC2** — RADP-03, ошибка домена — только через таблицу, перевод — по методам типа: `n16p` (sentinel в
+- [x] **AC2** — RADP-03, ошибка домена — только через таблицу, перевод — по методам типа: `n16p` (sentinel в
   `usecase.go`), `n18p` (`errors.New` в usecase), `n15` (своя функция перевода в хендлере), `n34` (метод
   адаптера без перевода), `n35` (метод `Trusted` вне перечня теста), `b15` (порт — структура со встроенным
   `*user.Trusted`) на базе — `✓ check clean`, на ветке — отказ; контроль `n17p` — отказ на обеих. Проверка:
   та же
+  - Подтверждено: база — сводные прогоны B и C `check=clean`; ветка (`exp/branch-s2.tsv`): `n16p`, `n18p` —
+    `TestDomainErrorsInErrorsGo`, `n15` — `TestDomainErrorTables` (хендлер отдаёт `statusErr(err)`), `n34` —
+    `TestUserAdapter_MapsUserErrors` (метода `LockEmail` нет в `calls`), `n35` — `TestTrusted_ErrorsAreDeclared`
+    (`Rename`), `b15` — `TestModulesEmbedNoForeignTypes`, `n17p` — `TestDomainErrorTables`; обходы `x03a`–`x03d`
+    (`fmt.Errorf` без `%w`, тип ошибки в `usecase.go`, тип в `errors.go` без `Unwrap`, `huma.Error404NotFound`
+    из хендлера) — отказ
 - [ ] **AC3** — RADP-04, подписка без события поставщика — отказ: `n22p` (подписка на `user.events.updated`
   со схемой `UserID` вместо `ID`, без контракт-теста) на базе — `✓ check clean`, на ветке — отказ
   контракт-теста; домен с подпиской без `delivery/nats/contract_test.go`, который сверяет подписки
@@ -89,12 +95,20 @@ blocked-by: —
     кейсы AC1 и обходы `x02a`–`x02f` — отказ; rule `domain-architecture`, `architecture.md` (§ Что запрещено,
     § fx, § HTTP DTO naming, предел — хранилище за `internal/platform`), `endpoint.md`, `event.md`, комментарий
     пакета archtest; `make check` → ✓
-- [ ] **S2** — RADP-03: archtest — в корне домена ошибки и их типы только в `errors.go` (тип — с `Unwrap` в
+- [x] **S2** — RADP-03: archtest — в корне домена ошибки и их типы только в `errors.go` (тип — с `Unwrap` в
   sentinel), `fmt.Errorf` — с `%w`; хендлер отдаёт `nil` или `<домен>Errors.Map(…)`; структура `module/` не
   встраивает тип чужого домена; тесты адаптеров и `Trusted` сверяют перечень `calls` с методами типа. Проза
   контракта ошибок
   - Проверка: n16p, n18p, n15, n34, n35, b15 на ветке → отказ, n17p → отказ; `make check` → ✓ ·
     Закрывает: AC2, AC6 · Зависит от: —
+  - Сделано: `TestDomainErrorsInErrorsGo` (`archtest_test.go`): в корне домена `errors.New`, `var Err…` и тип
+    ошибки — только в `errors.go`, там — только экспортируемые `Err…`, тип — с `Unwrap` в sentinel,
+    `fmt.Errorf` — с `%w`; `TestDomainErrorTables`: хендлер (метод, функция или литерал, и
+    `huma.Register[I, O]`) отдаёт ошибкой только `nil` или `<домен>Errors.Map(…)`;
+    `TestModulesEmbedNoForeignTypes` (`crossdomain_test.go`); тесты адаптеров auth и verification и
+    `TestTrusted_ErrorsAreDeclared` — `calls` картой, ключи сверены с методами типа (`reflect`); rule
+    `domain-architecture`, `architecture.md` (§ Контракт ошибок API — обещание в проверяемой форме и
+    пределы, § Ports & adapters), `endpoint.md`, `port.md`, комментарий пакета archtest; `make check` → ✓
 - [ ] **S3** — RADP-04: контракт-тест verification — одна сверка: каждой подписке `Register` — событие
   настоящего usecase поставщика; archtest — домен с подпиской держит такой `contract_test.go`. Проза
   - Проверка: n22p на ветке → отказ; инъекция подписки без контракт-теста → отказ; `make check` → ✓ ·
@@ -122,10 +136,19 @@ blocked-by: —
   правилами: правила HTTP и контракт подписок читают один пакет, неэкспортируемая таблица домена в
   подпакете недоступна. Хендлер операции — из пакета `delivery/http` (не `<пакет>.<имя>`), подписка natskit —
   только в `delivery/nats`, dot-импорт huma и natskit — отказ: иначе регистрацию правила не видят.
+- Правило «ошибки — только в `errors.go`» — для корня домена (как у аудитора): ошибка `infra/<kit>` вроде
+  `logmail.ErrOutsideDev` — отказ старта, а не ответ клиенту. Сверх пункта (а) аудитора: тип ошибки — только в
+  `errors.go` и с `Unwrap` в sentinel (`auth.LockedError`), неэкспортируемая переменная в `errors.go` — отказ:
+  у обоих иначе нет правила в таблице, и обещание «не 500» не держалось бы.
+- Встроенный тип чужого домена в `module/` (пункт (г) аудитора — правило archkit) держит archtest шаблона:
+  golibinfra в треке не трогаем.
+- Сверка `calls` с методами — картой «метод → вызов» и `reflect.TypeFor[…]().Methods()` в самом тесте, без
+  общего хелпера: тест адаптера копируют с канона, сверка едет вместе с ним (`port.md`).
 
 ## Где мы сейчас
-S1 (RADP-02) сделан: правила входа — `internal/archtest/delivery_test.go`. База `98e425e`: сводные прогоны
+S1 (RADP-02) и S2 (RADP-03) сделаны: правила входа — `internal/archtest/delivery_test.go`, ошибок —
+`archtest_test.go` и `crossdomain_test.go`, сверка методов — в тестах адаптеров и `Trusted`. База `98e425e`: сводные прогоны
 кейсов трека — `✓ check clean`: A — `n12`, `n37`, `n38`, `n70`, `b14`; B — `n16p`, `n15`, `n34`, `n35`,
 `b15`, `n22p`, `n36`; C — `n18p` (`N/boundaries/exp/base.tsv`, логи — `exp/logs/batch-base-*.log`).
 Эксперименты ветки — в `N/wt-boundaries-exp` (снимок правил временным коммитом: раннер откатывает дерево к
-HEAD). Следующий шаг — S2 (RADP-03).
+HEAD). Следующий шаг — S3 (RADP-04).

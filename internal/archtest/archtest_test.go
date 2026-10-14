@@ -5,7 +5,8 @@
 // layout_settings_test.go. Здесь — правила шаблона: Trusted и таблицы ошибок между доменами, привязка
 // портов без fx.As, префикс, уникальность и envelope HTTP-типов, таблица ошибок домена в HTTP-контракте,
 // вход домена (пакет delivery/<транспорт>, операции и подписки — только в нём, из корня — данные, usecase —
-// портом над *Usecase, без хранилищ и клиентов китов),
+// портом над *Usecase, без хранилищ и клиентов китов), ошибки корня домена — только в errors.go, ответ
+// хендлера — nil или таблица домена, адаптер module/ без встроенного типа чужого домена,
 // владение subject-литералами, тесты без утверждений, заголовок сгенерированного только в выводе
 // генераторов, ограничение сборки — только integration у тестов; а ещё подключение доменов в cmd/api,
 // ссылки прозы на make-цели и пути, //nolint только включённых линтеров и без директив линтеров мимо
@@ -21,6 +22,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io/fs"
 	"os"
 	"path"
@@ -220,9 +222,10 @@ func structField(expr ast.Expr, name string) *ast.Field {
 }
 
 // TestDomainErrorTables: в домене, который регистрирует HTTP-операции, таблица домена <домен>Errors
-// (delivery/http) переводит каждую ошибку его errors.go, а хендлеры huma.Register отдают ошибки только
-// через неё: ни одна ошибка домена не уходит клиенту 500 ни на одной операции. Таблица операции лишь
-// объявляет свои коды в OpenAPI — Declare при регистрации.
+// (delivery/http) переводит каждую ошибку его errors.go, а хендлеры huma.Register отдают ошибкой только nil
+// или <домен>Errors.Map(…): ошибка домена (она — только из errors.go, TestDomainErrorsInErrorsGo) не уходит
+// клиенту 500 ни на одной операции. Таблица операции лишь объявляет свои коды в OpenAPI — Declare при
+// регистрации.
 func TestDomainErrorTables(t *testing.T) {
 	t.Parallel()
 	files := map[string][]goFile{} // домен → не-тестовые файлы его delivery/http
@@ -236,13 +239,14 @@ func TestDomainErrorTables(t *testing.T) {
 		root := module + "/internal/domain/" + domain
 		rules := map[string]string{}   // переменная-правило → ошибка домена
 		errorMaps := map[string]bool{} // переменные — таблицы ошибок
-		handlers := map[string]bool{}  // методы — хендлеры huma.Register
+		handlers := map[string]bool{}  // методы и функции пакета — хендлеры huma.Register
 		declared := map[string]bool{}  // таблицы с Declare в операции huma.Register
 		var (
 			tableArgs   []ast.Expr
 			tableByName map[string]string // импорты файла таблицы
 		)
 		registers := false
+		literals := map[*ast.FuncLit]string{} // хендлеры-литералы huma.Register → файл
 		parsed := make([]*ast.File, len(pkgFiles))
 		for i, f := range pkgFiles {
 			file := parseGo(t, f.path)
@@ -273,12 +277,20 @@ func TestDomainErrorTables(t *testing.T) {
 			}
 			ast.Inspect(file, func(n ast.Node) bool {
 				call, ok := n.(*ast.CallExpr)
-				if !ok || !isSelector(call.Fun, byName, "github.com/danielgtaylor/huma/v2", "Register") || len(call.Args) < 3 {
+				if !ok {
+					return true
+				}
+				if pkg, name := kitCall(call, byName); pkg != humaPath || name != "Register" || len(call.Args) < 3 {
 					return true
 				}
 				registers = true
-				if h, ok := call.Args[2].(*ast.SelectorExpr); ok {
+				switch h := call.Args[2].(type) {
+				case *ast.SelectorExpr:
 					handlers[h.Sel.Name] = true
+				case *ast.Ident:
+					handlers[h.Name] = true
+				case *ast.FuncLit:
+					literals[h] = f.path
 				}
 				ast.Inspect(call.Args[1], func(n ast.Node) bool {
 					if name := calledOn(n, "Declare"); name != "" {
@@ -322,19 +334,37 @@ func TestDomainErrorTables(t *testing.T) {
 						t.Errorf("%s maps errors with %s: a handler maps through the domain table %s, an operation table only declares", pkgFiles[i].path, m, table)
 					}
 				case *ast.FuncDecl:
-					if x.Recv != nil && handlers[x.Name.Name] {
-						ast.Inspect(x.Body, func(n ast.Node) bool {
-							if ret, ok := n.(*ast.ReturnStmt); ok && len(ret.Results) > 0 && isIdent(ret.Results[len(ret.Results)-1], "err") {
-								t.Errorf("%s: handler %s returns err unmapped: a handler returns %s.Map(err)", pkgFiles[i].path, x.Name.Name, table)
-							}
-							return true
-						})
+					if handlers[x.Name.Name] {
+						handlerReturns(t, pkgFiles[i].path, x.Name.Name, x.Body, table)
 					}
 				}
 				return true
 			})
 		}
+		for lit, where := range literals {
+			handlerReturns(t, where, "func literal", lit.Body, table)
+		}
 	}
+}
+
+// handlerReturns: хендлер отдаёт ошибкой nil или <таблица домена>.Map(…) — другая ошибка ушла бы клиенту 500
+// или мимо кодов таблицы. Литерал внутри хендлера — своя функция: его return — не ответ хендлера.
+func handlerReturns(t *testing.T, path, handler string, body *ast.BlockStmt, table string) {
+	t.Helper()
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.ReturnStmt:
+			if len(x.Results) == 0 {
+				return true
+			}
+			if last := x.Results[len(x.Results)-1]; !isIdent(last, "nil") && calledOn(last, "Map") != table {
+				t.Errorf("%s: handler %s returns %s: a handler returns nil or %s.Map(err) — any other error answers 500 or bypasses the codes of the table", path, handler, types.ExprString(last), table)
+			}
+		}
+		return true
+	})
 }
 
 const httpkitPath = "git.stit.tech/stit-core/golibinfra/httpkit"
@@ -401,6 +431,111 @@ func domainErrors(t *testing.T, domain string) []string {
 		}
 	}
 	return names
+}
+
+var sentinelName = regexp.MustCompile(`^Err[A-Z]`)
+
+// TestDomainErrorsInErrorsGo: ошибка домена — sentinel Err… или тип из errors.go: таблицу домена сверяют с
+// ним (TestDomainErrorTables), и ошибка, созданная в другом файле корня, ушла бы клиенту 500. fmt.Errorf без
+// %w теряет sentinel или причину; тип ошибки разворачивается (Unwrap) в sentinel errors.go — правило таблицы
+// для sentinel переводит и тип.
+func TestDomainErrorsInErrorsGo(t *testing.T) {
+	t.Parallel()
+	for _, f := range goFiles(t) {
+		if _, sub, ok := splitDomain(f.pkg); !ok || sub != "" || f.test {
+			continue
+		}
+		file := parseGo(t, f.path)
+		byName := importsByName(file)
+		inErrorsGo := path.Base(f.path) == "errors.go"
+		sentinels := map[string]bool{}
+		for _, decl := range file.Decls {
+			if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == token.VAR {
+				for _, spec := range gd.Specs {
+					for _, id := range spec.(*ast.ValueSpec).Names {
+						switch named := sentinelName.MatchString(id.Name); {
+						case inErrorsGo && named:
+							sentinels[id.Name] = true
+						case inErrorsGo:
+							t.Errorf("%s declares %s: errors.go holds exported sentinels Err… — an unexported one has no rule in the HTTP table", f.path, id.Name)
+						case named:
+							t.Errorf("%s declares %s: a sentinel lives in errors.go, where the HTTP error table is checked against it", f.path, id.Name)
+						}
+					}
+				}
+			}
+		}
+		var errorTypes []string
+		unwraps := map[string]bool{} // типы, чей Unwrap отдаёт sentinel errors.go
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.CallExpr:
+				switch {
+				case !inErrorsGo && isSelector(x.Fun, byName, "errors", "New"):
+					t.Errorf("%s creates an error with errors.New: a domain error is a sentinel of errors.go, with a rule in the HTTP error table", f.path)
+				case isSelector(x.Fun, byName, "fmt", "Errorf") && !wrapsError(x):
+					t.Errorf("%s calls fmt.Errorf without %%w: the error loses its sentinel or cause — wrap it, a new domain error is a sentinel of errors.go", f.path)
+				}
+			case *ast.FuncDecl:
+				recv := receiverName(x)
+				switch {
+				case recv != "" && x.Name.Name == "Error" && !inErrorsGo:
+					t.Errorf("%s declares error type %s: domain error types live in errors.go", f.path, recv)
+				case recv != "" && x.Name.Name == "Error":
+					errorTypes = append(errorTypes, recv)
+				case recv != "" && x.Name.Name == "Unwrap" && returnsOneOf(x, sentinels):
+					unwraps[recv] = true
+				}
+			}
+			return true
+		})
+		for _, typ := range errorTypes {
+			if !unwraps[typ] {
+				t.Errorf("%s: error type %s does not unwrap to a sentinel of errors.go: the HTTP table maps sentinels, the type would answer 500", f.path, typ)
+			}
+		}
+	}
+}
+
+// wrapsError — fmt.Errorf с литералом формата, в котором есть %w.
+func wrapsError(call *ast.CallExpr) bool {
+	if len(call.Args) == 0 {
+		return false
+	}
+	lit, ok := call.Args[0].(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return false
+	}
+	format, err := strconv.Unquote(lit.Value)
+	return err == nil && strings.Contains(format, "%w")
+}
+
+// receiverName — имя типа получателя метода; "" — функция.
+func receiverName(fn *ast.FuncDecl) string {
+	if fn.Recv == nil || len(fn.Recv.List) == 0 {
+		return ""
+	}
+	typ := fn.Recv.List[0].Type
+	if star, ok := typ.(*ast.StarExpr); ok {
+		typ = star.X
+	}
+	if id, ok := typ.(*ast.Ident); ok {
+		return id.Name
+	}
+	return ""
+}
+
+// returnsOneOf — тело функции — один return имени из names.
+func returnsOneOf(fn *ast.FuncDecl, names map[string]bool) bool {
+	if fn.Body == nil || len(fn.Body.List) != 1 {
+		return false
+	}
+	ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(ret.Results) != 1 {
+		return false
+	}
+	id, ok := ret.Results[0].(*ast.Ident)
+	return ok && names[id.Name]
 }
 
 // TestSubjectLiteralOwnership: литерал "<domain>.events." встречается только в
