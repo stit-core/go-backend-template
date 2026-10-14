@@ -13,7 +13,8 @@ generate, правка HTTP-слоя — openapi.json (дрейф сгенери
 Итог — убитые по стадиям и выжившие: известные эквивалентные (строка «=» в спецификации) и новые; ещё —
 мутации с устаревшим якорем и несобравшиеся (их правят в спецификации). Код 1 — есть новые выжившие или
 таймауты. Результаты — .cache/mutate/<HEAD>.tsv: оборванный прогон на том же коммите продолжается с места,
-правка, оставленная обрывом, откатывается. A="<id> …" — эти мутации заново, A=--check — только якоря.
+правка, оставленная обрывом, откатывается (другие изменённые файлы — отказ). A="<id> …" — эти мутации
+заново, A=--check — только якоря.
 """
 import fcntl
 import os
@@ -124,11 +125,20 @@ def dirty():
     return [line for line in git("status", "--porcelain", "--untracked-files=all").decode().splitlines() if line.strip()]
 
 
+def changed():
+    """Отслеживаемые файлы, изменённые относительно HEAD, и новые файлы дерева."""
+    def paths(out):
+        return [p for p in out.decode().split("\0") if p]
+
+    return paths(git("diff", "--name-only", "-z", "HEAD")), paths(git("ls-files", "--others", "--exclude-standard", "-z"))
+
+
 def restore():
-    """Дерево — к HEAD: до прогона оно было чистым, значит всё изменённое — правка мутации."""
-    for path in filter(None, git("diff", "--name-only", "-z", "HEAD").decode().split("\0")):
+    """Дерево — к HEAD: до мутации оно было чистым, значит всё изменённое — её правка и сгенерированное."""
+    modified, new = changed()
+    for path in modified:
         (ROOT / path).write_bytes(git("show", f"HEAD:{path}"))
-    for path in filter(None, git("ls-files", "--others", "--exclude-standard", "-z").decode().split("\0")):
+    for path in new:
         (ROOT / path).unlink()
     left = dirty()
     if left:
@@ -197,7 +207,16 @@ def main(args):
     except OSError:
         fail("make mutate уже идёт в этом дереве")
     if INFLIGHT.exists():
-        print(f"→ откат правки оборванной мутации {INFLIGHT.read_text().strip()}")
+        mid = INFLIGHT.read_text().strip()
+        # Обрыв оставляет в дереве правку мутации и то, что из неё сгенерировано (sqlc, openapi.json). Правку,
+        # сделанную в дереве после обрыва, откат стёр бы молча — с ней прогон не идёт.
+        own = {e["path"] for e in by_id[mid]["edits"]} if mid in by_id else set()
+        foreign = [p for p in sum(changed(), []) if p not in own and p != "openapi.json" and "/infra/postgres/db/" not in p]
+        if foreign:
+            fail(f"после обрыва мутации {mid} изменены и другие файлы: {' '.join(foreign)} — откат их стёр бы: "
+                 f"разбери дерево сам (правка мутации — в {', '.join(sorted(own)) or 'её файлах'}) и удали "
+                 f"{INFLIGHT.relative_to(ROOT)}")
+        print(f"→ откат правки оборванной мутации {mid}")
         restore()
         INFLIGHT.unlink()
     elif dirty():
@@ -259,16 +278,16 @@ def summary(selected, done, head):
           f"integration {len(integration)}")
     if equivalent:
         print(f"выжили известные эквивалентные ({len(equivalent)}): " + " ".join(m["id"] for m in equivalent))
-    for key, title in (
-        ("new", "ВЫЖИЛИ — НОВЫЕ: тесты не видят поломку — добавь тест или, если правка ненаблюдаема, строку «=» "
-                "(дифф и вывод тестов — .cache/mutate/logs/<id>.log)"),
-        ("timeout", "таймаут — перегони: make mutate A=\"<id>\""),
-        ("stale", "устаревший якорь — перепиши блок под код"),
-        ("invalid", "не собирается — поправь правку «стало»"),
-        ("equivalent-killed", "эквивалентная убита — проверь строку «=»"),
+    for key, title, hint in (
+        ("new", "ВЫЖИЛИ — НОВЫЕ", "тесты не видят поломку — добавь тест или, если правка ненаблюдаема, строку «=» "
+                                  "(дифф и вывод тестов — .cache/mutate/logs/<id>.log)"),
+        ("timeout", "таймаут", "перегони: make mutate A=\"<id>\""),
+        ("stale", "устаревший якорь", "перепиши блок под код"),
+        ("invalid", "не собирается", "поправь правку «стало»"),
+        ("equivalent-killed", "эквивалентная убита", "проверь строку «=»"),
     ):
         if groups.get(key):
-            print(f"{title} ({len(groups[key])}):")
+            print(f"{title} ({len(groups[key])}): {hint}")
             for m in groups[key]:
                 detail = done[m["id"]][1]
                 print(f"  {m['id']} {m['layer']} — {m['note']}" + (f" [{detail}]" if detail else ""))
