@@ -72,9 +72,13 @@ blocked-by: —
   - Подтверждено: база — G07 «да», ветка — «нет»; `make new-domain NAME=order` (временный worktree)
     печатает «Домен — по артефакту strategy: …/domain.md § 4 (поля — в миграцию среза до первого
     коммита; …)», § 4 и «Что не делать» domain.md говорят то же
-- [ ] **AC6** — `/release`: шаг `make mutate A=--strict` перед релизом; на коде ветки он даёт код 0.
+- [x] **AC6** — `/release`: шаг `make mutate A=--strict` перед релизом; на коде ветки он даёт код 0.
   Проверка: `exp.py` G08 → на ветке «да»; `flock … make mutate A=--strict` → `EXIT 0`
   (`N/harness/mutate-strict-*.log`)
+  - Подтверждено: G08 — на базе «нет», на ветке «да»; `make mutate A=--strict` на `f825fac` (код под
+    мутациями тот же, что на ветке): 356 мутаций, убиты 346 (юнит 275, integration 71), выжили 10 известных
+    эквивалентных, «спецификация совпадает с кодом», `EXIT 0` — прогон прерван на 101 и продолжен с места
+    (`mutate-strict-f825fac.log`, `-2.log`), около 70 минут работы
 
 ## Шаги
 - [x] **S1** — RHAR-01: «Готово» — ревью у принимающей стороны и след `Review:`; хук `commit-msg` и
@@ -108,9 +112,12 @@ blocked-by: —
   - Сделано: domain.md § 4 — колонки контракта пишутся в `CREATE TABLE` миграции среза, пока срез не
     закоммичен, остальное — шаги 3–7 варианта `field`; после первого коммита — `field` целиком, новой
     миграцией; вывод `make new-domain` ссылается на § 4; `make check` → `✓ check clean`
-- [ ] **S6** — шаг `make mutate A=--strict` в `/release`
+- [x] **S6** — шаг `make mutate A=--strict` в `/release`
   - Проверка: `exp.py` G08; лог прогона → `EXIT 0`; `make check` → `✓ check clean` · Закрывает: AC6 ·
     Зависит от: —
+  - Сделано: Pre-flight `/release` — `make mutate A=--strict` → код 0 (больше часа, в фоне, продолжение с
+    места), код 1 — STOP с разбором по rule `tests-pipeline`; прогон — как в AC6; «Шаг 0» triage-failure —
+    «багфикс начинается с теста» (build и lint тест не пишут); `make check` → `✓ check clean`
 - [ ] **S7** — приёмка трека: `exp.py` на базе и ветке, гейт
   - Проверка: `exp.py` — как в AC1–AC6; `make check` → `✓ check clean` · Закрывает: AC1–AC6 ·
     Зависит от: S1–S6
@@ -142,6 +149,8 @@ blocked-by: —
   Infra-touch. `ALTER TABLE` над пустой таблицей — лишняя операция выкатки, `DROP COLUMN` `name` — ещё и
   миграция с эффектом (маркер и handoff). Вывод `make new-domain` не повторяет § 4, а ссылается на него.
 - Чужой файл `scripts/new-domain.sh` (в волне 2 ничей): две строки `echo` «Дальше» — ссылка на § 4.
+- Шаг `make mutate` — в Pre-flight `/release`, а не в `release.sh` (файл трека lifecycle): решение владельца —
+  шаг скилла; прогон больше часа, и в Bash-вызове агента он идёт в фоне.
 
 ## Handoff
 - Дирижёру при слиянии: в комментарий пакета `internal/archtest` (файл трека boundaries) — «доставка
@@ -152,8 +161,8 @@ blocked-by: —
   545–1012 строк, код — до 303.
 
 ## Где мы сейчас
-S1–S5 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
+S1–S6 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
 самопроверка прозы видит имена тестов, доставку правил и подключение guard; S4 — правда прозы
-smartdev, triage-failure, stack-deep-dive; S5 — поля нового домена одним способом. Полный
-`make mutate A=--strict` на `f825fac` прерван на 101/356 ради гейта шагов, результаты — в
-`N/wt-harness-mut/.cache/mutate/`, прогон продолжится с места. Следующий шаг — S6 (`/release`).
+smartdev, triage-failure, stack-deep-dive; S5 — поля нового домена одним способом; S6 — шаг
+`make mutate A=--strict` в `/release`, полный прогон на `f825fac` — код 0. Пробное слияние с
+`nine/boundaries` (`acfe446`) — без конфликтов, archtest и `exp.py` зелёные. Следующий шаг — S7 (приёмка).
