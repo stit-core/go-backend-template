@@ -48,7 +48,7 @@ func (h *Handler) onPasswordResetRequested(ctx context.Context, e PasswordResetR
 	if err := h.uc.IssuePasswordReset(ctx, e.RequestID, e.UserID, e.At); err != nil {
 		return fmt.Errorf("issue password reset %s: %w", e.RequestID, err)
 	}
-	h.log.Info(ctx, "password reset handled", "request_id", e.RequestID)
+	h.log.Info(ctx, "password reset handled", "reset_request_id", e.RequestID)
 	return nil
 }
 
