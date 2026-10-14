@@ -43,7 +43,7 @@ func TestReleaseImage(t *testing.T) {
 			t.Parallel()
 			s := newReleaseSandbox(t, "true", union(doctor, map[string]string{"scripts/tools/e2e.sh": "exit 0\n"}))
 			git(t, s.repo, "remote", "set-url", "origin", tc.origin)
-			require.NoError(t, os.WriteFile(filepath.Join(s.bin, "docker"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$0.args\"\n"), 0o700))
+			writeExecutable(t, filepath.Join(s.bin, "docker"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$0.args\"\n")
 			govulncheck, err := exec.LookPath("true")
 			require.NoError(t, err)
 			require.NoError(t, os.Symlink(govulncheck, filepath.Join(s.bin, "govulncheck")))

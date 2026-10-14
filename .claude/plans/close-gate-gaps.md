@@ -264,8 +264,12 @@ blocked-by: —
   - Сделано: `:(exclude)scripts/tools/mutants.txt` в `.template/paths`; prune — блоки удалённых путей и строк
     подключения из спецификации, итог — `make mutate A=--check` → OK; rule `tests-pipeline` § Мутации;
     `make check` → ✓
-- [ ] **S26** — Флак `TestReleaseBuildForwardsSSHAgent`: заглушка пишется без чужого fork
+- [x] **S26** — Флак `TestReleaseBuildForwardsSSHAgent`: заглушка пишется без чужого fork
   - Проверка: тест ×N под нагрузкой → PASS · Закрывает: AC13 · Зависит от: S14
+  - Сделано: `writeExecutable` — заглушка-программа пишется под `syscall.ForkLock`; так — все заглушки archtest
+    (`make_test.go`, `steps_test.go`, а также `hooks_test.go`, `release_test.go` трека lifecycle — тот же класс).
+    Механизм — `N/gate/etxtbsy/`: запись и запуск при соседних fork — ETXTBSY 416 из 2000, под `ForkLock` — 0;
+    тесты с заглушками ×120 под нагрузкой — PASS (флак на прогоне мутаций — 2 из 356); `make check` → ✓
 - [ ] **S27** — Полный `make mutate` на итоге ветки и гейт
   - Проверка: код 0; `make check` → ✓ · Закрывает: AC13 · Зависит от: S15–S26
 
@@ -314,6 +318,8 @@ blocked-by: —
   таблицы); `CONCURRENTLY` — не эффект (рецепт `migration.md`); `DO` — эффект: его код машина не видит.
   Выпущенные 0001 (`CREATE EXTENSION`) и 0003 (индекс по существующей таблице) — списком имён в скрипте:
   существующие миграции не правим; у них — только разрушительные операторы.
+- `hooks_test.go`, `release_test.go` (трек lifecycle, слит): заглушки — через `writeExecutable` (S26), иначе тот
+  же флак ETXTBSY остаётся в соседних тестах.
 - `.claude/skills/scaffold/references/migration.md` (вне таблицы владения): рецепт индекса и список классов
   migrations-check (S5, S22) — иначе reference врёт о машине.
 - `.claude/rules/infra-impact.md` (вне таблицы владения): строка «машина держит одно…» — под новые классы,
@@ -334,4 +340,4 @@ blocked-by: —
 ## Где мы сейчас
 S1–S13 приняты по существу, валидатор — FAIL на `829481c` (`N/validation-gate.md`): круг фиксов S14–S27. Ветка
 перенесена на `main` `98e425e` (S14); B1–B3 и неблокирующие закрыты (S15–S23); спецификация — под код `main`, она
-— код форка (S24, S25). Следующее: S26 — флак `TestReleaseBuildForwardsSSHAgent`.
+— код форка (S24, S25), флак ETXTBSY снят (S26). Следующее: S27 — полный `make mutate` на итоге.

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,9 +38,19 @@ func stubTools(t *testing.T, tools ...string) string {
 	}
 	realGo, err := exec.LookPath("go")
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\n[ \"$1\" = env ] && exec \""+realGo+
-		"\" \"$@\"\necho \"go $*: the probe has no toolchain\" >&2\nexit 1\n"), 0o700))
+	writeExecutable(t, filepath.Join(bin, "go"), "#!/bin/sh\n[ \"$1\" = env ] && exec \""+realGo+
+		"\" \"$@\"\necho \"go $*: the probe has no toolchain\" >&2\nexit 1\n")
 	return bin
+}
+
+// writeExecutable — программа-заглушка без ETXTBSY: пока её файл открыт на запись, параллельный тест не
+// форкается (syscall.ForkLock), иначе его потомок держит дескриптор записи до своего exec — запуск заглушки
+// падает с ETXTBSY, а sh молча берёт одноимённую программу дальше по PATH (golang/go#22315).
+func writeExecutable(t *testing.T, path, content string) {
+	t.Helper()
+	syscall.ForkLock.Lock()
+	defer syscall.ForkLock.Unlock()
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o700))
 }
 
 // shellForgeries — окружение оболочки, которым вызывающий подменил бы bash-скрипт: файл автозапуска
@@ -460,7 +471,7 @@ func TestReleasePreflight(t *testing.T) {
 			}
 			// ssh-заглушка записывает свои аргументы и отказывает: хост ключу не открывается.
 			sshArgs := filepath.Join(bin, "ssh.args")
-			require.NoError(t, os.WriteFile(filepath.Join(bin, "ssh"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >\"$0.args\"\nexit 1\n"), 0o700))
+			writeExecutable(t, filepath.Join(bin, "ssh"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >\"$0.args\"\nexit 1\n")
 			writeFiles(t, repo, union(script, tc.files))
 			branch := tc.branch
 			if branch == "" {
@@ -520,7 +531,7 @@ func TestReleaseBuildForwardsSSHAgent(t *testing.T) {
 	// git ls-remote --get-url раскрывает insteadOf без сети.
 	fetches := func(run, url string) string {
 		bin := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\nexec git ls-remote --get-url "+url+"\n"), 0o700))
+		writeExecutable(t, filepath.Join(bin, "go"), "#!/bin/sh\nexec git ls-remote --get-url "+url+"\n")
 		script := regexp.MustCompile(`^RUN(\s+--\S+)*\s+`).ReplaceAllString(run, "")
 		out, err := runEnv(t, t.TempDir(), []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, "sh", "-c", script)
 		require.NoError(t, err, out)

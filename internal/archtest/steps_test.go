@@ -101,14 +101,13 @@ func TestGenCheckComparesMocksWithTree(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	bin := t.TempDir()
-	writeFiles(t, bin, map[string]string{
+	for tool, program := range map[string]string{
 		"mockery": "#!/bin/sh\n[ \"$*\" = \"--config .mockery.yml\" ] || { echo \"mockery $*: not the config of the repo\" >&2; exit 3; }\n" +
 			"[ -z \"$MOCKERY_CONFIG\" ] || exit 0\nprintf 'package mocks // v2\\n' >p/mocks/m.go\nprintf 'package mocks // n\\n' >p/mocks/n.go\n",
 		"sqlc": "#!/bin/sh\nexit 0\n",
 		"go":   "#!/bin/sh\nexit 0\n",
-	})
-	for _, tool := range []string{"mockery", "sqlc", "go"} {
-		require.NoError(t, os.Chmod(filepath.Join(bin, tool), 0o700))
+	} {
+		writeExecutable(t, filepath.Join(bin, tool), program)
 	}
 	for _, tc := range []struct {
 		name    string

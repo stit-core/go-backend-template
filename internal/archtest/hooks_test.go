@@ -23,9 +23,10 @@ func TestHooksVisible(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, hooks)
 	files := readFiles(t, root, "scripts/tools/status.sh", "scripts/tools/doctor.sh")
+	programs := map[string]string{} // хуки: исполняемые файлы
 	for _, h := range hooks {
 		name := "scripts/git-hooks/" + filepath.Base(h)
-		files[name] = readFiles(t, root, name)[name]
+		programs[name] = readFiles(t, root, name)[name]
 	}
 	wire := func(t *testing.T, repo string) { git(t, repo, "config", "core.hooksPath", "scripts/git-hooks") }
 	for _, tc := range []struct {
@@ -46,7 +47,7 @@ func TestHooksVisible(t *testing.T) {
 		{name: "hooks of another tree", setup: func(t *testing.T, repo string) {
 			other := t.TempDir()
 			for _, h := range hooks {
-				require.NoError(t, os.WriteFile(filepath.Join(other, filepath.Base(h)), []byte("#!/bin/sh\nexit 0\n"), 0o700))
+				writeExecutable(t, filepath.Join(other, filepath.Base(h)), "#!/bin/sh\nexit 0\n")
 			}
 			git(t, repo, "config", "core.hooksPath", other)
 		}, want: "не хук этого дерева"},
@@ -55,8 +56,9 @@ func TestHooksVisible(t *testing.T) {
 			t.Parallel()
 			repo, bin := t.TempDir(), t.TempDir()
 			writeFiles(t, repo, files)
-			for _, h := range hooks {
-				require.NoError(t, os.Chmod(filepath.Join(repo, "scripts", "git-hooks", filepath.Base(h)), 0o755))
+			require.NoError(t, os.MkdirAll(filepath.Join(repo, "scripts", "git-hooks"), 0o755))
+			for name, program := range programs {
+				writeExecutable(t, filepath.Join(repo, name), program)
 			}
 			git(t, repo, "init", "-q")
 			commitAll(t, repo)
@@ -94,7 +96,7 @@ func TestSetupWiresHooksFirst(t *testing.T) {
 	writeFiles(t, repo, readFiles(t, repoRoot(t), "Makefile", "scripts/install-tools.sh"))
 	git(t, repo, "init", "-q")
 	commitAll(t, repo)
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\nexit 1\n"), 0o700))
+	writeExecutable(t, filepath.Join(bin, "go"), "#!/bin/sh\nexit 1\n")
 
 	out, err := runEnv(t, repo, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, "make", "setup")
 	require.Error(t, err, "go fails here, the tools are not installed:\n%s", out)
