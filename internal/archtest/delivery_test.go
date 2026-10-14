@@ -3,6 +3,7 @@ package archtest
 import (
 	"go/ast"
 	"go/types"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -428,9 +429,26 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 				return true
 			})
 		}
-		ports := map[string]bool{} // поля пакета с типом-портом: через них хендлер зовёт usecase
+		ports := map[string]bool{}        // поля пакета с типом-портом: через них хендлер зовёт usecase
+		values := map[string][]ast.Expr{} // значения переменных пакета: операцию объявляют и переменной
+		pkgByName := map[string]string{}  // импорты пакета
 		for _, file := range parsed {
+			maps.Copy(pkgByName, importsByName(file))
 			ast.Inspect(file, func(n ast.Node) bool {
+				switch x := n.(type) {
+				case *ast.ValueSpec:
+					for j, name := range x.Names {
+						if j < len(x.Values) {
+							values[name.Name] = append(values[name.Name], x.Values[j])
+						}
+					}
+				case *ast.AssignStmt:
+					for j, lhs := range x.Lhs {
+						if id, ok := lhs.(*ast.Ident); ok && len(x.Lhs) == len(x.Rhs) {
+							values[id.Name] = append(values[id.Name], x.Rhs[j])
+						}
+					}
+				}
 				if field, ok := n.(*ast.Field); ok {
 					if id, ok := field.Type.(*ast.Ident); ok && ifaces[id.Name] {
 						for _, name := range field.Names {
@@ -450,25 +468,29 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 				}
 				pkg, name := kitCall(call, byName)
 				arg, ok := registrars[pkg][name]
-				if !ok || len(call.Args) <= arg || public(call.Args[1], byName) {
+				if !ok || len(call.Args) <= arg {
+					return true
+				}
+				op := operationExprs(call.Args[1], values)
+				if public(op, pkgByName) {
 					return true
 				}
 				body := handlerBody(call.Args[arg], funcs)
 				if body == nil {
 					return true // хендлер не из пакета — отказ TestInputsRegisterInDelivery
 				}
-				op := operationID(call.Args[1])
+				id := operationID(op)
 				called := usecaseCalls(body, funcs, ports, map[string]bool{})
 				if len(called) == 0 {
-					t.Errorf("%s: operation %s under Security calls no usecase method: the handler reaches its domain through the usecase", files[i].path, op)
+					t.Errorf("%s: operation %s under Security calls no usecase method: the handler reaches its domain through the usecase", files[i].path, id)
 				}
 				for _, name := range called {
 					m, ok := root.methods[name]
 					switch {
 					case !ok:
-						t.Errorf("%s: operation %s under Security calls %s, which *%s.Usecase does not declare", files[i].path, op, name, domain)
-					case !root.asks(m, map[*ast.FuncDecl]bool{}):
-						t.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor passes the caller's UserID to a port of its dependencies (uc.d.Repo…): any signed-in caller would get it (rule domain-architecture)", files[i].path, op, domain, name)
+						t.Errorf("%s: operation %s under Security calls %s, which *%s.Usecase does not declare", files[i].path, id, name, domain)
+					case !(policyWalk{root, map[*ast.FuncDecl]bool{}, map[*ast.FuncDecl]bool{}}).asks(m):
+						t.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor passes the caller's UserID to a port of its dependencies (uc.d.Repo…): any signed-in caller would get it (rule domain-architecture)", files[i].path, id, domain, name)
 					}
 				}
 				return true
@@ -477,29 +499,49 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 	}
 }
 
+// operationExprs — выражение операции в huma.Register и значения переменных пакета в нём: операцию объявляют и
+// переменной (registerOp = httpkit.Public(huma.Operation{…})).
+func operationExprs(op ast.Expr, values map[string][]ast.Expr) []ast.Expr {
+	out, seen := []ast.Expr{op}, map[string]bool{}
+	for i := 0; i < len(out); i++ {
+		ast.Inspect(out[i], func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok && !seen[id.Name] {
+				seen[id.Name] = true
+				out = append(out, values[id.Name]...)
+			}
+			return true
+		})
+	}
+	return out
+}
+
 // public — операция открыта пометкой httpkit.Public.
-func public(op ast.Expr, byName map[string]string) bool {
-	found := false
-	ast.Inspect(op, func(n ast.Node) bool {
-		if call, ok := n.(*ast.CallExpr); ok && isSelector(call.Fun, byName, httpkitPath, "Public") {
-			found = true
-		}
-		return !found
+func public(op []ast.Expr, byName map[string]string) bool {
+	return slices.ContainsFunc(op, func(e ast.Expr) bool {
+		found := false
+		ast.Inspect(e, func(n ast.Node) bool {
+			if call, ok := n.(*ast.CallExpr); ok && isSelector(call.Fun, byName, httpkitPath, "Public") {
+				found = true
+			}
+			return !found
+		})
+		return found
 	})
-	return found
 }
 
 // operationID — OperationID литерала операции; "?" — его нет.
-func operationID(op ast.Expr) string {
+func operationID(op []ast.Expr) string {
 	id := "?"
-	ast.Inspect(op, func(n ast.Node) bool {
-		if kv, ok := n.(*ast.KeyValueExpr); ok && isIdent(kv.Key, "OperationID") {
-			if lit, ok := kv.Value.(*ast.BasicLit); ok {
-				id, _ = strconv.Unquote(lit.Value)
+	for _, e := range op {
+		ast.Inspect(e, func(n ast.Node) bool {
+			if kv, ok := n.(*ast.KeyValueExpr); ok && isIdent(kv.Key, "OperationID") {
+				if lit, ok := kv.Value.(*ast.BasicLit); ok {
+					id, _ = strconv.Unquote(lit.Value)
+				}
 			}
-		}
-		return true
-	})
+			return true
+		})
+	}
 	return id
 }
 
@@ -551,13 +593,16 @@ func usecaseCalls(body *ast.BlockStmt, funcs map[string]*ast.FuncDecl, ports, se
 	return out
 }
 
-// policyRoot — что правило policy знает о корне домена: методы Usecase, импорты их файлов и поля зависимостей
-// (структур с fx.In) с интерфейсом корня — порты; порт policy — поле Policy или интерфейс из одних Can….
+// policyRoot — что правило policy знает о корне домена: методы Usecase и функции корня, импорты их файлов,
+// интерфейсы корня — порты, порты policy (тип поля Policy и интерфейсы из одних Can…) и поля зависимостей
+// (структур с fx.In) с ними.
 type policyRoot struct {
-	methods      map[string]*ast.FuncDecl
-	byName       map[*ast.FuncDecl]map[string]string
-	portFields   map[string]bool
-	policyFields map[string]bool
+	methods, funcs map[string]*ast.FuncDecl
+	byName         map[*ast.FuncDecl]map[string]string
+	ports          map[string]bool // интерфейсы корня
+	policies       map[string]bool // интерфейсы корня — порты policy
+	portFields     map[string]bool
+	policyFields   map[string]bool
 }
 
 func loadPolicyRoot(t *testing.T, domain string) policyRoot {
@@ -565,10 +610,9 @@ func loadPolicyRoot(t *testing.T, domain string) policyRoot {
 	paths, err := filepath.Glob(filepath.Join(repoRoot(t), "internal", "domain", domain, "*.go"))
 	require.NoError(t, err)
 	root := policyRoot{
-		methods: map[string]*ast.FuncDecl{}, byName: map[*ast.FuncDecl]map[string]string{},
-		portFields: map[string]bool{}, policyFields: map[string]bool{},
+		methods: map[string]*ast.FuncDecl{}, funcs: map[string]*ast.FuncDecl{}, byName: map[*ast.FuncDecl]map[string]string{},
+		ports: map[string]bool{}, policies: map[string]bool{}, portFields: map[string]bool{}, policyFields: map[string]bool{},
 	}
-	ifaces := map[string]*ast.InterfaceType{}
 	var deps []*ast.StructType
 	for _, p := range paths {
 		if strings.HasSuffix(p, "_test.go") {
@@ -577,15 +621,21 @@ func loadPolicyRoot(t *testing.T, domain string) policyRoot {
 		file := parseGo(t, "internal/domain/"+domain+"/"+filepath.Base(p))
 		byName := importsByName(file)
 		for _, decl := range file.Decls {
-			if fn, ok := decl.(*ast.FuncDecl); ok && receiverName(fn) == "Usecase" {
-				root.methods[fn.Name.Name], root.byName[fn] = fn, byName
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				root.byName[fn] = byName
+				switch {
+				case fn.Recv == nil:
+					root.funcs[fn.Name.Name] = fn
+				case receiverName(fn) == "Usecase":
+					root.methods[fn.Name.Name] = fn
+				}
 			}
 		}
 		ast.Inspect(file, func(n ast.Node) bool {
 			if ts, ok := n.(*ast.TypeSpec); ok {
 				switch typ := ts.Type.(type) {
 				case *ast.InterfaceType:
-					ifaces[ts.Name.Name] = typ
+					root.ports[ts.Name.Name], root.policies[ts.Name.Name] = true, onlyCan(typ)
 				case *ast.StructType:
 					if embedsFxIn(typ, byName) {
 						deps = append(deps, typ)
@@ -598,12 +648,22 @@ func loadPolicyRoot(t *testing.T, domain string) policyRoot {
 	for _, st := range deps {
 		for _, field := range st.Fields.List {
 			id, ok := field.Type.(*ast.Ident)
-			if !ok || ifaces[id.Name] == nil {
+			if !ok || !root.ports[id.Name] {
 				continue
 			}
 			for _, name := range field.Names {
-				root.portFields[name.Name] = true
-				root.policyFields[name.Name] = name.Name == "Policy" || onlyCan(ifaces[id.Name])
+				if name.Name == "Policy" {
+					root.policies[id.Name] = true
+				}
+			}
+		}
+	}
+	for _, st := range deps {
+		for _, field := range st.Fields.List {
+			if id, ok := field.Type.(*ast.Ident); ok && root.ports[id.Name] {
+				for _, name := range field.Names {
+					root.portFields[name.Name], root.policyFields[name.Name] = true, root.policies[id.Name]
+				}
 			}
 		}
 	}
@@ -627,52 +687,132 @@ func onlyCan(iface *ast.InterfaceType) bool {
 
 const identityPath = module + "/internal/platform/identity"
 
-// asks — метод зовёт Can… порта policy (uc.d.Policy.Can…) или передаёт порту зависимостей (uc.d.Repo.GetByID)
-// UserID вызывающего из identity.From — сам или своим методом. Вызов лога, кита или функции пакета с UserID —
-// не ключ: операция по-прежнему отдала бы чужое.
-func (r policyRoot) asks(fn *ast.FuncDecl, seen map[*ast.FuncDecl]bool) bool {
-	if fn == nil || fn.Body == nil || seen[fn] {
+// policyWalk — обход методов и функций корня от метода за операцией; asked и yielded — ответы по функциям (на время
+// обхода — false: цикл вызовов).
+type policyWalk struct {
+	policyRoot
+	asked, yielded map[*ast.FuncDecl]bool
+}
+
+// asks — метод спрашивает policy (Can… порта policy: поля зависимостей или параметра) или передаёт порту
+// зависимостей (uc.d.Repo.GetByID) ключ вызывающего — UserID из identity.From или переменную с ним, в том числе от
+// своего метода или функции корня (uc.callerID); сам или своим методом, функцией корня. Вызов лога, кита или
+// функции пакета с UserID — не ключ: операция по-прежнему отдала бы чужое.
+func (w policyWalk) asks(fn *ast.FuncDecl) bool {
+	if fn == nil || fn.Body == nil {
 		return false
 	}
-	seen[fn] = true
-	recv := ""
-	if names := fn.Recv.List[0].Names; len(names) > 0 {
-		recv = names[0].Name
+	if done, ok := w.asked[fn]; ok {
+		return done
 	}
-	callers := map[string]bool{} // переменные с вызывающим из identity.From
+	w.asked[fn] = false
+	params, sc := w.params(fn), callerScope{callers: map[string]bool{}, keys: map[string]bool{}}
 	asked := false
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.AssignStmt:
-			if call, ok := x.Rhs[0].(*ast.CallExpr); ok && len(x.Rhs) == 1 && isSelector(call.Fun, r.byName[fn], identityPath, "From") {
-				if id, ok := x.Lhs[0].(*ast.Ident); ok && id.Name != "_" {
-					callers[id.Name] = true
-				}
-			}
+			w.bind(fn, x, sc)
 		case *ast.CallExpr:
-			sel, ok := x.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			field, viaField := sel.X.(*ast.SelectorExpr)
+			sel, isSel := x.Fun.(*ast.SelectorExpr)
 			switch {
-			case viaField && r.policyFields[field.Sel.Name] && strings.HasPrefix(sel.Sel.Name, "Can"),
-				viaField && r.portFields[field.Sel.Name] && slices.ContainsFunc(x.Args, func(a ast.Expr) bool { return callerID(a, callers) }),
-				isIdent(sel.X, recv) && r.asks(r.methods[sel.Sel.Name], seen):
+			case isSel && strings.HasPrefix(sel.Sel.Name, "Can") && w.port(sel.X, params, true),
+				isSel && w.port(sel.X, params, false) && slices.ContainsFunc(x.Args, sc.key),
+				w.asks(w.callee(fn, x)):
 				asked = true
 			}
 		}
 		return !asked
 	})
+	w.asked[fn] = asked
 	return asked
 }
 
-// callerID — выражение <вызывающий>.UserID, где вызывающий — из identity.From.
-func callerID(expr ast.Expr, callers map[string]bool) bool {
-	sel, ok := expr.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != "UserID" {
+// yields — функция отдаёт первым результатом ключ вызывающего: return caller.UserID, nil.
+func (w policyWalk) yields(fn *ast.FuncDecl) bool {
+	if fn == nil || fn.Body == nil {
 		return false
 	}
-	id, ok := sel.X.(*ast.Ident)
-	return ok && callers[id.Name]
+	if done, ok := w.yielded[fn]; ok {
+		return done
+	}
+	w.yielded[fn] = false
+	sc := callerScope{callers: map[string]bool{}, keys: map[string]bool{}}
+	found := false
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.AssignStmt:
+			w.bind(fn, x, sc)
+		case *ast.ReturnStmt:
+			found = found || len(x.Results) > 0 && sc.key(x.Results[0])
+		}
+		return !found
+	})
+	w.yielded[fn] = found
+	return found
+}
+
+// callerScope — переменные функции: вызывающий из identity.From и ключи — его UserID.
+type callerScope struct{ callers, keys map[string]bool }
+
+func (sc callerScope) key(expr ast.Expr) bool {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return sc.keys[e.Name]
+	case *ast.SelectorExpr:
+		id, ok := e.X.(*ast.Ident)
+		return ok && e.Sel.Name == "UserID" && sc.callers[id.Name]
+	}
+	return false
+}
+
+// bind — x := identity.From(ctx) даёт вызывающего, x := <ключ> и x := <своя функция, которая отдаёт ключ> — ключ.
+func (w policyWalk) bind(fn *ast.FuncDecl, x *ast.AssignStmt, sc callerScope) {
+	id, ok := x.Lhs[0].(*ast.Ident)
+	if !ok || id.Name == "_" || len(x.Rhs) != 1 {
+		return
+	}
+	call, isCall := x.Rhs[0].(*ast.CallExpr)
+	switch {
+	case isCall && isSelector(call.Fun, w.byName[fn], identityPath, "From"):
+		sc.callers[id.Name] = true
+	case isCall && w.yields(w.callee(fn, call)), sc.key(x.Rhs[0]):
+		sc.keys[id.Name] = true
+	}
+}
+
+// callee — свой метод (на получателе fn) или функция корня, которую зовёт вызов; nil — чужой вызов.
+func (w policyWalk) callee(fn *ast.FuncDecl, call *ast.CallExpr) *ast.FuncDecl {
+	switch fun := call.Fun.(type) {
+	case *ast.Ident:
+		return w.funcs[fun.Name]
+	case *ast.SelectorExpr:
+		if fn.Recv != nil && len(fn.Recv.List[0].Names) > 0 && isIdent(fun.X, fn.Recv.List[0].Names[0].Name) {
+			return w.methods[fun.Sel.Name]
+		}
+	}
+	return nil
+}
+
+// port — выражение — порт корня (policy — порт policy): поле зависимостей (uc.d.Repo) или параметр функции.
+func (w policyWalk) port(expr ast.Expr, params map[string]string, policy bool) bool {
+	switch x := expr.(type) {
+	case *ast.SelectorExpr:
+		return policy && w.policyFields[x.Sel.Name] || !policy && w.portFields[x.Sel.Name]
+	case *ast.Ident:
+		return policy && w.policies[params[x.Name]] || !policy && w.ports[params[x.Name]]
+	}
+	return false
+}
+
+// params — параметры функции с типом корня: имя → тип.
+func (w policyWalk) params(fn *ast.FuncDecl) map[string]string {
+	out := map[string]string{}
+	for _, field := range fn.Type.Params.List {
+		if id, ok := field.Type.(*ast.Ident); ok {
+			for _, name := range field.Names {
+				out[name.Name] = id.Name
+			}
+		}
+	}
+	return out
 }
