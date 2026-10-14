@@ -327,3 +327,226 @@ func usecaseClosure(fn *ast.FuncType, body *ast.BlockStmt, byName map[string]str
 	return ok && isReturn && isSelector(star.X, byName, root, "Usecase") && len(ret.Results) == 1 &&
 		isIdent(ret.Results[0], params[0].Names[0].Name)
 }
+
+// TestSecuredOperationsAskPolicy: метод usecase за операцией под Security (не httpkit.Public) спрашивает policy
+// (…Policy.Can…) — сам или своим методом; без policy — только чтение самого вызывающего: его UserID из
+// identity.From — аргумент вызова (Me). Иначе операция отдала бы ресурс любому вошедшему.
+func TestSecuredOperationsAskPolicy(t *testing.T) {
+	t.Parallel()
+	byDomain := map[string][]goFile{} // домен → не-тестовые файлы delivery/http
+	for _, f := range goFiles(t) {
+		if domain, sub, ok := splitDomain(f.pkg); ok && sub == "delivery/http" && !f.test {
+			byDomain[domain] = append(byDomain[domain], f)
+		}
+	}
+	for domain, files := range byDomain {
+		methods := usecaseMethods(t, domain)
+		parsed := make([]*ast.File, len(files))
+		ifaces := map[string]bool{}
+		funcs := map[string]*ast.FuncDecl{} // методы и функции пакета
+		for i, f := range files {
+			parsed[i] = parseGo(t, f.path)
+			for _, decl := range parsed[i].Decls {
+				if fn, ok := decl.(*ast.FuncDecl); ok {
+					funcs[fn.Name.Name] = fn
+				}
+			}
+			ast.Inspect(parsed[i], func(n ast.Node) bool {
+				if ts, ok := n.(*ast.TypeSpec); ok {
+					if _, ok := ts.Type.(*ast.InterfaceType); ok {
+						ifaces[ts.Name.Name] = true
+					}
+				}
+				return true
+			})
+		}
+		ports := map[string]bool{} // поля пакета с типом-портом: через них хендлер зовёт usecase
+		for _, file := range parsed {
+			ast.Inspect(file, func(n ast.Node) bool {
+				if field, ok := n.(*ast.Field); ok {
+					if id, ok := field.Type.(*ast.Ident); ok && ifaces[id.Name] {
+						for _, name := range field.Names {
+							ports[name.Name] = true
+						}
+					}
+				}
+				return true
+			})
+		}
+		for i, file := range parsed {
+			byName := importsByName(file)
+			ast.Inspect(file, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if pkg, name := kitCall(call, byName); pkg != humaPath || name != "Register" || len(call.Args) < 3 || public(call.Args[1], byName) {
+					return true
+				}
+				op := operationID(call.Args[1])
+				called := usecaseCalls(handlerBody(call.Args[2], funcs), funcs, ports, map[string]bool{})
+				if len(called) == 0 {
+					t.Errorf("%s: operation %s under Security calls no usecase method: the handler reaches its domain through the usecase", files[i].path, op)
+				}
+				for _, name := range called {
+					m, ok := methods[name]
+					switch {
+					case !ok:
+						t.Errorf("%s: operation %s under Security calls %s, which *%s.Usecase does not declare", files[i].path, op, name, domain)
+					case !asksPolicy(m, methods, map[string]bool{}):
+						t.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor reads by the caller's UserID: any signed-in caller would get it (rule domain-architecture)", files[i].path, op, domain, name)
+					}
+				}
+				return true
+			})
+		}
+	}
+}
+
+// public — операция открыта пометкой httpkit.Public.
+func public(op ast.Expr, byName map[string]string) bool {
+	found := false
+	ast.Inspect(op, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok && isSelector(call.Fun, byName, httpkitPath, "Public") {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
+// operationID — OperationID литерала операции; "?" — его нет.
+func operationID(op ast.Expr) string {
+	id := "?"
+	ast.Inspect(op, func(n ast.Node) bool {
+		if kv, ok := n.(*ast.KeyValueExpr); ok && isIdent(kv.Key, "OperationID") {
+			if lit, ok := kv.Value.(*ast.BasicLit); ok {
+				id, _ = strconv.Unquote(lit.Value)
+			}
+		}
+		return true
+	})
+	return id
+}
+
+// handlerBody — тело хендлера huma.Register: метод или функция пакета, литерал; nil — не найден.
+func handlerBody(expr ast.Expr, funcs map[string]*ast.FuncDecl) *ast.BlockStmt {
+	switch h := expr.(type) {
+	case *ast.SelectorExpr:
+		if fn := funcs[h.Sel.Name]; fn != nil {
+			return fn.Body
+		}
+	case *ast.Ident:
+		if fn := funcs[h.Name]; fn != nil {
+			return fn.Body
+		}
+	case *ast.FuncLit:
+		return h.Body
+	}
+	return nil
+}
+
+// usecaseCalls — методы usecase, которые тело зовёт через поле-порт (h.uc.List) — само или функциями пакета.
+func usecaseCalls(body *ast.BlockStmt, funcs map[string]*ast.FuncDecl, ports, seen map[string]bool) []string {
+	if body == nil {
+		return nil
+	}
+	var out []string
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		var name string
+		switch fun := call.Fun.(type) {
+		case *ast.SelectorExpr:
+			if field, ok := fun.X.(*ast.SelectorExpr); ok && ports[field.Sel.Name] {
+				out = append(out, fun.Sel.Name)
+				return true
+			}
+			name = fun.Sel.Name
+		case *ast.Ident:
+			name = fun.Name
+		}
+		if fn := funcs[name]; fn != nil && !seen[name] {
+			seen[name] = true
+			out = append(out, usecaseCalls(fn.Body, funcs, ports, seen)...)
+		}
+		return true
+	})
+	return out
+}
+
+// usecaseMethod — метод *Usecase корня домена и импорты его файла.
+type usecaseMethod struct {
+	decl   *ast.FuncDecl
+	byName map[string]string
+}
+
+// usecaseMethods — методы Usecase корня домена по имени.
+func usecaseMethods(t *testing.T, domain string) map[string]usecaseMethod {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(repoRoot(t), "internal", "domain", domain, "*.go"))
+	require.NoError(t, err)
+	out := map[string]usecaseMethod{}
+	for _, p := range paths {
+		if strings.HasSuffix(p, "_test.go") {
+			continue
+		}
+		file := parseGo(t, "internal/domain/"+domain+"/"+filepath.Base(p))
+		byName := importsByName(file)
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && receiverName(fn) == "Usecase" {
+				out[fn.Name.Name] = usecaseMethod{fn, byName}
+			}
+		}
+	}
+	return out
+}
+
+const identityPath = module + "/internal/platform/identity"
+
+// asksPolicy — метод зовёт …Policy.Can…(…) или передаёт вызову UserID вызывающего из identity.From — сам или
+// своим методом.
+func asksPolicy(m usecaseMethod, methods map[string]usecaseMethod, seen map[string]bool) bool {
+	if seen[m.decl.Name.Name] || m.decl.Body == nil {
+		return false
+	}
+	seen[m.decl.Name.Name] = true
+	recv := ""
+	if names := m.decl.Recv.List[0].Names; len(names) > 0 {
+		recv = names[0].Name
+	}
+	callers := map[string]bool{} // переменные с вызывающим из identity.From
+	asked := false
+	ast.Inspect(m.decl.Body, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.AssignStmt:
+			if call, ok := x.Rhs[0].(*ast.CallExpr); ok && len(x.Rhs) == 1 && isSelector(call.Fun, m.byName, identityPath, "From") {
+				if id, ok := x.Lhs[0].(*ast.Ident); ok && id.Name != "_" {
+					callers[id.Name] = true
+				}
+			}
+		case *ast.CallExpr:
+			sel, ok := x.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if field, ok := sel.X.(*ast.SelectorExpr); ok && field.Sel.Name == "Policy" && strings.HasPrefix(sel.Sel.Name, "Can") {
+				asked = true
+			}
+			for _, arg := range x.Args {
+				if key, ok := arg.(*ast.SelectorExpr); ok && key.Sel.Name == "UserID" {
+					if id, ok := key.X.(*ast.Ident); ok && callers[id.Name] {
+						asked = true
+					}
+				}
+			}
+			if next, ok := methods[sel.Sel.Name]; ok && isIdent(sel.X, recv) && asksPolicy(next, methods, seen) {
+				asked = true
+			}
+		}
+		return !asked
+	})
+	return asked
+}

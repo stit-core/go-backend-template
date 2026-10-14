@@ -78,10 +78,14 @@ blocked-by: —
     `user/delivery/nats`, подключена в `module/`, без `contract_test.go`) — `TestSubscriptionsHaveContractTest`;
     `x04b` (`n22p` + сценарий поставщика `user.Update` в `TestContracts`) — отказ: подписка разбирает `UserID`
     вместо `ID` поставщика и зовёт порт с пустым ID
-- [ ] **AC4** — RADP-09, операция под Security спрашивает policy: `n36-uc-no-policy` (`GET /api/users/emails`
+- [x] **AC4** — RADP-09, операция под Security спрашивает policy: `n36-uc-no-policy` (`GET /api/users/emails`
   отдаёт адреса всех любому вошедшему) на базе — `✓ check clean`, на ветке — отказ archtest. Проверка: та же
-- [ ] **AC5** — Законные формы не краснеют: эталон и законные формы аудитора (`fp01`–`fp04`, `fp09`–`fp13`,
-  `fp17`, `fp18`, `fp20`, `fp21p`, `fp22`) на ветке — `✓ check clean`. Проверка: `batch.py <wt ветки>` →
+  - Подтверждено: база — сводный прогон B `check=clean`; ветка (`exp/branch-s4.tsv`): `n36` —
+    `TestSecuredOperationsAskPolicy` («calls user.Usecase.Emails, which neither asks policy…»); обходы `x09a`
+    (только проверка, что вызывающий есть), `x09b` (вызывающий прочитан, но не ключ), `x09d` (хендлер под
+    Security без usecase) — отказ; законная форма `x09c` (policy своим методом `uc.authorizeList`) — зелёная
+- [ ] **AC5** — Законные формы не краснеют: эталон и законные формы аудитора (`fp01`–`fp05`, `fp08`–`fp15`,
+  `fp17`, `fp18`, `fp20`, `fp21p`, `fp22b`) на ветке — `✓ check clean`. Проверка: `batch.py <wt ветки>` →
   `check=clean`
 - [ ] **AC6** — Проза — ровно то, что проверяется: rule `domain-architecture`, `docs/reference/architecture.md`,
   `scaffold/references/{endpoint,port,event}.md` и комментарий пакета archtest называют новые правила
@@ -124,9 +128,15 @@ blocked-by: —
     поставщика; `TestSubscriptionsHaveContractTest` (`delivery_test.go`): `delivery/nats` с подпиской держит
     `contract_test.go` со сверкой `Subscriptions()`; `event.md` (тест и прежние версии subject'а),
     `architecture.md` § События, rule `events-and-messaging`, комментарий пакета archtest; `make check` → ✓
-- [ ] **S4** — RADP-09: archtest — метод usecase за операцией под Security спрашивает policy
-  (`uc.d.Policy.Can…`, в том числе через свои методы); `user.Me` спрашивает `CanGetByID` своего id. Проза
+- [x] **S4** — RADP-09: archtest — метод usecase за операцией под Security спрашивает policy
+  (`uc.d.Policy.Can…`, в том числе через свои методы); без policy — только чтение вызывающего: ключ порта —
+  его `UserID` из `identity.From` (`Me`). Проза
   - Проверка: n36 на ветке → отказ; `make check` → ✓ · Закрывает: AC4, AC6 · Зависит от: S1
+  - Сделано: `TestSecuredOperationsAskPolicy` (`delivery_test.go`): операция без `httpkit.Public` → методы
+    usecase, которые хендлер зовёт полем-портом (и функциями пакета) → метод `*<домен>.Usecase` (и его методы)
+    зовёт `…Policy.Can…` или передаёт вызову `UserID` из `identity.From`; хендлер под Security без вызова
+    usecase — отказ; эталон и законные формы — без отказов; rule `domain-architecture`, `architecture.md`
+    § Usecase-канон, `endpoint.md`, комментарий пакета archtest; `make check` → ✓
 - [ ] **S5** — Приёмка: эксперименты аудитора на базе и ветке, законные формы, гейт
   - Проверка: `N/boundaries/exp/{base,branch}.tsv`; `make check` → `✓ check clean`
   - Закрывает: AC1, AC2, AC3, AC4, AC5, AC6 · Зависит от: S1, S2, S3, S4
@@ -160,12 +170,21 @@ blocked-by: —
   перечень был бы мёртвым кодом; его форму и место описывает `event.md` § Versioning.
 - Чужой файл: rule `events-and-messaging` (владелец волны 1 — трек identity, в волне 2 не назначен) — одна
   строка: отказ теста и archtest у подписки без события поставщика, иначе правило молчало бы о машине.
+- RADP-09 держит ровно правило прозы: policy или чтение самого вызывающего (ключ порта — `UserID` из
+  `identity.From`). `Me` не переводим на `CanGetByID` своего id: настоящая policy пускает своё чтение всегда,
+  ветка отказа была бы недостижимой — при пороге покрытия 100 трека gate красный cover-check; «policy или
+  `identity.From`» аудитора слабее: проверка «вызывающий есть» без решения (`x09a`) прошла бы. Policy — поле
+  `Policy` с методом `Can…` (канон `UsecaseDeps`).
 
 ## Где мы сейчас
-S1 (RADP-02), S2 (RADP-03) и S3 (RADP-04) сделаны: правила входа и подписок — `internal/archtest/delivery_test.go`,
+S1–S4 сделаны (RADP-02, 03, 04, 09): правила входа, подписок и policy — `internal/archtest/delivery_test.go`,
 ошибок — `archtest_test.go` и `crossdomain_test.go`, сверка методов — в тестах адаптеров и `Trusted`, контракт
-подписок — `TestContracts` verification. База `98e425e`: сводные прогоны
+подписок — `TestContracts` verification. Быстрые шаги законных форм на снимке S4 — зелёные, кроме `fp16`
+(отказ `TestPruneNamesIdentityDependents` — правило prune трека lifecycle, RADP-01, а не трека;
+`exp/branch-fp-quick.tsv`). База `98e425e`: сводные прогоны
 кейсов трека — `✓ check clean`: A — `n12`, `n37`, `n38`, `n70`, `b14`; B — `n16p`, `n15`, `n34`, `n35`,
 `b15`, `n22p`, `n36`; C — `n18p` (`N/boundaries/exp/base.tsv`, логи — `exp/logs/batch-base-*.log`).
 Эксперименты ветки — в `N/wt-boundaries-exp` (снимок правил временным коммитом: раннер откатывает дерево к
-HEAD). Следующий шаг — S4 (RADP-09).
+HEAD). Следующий шаг — S5: законные формы полным `make check` (сводные L1 — `fp01`, `fp02`, `fp04p`, `fp05`,
+`fp08`–`fp15`, `fp17`, `fp18`, `fp20`, `fp21p`; L2 — `fp03`; L3 — `fp22b`), перегон кейсов трека на итоге ветки,
+гейт.
