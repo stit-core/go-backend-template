@@ -75,8 +75,14 @@ blocked-by: —
 
 ## Шаги
 ### Волна 1
-- [ ] **S1** — Трек gate (`close-gate-gaps`) принят и слит в `main`
+- [x] **S1** — Трек gate (`close-gate-gaps`) принят и слит в `main`
   - Проверка: валидатор с ревью → PASS; `make check` на `main` → `✓ check clean` · Закрывает: AC1 · Зависит от: —
+  - Сделано: `98e425e..02f7845` fast-forward (перенос на `main` — конфликт в комментарии пакета archtest);
+    валидатор — FAIL (B1 `MAKEOVERRIDES`, B2 мутация в дереве разработчика после SIGTERM, B3 `.mockery.yaml`) →
+    фиксы, неблокирующие, хвосты (спецификация мутаций под код identity, она же — код форка, флак ETXTBSY) → PASS:
+    гейт в свежем worktree на `02f7845` → `✓ check clean`, 89 кейсов аудитора пойманы, `make mutate` — 356
+    мутаций, 346 убиты, 10 эквивалентных, код 0, `A=--strict` — для шага `/release` (`N/validation-gate.md`);
+    ревью — валидатор, дирижёр — самозащита `Makefile` и хуки; остаток minor — в бэклоге; план трека удалён
 - [x] **S2** — Трек identity (`fix-identity-edges`) принят и слит в `main`
   - Проверка: валидатор с ревью и security → PASS; `make check` → `✓ check clean` · Закрывает: AC1 · Зависит от: —
   - Сделано: `1acaf61..d5fa709` fast-forward; валидатор с security — FAIL (B1–B3, N1–N7) → фиксы → FAIL (B4:
@@ -138,9 +144,10 @@ blocked-by: —
   записи-дубли по адресу без пробелов в данных окружений, предел имени 200, лимит `/api/auth/*` 5 rps с запасом 10
   (`HTTP_TRUST_PROXY_HOPS` за прокси); в аннотацию `template/v1.2.0` — событие
   `verification.events.password_reset_requested.v3`, миграция `0006` до замены api, env `HTTP_AUTH_RATE_LIMIT_*`.
+- Из трека gate — в аннотацию `template/v1.2.0`: порог покрытия 100 % с явным списком непокрываемого (`cover.sh`),
+  `gofumpt -extra` у `make fmt` и `fmt-check`, шаг build — `go build ./...` без тегов, ограничение сборки — только
+  `integration` в тестах, `make mutate` (спецификация `scripts/tools/mutants.txt` — код форка), хуки — `bash -p`.
 
 ## Где мы сейчас
-S2 и S3 закрыты: identity (`d5fa709`) и lifecycle — в `main`. Gate — у валидатора; после него — перенос на `main`
-и хвосты трека: патч мутаций после identity (`N/gate/mutants-after-identity.patch`), `scripts/tools/mutants.txt`
-вне путей шаблона и в prune, флак `TestReleaseBuildForwardsSSHAgent`, `make mutate` → код 0. Следующее: волна 2 —
-boundaries от `d5fa709`, harness — после S1.
+Волна 1 закрыта: S1–S3 в `main`. Boundaries — у валидатора (`N/validation-boundaries.md`); harness — исполнитель
+от нового `main`. Следующее: S4 и S5, затем переаудит S6.

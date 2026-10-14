@@ -13,15 +13,20 @@ https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE). Medium-пункты и minor
 ## Гейт и тулинг
 
 - **minor-enforcement** — minor угла ENF: RENF-10 guard: `git-<подкоманда>` по пути, `.git//config`; 11
-  `cherry-pick --continue` давнего коммита — отказ, subject пушимых не проверяется; 12 infra-touch уже
-  правила, миграции сверяет с HEAD, а не с тегом релиза; 13 tidy в allow; 14 секреты и `:latest` без машины;
-  15 версии инструментов; 16 мелочи. Триггер: с гейтом.
+  `cherry-pick --continue` давнего коммита — отказ, subject пушимых не проверяется; 12 infra-touch уже правила,
+  миграции сверяет с HEAD, а не с тегом релиза; 13 tidy в allow; 14 секреты и `:latest` без машины; 15 версии
+  инструментов; 16 мелочи; остаток gate: лишние отказы `new-domain`, списки снимаемых переменных в `Makefile` и
+  хуках, `GOPACKAGESDRIVER`, `INSERT … VALUES` и `.gitkeep` в migrations-check, исключение выпущенных миграций
+  по имени (форк со своей `0001_users` его наследует). Триггер: с гейтом.
 
 ## Тесты
 
 - **minor-tests** — minor угла TSTT: RTSTT-07 обход «функции без тестов»: замыкание уровня пакета, `init()`,
-  файл под «Code generated»; 08 `.Maybe()` запрещает только текст; 09 полный `make e2e`, ruff и mypy
-  харнеса никто не запускает; 10 тесты `cmd/api` — 2,4 ГБ памяти под `-race`. Триггер: попутно.
+  файл под «Code generated»; 08 `.Maybe()` запрещает только текст; 09 полный `make e2e`, ruff и mypy харнеса
+  никто не запускает; 10 тесты `cmd/api` — 2,4 ГБ памяти под `-race`; `make mutate`: `fmt-check` заходит в
+  worktree раннера `.cache/mutate/wt` (после SIGKILL — ложный красный), стадия, снятая по таймауту, оставляет
+  `go-build…` на 35–66 МБ, `os.killpg` без защиты от `ProcessLookupError`, у раннера нет теста в гейте (нужен
+  python3). Триггер: попутно.
 
 ## Обвязка и жизненный цикл
 
