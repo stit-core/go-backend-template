@@ -13,12 +13,15 @@
    ```
    `.template/identity` остаётся: по нему и решению `identity: external` самопроверка прозы знает, что
    образцы в этих путях — в теге шаблона («Что остаётся»).
-2. **Подключение** — строки удалённых пакетов и китов, которые были нужны только им (сессии входа и
-   антибрутфорс):
+2. **Подключение** — строки удалённых пакетов и китов, которые были нужны только им (сессии входа,
+   антибрутфорс, строгий лимит `/api/auth/*` перед очередью хэша паролей):
    - `cmd/api/main.go` — `usermod`, `authmod`, `verifmod` (импорты, `domainModules`), `session.NewConfig`,
      `bruteforcekit.NewConfig` (`kitConfigs`), `sessionpg.Module`, `bruteforcepg.Module`;
    - `cmd/api/http.go` — `userhttp`, `authhttp`, `verifhttp` (импорты, поля `httpHandlers`, вызовы в
-     `registerHTTP`);
+     `registerHTTP`), `authRateLimit` и `authPathPrefix` (и `fx.Provide` в `httpModule`); их тесты — файл
+     `cmd/api/http_test.go` и `TestBoot_AuthRateLimit` в `cmd/api/boot_test.go`;
+   - `internal/platform/config/config.go` — `App.AuthRateLimit` (тип, поле, проверка в `Load`), его кейсы — в
+     `config_test.go`;
    - `cmd/migrate/sources/sources.go` — `useroutbox`, `verifoutbox`, `sessionpg`, `bruteforcepg`;
    - `cmd/api/api_test.go` — их открытые операции из `publicOperations`.
 3. **Подключение по стеку** — киты, которые de-template оставил ради доменов идентичности (wiring §2
@@ -31,8 +34,8 @@
    из `0001_users` уходят с ней: своя миграция, которой они нужны, заводит их сама.
 6. **Окружение** — `.env.example`: в `NATS_JS_STREAM_NAMES` — стримы своих доменов-публикаторов (без
    `user` и `verification`; публикаторов нет — `NATS_JS_STREAM_NAMES=`), комментарий над ним — про них;
-   у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*` и
-   `BRUTEFORCE_SUBJECT_*` с их комментариями удали.
+   у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*`,
+   `BRUTEFORCE_SUBJECT_*` и `HTTP_AUTH_RATE_LIMIT_*` с их комментариями удали.
 7. **Раскладка** — `internal/archtest/layout_settings_test.go`: запись
    `archkit.WithUncheckedPackages("internal/platform/identity")` убери, если корень ни одного своего
    домена не берёт `internal/platform/identity` (сам или через `pkg/`): лишняя запись — `TestLayout`

@@ -18,6 +18,8 @@ migrations/0004_email_verifications_sent_at.up.sql
 migrations/0004_email_verifications_sent_at.down.sql
 migrations/0005_drop_refresh_sessions.up.sql
 migrations/0005_drop_refresh_sessions.down.sql
+migrations/0006_password_resets_sent_at.up.sql
+migrations/0006_password_resets_sent_at.down.sql
 test/e2e
 test/scenarios
 test/smoke/test_auth.py

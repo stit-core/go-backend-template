@@ -158,7 +158,10 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     `authRateLimit` в `cmd/api/http.go` — `httpkit.RateLimit` на префиксе `/api/auth/` через
     `httpkit.Middlewares`; потоки идентичности в тестах лимит выключают, 429 brute-force сверяется по коду
     `AUTH_ACCOUNT_LOCKED`; `.env.example`, требование в шаблоне `auth.md` § Brute-force, блок в накопителе; RED на
-    базе — `TestBoot_AuthRateLimit` (401 вместо 429), GREEN; `make check` → `✓ check clean`
+    базе — `TestBoot_AuthRateLimit` (401 вместо 429), GREEN; `make check` → `✓ check clean`. Фиксы валидации B3
+    и N7: путь вне `/api/auth/` в `TestBoot_AuthRateLimit` — `/health`, он переживает prune (`/api/users/me`
+    уходит с доменом user); `prune.md` называет лимит — `authRateLimit`, `App.AuthRateLimit`,
+    `HTTP_AUTH_RATE_LIMIT_*` и их тесты: без `/api/auth/*` он мёртвая настройка
 - [x] **S8** — reset-timing: запрос сброса делает одну и ту же работу для любого адреса, письмо — подписчик
   события (`sent_at`, миграция `0006`), строка о гарантии доставки в `domain-mapping.md`; INFRA-HANDOFF
   - Проверка: RED → GREEN тестов `verification`; E8 и B07b → |z| < 3 · Закрывает: AC8 · Зависит от: S7
@@ -171,7 +174,8 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     в запросе, у неизвестного адреса — ни лимита, ни события; `N/identity/s8-red-request.log`), GREEN;
     `make check` → `✓ check clean`. Фикс валидации B1: guard обрезает пробелы по краям ключа целиком, и адрес
     за приставкой `password_reset:` их сохранял — адаптер лимитера снимает их с субъекта сам; RED → GREEN
-    `TestResetLimiter_AddressForms` (`N/identity/b1-red.log`)
+    `TestResetLimiter_AddressForms` (`N/identity/b1-red.log`). Фикс B3: миграция `0006` — в `.template/identity`;
+    симуляция prune копии `migrations/` — до фикса остаётся `0006`, после — ничего (`N/identity/b3-*.log`)
 - [x] **S9** — компромиссы входа: перечисление через регистрацию и окно access-JWT — в `SECURITY.md` и
   шаблоне `auth.md`, комментарии правдивы
   - Проверка: чтение и grep из AC9 · Закрывает: AC9 · Зависит от: S8
@@ -242,11 +246,14 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   пример сигнала `metrics.go` (письма сброса больше не уходят из запроса).
 - Чужой файл: rule `domain-architecture` (трек boundaries, волна 2) — фраза о канонической форме ключа
   уникальности в «Вход — проверка поля»: конвенция, которую копирует следующая сущность.
+- Чужие файлы: `.template/identity` и `references/prune.md` скилла `init-service` (трек lifecycle, слит) —
+  миграция `0006` и лимит `/api/auth/*` трека в prune (B3, N7 валидации): иначе prune форка с внешней
+  идентичностью оставлял миграцию над удалённой таблицей и мёртвую настройку.
 
 ## Handoff
 —
 
 ## Где мы сейчас
 S1–S14 закрыты; ветка перенесена на `main` с треком lifecycle. Идёт круг фиксов по отчёту валидатора
-(`N/validation-identity.md`): B1, B2 и N4 закрыты. Следующее: B3, N1–N3, N5–N7, затем перепроверка
+(`N/validation-identity.md`): B1–B3, N4 и N7 закрыты. Следующее: N2, N1, N3, N5, N6, затем перепроверка
 валидатором.

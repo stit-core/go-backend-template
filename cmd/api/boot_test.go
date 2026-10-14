@@ -247,10 +247,12 @@ func TestBoot_AuthRateLimit(t *testing.T) {
 		req.Header.Set("X-Forwarded-For", ip)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
-		var apiErr httpkit.APIError
-		require.NoError(t, json.NewDecoder(resp.Body).Decode(&apiErr))
+		var body struct {
+			Code string `json:"code"`
+		}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.NoError(t, resp.Body.Close())
-		return resp.StatusCode, apiErr.Code
+		return resp.StatusCode, body.Code
 	}
 
 	for range 2 {
@@ -262,8 +264,8 @@ func TestBoot_AuthRateLimit(t *testing.T) {
 	require.Equal(t, "RATE_LIMITED", code)
 	status, code = send(http.MethodPost, "/api/auth/refresh", "198.51.100.2")
 	require.NotEqual(t, http.StatusTooManyRequests, status, "another client has its own bucket: %s", code)
-	status, code = send(http.MethodGet, "/api/users/me", "198.51.100.1")
-	require.Equal(t, http.StatusUnauthorized, status, "a path outside /api/auth/ is not limited: %s", code)
+	status, code = send(http.MethodGet, "/health", "198.51.100.1")
+	require.Equal(t, http.StatusOK, status, "a path outside /api/auth/ is not limited: %s", code)
 }
 
 func sourceNames(srcs []pgkit.Source) []string {
