@@ -220,8 +220,11 @@ blocked-by: —
   - Сделано: `deliveryKits` — в `internal/archtest/layout_settings_test.go` (файл сервиса, `:(exclude)` в
     `.template/paths`); `architecture.md` — место перечня, skill `upgrade` — файл настроек держит и `deliveryKits`;
     строка аннотации тега — «Handoff»; `make check` → ✓
-- [ ] **S13** — N6, N7: `event.md` — строка prune контракт-теста потребителя события `user`, прежняя версия — сценарием
+- [x] **S13** — N6, N7: `event.md` — строка prune контракт-теста потребителя события `user`, прежняя версия — сценарием
   - Проверка: `make check` → ✓ · Закрывает: AC8 · Зависит от: S6
+  - Сделано: `event.md` шаг 7 — поставщик события из доменов идентичности: `delivery/nats/contract_test.go`
+    потребителя — строкой в `prune.md` (как адаптер в `port.md`); § Versioning — прежняя версия одной формулировкой:
+    сценарий с записанным payload и строкой «снять в релизе …»; `make check` → ✓
 - [ ] **S14** — O1: `TestNewDomainRefusesOrRollsBack` берёт свободное имя домена
   - Проверка: инъекция домена `order` → тест зелёный; `make check` → ✓ · Закрывает: AC9 · Зависит от: S6
 - [ ] **S15** — O2: занятая таблица — из миграции песочницы, а не доменов идентичности
@@ -286,6 +289,6 @@ blocked-by: —
   собирается — скопировать из шаблона (`git show template/v1.2.0:internal/archtest/layout_settings_test.go`).
 
 ## Где мы сейчас
-S7–S12 (B1, N1–N5) и S19 (RHAR-08 п. 5) сделаны; у `fix(...)` круга — строка `Review:`. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
-Следующий шаг — S13 (N6, N7); затем S14–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
+S7–S13 (B1, N1–N7) и S19 (RHAR-08 п. 5) сделаны; у `fix(...)` круга — строка `Review:`. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
+Следующий шаг — S14 (O1); затем S15–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
 валидатора — `cases_val.py`), worktree экспериментов — `N/wt-boundaries-exp`.
