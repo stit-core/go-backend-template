@@ -106,7 +106,7 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
     A36 (`auth`), UH7 (`user/delivery/http`), AD1 (`auth/module`, юнит) → KILLED красным тестом своего пакета
     (`N/identity/mutants/*.log`); на базе они выжили в гейте (Приложение Б `R/template-tests.md`, AD1 ловил
     только integration `TestSessions`), A36, UH7, AD1 на тестах до S13 → SURVIVED (`*-base.log`); выжившие полного
-    `make mutate` трека gate на слиянии с ним — K12, K13 → KILLED
+    `make mutate` трека gate на слиянии с ним — K12, K13, SD2 → KILLED
 - [x] **AC11** — Гейт зелёный. Проверка: `flock N/gate.lock make check` → `✓ check clean`
   - Подтверждено: на итоге ветки `flock N/gate.lock make check` → `✓ check clean`, покрытие 100 % (798/798)
 
@@ -199,7 +199,11 @@ RSECT-01–04), RCOD-13, запись окна access-JWT и пробелы те
   - Проверка: мутанты SD1, SD5, SD6, SD7 → красные · Закрывает: AC10
   - Сделано: `TestRun_CreatesAdminOnce` — роль и `email_verified` после первого запуска,
     `TestRun_RequiresAddressAndPassword`, `TestRun_DeletedAccountKeepsNothing`; SD1, SD5, SD6, SD7 → KILLED
-    (`N/identity/mutants/SD*.log`, раннер `N/identity/mutate.py`); `make check` → `✓ check clean`
+    (`N/identity/mutants/SD*.log`, раннер `N/identity/mutate.py`); `make check` → `✓ check clean`. Выживший
+    полного `make mutate` трека gate SD2 (поиск без `FOR UPDATE`) — `TestRun_WaitsForLockedAccount`: чужая
+    транзакция удаляет учётную запись и держит строку, seed ждёт и после её коммита заводит нового admin, а
+    удалённую не повышает; во временном worktree с мутацией FAIL (удалённая — `admin`), без неё PASS
+    (`N/identity/mutants/SD2.log`)
 - [x] **S11** — RTSTT-04: `fx.StopTimeout` графа и граница ⅔ бюджета остановки
   - Проверка: мутанты K01, K04 → красные · Закрывает: AC10
   - Сделано: случай «ровно ⅔» в `TestCheckStopBudget`, `app.StopTimeout() == stopTimeout` в `TestBoot`; K01, K04 →

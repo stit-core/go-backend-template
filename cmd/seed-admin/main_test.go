@@ -159,3 +159,40 @@ func TestRun_DeletedAccountKeepsNothing(t *testing.T) {
 	).Scan(&admins))
 	require.Equal(t, 1, admins, "a new admin is created")
 }
+
+// Поиск — под FOR UPDATE: повышение ждёт чужую блокировку строки учётной записи и решает по её итогу —
+// учётную запись, удалённую, пока seed ждал, не повышает, а заводит нового admin.
+func TestRun_WaitsForLockedAccount(t *testing.T) {
+	pg := seedEnv(t, "admin@example.com")
+	db := pg.DB(t)
+	var id string
+	require.NoError(t, db.QueryRow(
+		t.Context(),
+		`INSERT INTO users (email, password_hash, name, status, role) VALUES ('admin@example.com', 'x', 'Early', 'active', 'client') RETURNING id`,
+	).Scan(&id))
+	deletion, err := pg.Pool(t).Begin(t.Context())
+	require.NoError(t, err)
+	_, err = deletion.Exec(t.Context(), `UPDATE users SET status = 'deleted' WHERE id = $1`, id)
+	require.NoError(t, err)
+
+	done := make(chan int, 1)
+	go func() { done <- run(t.Context(), logkit.Nop()) }()
+	require.Eventually(t, func() bool {
+		var waiting int
+		err := db.QueryRow(t.Context(),
+			`SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE '%users%'`).Scan(&waiting)
+		return err == nil && waiting == 1
+	}, 30*time.Second, 50*time.Millisecond, "seed waits for the lock on the account row")
+	require.NoError(t, deletion.Commit(t.Context()))
+	require.Equal(t, 0, <-done)
+
+	var status, role string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT status, role FROM users WHERE id = $1`, id).Scan(&status, &role))
+	require.Equal(t, []string{"deleted", "client"}, []string{status, role}, "the account deleted while seed waited is not promoted")
+	var admins int
+	require.NoError(t, db.QueryRow(
+		t.Context(),
+		`SELECT count(*) FROM users WHERE LOWER(email) = 'admin@example.com' AND role = 'admin' AND status = 'active'`,
+	).Scan(&admins))
+	require.Equal(t, 1, admins, "a new admin is created")
+}
