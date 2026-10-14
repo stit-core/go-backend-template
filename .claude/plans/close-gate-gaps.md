@@ -117,12 +117,20 @@ blocked-by: —
     у аудитора — он брал `unshare`); `altconfig*.sh` — `.golangci.toml` и `.json` не заслоняют `.yml`;
     `gen-roundtrip.sh` — три пути после `make gen` без `git add` → OK
 
-- [ ] **AC12** — Круг фиксов валидатора (`N/validation-gate.md`): формы B1 (`MAKEOVERRIDES`), B2 (`make mutate` в
+- [x] **AC12** — Круг фиксов валидатора (`N/validation-gate.md`): формы B1 (`MAKEOVERRIDES`), B2 (`make mutate` в
   дереве разработчика), B3 (`.mockery.yaml`) не проходят; неблокирующие из задания дирижёра закрыты или отклонены
   в «Решениях». Проверка: воспроизведения валидатора на ветке → отказ или дерево чистое; тесты archtest → PASS
-- [ ] **AC13** — Ветка на `main` (`98e425e`, слиты lifecycle и identity): спецификация мутаций — под код `main`,
+  - Подтверждено: B1 — `MAKEOVERRIDES='SHELL=/bin/true' make check` → отказ make, три формы и
+    `TestCheckCoversItsOwnRun` на Makefile до правки — RED; B2 — `N/gate/r2-sandbox.log`: SIGTERM, SIGHUP, SIGKILL
+    посреди мутации — дерево разработчика чистое, его правка цела, повтор — с места; B3 — `.mockery.yaml` с выводом
+    в `mocks2` → gen-check FAIL с файлом мока; неблокирующие — S18–S23, у каждого RED на коде до правки
+- [x] **AC13** — Ветка на `main` (`98e425e`, слиты lifecycle и identity): спецификация мутаций — под код `main`,
   `.template/paths` и prune держат её кодом форка, флака `TestReleaseBuildForwardsSSHAgent` нет; полный
   `make mutate` → код 0. Проверка: `make check` → ✓; полный прогон под замком → код 0
+  - Подтверждено: `make check` → ✓ (795/795) на каждом шаге S14–S27; якоря 356 — по одному месту; полный
+    `make mutate` на `bec139c` — убиты 346 (юнит 275, integration 71), выжили 10 известных эквивалентных, новых нет,
+    устаревших и несобравшихся нет — код 0 (`N/gate/s27-mutate-4.log`, `mutate-final/`); K12, K13, SD2 убиты
+    тестами identity
 ## Шаги
 - [x] **S1** — Самозащита `make check` не зависит от `MAKECMDGOALS`: `MAKECMDGOALS` и `MAKEFILE_LIST`
   вызывающего — отказ make, отказы гейта — при разборе и первой строкой рецепта; pre-push снимает `MAKE*`
@@ -270,8 +278,10 @@ blocked-by: —
     (`make_test.go`, `steps_test.go`, а также `hooks_test.go`, `release_test.go` трека lifecycle — тот же класс).
     Механизм — `N/gate/etxtbsy/`: запись и запуск при соседних fork — ETXTBSY 416 из 2000, под `ForkLock` — 0;
     тесты с заглушками ×120 под нагрузкой — PASS (флак на прогоне мутаций — 2 из 356); `make check` → ✓
-- [ ] **S27** — Полный `make mutate` на итоге ветки и гейт
+- [x] **S27** — Полный `make mutate` на итоге ветки и гейт
   - Проверка: код 0; `make check` → ✓ · Закрывает: AC13 · Зависит от: S15–S26
+  - Сделано: полный прогон на `bec139c` в worktree раннера (кусками под замком, уступая исполнителю boundaries) —
+    код 0; worktree раннера снят; `make check` → ✓
 
 ## Решения
 - Шаги-скрипты гейта зовутся `bash scripts/…` из рецептов, их защищает `unexport` Makefile; `bash -p` —
@@ -338,6 +348,6 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S13 приняты по существу, валидатор — FAIL на `829481c` (`N/validation-gate.md`): круг фиксов S14–S27. Ветка
-перенесена на `main` `98e425e` (S14); B1–B3 и неблокирующие закрыты (S15–S23); спецификация — под код `main`, она
-— код форка (S24, S25), флак ETXTBSY снят (S26). Следующее: S27 — полный `make mutate` на итоге.
+S1–S27 закрыты: ветка на `main` `98e425e`, круг фиксов валидатора (`N/validation-gate.md`) пройден — B1–B3 и
+неблокирующие из задания дирижёра, спецификация мутаций — под код `main` и код форка, флак ETXTBSY снят; полный
+`make mutate` → код 0, `make check` → ✓. Следующее — повторная валидация трека.
