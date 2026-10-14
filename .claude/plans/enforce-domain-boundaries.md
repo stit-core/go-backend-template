@@ -185,9 +185,13 @@ blocked-by: —
     поле с интерфейсом корня, порт policy — поле `Policy` или интерфейс из одних `Can…`; ключ вызывающего засчитан
     только аргументом вызова порта (`uc.d.Repo.GetByID(ctx, caller.UserID)`); `rootServices` берёт `embedsFxIn`;
     проза — rule `domain-architecture`, `architecture.md` § Usecase-канон, `endpoint.md`; `make check` → ✓
-- [ ] **S8** — N1: порт входа — интерфейс; тип-функция, поле `fx.Out`, алиас и другие упоминания порта вне closure над
+- [x] **S8** — N1: порт входа — интерфейс; тип-функция, поле `fx.Out`, алиас и другие упоминания порта вне closure над
   `*Usecase` — отказ
   - Проверка: v02b, v02c, v02d, v02i → отказ; `make check` → ✓ · Закрывает: AC8 · Зависит от: S6
+  - Сделано: `TestDeliveryPortsBoundToUsecase` — порты входа — интерфейсы и экспортируемые типы-функции пакетов
+    `delivery/*`; вне входа любое их упоминание, кроме результата `func(uc *<домен>.Usecase) <порт> { return uc }` в
+    `module/` своего домена, — отказ; `exp/round-n1.tsv`: `v02b`, `v02c`, `v02d`, `v02i`, `b14`, `x02a` — отказ, `fp10` —
+    зелёный; rule `domain-architecture`, `architecture.md` § fx; `make check` → ✓
 - [ ] **S9** — N2: регистрация — `huma.Register` и `sse.Register` вызовом в `delivery/http`, хендлер — метод, функция или
   литерал пакета
   - Проверка: v02e, v02h, v02f → отказ, v02g → отказ своим текстом; `make check` → ✓ · Закрывает: AC8 · Зависит от: S6
@@ -248,6 +252,6 @@ blocked-by: —
   `Policy` с методом `Can…` (канон `UsecaseDeps`).
 
 ## Где мы сейчас
-S7 (B1) сделан. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
-Следующий шаг — S8 (N1); затем S9–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
+S7 (B1), S8 (N1) сделаны. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
+Следующий шаг — S9 (N2); затем S10–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
 валидатора — `cases_val.py`), worktree экспериментов — `N/wt-boundaries-exp`.

@@ -250,12 +250,13 @@ func mentions(node ast.Node, names map[string]bool) bool {
 }
 
 // TestDeliveryPortsBoundToUsecase: порт входа (интерфейс пакета delivery/<транспорт>) получает usecase своего
-// домена — identity-closure над *<домен>.Usecase в его module/. Порт, привязанный к репозиторию, Trusted или
-// хранилищу кита, отдал бы входу операции мимо usecase и policy.
+// домена — identity-closure над *<домен>.Usecase в его module/. Другое упоминание порта вне входа — поле fx.Out,
+// алиас, параметр, экспортируемый тип-функция пакета входа — отказ: порт над репозиторием, Trusted или хранилищем
+// кита отдал бы входу операции мимо usecase и policy.
 func TestDeliveryPortsBoundToUsecase(t *testing.T) {
 	t.Parallel()
 	files := goFiles(t)
-	ports := map[string]map[string]bool{} // путь импорта пакета delivery/<транспорт> → его интерфейсы
+	ports := map[string]map[string]bool{} // путь импорта пакета delivery/<транспорт> → его порты
 	for _, f := range files {
 		if _, sub, ok := splitDomain(f.pkg); !ok || f.test || !under(sub, "delivery") {
 			continue
@@ -266,39 +267,60 @@ func TestDeliveryPortsBoundToUsecase(t *testing.T) {
 		}
 		ast.Inspect(parseGo(t, f.path), func(n ast.Node) bool {
 			if ts, ok := n.(*ast.TypeSpec); ok {
-				if _, ok := ts.Type.(*ast.InterfaceType); ok {
+				switch ts.Type.(type) {
+				case *ast.InterfaceType:
 					ports[pkg][ts.Name.Name] = true
+				case *ast.FuncType:
+					ports[pkg][ts.Name.Name] = ast.IsExported(ts.Name.Name)
 				}
 			}
 			return true
 		})
 	}
 	for _, f := range files {
-		if f.test || !slices.ContainsFunc(f.imports, func(imp string) bool { return ports[imp] != nil }) {
+		_, sub, inDomain := splitDomain(f.pkg)
+		if f.test || inDomain && under(sub, "delivery") || !slices.ContainsFunc(f.imports, func(imp string) bool { return ports[imp] != nil }) {
 			continue
 		}
 		file := parseGo(t, f.path)
 		byName := importsByName(file)
+		bound := map[ast.Expr]bool{} // результаты closure над *Usecase в module/ своего домена
 		ast.Inspect(file, func(n ast.Node) bool {
 			fn, body := funcParts(n)
-			if fn == nil || fn.Results == nil {
+			if fn == nil || fn.Results == nil || len(fn.Results.List) != 1 {
 				return true
 			}
-			sel, ok := fn.Results.List[0].Type.(*ast.SelectorExpr)
-			if !ok {
-				return true
+			result := fn.Results.List[0].Type
+			if domain, ok := portDomain(result, byName, ports); ok && f.pkg == "internal/domain/"+domain+"/module" &&
+				usecaseClosure(fn, body, byName, module+"/internal/domain/"+domain) {
+				bound[result] = true
 			}
-			id, ok := sel.X.(*ast.Ident)
-			if !ok || !ports[byName[id.Name]][sel.Sel.Name] {
-				return true
-			}
-			domain, _, _ := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/"))
-			if f.pkg != "internal/domain/"+domain+"/module" || !usecaseClosure(fn, body, byName, module+"/internal/domain/"+domain) {
-				t.Errorf("%s binds %s.%s otherwise than func(uc *%s.Usecase) %s.%s { return uc } in internal/domain/%s/module: an input reaches its domain through the usecase and its policy", f.path, id.Name, sel.Sel.Name, domain, id.Name, sel.Sel.Name, domain)
+			return true
+		})
+		ast.Inspect(file, func(n ast.Node) bool {
+			if sel, ok := n.(*ast.SelectorExpr); ok && !bound[sel] {
+				if domain, ok := portDomain(sel, byName, ports); ok {
+					port := types.ExprString(sel)
+					t.Errorf("%s uses %s otherwise than as the result of func(uc *%s.Usecase) %s { return uc } in internal/domain/%s/module: an input port gets the usecase of its domain and its policy", f.path, port, domain, port, domain)
+				}
 			}
 			return true
 		})
 	}
+}
+
+// portDomain — домен порта входа, если выражение — <пакет delivery/<транспорт>>.<порт>.
+func portDomain(expr ast.Expr, byName map[string]string, ports map[string]map[string]bool) (string, bool) {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return "", false
+	}
+	id, ok := sel.X.(*ast.Ident)
+	if !ok || !ports[byName[id.Name]][sel.Sel.Name] {
+		return "", false
+	}
+	domain, _, _ := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/"))
+	return domain, true
 }
 
 // funcParts — сигнатура и тело объявленной функции или литерала; nil — не функция.

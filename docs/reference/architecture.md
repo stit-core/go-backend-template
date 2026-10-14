@@ -204,8 +204,9 @@ DTO в порте — локальные (не re-export из B).
   `func(j *authnkit.HS256JWT) authnkit.JWTSigner { return j }`). `fx.As` не используется
   (archtest), `fx.Annotate` — только для тегов `name:` и `group:`. Порт входа (интерфейс пакета
   `delivery/<транспорт>`) получает только usecase своего домена — такой closure в его `module/`: порт над
-  репозиторием, `Trusted` или хранилищем кита отдал бы входу операции мимо policy (archtest
-  `TestDeliveryPortsBoundToUsecase`).
+  репозиторием, `Trusted` или хранилищем кита отдал бы входу операции мимо policy. Другого упоминания порта
+  вне входа нет — ни поля `fx.Out`, ни алиаса, ни параметра; экспортируемый тип-функция пакета входа — тоже
+  порт, привязать его к usecase нечем (archtest `TestDeliveryPortsBoundToUsecase`).
 - **Конфиги** — конфиг кита читает его `<kit>.NewConfig` (`kitConfigs` в `cmd/api`), конфиги
   самого приложения — структура `App` (`internal/platform/config`). Вне `APP_ENV=dev` старт не
   пускает небезопасное: cookie без Secure, логи без маскирования, docs и access-токены без
