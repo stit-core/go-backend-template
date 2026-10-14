@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,7 +38,7 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 		{name: "a keyword", domain: "func", want: "ключевое слово"},
 		{name: "a declaration of the domain package", domain: "repository", want: "имя из кода среза"},
 		{name: "an occupied table", domain: "password_reset", want: "таблицу password_resets уже создаёт миграция"},
-		{name: "a failure after the first edit", domain: "order", want: "правки откатаны"},
+		{name: "a failure after the first edit", domain: freeDomain(files), want: "правки откатаны"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -55,4 +56,19 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 			require.Empty(t, git(t, repo, "status", "--porcelain", "--untracked-files=all"), "new-domain %s leaves the tree changed:\n%s", tc.domain, out)
 		})
 	}
+}
+
+// freeDomain — имя домена, которого у сервиса нет (ни алиаса в cmd/api, ни таблицы в миграциях): срез с ним
+// доходит до первой правки, какие бы домены ни завёл форк.
+func freeDomain(files map[string]string) string {
+	var all strings.Builder
+	for _, text := range files {
+		all.WriteString(strings.ToLower(text))
+	}
+	name := "probe"
+	for strings.Contains(all.String(), name+"mod") || strings.Contains(all.String(), name+"http") ||
+		strings.Contains(all.String(), "table "+name+"s") {
+		name += "x"
+	}
+	return name
 }
