@@ -979,5 +979,5 @@ echo "  таблица ${TABLE}, подключение в cmd/api; создан
 echo
 echo "Дальше:"
 echo "  1. make check (нужен Docker)"
-echo "  2. Домен — по артефакту strategy: поля (миграция новым файлом + queries + make gen),"
-echo "     права (policy.go), операции и события — skill scaffold (endpoint, event, port)"
+echo "  2. Домен — по артефакту strategy: .claude/skills/scaffold/references/domain.md § 4"
+echo "     (поля — в миграцию среза до первого коммита; права, операции, события)"

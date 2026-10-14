@@ -67,8 +67,11 @@ blocked-by: —
     только `status.sh` — hooks, build, sqlc-drift, migrations, infra-touch, lint (`A=--full`), тестов он
     не гоняет; enum env — «где живёт» (`field-checklists.md`), секции `Architecture notes` у шаблонов
     `docs/stack/_templates/` нет
-- [ ] **AC5** — T6: поля нового домена — одним способом в `scaffold/references/domain.md § 4` и в выводе
+- [x] **AC5** — T6: поля нового домена — одним способом в `scaffold/references/domain.md § 4` и в выводе
   `make new-domain`. Проверка: `exp.py` G07 → на базе «да», на ветке «нет»; текст обоих мест
+  - Подтверждено: база — G07 «да», ветка — «нет»; `make new-domain NAME=order` (временный worktree)
+    печатает «Домен — по артефакту strategy: …/domain.md § 4 (поля — в миграцию среза до первого
+    коммита; …)», § 4 и «Что не делать» domain.md говорят то же
 - [ ] **AC6** — `/release`: шаг `make mutate A=--strict` перед релизом; на коде ветки он даёт код 0.
   Проверка: `exp.py` G08 → на ветке «да»; `flock … make mutate A=--strict` → `EXIT 0`
   (`N/harness/mutate-strict-*.log`)
@@ -100,8 +103,11 @@ blocked-by: —
     lint), красный `make check` или тест — отдельно, заголовки без «(фикс …)»; triage-failure — `ATTENTION:`
     даёт `make status`; stack-deep-dive — «где живёт» у env вместо `Source`, строка `Architecture notes`
     снята (такой секции нет); `exp.py` — как в AC4; `make check` → `✓ check clean`
-- [ ] **S5** — T6: поля нового домена — одним способом
+- [x] **S5** — T6: поля нового домена — одним способом
   - Проверка: `exp.py` G07; `make check` → `✓ check clean` · Закрывает: AC5 · Зависит от: —
+  - Сделано: domain.md § 4 — колонки контракта пишутся в `CREATE TABLE` миграции среза, пока срез не
+    закоммичен, остальное — шаги 3–7 варианта `field`; после первого коммита — `field` целиком, новой
+    миграцией; вывод `make new-domain` ссылается на § 4; `make check` → `✓ check clean`
 - [ ] **S6** — шаг `make mutate A=--strict` в `/release`
   - Проверка: `exp.py` G08; лог прогона → `EXIT 0`; `make check` → `✓ check clean` · Закрывает: AC6 ·
     Зависит от: —
@@ -131,6 +137,11 @@ blocked-by: —
 - «Шаг 0» у triage-failure (`tests-pipeline`): багфикс начинается с теста, новый файл теста пишет Write — и
   правило по `paths:` не придёт; список процедур с шагом 0 — `readRulesFirst`.
 - Чужой файл `docs/contributing.md`: строки deny, guard и «Самопроверка обвязки» называют новые проверки.
+- T6: колонки нового домена — в миграцию среза, пока срез не закоммичен; порог — первый коммит, а не
+  релиз: его видно по `git status`, а правку закоммиченной миграции `make status` показывает в
+  Infra-touch. `ALTER TABLE` над пустой таблицей — лишняя операция выкатки, `DROP COLUMN` `name` — ещё и
+  миграция с эффектом (маркер и handoff). Вывод `make new-domain` не повторяет § 4, а ссылается на него.
+- Чужой файл `scripts/new-domain.sh` (в волне 2 ничей): две строки `echo` «Дальше» — ссылка на § 4.
 
 ## Handoff
 - Дирижёру при слиянии: в комментарий пакета `internal/archtest` (файл трека boundaries) — «доставка
@@ -141,8 +152,8 @@ blocked-by: —
   545–1012 строк, код — до 303.
 
 ## Где мы сейчас
-S1–S4 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
+S1–S5 закрыты: «Готово» называет принимающую сторону ревью, хук требует `Review:` у `feat` и `fix`,
 самопроверка прозы видит имена тестов, доставку правил и подключение guard; S4 — правда прозы
-smartdev, triage-failure, stack-deep-dive. Полный `make mutate A=--strict` на `f825fac` прерван на 101/356
-ради гейта шагов, результаты — в `N/wt-harness-mut/.cache/mutate/`, прогон продолжится с места.
-Следующий шаг — S5 (T6).
+smartdev, triage-failure, stack-deep-dive; S5 — поля нового домена одним способом. Полный
+`make mutate A=--strict` на `f825fac` прерван на 101/356 ради гейта шагов, результаты — в
+`N/wt-harness-mut/.cache/mutate/`, прогон продолжится с места. Следующий шаг — S6 (`/release`).
