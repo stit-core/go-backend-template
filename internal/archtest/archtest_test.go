@@ -1,22 +1,43 @@
-// Package archtest машинно держит обвязку и канон доменов (rule domain-architecture) для любого
-// каталога internal/domain/*. Раскладку — каталоги internal/, импорты между доменами и слоями, чистоту
-// корня домена и чистых слоёв, настенные часы, порты между доменами без identity-closure, свои таблицы —
-// держит archkit (golibinfra) вызовом TestLayout: правила едут версией кита, настройки сервиса — в
-// layout_settings_test.go. Здесь — правила шаблона: Trusted и таблицы ошибок между доменами, привязка
-// портов без fx.As, префикс, уникальность и envelope HTTP-типов, таблица ошибок домена в HTTP-контракте,
-// вход домена (пакет delivery/<транспорт>, операции и подписки — только в нём, из корня — данные, usecase —
-// портом над *Usecase, без хранилищ и клиентов китов, у подписки — контракт-тест, у метода usecase за
-// операцией под Security — policy), ошибки корня домена — только в errors.go, ответ хендлера — nil или
-// таблица домена, адаптер module/ без встроенного типа чужого домена,
-// владение subject-литералами, тесты без утверждений, заголовок сгенерированного только в выводе
-// генераторов, ограничение сборки — только integration у тестов; а ещё подключение доменов в cmd/api,
-// ссылки прозы на make-цели и пути, //nolint только включённых линтеров и без директив линтеров мимо
-// него, пути и версия обвязки шаблона (.template), её перенос в форк (make
-// template-update), маркеры конфликтов, пути доменов идентичности и процедура их prune, канонический
-// репо шаблона, валидатор stack-артефактов, хуки guard-bash, commit-msg, pre-commit и pre-push, подключение
-// git-хуков (make setup, status, doctor), путь образа релиза и самозащита make check от флагов, переменных и
-// окружения вызывающего. На archtest и archkit //nolint не
-// действует.
+// Package archtest машинно держит обвязку шаблона и канон доменов (rule domain-architecture) для любого
+// каталога internal/domain/*; на archtest и archkit //nolint не действует. Тесты по файлам:
+//
+//   - layout_test.go — TestLayout: раскладку держит archkit (golibinfra) — каталоги internal/, импорты между
+//     доменами и слоями, чистоту корня и чистых слоёв, настенные часы, порты между доменами без
+//     identity-closure, свои таблицы; правила едут версией кита, настройки сервиса (layout и киты входа
+//     deliveryKits) — layout_settings_test.go;
+//   - archtest_test.go — TestHTTPTypes (префикс, уникальность и envelope HTTP-типов), TestDomainErrorTables
+//     (таблица ошибок домена и ответ хендлера — nil или она), TestDomainErrorsInErrorsGo (ошибки корня — только
+//     в errors.go), TestSubjectLiteralOwnership и TestNoExportedSubjectInDomainRoot (владение subject'ами),
+//     TestTestsAssert (тесты без утверждений);
+//   - crossdomain_test.go — TestTrustedOnlyInModules и TestTrustedErrors (Trusted между доменами), TestNoFxAs
+//     (привязка портов без fx.As), TestModulesEmbedNoForeignTypes (порт между доменами — типовой адаптер);
+//   - delivery_test.go — вход домена: TestDeliveryPackages (пакет delivery/<транспорт>),
+//     TestInputsRegisterInDelivery (операции и подписки — только в нём), TestSubscriptionsHaveContractTest
+//     (контракт-тест подписки), TestDeliveryReachesUsecaseOnly (из корня — данные, киты — deliveryKits),
+//     TestDeliveryPortsBoundToUsecase (порт входа — над *Usecase), TestSecuredOperationsAskPolicy (операция под
+//     Security — с policy);
+//   - generated_test.go — TestGeneratedHeaderOnlyInGeneratorOutput (заголовок сгенерированного — только у вывода
+//     генераторов), TestBuildConstraints (ограничение сборки — только integration у тестов),
+//     TestLinterDirectives (директив линтеров мимо //nolint нет);
+//   - harness_test.go — TestDomainsAreWired (домены подключены в cmd/api), TestProseReferencesExist (ссылки прозы
+//     на make-цели и пути), TestNolintNamesEnabledLinters и TestNolintNames (//nolint — только включённых
+//     линтеров);
+//   - template_test.go — TestTemplatePaths, TestTemplateUpdate, TestTemplateUpdateFirstBase,
+//     TestTemplateUpdateBeforeVersionTag, TestTemplateUpdatePaths, TestTemplateUpdateRemote (пути и версия
+//     обвязки .template, её перенос в форк make template-update), TestNoConflictMarkers и TestConflictMarkers;
+//   - onboarding_test.go — TestIdentityPaths, TestIdentityDependents, TestPruneNamesIdentityDependents (пути
+//     доменов идентичности и процедура их prune), TestCanonicalTemplate (канонический репо шаблона),
+//     TestStackValidator (валидатор stack-артефактов);
+//   - guard_test.go, commitmsg_test.go, hooks_test.go — TestGuardBash, TestCommitMsgHook, TestHooksVisible и
+//     TestSetupWiresHooksFirst (хуки guard-bash и commit-msg, подключение git-хуков: make setup, status, doctor);
+//   - make_test.go — TestMakeCheckCannotBeForged, TestCheckCoversItsOwnRun, TestPrePushGatesPushedCommit,
+//     TestGateStepsIgnoreShellEnvironment, TestHooksIgnoreCallerEnvironment (самозащита make check и pre-push от
+//     флагов, переменных и окружения вызывающего), TestReleaseGateIgnoresGNUmakefile,
+//     TestReleaseStopsWithoutModuleAccess, TestReleasePreflight, TestReleaseBuildForwardsSSHAgent (релиз);
+//   - steps_test.go — TestCoverCheck, TestLintUsesItsConfig, TestGenCheckComparesMocksWithTree,
+//     TestFmtAppliesLintRules, TestMigrationsCheck (шаги гейта);
+//   - newdomain_test.go — TestNewDomainRefusesOrRollsBack (make new-domain: отказ до первой правки, откат после);
+//   - release_test.go — TestReleaseImage (путь образа релиза).
 package archtest
 
 import (

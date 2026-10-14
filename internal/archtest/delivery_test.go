@@ -145,7 +145,8 @@ func localHandler(expr ast.Expr, byName map[string]string, declared map[string]b
 
 // TestSubscriptionsHaveContractTest: схему подписки со схемой поставщика сверяет контракт-тест потребителя
 // delivery/nats/contract_test.go — каждой подписке Register (bus.Subscriptions()) событие настоящего usecase
-// поставщика. Без него схема подписки держится только на её собственном тесте, а он пишет payload сам.
+// поставщика. Без него схема подписки держится только на её собственном тесте, а он пишет payload сам. Правило
+// держит присутствие теста и вызова Subscriptions; что сверка верна, держит сам тест.
 func TestSubscriptionsHaveContractTest(t *testing.T) {
 	t.Parallel()
 	subscribers := map[string]bool{} // пакеты delivery/nats с подпиской
@@ -186,8 +187,9 @@ func kitCall(call *ast.CallExpr, byName map[string]string) (string, string) {
 }
 
 // TestDeliveryReachesUsecaseOnly: вход домена зовёт usecase своего домена портом пакета. Из корня он берёт
-// данные — сущности, DTO, ошибки, — а не порты, usecase, Trusted и их зависимости, и не держит хранилищ,
-// клиентов и драйверов: иначе операция прошла бы мимо usecase и его policy.
+// данные — сущности, DTO, ошибки, — а не порты, usecase, Trusted и их зависимости; из golibinfra — только
+// deliveryKits (layout_settings_test.go), database/sql и pgx — нет: иначе операция прошла бы мимо usecase и его
+// policy. Клиент stdlib (net/http) и хранилище за пакетом internal/platform или pkg/ правило не видит — ревью.
 func TestDeliveryReachesUsecaseOnly(t *testing.T) {
 	t.Parallel()
 	services := map[string]map[string]bool{} // домен → имена корня, за которыми зависимости

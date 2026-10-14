@@ -15,27 +15,20 @@ blocked-by: —
 
 ## Контекст
 - Программа — `.claude/plans/reaudit-to-nine.md` (трек boundaries, волна 2, S4): владение файлами, решения
-  владельца, метод. Ветка `nine/boundaries`, worktree `N/wt-boundaries` от `main` `98e425e` (слиты identity и
-  lifecycle; gate — ещё нет). `N` = `/home/mm/.cache/stit-audit-program/nine`, `R` =
-  `/home/mm/.cache/stit-audit-program/reaudit`.
-- Находки — `R/template-adapters.md` § RADP-02, 03, 04, 09; эксперименты — `R/tpl-adp/` (инжектор `lib.py`,
-  кейсы `cases_*.py`, раннеры `run.py`, `batch.py`). Рабочая копия трека — `N/boundaries/exp/`: `make check`
-  раннеров — под `flock N/gate.lock`, логи и TSV — там же; кейсы, которым база `98e425e` сдвинула якоря или
-  имена, — в `cases_port.py` с суффиксом `-p` (смысл тот же). Worktree экспериментов — `N/wt-boundaries-<x>`.
-- Что держит машина на базе: archkit (`TestLayout`) из правил входа — только импорт `infra` из `delivery`;
-  `TestHTTPTypes` и `TestDomainErrorTables` (`internal/archtest/archtest_test.go`) читают пакет `delivery/http`
-  ровно, ошибки домена — только `var Err*` из `errors.go`, у хендлера ловят только `return …, err`;
-  `TestTrustedOnlyInModules` (`crossdomain_test.go`) узнаёт `Trusted` по имени типа; контракт-тест
-  `internal/domain/verification/delivery/nats/contract_test.go` — сценарий на подписку, без сверки с
-  `Register`; policy под Security — проза rule `domain-architecture`.
-- Владение: `internal/archtest/{archtest,crossdomain,layout,layout_settings}_test.go` (в `archtest_test.go` —
-  кроме `TestTestsAssert` и правила тегов сборки трека gate: он не в `main`, конфликты слияния сводит
-  дирижёр), правки доменов под новые правила, rule `domain-architecture`,
-  `scaffold/references/{port,endpoint,event}.md`, `docs/reference/architecture.md`.
-- Круг фиксов валидатора — `N/validation-boundaries.md` (FAIL на `298090e`: B1, N1–N11, находки добора O1–O3); его
-  кейсы — `N/val-boundaries/exp/cases_val.py` (копия — `N/boundaries/exp/`). Ветка перенесена на `main` `f825fac`: трек
-  gate слит — порог покрытия 100 %, `make mutate`; файлы gate (`internal/archtest/newdomain_test.go`,
-  `scripts/tools/mutants.txt`) правлю минимально (O1–O3).
+  владельца, метод. Ветка `nine/boundaries`, worktree `N/wt-boundaries`; база трека — `main` `98e425e`, круг фиксов —
+  на `main` `f825fac` (трек gate слит: порог покрытия 100 %, `make mutate`). `N` = `/home/mm/.cache/stit-audit-program/nine`,
+  `R` = `/home/mm/.cache/stit-audit-program/reaudit`.
+- Находки — `R/template-adapters.md` § RADP-02, 03, 04, 09; эксперименты — `R/tpl-adp/`. Рабочая копия трека —
+  `N/boundaries/exp/` (`make check` раннеров — под `flock N/gate.lock`, логи и TSV — там же): кейсы, которым база
+  сдвинула якоря, — `cases_port.py` (суффикс `-p`), обходы трека — `cases_bnd.py`, кейсы валидатора — `cases_val.py`.
+- На базе машина держала из правил входа только импорт `infra` из `delivery` (archkit), `TestHTTPTypes` и
+  `TestDomainErrorTables` читали пакет `delivery/http` ровно и только `var Err*` из `errors.go`, `Trusted` узнавался
+  по имени типа, контракт-тест verification не сверял подписки `Register`, policy под Security — проза.
+- Владение: `internal/archtest/{archtest,crossdomain,layout,layout_settings}_test.go` (`TestTestsAssert` и правило
+  тегов сборки — трека gate), правки доменов под новые правила, rule `domain-architecture`,
+  `scaffold/references/{port,endpoint,event}.md`, `docs/reference/architecture.md`. Круг фиксов валидатора —
+  `N/validation-boundaries.md` (FAIL на `298090e`: B1, N1–N11, добор O1–O3); файлы gate (`newdomain_test.go`,
+  `scripts/tools/mutants.txt`) — минимально.
 - Новые правила читают и код identity: эталон, вывод `make new-domain` и законные формы аудитора не должны
   получить ни одного отказа.
 
@@ -242,8 +235,11 @@ blocked-by: —
     `make mutate A=--check` → якоря 356 — по одному месту; `make mutate A="--strict U25 UH9"` (временный коммит в
     worktree экспериментов, под замком) → обе — известные эквивалентные, код 0 (`N/boundaries/o3-mutate.log`);
     `make check` → ✓
-- [ ] **S17** — Комментарий пакета archtest — перечень по файлам (N9), комментарии правил (N10, N11)
+- [x] **S17** — Комментарий пакета archtest — перечень по файлам (N9), комментарии правил (N10, N11)
   - Проверка: перечень = тесты пакета; `make check` → ✓ · Закрывает: AC9 · Зависит от: S6
+  - Сделано: комментарий пакета — список по файлам с каждым тестом (57 из 57, лишних нет; тесты трека harness впишет
+    перенос второго из слитых треков); `TestSubscriptionsHaveContractTest` — держит присутствие сверки, а не её
+    верность (N10); `TestDeliveryReachesUsecaseOnly` — ровно что проверяет, предел — клиент stdlib (N11); `make check` → ✓
 - [x] **S19** — RHAR-08 п. 5 (от трека harness): предел ~400 строк — у файла кода, не `*_test.go`
   - Проверка: `make check` → ✓
   - Сделано: rule `domain-architecture`, `architecture.md` § Разбиение переростков: «файл кода (не `*_test.go`) > ~400
@@ -300,6 +296,5 @@ blocked-by: —
   собирается — скопировать из шаблона (`git show template/v1.2.0:internal/archtest/layout_settings_test.go`).
 
 ## Где мы сейчас
-S7–S16 (B1, N1–N7, O1–O3) и S19 (RHAR-08 п. 5) сделаны; у `fix(...)` круга — строка `Review:`. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
-Следующий шаг — S17 (комментарий пакета archtest) по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
-валидатора — `cases_val.py`), worktree экспериментов — `N/wt-boundaries-exp`.
+S7–S17 (B1, N1–N11, O1–O3, комментарий пакета) и S19 (RHAR-08 п. 5) сделаны, у `fix(...)` — строка `Review:`. Следующий шаг —
+S18: приёмка круга (кейсы валидатора, исполнителя и аудитора, законные формы, гейт); worktree — `N/wt-boundaries-exp`.
