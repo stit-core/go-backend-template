@@ -225,7 +225,8 @@ test-bench: ## Бенчмарки
 	go test -run=^$$ -bench=. -benchmem ./internal/domain/...
 
 # Силу тестов держат мутации, а не процент покрытия: правки «было → стало» scripts/tools/mutants.txt по
-# одной на чистом дереве, итог — выжившие списком (scripts/tools/mutate.py, rule tests-pipeline).
+# одной в своём worktree .cache/mutate/wt по HEAD, итог — выжившие списком (scripts/tools/mutate.py, rule
+# tests-pipeline).
 mutate: ## Мутационный прогон вне гейта, нужен Docker (A="<id> …" — эти мутации заново, A=--check — только якоря)
 	@python3 -I scripts/tools/mutate.py $(A)
 

@@ -3,23 +3,24 @@
 
 Использование: make mutate [A="<id> …" | A=--check]
 
-Прогон идёт на чистом дереве. Сначала базовый прогон тестов: красный — отказ (мутации без смысла), а кеш
-go test после него держит результаты пакетов, которых мутация не касается. Каждая мутация: правка по
-тексту кода (якорь «было» — ровно одно место файла, пробелы не важны) → gofumpt; правка SQL — sqlc
-generate, правка HTTP-слоя — openapi.json (дрейф сгенерированного мутацию не убивает) → go build ./...
-→ юнит-тесты (go test ./...) → юнит + integration (go test -tags=integration ./..., нужен Docker) →
-откат к HEAD. Без -race: мутации — про логику, гонки держит гейт.
+Мутации идут по HEAD в своём worktree .cache/mutate/wt: дерево разработчика прогон не трогает, незакоммиченное в
+прогон не входит. Сначала базовый прогон тестов: красный — отказ (мутации без смысла), а кеш go test после него
+держит результаты пакетов, которых мутация не касается. Каждая мутация: правка по тексту кода (якорь «было» —
+ровно одно место файла, пробелы не важны) → gofumpt; правка SQL — sqlc generate, правка HTTP-слоя — openapi.json
+(дрейф сгенерированного мутацию не убивает) → go build ./... → юнит-тесты (go test ./...) → юнит + integration
+(go test -tags=integration ./..., нужен Docker) → worktree — снова HEAD. Без -race: мутации — про логику, гонки
+держит гейт.
 
-Итог — убитые по стадиям и выжившие: известные эквивалентные (строка «=» в спецификации) и новые; ещё —
-мутации с устаревшим якорем и несобравшиеся (их правят в спецификации). Код 1 — есть новые выжившие или
-таймауты. Результаты — .cache/mutate/<HEAD>.tsv: оборванный прогон на том же коммите продолжается с места,
-правка, оставленная обрывом, откатывается (другие изменённые файлы — отказ). A="<id> …" — эти мутации
-заново, A=--check — только якоря.
+Итог — убитые по стадиям и выжившие: известные эквивалентные (строка «=» в спецификации) и новые; ещё — мутации с
+устаревшим якорем и несобравшиеся (их правят в спецификации). Код 1 — есть новые выжившие или таймауты. Результаты —
+.cache/mutate/<HEAD>.tsv: оборванный прогон на том же коммите продолжается с места. A="<id> …" — эти мутации
+заново, A=--check — только якоря спецификации рабочего дерева.
 """
 import fcntl
 import os
 import pathlib
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -27,9 +28,9 @@ import time
 ROOT = pathlib.Path(
     subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
 )
-SPEC = ROOT / "scripts" / "tools" / "mutants.txt"
+SPEC = pathlib.Path("scripts", "tools", "mutants.txt")
 CACHE = ROOT / ".cache" / "mutate"
-INFLIGHT = CACHE / "inflight"
+WT = CACHE / "wt"
 # Правка этих путей меняет HTTP-контракт: openapi.json регенерируется, как сделал бы make gen.
 HTTP_PATHS = ("/delivery/http/", "internal/platform/authgate/", "cmd/api/", "pkg/")
 STAGE_TIMEOUT = 1800
@@ -38,7 +39,8 @@ ENV = {
     k: v
     for k, v in os.environ.items()
     if not k.startswith(("MAKE", "BASH_FUNC_"))
-    and k not in ("MFLAGS", "GNUMAKEFLAGS", "BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "API_TEST_MAIN_ARGS")
+    and k not in ("MFLAGS", "GNUMAKEFLAGS", "BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "CDPATH", "GLOBIGNORE",
+                  "API_TEST_MAIN_ARGS")
 }
 
 
@@ -47,14 +49,14 @@ def fail(msg):
     sys.exit(1)
 
 
-def git(*args):
-    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, check=True, env=ENV).stdout
+def git(*args, cwd=ROOT):
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=True, env=ENV).stdout.decode()
 
 
 def run(cmd):
-    """Код выхода и вывод команды; None — таймаут."""
+    """Код выхода и вывод команды в worktree раннера; None — таймаут."""
     try:
-        r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, errors="replace", timeout=STAGE_TIMEOUT, env=ENV)
+        r = subprocess.run(cmd, cwd=WT, capture_output=True, text=True, errors="replace", timeout=STAGE_TIMEOUT, env=ENV)
         return r.returncode, r.stdout + r.stderr
     except subprocess.TimeoutExpired as e:
         out = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
@@ -97,10 +99,10 @@ def anchor(lines):
     return re.compile(r"\s+".join(re.escape(chunk) for chunk in " ".join(lines).split()))
 
 
-def stale(m):
-    """Причина, по которой мутация не применится к дереву, или пустая строка."""
+def stale(m, tree):
+    """Причина, по которой мутация не применится к дереву tree, или пустая строка."""
     for e in m["edits"]:
-        path = ROOT / e["path"]
+        path = tree / e["path"]
         if not path.is_file():
             return f"нет файла {e['path']}"
         found = len(anchor(e["before"]).findall(path.read_text()))
@@ -111,7 +113,7 @@ def stale(m):
 
 def apply(m):
     for e in m["edits"]:
-        path = ROOT / e["path"]
+        path = WT / e["path"]
         text = path.read_text()
         found = list(anchor(e["before"]).finditer(text))
         if len(found) != 1:
@@ -121,28 +123,13 @@ def apply(m):
     return ""
 
 
-def dirty():
-    return [line for line in git("status", "--porcelain", "--untracked-files=all").decode().splitlines() if line.strip()]
-
-
-def changed():
-    """Отслеживаемые файлы, изменённые относительно HEAD, и новые файлы дерева."""
-    def paths(out):
-        return [p for p in out.decode().split("\0") if p]
-
-    return paths(git("diff", "--name-only", "-z", "HEAD")), paths(git("ls-files", "--others", "--exclude-standard", "-z"))
-
-
-def restore():
-    """Дерево — к HEAD: до мутации оно было чистым, значит всё изменённое — её правка и сгенерированное."""
-    modified, new = changed()
-    for path in modified:
-        (ROOT / path).write_bytes(git("show", f"HEAD:{path}"))
-    for path in new:
-        (ROOT / path).unlink()
-    left = dirty()
-    if left:
-        fail("дерево не вернулось к HEAD — проверь руками: " + "; ".join(left))
+def reset(head):
+    """Worktree раннера — ровно HEAD разработчика: правка прошлой мутации, и оборванной, уходит."""
+    if not (WT / ".git").exists():
+        git("worktree", "prune")
+        git("worktree", "add", "-q", "--detach", str(WT), head)
+    git("checkout", "-q", "-f", "--detach", head, cwd=WT)
+    git("clean", "-q", "-fd", cwd=WT)
 
 
 def failed(out):
@@ -154,7 +141,7 @@ def failed(out):
 
 def mutate(m, log):
     """Вердикт мутации: unit, integration (убита), survived, invalid, timeout — и подробность."""
-    reason = stale(m) or apply(m)
+    reason = stale(m, WT) or apply(m)
     if reason:
         return "stale", reason
     paths = [e["path"] for e in m["edits"]]
@@ -172,7 +159,7 @@ def mutate(m, log):
         log.append(f"$ {' '.join(cmd)}  (exit {code})\n{out}")
         if code != 0:
             return "invalid", f"{name}: {out.strip()[-200:]}"
-    log.append("$ git diff\n" + git("diff").decode())
+    log.append("$ git diff\n" + git("diff", cwd=WT))
     for stage, cmd in (("unit", ["go", "test", "./..."]), ("integration", ["go", "test", "-tags=integration", "./..."])):
         t0 = time.time()
         code, out = run(cmd)
@@ -185,20 +172,16 @@ def mutate(m, log):
 
 
 def main(args):
-    mutants = parse(SPEC.read_text())
     if args == ["--check"]:
-        bad = [(m["id"], stale(m)) for m in mutants]
+        mutants = parse((ROOT / SPEC).read_text())
+        bad = [(m["id"], stale(m, ROOT)) for m in mutants]
         bad = [(mid, why) for mid, why in bad if why]
         for mid, why in bad:
             print(f"  {mid}: {why}")
         if bad:
-            fail(f"мутаций с устаревшим якорем: {len(bad)} из {len(mutants)} — перепиши их блоки в {SPEC.relative_to(ROOT)}")
+            fail(f"мутаций с устаревшим якорем: {len(bad)} из {len(mutants)} — перепиши их блоки в {SPEC}")
         print(f"OK: якоря {len(mutants)} мутаций — по одному месту в дереве")
         return 0
-    by_id = {m["id"]: m for m in mutants}
-    unknown = [a for a in args if a not in by_id]
-    if unknown:
-        fail("нет таких мутаций: " + " ".join(unknown))
 
     CACHE.mkdir(parents=True, exist_ok=True)
     lock = open(CACHE / "lock", "w")
@@ -206,25 +189,22 @@ def main(args):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         fail("make mutate уже идёт в этом дереве")
-    if INFLIGHT.exists():
-        mid = INFLIGHT.read_text().strip()
-        # Обрыв оставляет в дереве правку мутации и то, что из неё сгенерировано (sqlc, openapi.json). Правку,
-        # сделанную в дереве после обрыва, откат стёр бы молча — с ней прогон не идёт.
-        own = {e["path"] for e in by_id[mid]["edits"]} if mid in by_id else set()
-        foreign = [p for p in sum(changed(), []) if p not in own and p != "openapi.json" and "/infra/postgres/db/" not in p]
-        if foreign:
-            fail(f"после обрыва мутации {mid} изменены и другие файлы: {' '.join(foreign)} — откат их стёр бы: "
-                 f"разбери дерево сам (правка мутации — в {', '.join(sorted(own)) or 'её файлах'}) и удали "
-                 f"{INFLIGHT.relative_to(ROOT)}")
-        print(f"→ откат правки оборванной мутации {mid}")
-        restore()
-        INFLIGHT.unlink()
-    elif dirty():
-        fail("дерево не чистое — make mutate правит файлы и откатывает их к HEAD: закоммить или отложи правки")
     if subprocess.run(["go", "env", "GOFLAGS"], capture_output=True, text=True, env=ENV).stdout.strip():
         fail("make mutate не запускается с GOFLAGS — тесты шли бы не так, как в гейте")
+    # SIGTERM и SIGHUP (kill, закрытый терминал) — как Ctrl-C: прогон выходит через откат worktree.
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda signum, _: sys.exit(128 + signum))
 
-    head = git("rev-parse", "HEAD").decode().strip()
+    head = git("rev-parse", "HEAD").strip()
+    if git("status", "--porcelain", "--untracked-files=all").strip():
+        print(f"→ незакоммиченное в прогон не входит: мутации идут по HEAD {head[:7]}")
+    reset(head)
+    mutants = parse((WT / SPEC).read_text())
+    by_id = {m["id"]: m for m in mutants}
+    unknown = [a for a in args if a not in by_id]
+    if unknown:
+        fail("нет таких мутаций: " + " ".join(unknown))
+
     results = CACHE / f"{head}.tsv"
     for old in CACHE.glob("*.tsv"):
         if old != results:
@@ -240,7 +220,7 @@ def main(args):
     todo = [m for m in selected if args or m["id"] not in done]
 
     if todo:
-        print(f"→ базовый прогон: go test и go test -tags=integration по всему дереву ({len(todo)} мутаций впереди)")
+        print(f"→ базовый прогон: go test и go test -tags=integration по HEAD {head[:7]} ({len(todo)} мутаций впереди)")
         for cmd in (["go", "test", "./..."], ["go", "test", "-tags=integration", "./..."]):
             code, out = run(cmd)
             if code != 0:
@@ -248,13 +228,11 @@ def main(args):
                 fail(f"базовый прогон {' '.join(cmd)} красный — мутации на красных тестах без смысла")
     for k, m in enumerate(todo, 1):
         t0 = time.time()
-        INFLIGHT.write_text(m["id"])
         log = []
         try:
             verdict, detail = mutate(m, log)
         finally:
-            restore()
-            INFLIGHT.unlink()
+            reset(head)
         dt = int(time.time() - t0)
         (logs / f"{m['id']}.log").write_text("\n\n".join(log))
         done[m["id"]] = (verdict, detail)
