@@ -20,7 +20,11 @@ import (
 	"git.stit.tech/stit-core/golibinfra/testkit"
 )
 
-var tokenExpiry = time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+// requestedAt — запрос сброса тестов: его ссылка живёт час, до tokenExpiry.
+var (
+	tokenExpiry = time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	requestedAt = tokenExpiry.Add(-time.Hour)
+)
 
 // setup seeds a user because both token tables reference users(id).
 func setup(t *testing.T) (verification.Repository, string) {
@@ -35,7 +39,7 @@ func setup(t *testing.T) (verification.Repository, string) {
 func issueReset(t *testing.T, repo verification.Repository, userID, hash string) string {
 	t.Helper()
 	id := idkit.NewV7()
-	issued, err := repo.UpsertPasswordReset(context.Background(), id, userID, hash, tokenExpiry)
+	issued, err := repo.UpsertPasswordReset(context.Background(), id, userID, hash, requestedAt, tokenExpiry)
 	require.NoError(t, err)
 	require.True(t, issued)
 	return id
@@ -64,7 +68,7 @@ func TestUpsertPasswordReset_Redelivery(t *testing.T) {
 	ctx := context.Background()
 	id := issueReset(t, repo, userID, "hash:pr-1")
 
-	issued, err := repo.UpsertPasswordReset(ctx, id, userID, "hash:pr-2", tokenExpiry)
+	issued, err := repo.UpsertPasswordReset(ctx, id, userID, "hash:pr-2", requestedAt, tokenExpiry)
 	require.NoError(t, err)
 	require.True(t, issued, "an unsent link is issued again")
 	_, err = repo.GetPasswordReset(ctx, "hash:pr-1")
@@ -74,7 +78,7 @@ func TestUpsertPasswordReset_Redelivery(t *testing.T) {
 	require.Equal(t, id, got.ID)
 
 	require.NoError(t, repo.MarkPasswordResetSent(ctx, id))
-	issued, err = repo.UpsertPasswordReset(ctx, id, userID, "hash:pr-3", tokenExpiry)
+	issued, err = repo.UpsertPasswordReset(ctx, id, userID, "hash:pr-3", requestedAt, tokenExpiry)
 	require.NoError(t, err)
 	require.False(t, issued, "a sent link is not issued again")
 	_, err = repo.GetPasswordReset(ctx, "hash:pr-3")
@@ -84,9 +88,60 @@ func TestUpsertPasswordReset_Redelivery(t *testing.T) {
 
 	unsent := issueReset(t, repo, userID, "hash:pr-4")
 	require.NoError(t, repo.MarkPasswordResetUsed(ctx, unsent))
-	issued, err = repo.UpsertPasswordReset(ctx, unsent, userID, "hash:pr-5", tokenExpiry)
+	issued, err = repo.UpsertPasswordReset(ctx, unsent, userID, "hash:pr-5", requestedAt, tokenExpiry)
 	require.NoError(t, err)
 	require.False(t, issued, "a used link is not issued again")
+}
+
+// Ссылка запроса — его пользователя: событие с id чужой неотправленной ссылки её токен не перевыпускает.
+func TestUpsertPasswordReset_OtherUser(t *testing.T) {
+	t.Parallel()
+	db := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations())).DB(t)
+	users := userpg.NewRepository(db)
+	owner, other := pgseed.InsertUser(t, users), pgseed.InsertUser(t, users)
+	repo := verifpg.NewRepository(db)
+	ctx := context.Background()
+	id := issueReset(t, repo, owner.ID, "hash:pr-1")
+
+	issued, err := repo.UpsertPasswordReset(ctx, id, other.ID, "hash:pr-2", requestedAt, tokenExpiry)
+	require.NoError(t, err)
+	require.False(t, issued, "the link of another user is not issued")
+	got, err := repo.GetPasswordReset(ctx, "hash:pr-1")
+	require.NoError(t, err)
+	require.Equal(t, owner.ID, got.UserID, "the token of the owner stays")
+}
+
+// Подтверждение гасит и запрос в полёте: запрос, после которого пользователь погасил ссылку сброса, ссылки не
+// получает, а запрос после погашения и запрос соседа — получают.
+func TestUpsertPasswordReset_AfterRedemption(t *testing.T) {
+	t.Parallel()
+	db := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations())).DB(t)
+	users := userpg.NewRepository(db)
+	owner, neighbour := pgseed.InsertUser(t, users), pgseed.InsertUser(t, users)
+	repo := verifpg.NewRepository(db)
+	ctx := context.Background()
+	require.NoError(t, repo.MarkPasswordResetUsed(ctx, issueReset(t, repo, owner.ID, "hash:pr-1")))
+	redeemed, err := repo.GetPasswordReset(ctx, "hash:pr-1")
+	require.NoError(t, err)
+	before, after := redeemed.UsedAt.Add(-time.Second), redeemed.UsedAt.Add(time.Second)
+
+	for _, tc := range []struct {
+		name, userID, hash string
+		requestedAt        time.Time
+		issued             bool
+	}{
+		{"request before the redemption", owner.ID, "hash:pr-2", before, false},
+		{"request after the redemption", owner.ID, "hash:pr-3", after, true},
+		{"request of the neighbour", neighbour.ID, "hash:pr-n", before, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			issued, err := repo.UpsertPasswordReset(ctx, idkit.NewV7(), tc.userID, tc.hash, tc.requestedAt, tokenExpiry)
+			require.NoError(t, err)
+			require.Equal(t, tc.issued, issued)
+			_, err = repo.GetPasswordReset(ctx, tc.hash)
+			require.Equal(t, tc.issued, err == nil, "the link is stored only when issued")
+		})
+	}
 }
 
 func TestGetPasswordReset_UnknownTokenHash(t *testing.T) {
@@ -257,11 +312,11 @@ func TestRepository_Failures(t *testing.T) {
 		ctx := context.Background()
 		calls := map[string]func() error{
 			"UpsertPasswordReset bad user": func() error {
-				_, err := repo.UpsertPasswordReset(ctx, idkit.NewV7(), "not-a-uuid", "hash:bad-user", tokenExpiry)
+				_, err := repo.UpsertPasswordReset(ctx, idkit.NewV7(), "not-a-uuid", "hash:bad-user", requestedAt, tokenExpiry)
 				return err
 			},
 			"UpsertPasswordReset bad request": func() error {
-				_, err := repo.UpsertPasswordReset(ctx, "not-a-uuid", userID, "hash:bad-request", tokenExpiry)
+				_, err := repo.UpsertPasswordReset(ctx, "not-a-uuid", userID, "hash:bad-request", requestedAt, tokenExpiry)
 				return err
 			},
 			"MarkPasswordResetSent": func() error { return repo.MarkPasswordResetSent(ctx, "not-a-uuid") },
@@ -289,7 +344,7 @@ func TestRepository_Failures(t *testing.T) {
 		const id = "00000000-0000-0000-0000-000000000001"
 		calls := map[string]func() error{
 			"UpsertPasswordReset": func() error {
-				_, err := repo.UpsertPasswordReset(ctx, id, userID, "hash:canceled", tokenExpiry)
+				_, err := repo.UpsertPasswordReset(ctx, id, userID, "hash:canceled", requestedAt, tokenExpiry)
 				return err
 			},
 			"MarkPasswordResetSent": func() error { return repo.MarkPasswordResetSent(ctx, id) },

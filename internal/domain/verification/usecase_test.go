@@ -398,14 +398,14 @@ func TestRequestPasswordReset_Failure(t *testing.T) {
 	}
 }
 
-// resetIssued ждёт выпуск ссылки сброса запроса rid пользователя u1 сроком час от запроса requestedAt и
-// копит хэши выпущенных токенов; issued — ответы по порядку вызовов.
+// resetIssued ждёт выпуск ссылки сброса запроса rid пользователя u1, сделанного в requestedAt, сроком час от
+// него и копит хэши выпущенных токенов; issued — ответы по порядку вызовов.
 func resetIssued(t *testing.T, requestedAt time.Time, hashes *[]string, issued ...bool) *mocks.MockRepository {
 	t.Helper()
 	repo := mocks.NewMockRepository(t)
 	for _, ok := range issued {
-		repo.EXPECT().UpsertPasswordReset(mock.Anything, "rid", "u1", mock.Anything, requestedAt.Add(time.Hour)).
-			RunAndReturn(func(_ context.Context, _, _, hash string, _ time.Time) (bool, error) {
+		repo.EXPECT().UpsertPasswordReset(mock.Anything, "rid", "u1", mock.Anything, requestedAt, requestedAt.Add(time.Hour)).
+			RunAndReturn(func(_ context.Context, _, _, hash string, _, _ time.Time) (bool, error) {
 				*hashes = append(*hashes, hash)
 				return ok, nil
 			}).Once()
@@ -513,7 +513,7 @@ func TestIssuePasswordReset_Failure(t *testing.T) {
 		}},
 		{"link not stored", func(t *testing.T) []ucOption {
 			repo := mocks.NewMockRepository(t)
-			repo.EXPECT().UpsertPasswordReset(mock.Anything, "rid", "u1", mock.Anything, mock.Anything).Return(false, errDown).Once()
+			repo.EXPECT().UpsertPasswordReset(mock.Anything, "rid", "u1", mock.Anything, mock.Anything, mock.Anything).Return(false, errDown).Once()
 			return []ucOption{withUsers(userByID(t, 1)), withRepo(repo)}
 		}},
 		{"sent mark not stored", func(t *testing.T) []ucOption {

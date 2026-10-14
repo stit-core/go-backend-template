@@ -1,11 +1,17 @@
 -- name: UpsertPasswordReset :one
--- Ссылка сброса запроса id: новая или новый токен неотправленной; отправленная и погашенная не трогаются —
--- RETURNING пуст.
+-- Ссылка сброса запроса id: новая или новый токен своей неотправленной. Отправленную, погашенную и чужую не
+-- трогает; запрос, после которого пользователь погасил ссылку сброса, ссылки не получает — подтверждение гасит
+-- и запросы в полёте. Не выпущено — RETURNING пуст.
 INSERT INTO password_resets (id, user_id, token_hash, expires_at)
-VALUES ($1, $2, $3, $4)
+SELECT sqlc.arg('id')::uuid, sqlc.arg('user_id')::uuid, sqlc.arg('token_hash')::text, sqlc.arg('expires_at')::timestamptz
+WHERE NOT EXISTS (
+    SELECT 1 FROM password_resets
+    WHERE user_id = sqlc.arg('user_id')::uuid AND used_at > sqlc.arg('requested_at')::timestamptz
+)
 ON CONFLICT (id) DO UPDATE
 SET token_hash = EXCLUDED.token_hash
-WHERE password_resets.sent_at IS NULL
+WHERE password_resets.user_id = EXCLUDED.user_id
+  AND password_resets.sent_at IS NULL
   AND password_resets.used_at IS NULL
 RETURNING id;
 

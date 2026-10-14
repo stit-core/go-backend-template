@@ -68,29 +68,37 @@ func (q *Queries) RevokePasswordResets(ctx context.Context, userID pgtype.UUID) 
 
 const upsertPasswordReset = `-- name: UpsertPasswordReset :one
 INSERT INTO password_resets (id, user_id, token_hash, expires_at)
-VALUES ($1, $2, $3, $4)
+SELECT $1::uuid, $2::uuid, $3::text, $4::timestamptz
+WHERE NOT EXISTS (
+    SELECT 1 FROM password_resets
+    WHERE user_id = $2::uuid AND used_at > $5::timestamptz
+)
 ON CONFLICT (id) DO UPDATE
 SET token_hash = EXCLUDED.token_hash
-WHERE password_resets.sent_at IS NULL
+WHERE password_resets.user_id = EXCLUDED.user_id
+  AND password_resets.sent_at IS NULL
   AND password_resets.used_at IS NULL
 RETURNING id
 `
 
 type UpsertPasswordResetParams struct {
-	ID        pgtype.UUID
-	UserID    pgtype.UUID
-	TokenHash string
-	ExpiresAt pgtype.Timestamptz
+	ID          pgtype.UUID
+	UserID      pgtype.UUID
+	TokenHash   string
+	ExpiresAt   pgtype.Timestamptz
+	RequestedAt pgtype.Timestamptz
 }
 
-// Ссылка сброса запроса id: новая или новый токен неотправленной; отправленная и погашенная не трогаются —
-// RETURNING пуст.
+// Ссылка сброса запроса id: новая или новый токен своей неотправленной. Отправленную, погашенную и чужую не
+// трогает; запрос, после которого пользователь погасил ссылку сброса, ссылки не получает — подтверждение гасит
+// и запросы в полёте. Не выпущено — RETURNING пуст.
 func (q *Queries) UpsertPasswordReset(ctx context.Context, arg UpsertPasswordResetParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertPasswordReset,
 		arg.ID,
 		arg.UserID,
 		arg.TokenHash,
 		arg.ExpiresAt,
+		arg.RequestedAt,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)

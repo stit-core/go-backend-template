@@ -35,9 +35,10 @@ type EmailVerificationSetter interface {
 
 // Repository: Mark*Used гасит токен, только если он не погашен, иначе — ErrTokenUsed.
 type Repository interface {
-	// UpsertPasswordReset выпускает ссылку сброса запроса id: новую или с новым токеном неотправленной;
-	// отправленную и погашенную не трогает (issued=false).
-	UpsertPasswordReset(ctx context.Context, id, userID, tokenHash string, expiresAt time.Time) (issued bool, err error)
+	// UpsertPasswordReset выпускает ссылку сброса запроса id, сделанного в requestedAt: новую или с новым токеном
+	// своей неотправленной. Отправленную, погашенную и чужую не трогает, запросу, после которого пользователь
+	// погасил ссылку сброса, ссылки не выпускает (issued=false).
+	UpsertPasswordReset(ctx context.Context, id, userID, tokenHash string, requestedAt, expiresAt time.Time) (issued bool, err error)
 	MarkPasswordResetSent(ctx context.Context, id string) error
 	GetPasswordReset(ctx context.Context, tokenHash string) (*PasswordResetToken, error)
 	MarkPasswordResetUsed(ctx context.Context, id string) error
@@ -180,7 +181,8 @@ func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outc
 
 // IssuePasswordReset — идемпотентный обработчик доставки verification.events.password_reset_requested.v3: ключ —
 // запрос (RequestID — id ссылки сброса). Письмо получает учётная запись, которую пускают, пока ссылка запроса
-// не истекла; отправленную ссылку повтор пропускает, неотправленную — отправляет заново с новым токеном.
+// не истекла и пользователь не погасил ссылку сброса после запроса; отправленную ссылку повтор пропускает,
+// неотправленную — отправляет заново с новым токеном.
 func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID string, requestedAt time.Time) error {
 	expiresAt := requestedAt.Add(passwordResetTTL)
 	if userID == "" || uc.d.Clock.Now().After(expiresAt) {
@@ -199,12 +201,12 @@ func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID str
 	}
 
 	token := authnkit.NewToken()
-	issued, err := uc.d.Repo.UpsertPasswordReset(ctx, requestID, userID, authnkit.HashToken(token), expiresAt)
+	issued, err := uc.d.Repo.UpsertPasswordReset(ctx, requestID, userID, authnkit.HashToken(token), requestedAt, expiresAt)
 	switch {
 	case err != nil:
 		return err
 	case !issued:
-		uc.d.Log.Info(ctx, "password reset already sent, skip", "user_id", userID)
+		uc.d.Log.Info(ctx, "password reset not issued: sent or redeemed, skip", "user_id", userID)
 		return nil
 	}
 	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
@@ -248,7 +250,8 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 	}
 
 	// Погашение — первым в транзакции: параллельный confirm ждёт блокировку строки и получает
-	// ErrTokenUsed, не меняя пароль. Остальные ссылки сброса гаснут с ним: старое письмо пароль не сменит.
+	// ErrTokenUsed, не меняя пароль. Остальные ссылки сброса гаснут с ним, а запрос до погашения ссылки уже не
+	// получит (UpsertPasswordReset): старое письмо пароль не сменит.
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
 			return err

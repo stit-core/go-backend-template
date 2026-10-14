@@ -20,7 +20,7 @@ func NewRepository(database *pgkit.DB) verification.Repository {
 	return &Repository{q: db.New(database)}
 }
 
-func (r *Repository) UpsertPasswordReset(ctx context.Context, id, userID, tokenHash string, expiresAt time.Time) (bool, error) {
+func (r *Repository) UpsertPasswordReset(ctx context.Context, id, userID, tokenHash string, requestedAt, expiresAt time.Time) (bool, error) {
 	rid, err := pgkit.ParseUUID(id)
 	if err != nil {
 		return false, fmt.Errorf("verification repo: invalid password reset id: %w", err)
@@ -30,10 +30,11 @@ func (r *Repository) UpsertPasswordReset(ctx context.Context, id, userID, tokenH
 		return false, fmt.Errorf("verification repo: invalid user id: %w", err)
 	}
 	_, err = r.q.UpsertPasswordReset(ctx, db.UpsertPasswordResetParams{
-		ID:        rid,
-		UserID:    uid,
-		TokenHash: tokenHash,
-		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		ID:          rid,
+		UserID:      uid,
+		TokenHash:   tokenHash,
+		ExpiresAt:   pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		RequestedAt: pgtype.Timestamptz{Time: requestedAt, Valid: true},
 	})
 	if pgkit.IsNoRows(err) {
 		return false, nil

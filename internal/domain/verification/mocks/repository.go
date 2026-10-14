@@ -545,8 +545,8 @@ func (_c *MockRepository_UpsertEmailVerification_Call) RunAndReturn(run func(ctx
 }
 
 // UpsertPasswordReset provides a mock function for the type MockRepository
-func (_mock *MockRepository) UpsertPasswordReset(ctx context.Context, id string, userID string, tokenHash string, expiresAt time.Time) (bool, error) {
-	ret := _mock.Called(ctx, id, userID, tokenHash, expiresAt)
+func (_mock *MockRepository) UpsertPasswordReset(ctx context.Context, id string, userID string, tokenHash string, requestedAt time.Time, expiresAt time.Time) (bool, error) {
+	ret := _mock.Called(ctx, id, userID, tokenHash, requestedAt, expiresAt)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpsertPasswordReset")
@@ -554,16 +554,16 @@ func (_mock *MockRepository) UpsertPasswordReset(ctx context.Context, id string,
 
 	var r0 bool
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, time.Time) (bool, error)); ok {
-		return returnFunc(ctx, id, userID, tokenHash, expiresAt)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, time.Time, time.Time) (bool, error)); ok {
+		return returnFunc(ctx, id, userID, tokenHash, requestedAt, expiresAt)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, time.Time) bool); ok {
-		r0 = returnFunc(ctx, id, userID, tokenHash, expiresAt)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, time.Time, time.Time) bool); ok {
+		r0 = returnFunc(ctx, id, userID, tokenHash, requestedAt, expiresAt)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, time.Time) error); ok {
-		r1 = returnFunc(ctx, id, userID, tokenHash, expiresAt)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, time.Time, time.Time) error); ok {
+		r1 = returnFunc(ctx, id, userID, tokenHash, requestedAt, expiresAt)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -580,12 +580,13 @@ type MockRepository_UpsertPasswordReset_Call struct {
 //   - id string
 //   - userID string
 //   - tokenHash string
+//   - requestedAt time.Time
 //   - expiresAt time.Time
-func (_e *MockRepository_Expecter) UpsertPasswordReset(ctx interface{}, id interface{}, userID interface{}, tokenHash interface{}, expiresAt interface{}) *MockRepository_UpsertPasswordReset_Call {
-	return &MockRepository_UpsertPasswordReset_Call{Call: _e.mock.On("UpsertPasswordReset", ctx, id, userID, tokenHash, expiresAt)}
+func (_e *MockRepository_Expecter) UpsertPasswordReset(ctx interface{}, id interface{}, userID interface{}, tokenHash interface{}, requestedAt interface{}, expiresAt interface{}) *MockRepository_UpsertPasswordReset_Call {
+	return &MockRepository_UpsertPasswordReset_Call{Call: _e.mock.On("UpsertPasswordReset", ctx, id, userID, tokenHash, requestedAt, expiresAt)}
 }
 
-func (_c *MockRepository_UpsertPasswordReset_Call) Run(run func(ctx context.Context, id string, userID string, tokenHash string, expiresAt time.Time)) *MockRepository_UpsertPasswordReset_Call {
+func (_c *MockRepository_UpsertPasswordReset_Call) Run(run func(ctx context.Context, id string, userID string, tokenHash string, requestedAt time.Time, expiresAt time.Time)) *MockRepository_UpsertPasswordReset_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -607,12 +608,17 @@ func (_c *MockRepository_UpsertPasswordReset_Call) Run(run func(ctx context.Cont
 		if args[4] != nil {
 			arg4 = args[4].(time.Time)
 		}
+		var arg5 time.Time
+		if args[5] != nil {
+			arg5 = args[5].(time.Time)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -623,7 +629,7 @@ func (_c *MockRepository_UpsertPasswordReset_Call) Return(issued bool, err error
 	return _c
 }
 
-func (_c *MockRepository_UpsertPasswordReset_Call) RunAndReturn(run func(ctx context.Context, id string, userID string, tokenHash string, expiresAt time.Time) (bool, error)) *MockRepository_UpsertPasswordReset_Call {
+func (_c *MockRepository_UpsertPasswordReset_Call) RunAndReturn(run func(ctx context.Context, id string, userID string, tokenHash string, requestedAt time.Time, expiresAt time.Time) (bool, error)) *MockRepository_UpsertPasswordReset_Call {
 	_c.Call.Return(run)
 	return _c
 }
