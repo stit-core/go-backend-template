@@ -79,8 +79,9 @@ paths:
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
   Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)` и
   строкой в `publicOperations` (`cmd/api/api_test.go`): без того и другого сервис не стартует (httpkit),
-  без строки — красный `TestHTTPOperations`. Операцию регистрирует `huma.Register` в `delivery/http` своего
-  домена с хендлером этого пакета (коротких форм `huma.Get`… нет), подписку — `natskit` в `delivery/nats`
+  без строки — красный `TestHTTPOperations`. Операцию регистрирует вызов `huma.Register` (поток — `sse.Register`)
+  в `delivery/http` своего домена, хендлер — метод, функция или литерал этого пакета (без обёрток, декораторов и
+  коротких форм `huma.Get`…), подписку — `natskit` в `delivery/nats`
   (archtest `TestInputsRegisterInDelivery`); `Register` доменов зовёт `registerHTTP`
   (`cmd/api/http.go`). Ошибки — таблица домена `<домен>Errors`: правило на каждую ошибку `errors.go`,
   хендлер отдаёт ошибкой только `nil` или `<домен>Errors.Map(err)`, таблица операции из тех же правил —

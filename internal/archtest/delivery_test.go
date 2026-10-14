@@ -39,41 +39,107 @@ func TestDeliveryPackages(t *testing.T) {
 // humaShortcuts — короткие формы регистрации huma: операция без таблицы ошибок, мимо правил huma.Register.
 var humaShortcuts = []string{"Get", "Post", "Put", "Patch", "Delete", "Head"}
 
-// TestInputsRegisterInDelivery: операцию HTTP регистрирует huma.Register в delivery/http домена, с хендлером
-// оттуда же, подписку на события — natskit в delivery/nats. Правила входа читают эти пакеты: операция или
-// подписка в platform, module/ или cmd/ обошла бы их.
+const ssePath = "github.com/danielgtaylor/huma/v2/sse"
+
+// registrars — функции, которые заводят операцию HTTP, и номер их аргумента-хендлера.
+var registrars = map[string]map[string]int{
+	humaPath: {"Register": 2},
+	ssePath:  {"Register": 3},
+}
+
+// TestInputsRegisterInDelivery: операцию HTTP регистрирует вызов huma.Register (поток — sse.Register) в
+// delivery/http домена, хендлер — метод, функция или литерал этого пакета; подписку на события заводит natskit в
+// delivery/nats. Правила входа читают эти пакеты и этих хендлеров: операция в platform, module/ или cmd/,
+// регистрация значением-функцией, обёрткой или с хендлером-декоратором обошла бы их.
 func TestInputsRegisterInDelivery(t *testing.T) {
 	t.Parallel()
-	for _, f := range goFiles(t) {
-		if f.test || !slices.Contains(f.imports, humaPath) && !slices.Contains(f.imports, natskitPath) {
+	files := goFiles(t)
+	declared := map[string]map[string]bool{} // пакет delivery/http → «m:<метод>», «f:<функция>»
+	for _, f := range files {
+		if _, sub, ok := splitDomain(f.pkg); ok && sub == "delivery/http" && !f.test {
+			if declared[f.pkg] == nil {
+				declared[f.pkg] = map[string]bool{}
+			}
+			for _, decl := range parseGo(t, f.path).Decls {
+				if fn, ok := decl.(*ast.FuncDecl); ok {
+					declared[f.pkg][map[bool]string{true: "m:", false: "f:"}[fn.Recv != nil]+fn.Name.Name] = true
+				}
+			}
+		}
+	}
+	for _, f := range files {
+		if f.test || !slices.ContainsFunc(f.imports, func(imp string) bool { return imp == humaPath || imp == ssePath || imp == natskitPath }) {
 			continue
 		}
 		file := parseGo(t, f.path)
 		for _, imp := range file.Imports {
-			if p, _ := strconv.Unquote(imp.Path.Value); imp.Name != nil && imp.Name.Name == "." && (p == humaPath || p == natskitPath) {
+			if p, _ := strconv.Unquote(imp.Path.Value); imp.Name != nil && imp.Name.Name == "." && (p == humaPath || p == ssePath || p == natskitPath) {
 				t.Errorf("%s dot-imports %s: archtest would not see the operations and subscriptions it registers", f.path, p)
 			}
 		}
 		byName := importsByName(file)
 		_, sub, inDomain := splitDomain(f.pkg)
+		inHTTP, inNATS := inDomain && sub == "delivery/http", inDomain && sub == "delivery/nats"
+		called := map[ast.Expr]bool{} // функции вызовов: регистратор вне вызова — значение
 		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
+			if call, ok := n.(*ast.CallExpr); ok {
+				called[unwrapIndex(call.Fun)] = true
 			}
-			switch pkg, name := kitCall(call, byName); {
-			case pkg == humaPath && slices.Contains(humaShortcuts, name):
-				t.Errorf("%s registers an operation with huma.%s: an operation is registered by huma.Register with its error table", f.path, name)
-			case pkg == humaPath && name == "Register" && (!inDomain || sub != "delivery/http"):
-				t.Errorf("%s registers an HTTP operation: operations live in internal/domain/<d>/delivery/http, where the rules of error tables and policy read them", f.path)
-			case pkg == humaPath && name == "Register" && len(call.Args) == 3 && importedName(call.Args[2], byName):
-				t.Errorf("%s registers handler %s declared outside delivery/http: the rules of error tables and policy read the handlers of that package", f.path, types.ExprString(call.Args[2]))
-			case pkg == natskitPath && strings.HasPrefix(name, "Subscribe") && (!inDomain || sub != "delivery/nats"):
-				t.Errorf("%s subscribes to events: subscriptions live in internal/domain/<d>/delivery/nats, where the consumer's contract test checks them", f.path)
+			return true
+		})
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.SelectorExpr:
+				id, ok := x.X.(*ast.Ident)
+				if !ok {
+					return true
+				}
+				pkg, name := byName[id.Name], x.Sel.Name
+				_, registrar := registrars[pkg][name]
+				switch {
+				case pkg == humaPath && slices.Contains(humaShortcuts, name):
+					t.Errorf("%s registers an operation with huma.%s: an operation is registered by huma.Register with its error table", f.path, name)
+				case registrar && !inHTTP:
+					t.Errorf("%s registers an HTTP operation (%s): operations live in internal/domain/<d>/delivery/http, where the rules of error tables and policy read them", f.path, types.ExprString(x))
+				case registrar && !called[x]:
+					t.Errorf("%s uses %s as a value: an operation is registered by a direct call, which the rules of error tables and policy read", f.path, types.ExprString(x))
+				case pkg == natskitPath && strings.HasPrefix(name, "Subscribe") && !inNATS:
+					t.Errorf("%s subscribes to events (natskit.%s): subscriptions live in internal/domain/<d>/delivery/nats, where the consumer's contract test checks them", f.path, name)
+				}
+			case *ast.CallExpr:
+				pkg, name := kitCall(x, byName)
+				if arg, ok := registrars[pkg][name]; ok && inHTTP && len(x.Args) > arg && !localHandler(x.Args[arg], byName, declared[f.pkg]) {
+					t.Errorf("%s registers handler %s, which is not a method, function or literal of delivery/http: the rules of error tables and policy read only those", f.path, types.ExprString(x.Args[arg]))
+				}
 			}
 			return true
 		})
 	}
+}
+
+// unwrapIndex — функция без параметров типа: huma.Register[I, O] → huma.Register.
+func unwrapIndex(fun ast.Expr) ast.Expr {
+	switch x := fun.(type) {
+	case *ast.IndexExpr:
+		return x.X
+	case *ast.IndexListExpr:
+		return x.X
+	}
+	return fun
+}
+
+// localHandler — хендлер — литерал, функция пакета или метод пакета на его значении (h.list).
+func localHandler(expr ast.Expr, byName map[string]string, declared map[string]bool) bool {
+	switch h := expr.(type) {
+	case *ast.FuncLit:
+		return true
+	case *ast.Ident:
+		return declared["f:"+h.Name]
+	case *ast.SelectorExpr:
+		id, ok := h.X.(*ast.Ident)
+		return ok && byName[id.Name] == "" && declared["m:"+h.Sel.Name]
+	}
+	return false
 }
 
 // TestSubscriptionsHaveContractTest: схему подписки со схемой поставщика сверяет контракт-тест потребителя
@@ -107,14 +173,7 @@ func TestSubscriptionsHaveContractTest(t *testing.T) {
 
 // kitCall — пакет и имя вызова <пакет>.<имя>(…), и с параметрами типа (huma.Register[I, O]); "" — не такой вызов.
 func kitCall(call *ast.CallExpr, byName map[string]string) (string, string) {
-	fun := call.Fun
-	switch x := fun.(type) {
-	case *ast.IndexExpr:
-		fun = x.X
-	case *ast.IndexListExpr:
-		fun = x.X
-	}
-	sel, ok := fun.(*ast.SelectorExpr)
+	sel, ok := unwrapIndex(call.Fun).(*ast.SelectorExpr)
 	if !ok {
 		return "", ""
 	}
@@ -123,16 +182,6 @@ func kitCall(call *ast.CallExpr, byName map[string]string) (string, string) {
 		return "", ""
 	}
 	return byName[id.Name], sel.Sel.Name
-}
-
-// importedName — выражение <пакет>.<имя>: имя объявлено в другом пакете.
-func importedName(expr ast.Expr, byName map[string]string) bool {
-	sel, ok := expr.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	id, ok := sel.X.(*ast.Ident)
-	return ok && byName[id.Name] != ""
 }
 
 // deliveryKits — пакеты golibinfra, которые видит вход: транспорт, лог и helpers без I/O. Хранилища, клиенты,
@@ -399,11 +448,17 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 				if !ok {
 					return true
 				}
-				if pkg, name := kitCall(call, byName); pkg != humaPath || name != "Register" || len(call.Args) < 3 || public(call.Args[1], byName) {
+				pkg, name := kitCall(call, byName)
+				arg, ok := registrars[pkg][name]
+				if !ok || len(call.Args) <= arg || public(call.Args[1], byName) {
 					return true
 				}
+				body := handlerBody(call.Args[arg], funcs)
+				if body == nil {
+					return true // хендлер не из пакета — отказ TestInputsRegisterInDelivery
+				}
 				op := operationID(call.Args[1])
-				called := usecaseCalls(handlerBody(call.Args[2], funcs), funcs, ports, map[string]bool{})
+				called := usecaseCalls(body, funcs, ports, map[string]bool{})
 				if len(called) == 0 {
 					t.Errorf("%s: operation %s under Security calls no usecase method: the handler reaches its domain through the usecase", files[i].path, op)
 				}

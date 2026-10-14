@@ -192,9 +192,15 @@ blocked-by: —
     `delivery/*`; вне входа любое их упоминание, кроме результата `func(uc *<домен>.Usecase) <порт> { return uc }` в
     `module/` своего домена, — отказ; `exp/round-n1.tsv`: `v02b`, `v02c`, `v02d`, `v02i`, `b14`, `x02a` — отказ, `fp10` —
     зелёный; rule `domain-architecture`, `architecture.md` § fx; `make check` → ✓
-- [ ] **S9** — N2: регистрация — `huma.Register` и `sse.Register` вызовом в `delivery/http`, хендлер — метод, функция или
+- [x] **S9** — N2: регистрация — `huma.Register` и `sse.Register` вызовом в `delivery/http`, хендлер — метод, функция или
   литерал пакета
   - Проверка: v02e, v02h, v02f → отказ, v02g → отказ своим текстом; `make check` → ✓ · Закрывает: AC8 · Зависит от: S6
+  - Сделано: `TestInputsRegisterInDelivery` — регистраторы `huma.Register` и `sse.Register` (номер аргумента-хендлера):
+    упоминание вне `delivery/http` и значением (не вызовом) — отказ, хендлер — только `<x>.<метод пакета>`, функция или
+    литерал пакета; подписка natskit — и значением; `TestSecuredOperationsAskPolicy` берёт хендлер любого регистратора и
+    молчит о нерешённом (его отказ — правило регистрации); `exp/round-n2.tsv`: `v02e`, `v02h`, `v02f`, `v02g` (текст —
+    «not a method, function or literal of delivery/http») и прежние `x02c`–`x02f`, `n37`, `n38` — отказ; rule
+    `domain-architecture`, `architecture.md` § HTTP DTO naming, `endpoint.md`; `make check` → ✓
 - [ ] **S10** — N3: в `errors.go` `errors.New` — только значением `var Err…`; ошибка из `pkg/` — в прозе
   - Проверка: v03c → отказ; `make check` → ✓ · Закрывает: AC8 · Зависит от: S6
 - [ ] **S11** — N4: правило policy без ложных отказов — операция переменной, policy функцией корня, ключ своим методом
@@ -252,6 +258,6 @@ blocked-by: —
   `Policy` с методом `Can…` (канон `UsecaseDeps`).
 
 ## Где мы сейчас
-S7 (B1), S8 (N1) сделаны. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
-Следующий шаг — S9 (N2); затем S10–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
+S7 (B1), S8 (N1), S9 (N2) сделаны. Круг фиксов валидатора (`N/validation-boundaries.md`: FAIL — B1). Ветка перенесена на `main` `f825fac` (S6, гейт ✓).
+Следующий шаг — S10 (N3); затем S11–S17 по коммиту на пункт, приёмка — S18. Эксперименты — `N/boundaries/exp/` (кейсы
 валидатора — `cases_val.py`), worktree экспериментов — `N/wt-boundaries-exp`.
