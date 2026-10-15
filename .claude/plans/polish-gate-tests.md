@@ -85,9 +85,14 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   - Сделано: опыты `N/s7g/bin/exp-s3.sh` → `N/s7g/exp-s3-{base,branch}.log`: база — `.gitkeep` вне конвенции,
     `INSERT … VALUES` в `users` и своя `0001_users` форка с `CREATE EXTENSION` проходят, шаблонная `0003` под
     номером `0002` — отказ; ветка — наоборот; шесть случаев в `TestMigrationsCheck`; `make check` → `✓ check clean`
-- [ ] **S4** — Хуки: pre-commit — снимок индекса, pre-push — subject пушимых коммитов и `-f Makefile`;
+- [x] **S4** — Хуки: pre-commit — снимок индекса, pre-push — subject пушимых коммитов и `-f Makefile`;
   переменные make — в хуках, оболочки — в `Makefile`
   - Проверка: опыты AC3; `make check` → `✓ check clean` · Закрывает: AC3 · Зависит от: S2
+  - Сделано: опыты `N/s7g/bin/exp-s4.sh` → `N/s7g/exp-s4-{base,branch}.log`: база — pre-commit отвергает чистый
+    индекс за WIP в дереве и пропускает неотформатированный индекс при исправленном дереве, pre-push пускает
+    `update stuff` на зелёный гейт; ветка — наоборот; `TestPreCommitChecksIndex`, расширены
+    `TestPrePushGatesPushedCommit` (subject, коммит remote'а, `unexport` Makefile репо) и
+    `TestHooksIgnoreCallerEnvironment`; `make check` → `✓ check clean`
 - [ ] **S5** — Покрытие и сила тестов: функции без тестов — по профилю до списка и в `cmd/`, fuzz и мягкие моки в
   `TestTestsAssert`, заголовок сгенерированного — только у вывода генераторов, `gochecknoinits`
   - Проверка: опыты AC4; `make check` → `✓ check clean` · Закрывает: AC4 · Зависит от: S2
@@ -120,9 +125,19 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   держится в git.
 - `scaffold/references/migration.md` (трек code+security+adapters) — одна строка перечня классов migrations-check:
   reference называет, что гейт не пропустит.
+- pre-commit судит снимок индекса (`git write-tree` → коммит вне веток) в постоянном worktree
+  `.cache/pre-commit/wt` — как раннер мутаций: кеш lint тёплый между коммитами; замок не нужен — два коммита в
+  одном worktree не даёт `index.lock`. Проверки — целями make с пустыми `PKG`, `FORMAT`, `A`.
+- pre-push судит subject пушимых коммитов самим `commit-msg` (тело — строка `Review:` о проверке): шаблон subject
+  один, его держит трек harness. Пушимые — те, которых нет в ветках remote'ов: история шаблона (`ea1de93 clean`) у
+  форка там, а коммиты cherry-pick и клона без хуков — нет.
+- Переменные окружения: хуки снимают только переменные make (`MAKE*`, `MFLAGS`, `GNUMAKEFLAGS`) — без них make
+  не запустить честно; окружение оболочки — `bash -p` у хуков и `unexport` `Makefile` у рецептов (все проверки
+  хуков идут через make); `mutate.py` снимает только `API_TEST_MAIN_ARGS`, остальное снял `make mutate`.
+- `docs/contributing.md` (трек harness+lifecycle) — ячейки «git-хуки» и «Самозащита гейта»: поведение хуков сменилось.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S3 закрыт: migrations-check знает `INSERT`, `.gitkeep` и выпущенные миграции по содержимому. Дальше — S4 (хуки).
+S4 закрыт: pre-commit судит индекс, pre-push — subject пушимых коммитов. Дальше — S5 (покрытие и сила тестов).

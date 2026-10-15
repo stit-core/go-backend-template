@@ -199,22 +199,32 @@ func TestCheckCoversItsOwnRun(t *testing.T) {
 
 // TestPrePushGatesPushedCommit: pre-push гоняет make check верхнего коммита пушимого ref'а в свежем
 // worktree — по дереву и Makefile самого коммита, а переменные make и оболочки пушащего до гейта не
-// доходят: каждая из них меняет шаги или выключает его самозащиту. Гейт здесь игрушечный: Makefile коммита печатает вердикт
-// (файл verdict) и то, что дошло до него из окружения.
+// доходят: каждая из них меняет шаги или выключает его самозащиту. До гейта — subject каждого пушимого коммита
+// (кроме тех, что уже в ветках remote'ов) хуком commit-msg: коммит cherry-pick или клона без хуков его не проходил.
+// Гейт здесь игрушечный: Makefile коммита печатает вердикт (файл verdict) и то, что дошло до него из окружения, а
+// окружение оболочки снимает строкой unexport Makefile репо.
 func TestPrePushGatesPushedCommit(t *testing.T) {
 	t.Parallel()
 	hook := filepath.Join(repoRoot(t), "scripts", "git-hooks", "pre-push")
 	require.FileExists(t, hook) // хук читает bash: без этого кеш go test не видит его правок
+	shellEnv := regexp.MustCompile(`(?m)^unexport BASH_ENV .*$`).FindString(readFiles(t, repoRoot(t), "Makefile")["Makefile"])
+	require.NotEmpty(t, shellEnv, "Makefile unexports the shell environment of the caller from its recipes")
 	repo, tmp := t.TempDir(), t.TempDir()
 	git(t, repo, "init", "-q", "-b", "main")
-	commit := func(verdict string) string {
+	commitAs := func(subject, verdict string) string {
 		t.Helper()
 		writeFiles(t, repo, map[string]string{
-			"Makefile": "check:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)] shell=[$${BASH_ENV-}$${SHELLOPTS-}$${BASHOPTS-}]\"; test \"$$(cat verdict)\" = green\n",
+			"Makefile": shellEnv + "\ncheck:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)] shell=[$${BASH_ENV-}$${SHELLOPTS-}$${BASHOPTS-}]\"; test \"$$(cat verdict)\" = green\n",
 			"verdict":  verdict + "\n",
+			"subject":  subject + "\n",
 		})
-		commitAll(t, repo)
+		git(t, repo, "add", "-A")
+		git(t, repo, "commit", "-qm", subject)
 		return strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	}
+	commit := func(verdict string) string {
+		t.Helper()
+		return commitAs("chore: toy gate "+verdict, verdict)
 	}
 	push := func(stdin string, env ...string) (string, error) {
 		t.Helper()
@@ -250,6 +260,19 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	green := commit("green")
 	out, err = push("refs/heads/main " + green + " refs/heads/main " + red + "\n")
 	require.NoError(t, err, "a green commit must be pushed:\n%s", out)
+	require.Contains(t, out, "toy gate: green")
+
+	stuff := commitAs("update stuff", "green")
+	out, err = push("refs/heads/main " + stuff + " refs/heads/main " + green + "\n")
+	require.Error(t, err, "a commit that is not a Conventional Commit must not be pushed:\n%s", out)
+	require.Contains(t, out, "subject не по форме")
+	require.NotContains(t, out, "toy gate", "the subject is checked before the gate")
+
+	// Коммит, который уже в ветке remote'а, — не пушимый: его subject больше не судится.
+	git(t, repo, "update-ref", "refs/remotes/origin/main", stuff)
+	next := commit("green")
+	out, err = push("refs/heads/main " + next + " refs/heads/main " + stuff + "\n")
+	require.NoError(t, err, "a commit of the remote is judged again:\n%s", out)
 	require.Contains(t, out, "toy gate: green")
 
 	out, err = push("refs/heads/old " + zero + " refs/heads/old " + red + "\n")
@@ -300,6 +323,7 @@ func TestHooksIgnoreCallerEnvironment(t *testing.T) {
 	writeFiles(t, repo, union(readFiles(t, root, "Makefile", "scripts/tools/fmt.sh", "scripts/tools/versions.sh"),
 		map[string]string{"COMMIT_EDITMSG": "update stuff\n"}))
 	git(t, repo, "init", "-q", "-b", "main")
+	git(t, repo, "add", "-A") // pre-commit судит индекс
 	forgeries := shellForgeries(t)
 	forgeries["make flags"] = []string{"MAKEFLAGS=i", "MAKECMDGOALS=x"}
 	for name, env := range forgeries {
@@ -317,6 +341,60 @@ func TestHooksIgnoreCallerEnvironment(t *testing.T) {
 		require.Error(t, err, "%s: pre-commit passes a red tree:\n%s", name, out)
 		require.Contains(t, out, "FAIL: gofumpt", "%s: pre-commit must run its first step", name)
 		require.NotContains(t, out, "pre-commit: go vet", "%s: pre-commit went past the failed step", name)
+	}
+}
+
+// TestPreCommitChecksIndex: pre-commit судит то, что уходит в коммит, — снимок индекса: правка дерева вне индекса и
+// неотслеживаемый файл на вердикт не влияют, а неотформатированный файл индекса при исправленном дереве — отказ.
+// gofumpt и go — настоящие, golangci-lint — заглушка с ответом «0 issues.».
+func TestPreCommitChecksIndex(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	hook := filepath.Join(root, "scripts", "git-hooks", "pre-commit")
+	require.FileExists(t, hook) // хук читает bash: без этого кеш go test не видит его правок
+	bin := t.TempDir()
+	writeExecutable(t, filepath.Join(bin, "golangci-lint"), "#!/bin/sh\ncase \"$1\" in\n--version) echo 'golangci-lint has version "+
+		strings.TrimPrefix(pin(t, "golangci-lint"), "v")+" built with go1.26' ;;\nrun) echo '0 issues.' ;;\nesac\n")
+	const formatted = "package p\n\n// Join joins.\nfunc Join(a, b string) string { return a + b }\n"
+	const unformatted = "package p\n\n// Join joins.\nfunc Join(a string, b string) string { return a + b }\n"
+	for _, tc := range []struct {
+		name        string
+		index, tree string // p/p.go в индексе и в дереве
+		untracked   bool   // и неотформатированный p/q.go вне индекса
+		ok          bool
+	}{
+		{name: "work in progress in the tree", index: formatted, tree: unformatted, untracked: true, ok: true},
+		{name: "a broken file in the index", index: unformatted, tree: formatted},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			writeFiles(t, repo, union(readFiles(t, root, "Makefile", ".golangci.yml", "scripts/tools/fmt.sh", "scripts/tools/lint.sh",
+				"scripts/tools/versions.sh"), map[string]string{
+				".gitignore": "/.cache/\n",
+				"go.mod":     "module example.com/hook\n\ngo 1.26\n",
+				"p/p.go":     tc.index,
+			}))
+			git(t, repo, "init", "-q", "-b", "main")
+			git(t, repo, "add", "-A")
+			writeFiles(t, repo, map[string]string{"p/p.go": tc.tree})
+			if tc.untracked {
+				writeFiles(t, repo, map[string]string{"p/q.go": strings.ReplaceAll(unformatted, "Join", "Glue")})
+			}
+			cmd := exec.CommandContext(t.Context(), hook)
+			cmd.Dir = repo
+			cmd.Env = callerEnv("PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH"))
+			data, err := cmd.CombinedOutput()
+			out := string(data)
+			if tc.ok {
+				require.NoError(t, err, "pre-commit judges the tree instead of the index:\n%s", out)
+				require.Contains(t, out, "pre-commit: all checks passed.")
+				return
+			}
+			require.Error(t, err, "pre-commit lets a broken index through:\n%s", out)
+			require.Contains(t, out, "  p/p.go")
+			require.Contains(t, out, "FAIL: fmt")
+		})
 	}
 }
 

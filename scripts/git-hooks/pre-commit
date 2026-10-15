@@ -1,40 +1,58 @@
 #!/bin/bash -p
-# pre-commit: быстрые проверки перед коммитом; полный гейт — pre-push (make check).
-# Нет инструмента — коммит не проходит.
+# pre-commit: быстрые проверки того, что уходит в коммит, — снимка индекса в своём worktree .cache/pre-commit/wt:
+# незакоммиченное и неотслеживаемое в дереве на вердикт не влияют. Полный гейт — pre-push (make check). Нет
+# инструмента — коммит не проходит.
 set -euo pipefail
 
-# Переменные make и оболочки из окружения вызывающего (MAKEFLAGS=i, MAKECMDGOALS, BASH_ENV, функции
-# BASH_FUNC_…) до проверок не доходят: каждая из них меняет шаги или выключает самозащиту гейта. Сам хук
-# их не читает (`bash -p`) и перезапускается без них.
-drop=()
-while IFS= read -r -d '' entry; do
-    if [[ ${entry%%=*} =~ ^(MAKE.*|MFLAGS|GNUMAKEFLAGS|BASH_ENV|ENV|SHELLOPTS|BASHOPTS|CDPATH|GLOBIGNORE|BASH_FUNC_.*)$ ]]; then
-        drop+=(-u "${entry%%=*}")
-    fi
-done < <(env -0)
-[ ${#drop[@]} -eq 0 ] || exec env "${drop[@]}" "$0" "$@"
+# Переменные make вызывающего (MAKEFLAGS=i, MAKECMDGOALS, MAKEFILES) до make не доходят: каждая меняет шаги или
+# выключает самозащиту гейта. Окружение оболочки (BASH_ENV, функции, SHELLOPTS) хук не читает (`bash -p`), а с
+# рецептов его снимает Makefile — проверки идут через make.
+for v in $(compgen -e); do
+    if [[ $v =~ ^(MAKE.*|MFLAGS|GNUMAKEFLAGS)$ ]]; then unset "$v"; fi
+done
 
-cd "$(git rev-parse --show-toplevel)"
+root=$(git rev-parse --show-toplevel)
+# Снимок — дерево индекса коммитом вне веток (недостижимый коммит git соберёт сам). Индекс — тот, что уходит в
+# коммит: у git commit -a и git commit <пути> это временный индекс хука.
+snapshot=$(GIT_AUTHOR_NAME=pre-commit GIT_AUTHOR_EMAIL=pre-commit@localhost GIT_COMMITTER_NAME=pre-commit \
+    GIT_COMMITTER_EMAIL=pre-commit@localhost git commit-tree "$(git write-tree)" -m pre-commit </dev/null)
+changed_stack=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^docs/stack/.*\.md$' || true)
+changed_plans=$(git diff --cached --name-only --diff-filter=ACMRD | grep -E '^\.claude/plans/' || true)
+# Переменные git хука (GIT_INDEX_FILE временного индекса) увели бы команды в worktree снимка не туда.
+# shellcheck disable=SC2046 # имена переменных — отдельными словами
+unset $(git rev-parse --local-env-vars)
+
+# Worktree снимка живёт между коммитами: кеш lint в нём тёплый.
+wt=$root/.cache/pre-commit/wt
+if [ -e "$wt/.git" ]; then
+    git -C "$wt" checkout -q -f --detach "$snapshot"
+    git -C "$wt" clean -q -fd
+else
+    mkdir -p "${wt%/*}"
+    git -C "$root" worktree prune
+    git -C "$root" worktree add -q --detach "$wt" "$snapshot"
+fi
+cd "$wt"
+
+gate() { make -f Makefile --no-print-directory PKG= VERBOSE= FORMAT= A= "$@"; }
 
 echo "pre-commit: make fmt-check"
-make --no-print-directory fmt-check
+gate fmt-check
 
 echo "pre-commit: go vet -tags=integration ./..."
 go vet -tags=integration ./...
 
-echo "pre-commit: lint"
-bash scripts/tools/lint.sh
+echo "pre-commit: make lint"
+gate lint
 
-CHANGED_STACK=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^docs/stack/.*\.md$' || true)
-if [ -n "$CHANGED_STACK" ]; then
-    echo "pre-commit: validate-stack-doc (docs/stack/)"
-    bash scripts/tools/validate-stack-doc.sh docs/stack
+if [ -n "$changed_stack" ]; then
+    echo "pre-commit: make validate-stack-docs (docs/stack/)"
+    gate validate-stack-docs
 fi
 
-CHANGED_PLANS=$(git diff --cached --name-only --diff-filter=ACMRD | grep -E '^\.claude/plans/' || true)
-if [ -n "$CHANGED_PLANS" ]; then
-    echo "pre-commit: validate-plan (.claude/plans/)"
-    bash scripts/tools/validate-plan.sh
+if [ -n "$changed_plans" ]; then
+    echo "pre-commit: make plan-check (.claude/plans/)"
+    gate plan-check
 fi
 
 echo "pre-commit: all checks passed."

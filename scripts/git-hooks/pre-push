@@ -2,7 +2,9 @@
 # pre-push: канонический gate перед отправкой в remote — `make check` верхнего коммита каждого пушимого
 # ref'а в свежем worktree (промежуточные коммиты push'а не гоняются). Вердикт — про то, что уходит в
 # remote: незакоммиченные правки и игнорируемые файлы рабочего дерева на него не влияют. Кеш lint у
-# свежего worktree холодный (lint.sh кладёт его в checkout).
+# свежего worktree холодный (lint.sh кладёт его в checkout). До гейта — subject каждого пушимого коммита
+# (его нет ни в одной ветке remote'ов) хуком commit-msg: коммит cherry-pick, rebase или клона без хуков
+# commit-msg не проходил.
 #
 # Строка интерпретатора — `bash -p`: файл автозапуска (BASH_ENV), экспортированные функции и SHELLOPTS
 # из окружения пушащего хук не читает — иначе `exit 0` в них пропускал бы push без гейта.
@@ -11,16 +13,11 @@
 # --no-verify и core.hooksPath блокирует хук .claude/hooks/guard-bash.sh.
 set -euo pipefail
 
-# Переменные make и оболочки из окружения вызывающего (MAKEFLAGS=i, MAKECMDGOALS, BASH_ENV, функции
-# BASH_FUNC_…) до проверок не доходят: каждая из них меняет шаги или выключает самозащиту гейта. Сам хук
-# их не читает (`bash -p`) и перезапускается без них.
-drop=()
-while IFS= read -r -d '' entry; do
-    if [[ ${entry%%=*} =~ ^(MAKE.*|MFLAGS|GNUMAKEFLAGS|BASH_ENV|ENV|SHELLOPTS|BASHOPTS|CDPATH|GLOBIGNORE|BASH_FUNC_.*)$ ]]; then
-        drop+=(-u "${entry%%=*}")
-    fi
-done < <(env -0)
-[ ${#drop[@]} -eq 0 ] || exec env "${drop[@]}" "$0" "$@"
+# Переменные make пушащего (MAKEFLAGS=i, MAKECMDGOALS, MAKEFILES) до гейта не доходят: каждая меняет шаги или
+# выключает его самозащиту. Окружение оболочки с рецептов гейта снимает Makefile.
+for v in $(compgen -e); do
+    if [[ $v =~ ^(MAKE.*|MFLAGS|GNUMAKEFLAGS)$ ]]; then unset "$v"; fi
+done
 
 if [ "${SKIP_PREPUSH:-}" = "1" ]; then
     echo "pre-push: SKIP_PREPUSH=1 — пропускаю проверки"
@@ -28,28 +25,49 @@ if [ "${SKIP_PREPUSH:-}" = "1" ]; then
 fi
 
 root=$(git rev-parse --show-toplevel)
+hooks=$(dirname "${BASH_SOURCE[0]}")
 # Хук git экспортирует GIT_DIR и соседей: в другом worktree они указали бы не туда.
 # shellcheck disable=SC2046 # имена переменных — отдельными словами
 unset $(git rev-parse --local-env-vars)
 
-tmp=""
+tmp="" msg=$(mktemp "${TMPDIR:-/tmp}/pre-push-msg.XXXXXX")
 cleanup() {
     [ -z "$tmp" ] || git -C "$root" worktree remove --force "$tmp" 2>/dev/null || rmdir "$tmp" 2>/dev/null || true
     tmp=""
 }
-trap cleanup EXIT
+trap 'cleanup; rm -f "$msg"' EXIT
 
 # stdin: <local ref> <local sha> <remote ref> <remote sha> на каждый пушимый ref.
+refs=$(cat)
+
+# Тело сообщения — строка Review: о самой проверке: pre-push судит subject, а след ревью — commit-msg при коммите.
+while read -r _ local_sha _ remote_sha; do
+    [[ -n $local_sha && ! $local_sha =~ ^0+$ ]] || continue
+    known=(--remotes)
+    if [[ ! $remote_sha =~ ^0+$ ]] && git -C "$root" cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+        known+=("$remote_sha")
+    fi
+    for c in $(git -C "$root" rev-list "$local_sha" --not "${known[@]}"); do
+        { git -C "$root" log -1 --format=%B "$c" | sed -n 1p; printf '\nReview: pre-push — только subject\n'; } >"$msg"
+        if ! out=$("$hooks/commit-msg" "$msg"); then
+            echo "pre-push: коммит $(git -C "$root" rev-parse --short "$c") — subject не по форме:"
+            sed 's/^/  /' <<<"$out"
+            echo "pre-push: перепиши сообщение (git rebase -i, reword) и пушь снова"
+            exit 1
+        fi
+    done
+done <<<"$refs"
+
 checked=" "
 while read -r local_ref local_sha _ _; do
-    [[ $local_sha =~ ^0+$ ]] && continue # удаление ref: проверять нечего
+    [[ -n $local_sha && ! $local_sha =~ ^0+$ ]] || continue # удаление ref: проверять нечего
     commit=$(git -C "$root" rev-parse "$local_sha^{commit}")
     [[ $checked == *" $commit "* ]] && continue # ветка и тег на одном коммите — один прогон
     checked+="$commit "
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")
     git -C "$root" worktree add --detach --quiet "$tmp" "$commit"
     echo "pre-push: $local_ref — make check в свежем worktree $(git -C "$root" rev-parse --short "$commit")"
-    # stdin гейта — не список ref'ов: его дочитывает цикл.
-    make -C "$tmp" check </dev/null
+    # stdin гейта — не список ref'ов; -f Makefile — GNUmakefile коммита make читал бы первым.
+    make -C "$tmp" -f Makefile check </dev/null
     cleanup
-done
+done <<<"$refs"

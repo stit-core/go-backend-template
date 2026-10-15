@@ -35,14 +35,9 @@ WT = CACHE / "wt"
 # Правка этих путей меняет HTTP-контракт: openapi.json регенерируется, как сделал бы make gen.
 HTTP_PATHS = ("/delivery/http/", "internal/platform/authgate/", "cmd/api/", "pkg/")
 STAGE_TIMEOUT = 1800
-# Окружение make и оболочки вызывающего до go и тестов не доходит — как у make check.
-ENV = {
-    k: v
-    for k, v in os.environ.items()
-    if not k.startswith(("MAKE", "BASH_FUNC_"))
-    and k not in ("MFLAGS", "GNUMAKEFLAGS", "BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "CDPATH", "GLOBIGNORE",
-                  "API_TEST_MAIN_ARGS")
-}
+# Окружение оболочки вызывающего снимает Makefile с рецепта make mutate, как у make check; перезапуск тестов cmd/api
+# в main (API_TEST_MAIN_ARGS) make check отвергает — здесь он снят.
+ENV = {k: v for k, v in os.environ.items() if k != "API_TEST_MAIN_ARGS"}
 
 
 def fail(msg):
