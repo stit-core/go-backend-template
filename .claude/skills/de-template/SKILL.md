@@ -33,8 +33,8 @@ description: Развернуть платформу форка go-backend-templ
    git config --get remote.origin.url | grep -qiE '[:/]stit-core/go-backend-template(\.git)?/?$' \
      && echo "STOP: origin — канонический шаблон; de-template — только в форке"
    ```
-   Гейт держит то же: в каноническом репо `make check` красный на чужом module path и решении
-   identity в `docs/stack/auth.md` (archtest `TestCanonicalTemplate`), pre-push такое не отправит.
+   Гейт держит то же: в каноническом репо `make check` красный на чужом module path и артефактах стека
+   `docs/stack/<kind>.md` (archtest `TestCanonicalTemplate`), pre-push такое не отправит.
 2. **Стек stable** — все 8 артефактов на месте, `status: stable`, валидатор зелёный; иначе СТОП →
    `stack-deep-dive`:
    ```bash
@@ -66,15 +66,18 @@ OLD=git.stit.tech/stit-core/go-backend-template
 NEW=<module path из docs/stack/service.md>
 git grep -lF "$OLD" -- go.mod '*.go' .mockery.yml | xargs sed -i "s#$OLD#$NEW#g"
 go mod tidy
+make fmt
 ```
 
-Проверь `head -1 go.mod` == `module $NEW` и `go build ./...` (импорты резолвятся).
+`make fmt` — порядок импортов: путь, который сортируется после `git.stit.tech/stit-core/golibinfra`
+(`git.stit.tech/zeta/shop`, `github.com/…`), встаёт в группе после него. Проверь `head -1 go.mod` ==
+`module $NEW` и `go build ./...` (импорты резолвятся).
 
 ### A.2 README и CONTRIBUTING
 
 Из `docs/stack/service.md` (имя, назначение, бинари): шапка `README.md` — проектная, раздел «Как начать»
-шаблона (форк → `/init-service`) — вон; заголовок `CONTRIBUTING.md` — имя проекта. Убери
-«шаблон»/«template»/«форкни». Детали release/ecosystem/architecture остаются ссылками на
+шаблона (форк → `/init-service`) — вон; заголовок `CONTRIBUTING.md` — имя проекта; `SECURITY.md` — политика
+и адрес для отчётов об уязвимостях проекта, а не шаблона. Убери «шаблон»/«template»/«форкни». Детали release/ecosystem/architecture остаются ссылками на
 `docs/reference/*` (они общие). `CLAUDE.md` и доки шаблона (`.template/paths`) не правь: они верны и для
 форка, а правку форка перенос обвязки показал бы конфликтом.
 

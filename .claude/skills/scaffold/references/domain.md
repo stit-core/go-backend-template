@@ -102,6 +102,10 @@ internal/domain/<name>/
   `<домен>Errors`.
 - **События** — вариант `event` (`events.go`, `infra/outbox/outbox.go`, источник в `cmd/migrate`).
 - **Данные другого домена** — вариант `port` (`module/adapters.go`, `trusted.go` поставщика).
+- **Пользователь** — FK на `users`, порт к `user`, сид `pgseed` в integration-тесте: пока решение `identity`
+  не `own`, путь каждого такого файла — в разделе «Свои домены поверх идентичности»
+  `.claude/skills/init-service/references/prune.md` (Go-файл там требует archtest
+  `TestPruneNamesIdentityDependents`).
 - **Метрика** — только под алерт (`docs/reference/architecture.md` § Обязательность файлов).
 
 Остальные файлы появляются вместе с содержимым (таблица обязательности — architecture.md).

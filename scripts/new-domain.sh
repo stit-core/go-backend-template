@@ -962,7 +962,8 @@ insert_before cmd/api/main.go '^	domainModules = fx\.Options\($' '^	\)$' "		${FL
 insert_before cmd/api/http.go '^import \($' '^\)$' "	${FLAT}http \"${MODULE_PATH}/internal/domain/${NAME}/delivery/http\""
 insert_before cmd/api/http.go '^type httpHandlers struct \{$' '^\}$' "	${TITLE} *${FLAT}http.Handler"
 insert_before cmd/api/http.go '^func registerHTTP\(' '^\}$' "	${FLAT}http.Register(api, h.${TITLE})"
-gofumpt -w cmd/api/main.go cmd/api/http.go
+# Импорты среза и cmd/api — по порядку module path форка: он сортируется и после golibinfra.
+gofumpt -w cmd/api/main.go cmd/api/http.go "$DOMAIN_DIR"
 
 echo "→ make gen"
 make --no-print-directory gen

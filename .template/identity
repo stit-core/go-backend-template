@@ -1,12 +1,14 @@
 # Домены идентичности — вход и сессии, учётные записи, подтверждение адреса и сброс пароля — и то, что
 # живёт только ради них. Проект с внешней идентичностью (identity: external в docs/stack/auth.md) удаляет
-# эти пути (skill init-service, references/prune.md); образцы, на которые здесь ссылается проза, у него —
-# в теге шаблона (.template/version или последний).
+# эти пути (skill init-service, references/prune.md); где у него образцы, на которые ссылается проза, —
+# CLAUDE.md § Проектирование первично. Проект со своей идентичностью, который убрал путь списка или дал
+# миграции шаблона свой номер (skill upgrade), правит его строку здесь.
 internal/domain/auth
 internal/domain/user
 internal/domain/verification
 internal/testkit/pgseed
 cmd/seed-admin
+cmd/api/http_test.go
 cmd/api/identity_test.go
 migrations/0001_users.up.sql
 migrations/0001_users.down.sql
