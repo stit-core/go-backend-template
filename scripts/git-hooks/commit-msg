@@ -43,7 +43,7 @@ for state in CHERRY_PICK_HEAD REBASE_HEAD; do
   if [ -e "$(git rev-parse --git-path "$state" 2>/dev/null)" ]; then
     echo "Перенос коммита ($state): сообщение — его, допиши subject и строку Review: — ревью переноса"
     echo "  (Review: <кто или чем> — перенос <коммит>, <итог>): git commit -e (или -F <файл>) закончит этот"
-    echo "  коммит, цепочку продолжит git cherry-pick --continue или git rebase --continue"
+    echo "  коммит; если в цепочке есть ещё коммиты — git cherry-pick --continue или git rebase --continue"
     break
   fi
 done
