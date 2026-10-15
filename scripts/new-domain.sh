@@ -13,6 +13,8 @@
 # Дальше домен растёт по skill `scaffold`.
 
 set -euo pipefail
+# Имя, регистр и множественное число — по ASCII при любой локали: в турецкой [a-z] не берёт «i».
+export LC_ALL=C
 
 NAME="${1:-}"
 if [ -z "$NAME" ]; then

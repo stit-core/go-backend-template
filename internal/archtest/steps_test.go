@@ -13,11 +13,35 @@ import (
 // step запускает скрипт шага гейта в dir без окружения make и git вызывающего и отдаёт вывод.
 func step(t *testing.T, dir, script string, args ...string) (string, error) {
 	t.Helper()
+	return stepEnv(t, dir, nil, script, args...)
+}
+
+// stepEnv — step с env поверх окружения.
+func stepEnv(t *testing.T, dir string, env []string, script string, args ...string) (string, error) {
+	t.Helper()
 	cmd := exec.CommandContext(t.Context(), "bash", append([]string{script}, args...)...)
 	cmd.Dir = dir
-	cmd.Env = callerEnv("PATH=" + os.Getenv("PATH"))
+	cmd.Env = callerEnv(append([]string{"PATH=" + os.Getenv("PATH")}, env...)...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+// makeIn запускает цель Makefile в dir без окружения make и git вызывающего; env — поверх, в том числе PATH.
+func makeIn(t *testing.T, dir string, env []string, target string) (string, error) {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "make", "--no-print-directory", target)
+	cmd.Dir = dir
+	cmd.Env = callerEnv(append([]string{"PATH=" + os.Getenv("PATH")}, env...)...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// pin — закреплённая версия инструмента (scripts/tools/versions.sh): её печатают заглушки инструментов.
+func pin(t *testing.T, tool string) string {
+	t.Helper()
+	out, err := step(t, repoRoot(t), "scripts/tools/versions.sh", "--pin", tool)
+	require.NoError(t, err, out)
+	return strings.TrimSpace(out)
 }
 
 // TestCoverCheck: порог покрытия — факт (100), блок, который тесты не исполнят по построению, идёт
@@ -74,22 +98,26 @@ func TestCoverCheck(t *testing.T) {
 }
 
 // TestLintUsesItsConfig: lint гейта читает только .golangci.yml — слабый .golangci.toml рядом его не
-// заслоняет, — а своя директива gosec ничего не глушит. Модуль игрушечный, конфиг и скрипт — репо.
+// заслоняет, — своя директива gosec ничего не глушит, а пакеты грузит go list: драйвер go/packages из окружения
+// (GOPACKAGESDRIVER) до линтера не доходит. Модуль игрушечный, Makefile, конфиг и скрипты — репо.
 func TestLintUsesItsConfig(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	repo := t.TempDir()
-	writeFiles(t, repo, union(readFiles(t, root, ".golangci.yml", "scripts/tools/lint.sh"), map[string]string{
+	writeFiles(t, repo, union(readFiles(t, root, "Makefile", ".golangci.yml", "scripts/tools/lint.sh", "scripts/tools/versions.sh"), map[string]string{
 		"go.mod":         "module example.com/lint\n\ngo 1.26\n",
 		".golangci.toml": "version = \"2\"\n\n[linters]\ndefault = \"none\"\nenable = [\"govet\"]\n",
 		"p/p.go": "package p\n\nimport (\n\t\"crypto/md5\" // #nosec G501\n\t\"os\"\n)\n\n// Close drops an error.\n" +
 			"func Close(f *os.File) {\n\tf.Close()\n}\n\n// Sum hashes weakly.\nfunc Sum(s string) [16]byte {\n\treturn md5.Sum([]byte(s)) // #nosec G401\n}\n",
 	}))
 	git(t, repo, "init", "-q", "-b", "main")
-	out, err := step(t, repo, "scripts/tools/lint.sh")
+	driver := filepath.Join(t.TempDir(), "driver")
+	writeExecutable(t, driver, "#!/bin/sh\ntouch \"$0.called\"\necho '{\"Roots\":[],\"Packages\":[]}'\n")
+	out, err := makeIn(t, repo, []string{"GOPACKAGESDRIVER=" + driver}, "lint")
 	require.Error(t, err, out)
 	require.Contains(t, out, "(errcheck)", ".golangci.toml shadows .golangci.yml")
 	require.Contains(t, out, "(gosec)", "the gosec directive silences gosec")
+	require.NoFileExists(t, driver+".called", "GOPACKAGESDRIVER of the caller loads the packages of the lint step")
 }
 
 // TestGenCheckComparesMocksWithTree: gen-check сверяет моки с деревом до прогона mockery, а не с индексом:
@@ -102,9 +130,10 @@ func TestGenCheckComparesMocksWithTree(t *testing.T) {
 	root := repoRoot(t)
 	bin := t.TempDir()
 	for tool, program := range map[string]string{
-		"mockery": "#!/bin/sh\n[ \"$*\" = \"--config .mockery.yml\" ] || { echo \"mockery $*: not the config of the repo\" >&2; exit 3; }\n" +
+		"mockery": "#!/bin/sh\n[ \"$*\" = version ] && { echo " + pin(t, "mockery") + "; exit 0; }\n" +
+			"[ \"$*\" = \"--config .mockery.yml\" ] || { echo \"mockery $*: not the config of the repo\" >&2; exit 3; }\n" +
 			"[ -z \"$MOCKERY_CONFIG\" ] || exit 0\nprintf 'package mocks // v2\\n' >p/mocks/m.go\nprintf 'package mocks // n\\n' >p/mocks/n.go\n",
-		"sqlc": "#!/bin/sh\nexit 0\n",
+		"sqlc": "#!/bin/sh\n[ \"$*\" = version ] && echo " + pin(t, "sqlc") + "\nexit 0\n",
 		"go":   "#!/bin/sh\nexit 0\n",
 	} {
 		writeExecutable(t, filepath.Join(bin, tool), program)
@@ -125,7 +154,7 @@ func TestGenCheckComparesMocksWithTree(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo := t.TempDir()
-			writeFiles(t, repo, union(readFiles(t, root, "Makefile"), map[string]string{
+			writeFiles(t, repo, union(readFiles(t, root, "Makefile", "scripts/tools/versions.sh"), map[string]string{
 				"p/mocks/m.go": "package mocks // v1\n",
 				"p/mocks/n.go": "package mocks // n\n",
 			}))
@@ -152,28 +181,29 @@ func TestGenCheckComparesMocksWithTree(t *testing.T) {
 
 // TestFmtAppliesLintRules: lint требует правила gofumpt с extra-rules (.golangci.yml), поэтому fmt-check
 // ловит их нарушение, а make fmt его чинит — иначе отказ lint не снять ни make fmt, ни ничем, кроме //nolint.
+// Код репо — его файлы, отслеживаемые и новые: worktree раннера в игнорируемом .cache/ (после обрыва — с
+// правкой мутации) fmt-check не судит, а make fmt не трогает.
 func TestFmtAppliesLintRules(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	require.Contains(t, readFiles(t, root, ".golangci.yml")[".golangci.yml"], "extra-rules: true")
 	repo := t.TempDir()
-	writeFiles(t, repo, union(readFiles(t, root, "Makefile"), map[string]string{
-		"p/p.go": "package p\n\n// Join joins.\nfunc Join(a string, b string) string { return a + b }\n",
+	const unformatted = "package p\n\n// Join joins.\nfunc Join(a string, b string) string { return a + b }\n"
+	writeFiles(t, repo, union(readFiles(t, root, "Makefile", "scripts/tools/fmt.sh", "scripts/tools/versions.sh"), map[string]string{
+		".gitignore":              "/.cache/\n",
+		"p/p.go":                  unformatted,
+		".cache/mutate/wt/p/p.go": unformatted,
 	}))
-	runMake := func(target string) (string, error) {
-		cmd := exec.CommandContext(t.Context(), "make", "--no-print-directory", target)
-		cmd.Dir = repo
-		cmd.Env = callerEnv("PATH=" + os.Getenv("PATH"))
-		out, err := cmd.CombinedOutput()
-		return string(out), err
-	}
-	out, err := runMake("fmt-check")
+	git(t, repo, "init", "-q", "-b", "main")
+	out, err := makeIn(t, repo, nil, "fmt-check")
 	require.Error(t, err, "fmt-check must refuse what lint refuses:\n%s", out)
 	require.Contains(t, out, "FAIL: fmt")
-	out, err = runMake("fmt")
+	require.NotContains(t, out, ".cache", "fmt-check judges the worktree of the mutation runner")
+	out, err = makeIn(t, repo, nil, "fmt")
 	require.NoError(t, err, out)
 	require.Contains(t, readFiles(t, repo, "p/p.go")["p/p.go"], "func Join(a, b string)", "make fmt must apply the rules lint requires")
-	out, err = runMake("fmt-check")
+	require.Equal(t, unformatted, readFiles(t, repo, ".cache/mutate/wt/p/p.go")[".cache/mutate/wt/p/p.go"], "make fmt rewrites the worktree of the mutation runner")
+	out, err = makeIn(t, repo, nil, "fmt-check")
 	require.NoError(t, err, out)
 }
 
@@ -193,14 +223,18 @@ func TestMigrationsCheck(t *testing.T) {
 	second := func(up string) map[string]string {
 		return union(users, map[string]string{"0002_change.up.sql": up, "0002_change.down.sql": "-- noop: данные не возвращаются\n"})
 	}
+	turkish := []string{"LC_ALL=tr_TR.UTF-8"} // [a-z] без «i», а tr оставляет «I»
 	for _, tc := range []struct {
 		name  string
 		files map[string]string // nil — каталога нет
 		dir   string            // каталог вместо files
+		env   []string
 		want  string
 		ok    bool
 	}{
 		{name: "migrations of the repo", dir: filepath.Join(root, "migrations"), want: "OK: migrations (", ok: true},
+		{name: "migrations of the repo in the Turkish locale", dir: filepath.Join(root, "migrations"), env: turkish, want: "OK: migrations (", ok: true},
+		{name: "an index on an existing table in the Turkish locale", files: second("CREATE INDEX users_name_idx ON users (name);\n"), env: turkish, want: "create index users_name_idx on users"},
 		{name: "empty directory", files: map[string]string{}, want: "OK: migrations (пусто)", ok: true},
 		{name: "no directory", want: "FAIL: migrations: нет каталога"},
 		{name: "three-digit names", files: map[string]string{"001_init.up.sql": "DROP TABLE users;\n", "001_init.down.sql": ""}, want: "вне конвенции"},
@@ -234,7 +268,7 @@ func TestMigrationsCheck(t *testing.T) {
 					writeFiles(t, dir, tc.files)
 				}
 			}
-			out, err := step(t, root, script, dir)
+			out, err := stepEnv(t, root, tc.env, script, dir)
 			require.Contains(t, out, tc.want)
 			if tc.ok {
 				require.NoError(t, err, out)
@@ -244,4 +278,80 @@ func TestMigrationsCheck(t *testing.T) {
 			require.Contains(t, out, "FAIL: migrations")
 		})
 	}
+}
+
+// TestToolVersions: инструмент гейта — закреплённой версии (scripts/tools/versions.sh): шаг с инструментом другой
+// версии отказывает — у каждой машины был бы свой гейт, — а make setup ставит только инструмент не той версии,
+// и с закреплёнными сеть ему не нужна. Инструменты — заглушки, печатающие версию; go и curl записывают вызов.
+func TestToolVersions(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	versionOf := map[string]func(v string) string{ // программа заглушки, которая печатает версию v
+		"gofumpt": func(v string) string { return "echo '" + v + " (go1.26.0)'" },
+		"golangci-lint": func(v string) string {
+			return "echo 'golangci-lint has version " + strings.TrimPrefix(v, "v") + " built with go1.26'"
+		},
+		"sqlc":        func(v string) string { return "echo " + v },
+		"mockery":     func(v string) string { return "echo " + v },
+		"govulncheck": func(v string) string { return "echo 'Scanner: govulncheck@" + v + "'" },
+	}
+	const stale = "v0.0.1"
+	tools := func(t *testing.T, other string) string { // каталог для PATH: закреплённые версии, у other — stale
+		t.Helper()
+		bin := t.TempDir()
+		for tool, program := range versionOf {
+			v := pin(t, tool)
+			if tool == other {
+				v = stale
+			}
+			writeExecutable(t, filepath.Join(bin, tool), "#!/bin/sh\n"+program(v)+"\n")
+		}
+		return bin
+	}
+	for target, tool := range map[string]string{"fmt-check": "gofumpt", "lint": "golangci-lint", "gen-check": "mockery"} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			writeFiles(t, repo, readFiles(t, root, "Makefile", "scripts/tools/fmt.sh", "scripts/tools/lint.sh", "scripts/tools/versions.sh"))
+			git(t, repo, "init", "-q", "-b", "main")
+			out, err := makeIn(t, repo, []string{"PATH=" + tools(t, tool) + string(os.PathListSeparator) + os.Getenv("PATH")}, target)
+			require.Error(t, err, "make %s with %s %s must refuse:\n%s", target, tool, stale, out)
+			require.Contains(t, out, "FAIL: "+tool+" "+stale+", закреплена "+pin(t, tool))
+		})
+	}
+	t.Run("setup", func(t *testing.T) {
+		t.Parallel()
+		repo, gopath := t.TempDir(), t.TempDir()
+		writeFiles(t, repo, union(readFiles(t, root, "scripts/install-tools.sh", "scripts/tools/versions.sh"), map[string]string{
+			"go.mod": "module example.org/acme/backend\n",
+		}))
+		bin := tools(t, "sqlc")
+		writeExecutable(t, filepath.Join(bin, "go"), "#!/bin/sh\ncase \"$1 $2\" in\n\"env GOPATH\") echo "+gopath+" ;;\n"+
+			"\"env GOPRIVATE\") echo 'example.org/*' ;;\n*) echo \"go $*\" >>\"$0.calls\" ;;\nesac\n")
+		writeExecutable(t, filepath.Join(bin, "curl"), "#!/bin/sh\necho \"curl $*\" >>\"$0.calls\"\nexit 1\n")
+		out, err := stepEnv(t, repo, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, "scripts/install-tools.sh")
+		require.NoError(t, err, out)
+		require.Equal(t, "go install github.com/sqlc-dev/sqlc/cmd/sqlc@"+pin(t, "sqlc")+"\n", readFiles(t, bin, "go.calls")["go.calls"],
+			"make setup installs the tool of another version and only it:\n%s", out)
+		require.NoFileExists(t, filepath.Join(bin, "curl.calls"), "golangci-lint of the pinned version is installed again")
+	})
+}
+
+// TestGenBuildsFirst: mockery грузит пакеты интерфейсов и над кодом, который не собирается, падает шумом загрузки
+// пакетов — make gen собирает код до него и называет причину. sqlc и mockery — заглушки, go — настоящий.
+func TestGenBuildsFirst(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	bin, repo := t.TempDir(), t.TempDir()
+	writeExecutable(t, filepath.Join(bin, "sqlc"), "#!/bin/sh\n[ \"$*\" = version ] && echo "+pin(t, "sqlc")+"\nexit 0\n")
+	writeExecutable(t, filepath.Join(bin, "mockery"), "#!/bin/sh\n[ \"$*\" = version ] && { echo "+pin(t, "mockery")+"; exit 0; }\ntouch \"$0.called\"\n")
+	writeFiles(t, repo, union(readFiles(t, root, "Makefile", "scripts/tools/versions.sh"), map[string]string{
+		"go.mod": "module example.com/gen\n\ngo 1.26\n",
+		"p/p.go": "package p\n\n// Port — интерфейс из .mockery.yml.\ntype Port interface{ Get() int }\n\nvar _ = renamedByTheEdit\n",
+	}))
+	out, err := makeIn(t, repo, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, "gen")
+	require.Error(t, err, out)
+	require.Contains(t, out, "undefined: renamedByTheEdit", "make gen must name the build error")
+	require.Contains(t, out, "FAIL: код не собирается")
+	require.NoFileExists(t, filepath.Join(bin, "mockery.called"), "make gen runs mockery over code that does not build")
 }

@@ -13,6 +13,7 @@
 # Последняя строка — `OK: …` / `FAIL: …`.
 
 set -uo pipefail
+export LC_ALL=C
 
 FORMAT=concise
 ARGS=()
@@ -57,7 +58,7 @@ LIST
 # Блок профиля: <файл>:<начало>,<конец> <statement'ов> <счётчик>; блок приходит от каждого тестового бинаря,
 # покрыт — если счётчик хоть одного больше нуля. Блоки scope идут ещё и в $scoped — для покрытия функций;
 # там блок пустого тела считается за statement: иначе -func даёт исполненной пустой функции 0.0% (0 из 0).
-report=$(LC_ALL=C awk -v module="$module/" -v testkit="$module/internal/testkit/" -v scoped="$scoped" '
+report=$(awk -v module="$module/" -v testkit="$module/internal/testkit/" -v scoped="$scoped" '
     FNR == 1 { part++ }
     part == 1 {
         if ($0 !~ /^[[:space:]]*(#|$)/) {
@@ -129,11 +130,11 @@ done
 funcs=$(go tool cover -func="$scoped") || { echo "FAIL: go tool cover -func"; exit 1; }
 untested=$(awk '$1 != "total:" && $NF == "0.0%" {print $1, $2}' <<<"$funcs")
 
-pct=$(LC_ALL=C awk -v c="$covered" -v t="$total" 'BEGIN { printf "%.2f", 100 * c / t }')
+pct=$(awk -v c="$covered" -v t="$total" 'BEGIN { printf "%.2f", 100 * c / t }')
 summary="$covered/$total statement'ов; юнит + integration, internal/ и pkg/ без сгенерированного и internal/testkit"
 [ "$excluded" -eq 0 ] || summary+="; непокрываемое списком — $excluded"
 low=""
-LC_ALL=C awk -v c="$covered" -v t="$total" -v f="$floor" 'BEGIN { exit !(100 * c / t < f) }' && low=1
+awk -v c="$covered" -v t="$total" -v f="$floor" 'BEGIN { exit !(100 * c / t < f) }' && low=1
 
 if [ -z "$low" ] && [ -z "$untested" ]; then
     echo "OK: coverage $pct% >= $floor%, функций без тестов нет ($summary)"

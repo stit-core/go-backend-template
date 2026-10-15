@@ -78,7 +78,8 @@ func shellForgeries(t *testing.T) map[string][]string {
 func TestMakeCheckCannotBeForged(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	writeFiles(t, repo, readFiles(t, repoRoot(t), "Makefile"))
+	writeFiles(t, repo, readFiles(t, repoRoot(t), "Makefile", "scripts/tools/fmt.sh", "scripts/tools/versions.sh"))
+	git(t, repo, "init", "-q", "-b", "main")
 	bin, fakes := stubTools(t, "gofumpt", "golangci-lint", "sqlc", "mockery"), t.TempDir()
 	shell := shellForgeries(t)
 	writeFiles(t, fakes, map[string]string{
@@ -263,11 +264,11 @@ func TestGateStepsIgnoreShellEnvironment(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	repo, bin := t.TempDir(), stubTools(t, "golangci-lint")
-	writeFiles(t, repo, readFiles(t, root, "Makefile", "scripts/tools/lint.sh", "scripts/tools/test.sh"))
+	writeFiles(t, repo, readFiles(t, root, "Makefile", "scripts/tools/lint.sh", "scripts/tools/test.sh", "scripts/tools/versions.sh"))
 	git(t, repo, "init", "-q", "-b", "main")
 	forgeries := shellForgeries(t)
 	forgeries["clean environment"] = nil
-	for step, refusal := range map[string]string{"lint": "FAIL: .golangci.yml", "test": "FAIL: go test exit"} {
+	for step, refusal := range map[string]string{"lint": "FAIL: golangci-lint", "test": "FAIL: go test exit"} {
 		for name, env := range forgeries {
 			for _, shell := range []string{"", "SHELL=/bin/bash"} {
 				args := []string{"--no-print-directory", step}
@@ -296,7 +297,8 @@ func TestHooksIgnoreCallerEnvironment(t *testing.T) {
 	require.FileExists(t, commitMsg) // хуки читает bash: без этого кеш go test не видит их правок
 	require.FileExists(t, preCommit)
 	repo, bin := t.TempDir(), stubTools(t, "gofumpt")
-	writeFiles(t, repo, union(readFiles(t, root, "Makefile"), map[string]string{"COMMIT_EDITMSG": "update stuff\n"}))
+	writeFiles(t, repo, union(readFiles(t, root, "Makefile", "scripts/tools/fmt.sh", "scripts/tools/versions.sh"),
+		map[string]string{"COMMIT_EDITMSG": "update stuff\n"}))
 	git(t, repo, "init", "-q", "-b", "main")
 	forgeries := shellForgeries(t)
 	forgeries["make flags"] = []string{"MAKEFLAGS=i", "MAKECMDGOALS=x"}
@@ -325,8 +327,7 @@ type releaseSandbox struct {
 	bin  string
 }
 
-// newReleaseSandbox: gofumpt — программа на месте gofumpt (false роняет первый шаг гейта); files — файлы
-// репо поверх заглушек.
+// newReleaseSandbox: gofumpt — программа на месте gofumpt; files — файлы репо поверх заглушек.
 func newReleaseSandbox(t *testing.T, gofumpt string, files map[string]string) releaseSandbox {
 	t.Helper()
 	root := repoRoot(t)
@@ -372,20 +373,20 @@ func (s releaseSandbox) release(t *testing.T, env ...string) (string, error) {
 // TestReleaseGateIgnoresGNUmakefile: make читает GNUmakefile раньше Makefile, а -f в под-make не
 // переходит — свой GNUmakefile (и игнорируемый git: дерево «чистое») подменил бы make check релиза, его
 // шаги или smoke. Релиз зовёт make с -f Makefile, шаги гейта — тоже. Гейт здесь — Makefile репо на
-// заглушках инструментов: с gofumpt-false падает его первый шаг, с зелёными шагами — smoke.
+// заглушках: с красным fmt.sh падает его первый шаг, с зелёными шагами — smoke.
 func TestReleaseGateIgnoresGNUmakefile(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name    string
-		gofumpt string
-		want    []string
+		name  string
+		files map[string]string
+		want  []string
 	}{
-		{name: "gate", gofumpt: "false", want: []string{"FAIL: gofumpt"}},
-		{name: "smoke after a green gate", gofumpt: "true", want: []string{"✓ check clean", "SMOKE of the Makefile: --smoke"}},
+		{name: "gate", files: map[string]string{"scripts/tools/fmt.sh": "echo \"FAIL: fmt of the sandbox\"\nexit 1\n"}, want: []string{"FAIL: fmt of the sandbox"}},
+		{name: "smoke after a green gate", want: []string{"✓ check clean", "SMOKE of the Makefile: --smoke"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := newReleaseSandbox(t, tc.gofumpt, nil)
+			s := newReleaseSandbox(t, "true", tc.files)
 			writeFiles(t, s.repo, map[string]string{
 				"GNUmakefile":       "check e2e-smoke fmt-check lint test-int build gen-check:\n\t@echo \"FORGED $@\"\n",
 				".git/info/exclude": "GNUmakefile\n",

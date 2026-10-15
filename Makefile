@@ -46,16 +46,11 @@ build: ## Сборка всего дерева без тегов, как обр�
 	fi
 
 # Правила gofumpt — с -extra, как у шага lint (.golangci.yml: extra-rules): make fmt чинит всё, что требует гейт.
-fmt: ## gofumpt -extra -w .
-	gofumpt -extra -w .
+fmt: ## gofumpt -extra по Go-коду репо
+	@bash scripts/tools/fmt.sh
 
 fmt-check: ## Проверка форматирования без мутации дерева (gate)
-	@command -v gofumpt >/dev/null || { echo "FAIL: gofumpt не найден — make setup"; exit 1; }
-	@files=$$(gofumpt -extra -l .) || { echo "FAIL: gofumpt не разобрал дерево (ошибка выше)"; exit 1; }; \
-	if [ -n "$$files" ]; then \
-		echo "$$files" | sed 's/^/  /'; \
-		echo "FAIL: fmt — файлы не отформатированы, запусти make fmt"; exit 1; \
-	fi
+	@bash scripts/tools/fmt.sh --check
 
 # Шаги гейта не видят PKG, VERBOSE и FORMAT ни из окружения, ни из командной строки и читают этот же
 # Makefile: -f вызывающего в под-make не переходит, а GNUmakefile make прочёл бы первым.
@@ -118,12 +113,17 @@ check:: ## Канонический gate (pre-push) по всему дереву
 ##@ GEN
 # mockery читает MOCKERY_CONFIG и MOCKERY_* из окружения поверх конфига, а конфиг ищет сам — .mockery.yaml
 # раньше .mockery.yml: моки, выведенные мимо каталогов mocks/, gen-check не сверил бы. Конфиг — только
-# --config .mockery.yml, окружение mockery не достаётся.
-unexport $(filter MOCKERY_%,$(.VARIABLES))
+# --config .mockery.yml, окружение mockery не достаётся. GOPACKAGESDRIVER подменил бы пакеты, которые грузят
+# mockery и golangci-lint (go/packages), — до шагов он тоже не доходит.
+unexport $(filter MOCKERY_%,$(.VARIABLES)) GOPACKAGESDRIVER
 
+# mockery грузит пакеты интерфейсов .mockery.yml и, пока код не собирается, моков не пишет: сборка — до него,
+# с причиной.
 gen: ## Регенерация сгенерированного: sqlc, mockery, openapi.json (без запуска сервиса)
+	@bash scripts/tools/versions.sh sqlc mockery
 	sqlc generate
-	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
+	@out=$$(go build ./... 2>&1) || { echo "$$out" | head -30; \
+		echo "FAIL: код не собирается (вывод выше) — моки mockery пишет по собранным пакетам: почини сборку, затем make gen"; exit 1; }
 	mockery --config .mockery.yml
 	go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 -args -update
 
@@ -131,10 +131,10 @@ gen: ## Регенерация сгенерированного: sqlc, mockery, 
 # индексе, — не дрейф, а ручная правка мока в дереве — дрейф, а не молча стёртая правка. Новый мок вне
 # индекса — отдельный отказ: без git add он не уйдёт в коммит.
 gen-check: ## Проверка, что sqlc, моки и openapi.json актуальны (шаг make check)
+	@bash scripts/tools/versions.sh sqlc mockery
 	@sqlc diff || { echo "FAIL: sqlc diff — вывод выше (дрейф сгенерированного чинит make gen)"; exit 1; }
 	@out=$$(go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 2>&1) || \
 		{ echo "$$out"; echo "FAIL: TestOpenAPISpec — вывод выше (расхождение с openapi.json чинит make gen)"; exit 1; }
-	@command -v mockery >/dev/null || { echo "FAIL: mockery не найден — запусти make setup (pinned версия)"; exit 1; }
 	@before=$$(git ls-files -co --exclude-standard -- '**/mocks/*.go' | xargs -r cksum) && mockery --config .mockery.yml && \
 	after=$$(git ls-files -co --exclude-standard -- '**/mocks/*.go' | xargs -r cksum) || \
 		{ echo "FAIL: mockery или чтение моков — вывод выше"; exit 1; }; \

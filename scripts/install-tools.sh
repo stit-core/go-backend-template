@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
-# install-tools.sh — поставить pinned-версии dev-инструментов.
-# Все версии должны быть pinned.
+# install-tools.sh — поставить закреплённые версии dev-инструментов (scripts/tools/versions.sh): инструмент, у
+# которого стоит закреплённая, не трогается — сеть нужна только тому, чья версия не та.
 set -euo pipefail
-
-GOFUMPT_VERSION="${GOFUMPT_VERSION:-v0.10.0}"
-GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.12.2}"
-SQLC_VERSION="${SQLC_VERSION:-v1.31.1}"
-MOCKERY_VERSION="${MOCKERY_VERSION:-v3.7.0}"
-GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.8.0}"
 
 GOBIN="$(go env GOPATH)/bin"
 mkdir -p "$GOBIN"
@@ -44,35 +38,34 @@ if ! git config --global --get-regexp '^url\..*\.insteadof$' 2>/dev/null \
   echo "    git config --global url.git@$MODULE_HOST:.insteadOf https://$MODULE_HOST/"
 fi
 
+versions() { bash "$ROOT/scripts/tools/versions.sh" "$@"; }
+
+# go_install <инструмент> <пакет без версии>
 go_install() {
-  local pkg="$1" name="${2:-}"
-  # basename даёт неверное имя для версионированных module-path'ов
-  # (mockery/v3 → "v3"); для таких передаём имя бинаря вторым аргументом.
-  [ -z "$name" ] && name="$(basename "${pkg%@*}")"
-  if command -v "$name" >/dev/null 2>&1 && "$name" --version 2>/dev/null | grep -q "${pkg##*@}"; then
-    echo "✓ $name (${pkg##*@}) уже установлен"
+  local tool=$1 pkg=$2 pin
+  pin=$(versions --pin "$tool")
+  if versions "$tool" >/dev/null; then
+    echo "✓ $tool ($pin) уже установлен"
     return
   fi
-  echo "→ installing $pkg"
-  GOBIN="$GOBIN" go install "$pkg"
+  echo "→ installing $pkg@$pin"
+  GOBIN="$GOBIN" go install "$pkg@$pin"
 }
 
-go_install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
-go_install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
-go_install "github.com/vektra/mockery/v3@${MOCKERY_VERSION}" "mockery"
-go_install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+go_install gofumpt mvdan.cc/gofumpt
+go_install sqlc github.com/sqlc-dev/sqlc/cmd/sqlc
+go_install mockery github.com/vektra/mockery/v3
+go_install govulncheck golang.org/x/vuln/cmd/govulncheck
 
-# golangci-lint ставится через свой installer (статическая сборка,
-# не через `go install`), взятый с тега той же версии, а не с HEAD.
-# Сравниваем версию — апгрейдим если pin изменился.
-GOLANGCI_LINT_PIN="${GOLANGCI_LINT_VERSION#v}"
-if command -v golangci-lint >/dev/null 2>&1 \
-   && golangci-lint --version 2>/dev/null | grep -q "version $GOLANGCI_LINT_PIN "; then
-  echo "✓ golangci-lint ($GOLANGCI_LINT_VERSION) уже установлен"
+# golangci-lint ставится через свой installer (статическая сборка, не через `go install`), взятый с тега той же
+# версии, а не с HEAD.
+GOLANGCI_LINT_PIN=$(versions --pin golangci-lint)
+if versions golangci-lint >/dev/null; then
+  echo "✓ golangci-lint ($GOLANGCI_LINT_PIN) уже установлен"
 else
-  echo "→ installing golangci-lint ${GOLANGCI_LINT_VERSION}"
-  curl -sSfL "https://raw.githubusercontent.com/golangci/golangci-lint/${GOLANGCI_LINT_VERSION}/install.sh" \
-    | sh -s -- -b "$GOBIN" "${GOLANGCI_LINT_VERSION}"
+  echo "→ installing golangci-lint $GOLANGCI_LINT_PIN"
+  curl -sSfL "https://raw.githubusercontent.com/golangci/golangci-lint/$GOLANGCI_LINT_PIN/install.sh" \
+    | sh -s -- -b "$GOBIN" "$GOLANGCI_LINT_PIN"
 fi
 
 echo

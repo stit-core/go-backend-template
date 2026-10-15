@@ -6,6 +6,8 @@
 # (SET NOT NULL, CREATE INDEX без CONCURRENTLY по таблице не из этого файла), расширение (CREATE EXTENSION).
 # Тело $$…$$ (функция, DO) — не оператор файла: CREATE FUNCTION его только объявляет. Шаг make check.
 set -euo pipefail
+# Диапазоны и регистр — ASCII при любой локали вызывающего: в турецкой [a-z] не берёт «i», а tr оставляет «I».
+export LC_ALL=C
 
 dir="${1:-migrations}"
 fail=0

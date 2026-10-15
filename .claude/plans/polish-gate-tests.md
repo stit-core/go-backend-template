@@ -70,10 +70,16 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - [x] **S1** — План трека
   - Проверка: `make plan-check` → OK · Закрывает: — · Зависит от: —
   - Сделано: план; `make plan-check` → OK, гейт — `✓ check clean` (`N/s7g/check-s1.log`)
-- [ ] **S2** — Шаги гейта: `fmt.sh` по файлам репо, версии инструментов одним местом (`versions.sh`: сверка шагом
+- [x] **S2** — Шаги гейта: `fmt.sh` по файлам репо, версии инструментов одним местом (`versions.sh`: сверка шагом
   и `install-tools.sh` — ставит только то, чья версия не та), `LC_ALL=C` у bash-шагов, вывод `test.sh` по строкам,
   `make gen` — сборка до mockery, `GOPACKAGESDRIVER` вне шагов
   - Проверка: опыты AC1 и T7; `make check` → `✓ check clean` · Закрывает: AC1 · Зависит от: S1
+  - Сделано: опыты `N/s7g/bin/exp-s2.sh` → `N/s7g/exp-s2-{base,branch}.log`: база — migrations-check под tr_TR
+    отвергает миграции репо и пропускает `CREATE INDEX` по существующей таблице, gofumpt и golangci-lint чужой версии
+    проходят, `make setup` переставляет sqlc и mockery, fmt-check судит `.cache/…/wt`, драйвер `GOPACKAGESDRIVER`
+    зовётся, `make gen` — FTL mockery без причины, `test.sh` рвёт UTF-8; ветка — верный вердикт в каждом; тесты
+    `TestToolVersions`, `TestGenBuildsFirst`, расширены `TestLintUsesItsConfig`, `TestFmtAppliesLintRules`,
+    `TestMigrationsCheck`; `make check` → `✓ check clean` (`N/s7g/check-s2.log`)
 - [ ] **S3** — migrations-check: `INSERT`, `.gitkeep`, выпущенные по содержимому; rule `sqlc-and-migrations`
   - Проверка: `TestMigrationsCheck`, опыт AC2; `make check` → `✓ check clean` · Закрывает: AC2 · Зависит от: S2
 - [ ] **S4** — Хуки: pre-commit — снимок индекса, pre-push — subject пушимых коммитов и `-f Makefile`;
@@ -95,9 +101,19 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
   правит этот трек: другого владельца у тестов шагов нет.
+- Версии инструментов — одним местом, `scripts/tools/versions.sh`: шаг гейта сверяет свой инструмент (fmt —
+  gofumpt, lint — golangci-lint, gen и gen-check — sqlc и mockery), `install-tools.sh` берёт версии оттуда и ставит
+  только инструмент не той версии (RLIF-13); версия из окружения (`GOFUMPT_VERSION=…`) снята — закреплённая одна.
+- `fmt.sh` отдаёт gofumpt каталоги верхнего уровня с Go-файлами репо (`git ls-files -co`), а не файлы: сгенерированное
+  gofumpt пропускает только при обходе каталога, а явный файл переформатировал бы.
+- `LC_ALL=C` — первой строкой каждого bash-скрипта шагов и `new-domain.sh`, а не в `Makefile`: тесты и хуки зовут
+  скрипты и мимо make.
+- `GOPACKAGESDRIVER` снимает `Makefile` вместе с `MOCKERY_*`: его читают golangci-lint и mockery, шаги гейта идут
+  через make.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-План написан; замеры базы — в «Контексте». Дальше — S2.
+S2 закрыт: шаги гейта не зависят от локали, версий инструментов и `.cache/`, `make gen` называет несобранный код.
+Дальше — S3 (migrations-check).

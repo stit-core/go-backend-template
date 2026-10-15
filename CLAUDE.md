@@ -64,9 +64,10 @@ DDD-артефакты доменов — в соседнем strategy-репо 
 Конциз-by-default: `FORMAT=detailed`/`VERBOSE=1` — полно, `PKG=./x/...` — подмножество; `make check`
 их не читает. `make check` = fmt-check + vet + lint + migrations-check + test-int (юнит +
 integration, нужен Docker) + build (`./...` без тегов, как образ) + gen-check + cover-check (покрытие
-профиля test-int 100%, непокрываемое — список `cover.sh`; функций без тестов нет). `make gen` — sqlc,
-mockery и `openapi.json` (контракт API из регистраций huma, без запуска сервиса). `make mutate` —
-мутационный прогон вне гейта (rule `tests-pipeline`).
+профиля test-int 100%, непокрываемое — список `cover.sh`; функций без тестов нет). Версии gofumpt,
+golangci-lint, sqlc и mockery — закреплённые в `scripts/tools/versions.sh`: их ставит `make setup`, а шаг с
+инструментом другой версии отказывает. `make gen` — sqlc, mockery и `openapi.json` (контракт API из регистраций
+huma, без запуска сервиса). `make mutate` — мутационный прогон вне гейта (rule `tests-pipeline`).
 
 ## Карта: где что
 

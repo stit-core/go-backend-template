@@ -4,14 +4,14 @@
 # Использование:
 #   scripts/tools/lint.sh [--format=detailed] [pkg…]      (по умолчанию ./...)
 #
-# Конфиг — только .golangci.yml (без --config golangci-lint взял бы первым .golangci.toml или .json
-# рядом). Сначала `golangci-lint config verify`, затем `run`. OK — только exit 0 вместе со строкой
-# отчёта «0 issues.». Замечания — по строке на каждое, до 40 строк (detailed — все, со
-# строками кода); любой другой исход (битый конфиг, неизвестный линтер, таймаут,
-# несуществующий пакет) — хвост вывода линтера и его код выхода. Последняя строка — `OK` /
-# `FAIL: <причина>`.
+# Версия golangci-lint — закреплённая (scripts/tools/versions.sh), конфиг — только .golangci.yml (без --config
+# golangci-lint взял бы первым .golangci.toml или .json рядом). Сначала `golangci-lint config verify`, затем
+# `run`. OK — только exit 0 вместе со строкой отчёта «0 issues.». Замечания — по строке на каждое, до 40 строк
+# (detailed — все, со строками кода); любой другой исход (битый конфиг, неизвестный линтер, таймаут,
+# несуществующий пакет) — хвост вывода линтера и его код выхода. Последняя строка — `OK` / `FAIL: <причина>`.
 
 set -uo pipefail
+export LC_ALL=C
 
 FORMAT=concise
 PKGS=()
@@ -19,7 +19,7 @@ for arg in "$@"; do
     case "$arg" in
         --format=*) FORMAT="${arg#--format=}" ;;
         -h | --help)
-            sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) PKGS+=("$arg") ;;
@@ -28,11 +28,7 @@ done
 [ ${#PKGS[@]} -gt 0 ] || PKGS=(./...)
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
-
-if ! command -v golangci-lint >/dev/null 2>&1; then
-    echo "FAIL: golangci-lint не установлен — make setup"
-    exit 1
-fi
+bash scripts/tools/versions.sh golangci-lint || exit 1
 
 # Кеш golangci-lint ключуется путём пакета, а у каждого worktree тот же module path:
 # общий кеш подмешивает в прогон замечания чужого дерева.
