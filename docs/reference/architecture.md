@@ -267,7 +267,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 пакета их бы обошли. Короткие формы huma (`huma.Get` и соседи) не используются,
 подписку на события заводит `natskit` в `delivery/nats` (archtest `TestInputsRegisterInDelivery`,
 `TestDeliveryPackages`); подписку методом шины мимо функций natskit archtest не видит — ревью.
-`Register` пакетов доменов зовёт одна функция — `registerHTTP` в `cmd/api/http.go`. Открытая
+`Register` пакетов доменов зовёт одна функция — `registerHTTP` в `cmd/api/http.go`; там же middleware сервиса
+(`middlewares`): `Cache-Control: no-store` у ответов `/api/*` и строгий лимит клиента на `/api/auth/*`. Открытая
 операция помечена `httpkit.Public(op)`: операция без `Security` и без пометки, дубль метода и пути
 (huma и chi молча перезаписали бы маршрут) — ошибка старта (httpkit, `Server.CheckRoutes`), дубль
 `OperationID` — паника huma. По `registerHTTP` же `cmd/api/api_test.go` собирает API без БД и брокера:
@@ -343,7 +344,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   `timerkit.ProvideJob` в модуле-владельце и гоняются `timerkit.Module` той же fx.Lifecycle; тело job'а — метод
   usecase с тестом. Образец — `verification.purge_links` (`verification/module/module.go`, `Usecase.PurgeLinks`).
   Обслуживание kit-таблиц приходит с модулями китов (`bruteforcepg.Module` и `sessionpg.Module` —
-  cleanup, `outboxkit.Instance` — drain/партиции/retention); свой job поверх kit-таблицы не пишется.
+  cleanup, `outboxkit.Instance` — drain/партиции/retention, `auditpg.RetentionModule` — срок хранения
+  `audit_log`, `AUDIT_RETENTION_DAYS`); свой job поверх kit-таблицы не пишется.
 - **JetStream-стримы.** drain и subscriber'ы требуют включённого JetStream
   (`NATS_JETSTREAM_ENABLED=true`) и стримов, покрывающих subject-префиксы доменов
   (`NATS_JS_STREAM_NAMES`, напр. `user,verification` → `user.>`/`verification.>`). Без стрима

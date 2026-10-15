@@ -112,8 +112,12 @@ blocked-by: —
     адресу, `Promote` при версии (растёт), закрытие сессий, аудит `seed_admin`; сырого SQL в `cmd/seed-admin` нет;
     логгеры `cmd/migrate` и `cmd/seed-admin` — `logkit.NewConfig`. RED: `TestRun_RejectsWeakPassword` (код 0 с
     паролем «1»), `TestRun_PromotionIsVersionedAndAudited` (версия 1, аудита нет) — на ветке PASS; `make check` → ✓
-- [ ] **S6** — Срок хранения аудита (job кита) и `Cache-Control: no-store` у ответов `/api/*`
+- [x] **S6** — Срок хранения аудита (job кита) и `Cache-Control: no-store` у ответов `/api/*`
   - Проверка: D14; `TestBoot`; `make check` → ✓ · Закрывает: AC4 · Зависит от: —
+  - Сделано: `auditpg.RetentionModule` и `NewRetentionConfig` в графе, `AUDIT_RETENTION_DAYS` — required (в
+    `.env.example` — 30); middleware `noStore` в `cmd/api/http.go`; `TestBoot` видит job'ы `auditkit.retention` и
+    `verification.purge_links` и `no-store` у ответа `/api/users/me`, `TestMiddlewares_NoStore` — и у отказа лимита;
+    handoff-блок; `make check` → ✓
 - [ ] **S7** — Контракт API: 429 строгого лимита, таблицы logout и запроса сброса, адрес регистрации, cookie
   строкой, `changePassword`, поля и форматы ответов, ветки пустого cookie
   - Проверка: сводка `openapi.json`; E2; `make check` → ✓ · Закрывает: AC5 · Зависит от: S6
@@ -150,6 +154,8 @@ blocked-by: —
 - RCOD-12, RSECT-08: `seed-admin` — метод `user.Usecase.EnsureAdmin` без policy (вход оператора: решает доступ к
   БД), а не `Trusted` (его берут только адаптеры доменов, archtest); событий он не публикует — outbox домена
   монтирует только его `module/` (archkit), а подтверждённому admin письмо не нужно.
+- RSECT-05: `AUDIT_RETENTION_DAYS` — required без дефолта шаблона: срок хранения аудита — требование проекта, и кит
+  нарочно не даёт его по умолчанию (`RetentionConfig.Validate`).
 - RCOD-10: своя ссылка и соседние гасятся одним оператором с `RETURNING id`; канон одиночного погашения в rule
   `sqlc-and-migrations` (трек gate) — `MarkEmailVerificationUsed`, строкой там же — погашение с соседями: правка
   чужого файла, иначе правило называло бы снятый метод.
@@ -162,4 +168,4 @@ blocked-by: —
   к кому: владелец
 
 ## Где мы сейчас
-S1–S5 закрыты. Следующий шаг — S6 (срок хранения аудита, `Cache-Control`).
+S1–S6 закрыты. Следующий шаг — S7 (контракт API).

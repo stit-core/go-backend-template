@@ -31,6 +31,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/telemetry"
 	"git.stit.tech/stit-core/golibinfra/testkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
+	"git.stit.tech/stit-core/golibinfra/timerkit"
 
 	"git.stit.tech/stit-core/go-backend-template/cmd/migrate/sources"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
@@ -128,14 +129,22 @@ func TestBoot(t *testing.T) {
 	var (
 		srv         *httpkit.Server
 		kitSources  []pgkit.Source
+		jobs        []string
 		telemetryMP *sdkmetric.MeterProvider
 	)
 	app := fxtest.New(t, service,
 		hookEvents(hooks),
 		fx.Decorate(func(p *telemetry.Providers) *telemetry.Providers { telemetryMP = p.MeterProvider; return p }),
 		fx.Populate(&srv),
-		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))))
+		fx.Invoke(fx.Annotate(func(s []pgkit.Source) { kitSources = s }, fx.ParamTags(`group:"`+pgkit.MigrationsGroup+`"`))),
+		fx.Invoke(fx.Annotate(func(js []timerkit.Job) {
+			for _, j := range js {
+				jobs = append(jobs, j.Name)
+			}
+		}, fx.ParamTags(`group:"`+timerkit.JobsGroup+`"`))))
 	app.RequireStart()
+	require.Subset(t, jobs, []string{"auditkit.retention", "verification.purge_links"},
+		"the service keeps audit_log and the links of the mails for a term, not forever")
 	require.Equal(t, stopTimeout, app.StopTimeout(), "the stop hooks get the budget checkStopBudget checks the env against, not the fx default")
 	require.Same(t, telemetryMP, otel.GetMeterProvider(),
 		"telemetry.Module sets its meter provider as the global one: without it every metric of the kits is a no-op")
@@ -203,6 +212,12 @@ func TestBoot(t *testing.T) {
 		}
 	}
 	require.NotZero(t, secured, "the contract has operations under Security")
+	req, err = http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/api/users/me", nil)
+	require.NoError(t, err)
+	resp, err = anon.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"), "a response of a domain operation stays out of caches")
 	// Сырой маршрут chi (Router().Get, Mount) и Hidden-операция huma обходят проверку Security и
 	// openapi.json: каждый маршрут роутера — операция контракта или маршрут спецификации huma.
 	for _, route := range srv.Router().Routes() {

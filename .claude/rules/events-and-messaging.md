@@ -71,8 +71,8 @@ paths:
   отдельного worker-бинаря нет. Спан `timerkit.job <name>`, метрики `timer_job_*`. Тело — метод usecase
   с тестом, имя — `<домен>.<что>`; образец — `verification.purge_links` (чистка отживших ссылок, батчем).
 - Обслуживание kit-таблиц пишут сами киты: cleanup `bruteforce_attempts` — `bruteforcepg.Module`,
-  истёкших сессий — `sessionpg.Module`, drain/партиции/retention outbox — `outboxkit.Instance`. Свой
-  job поверх kit-таблицы не заводить.
+  истёкших сессий — `sessionpg.Module`, drain/партиции/retention outbox — `outboxkit.Instance`, срок хранения
+  `audit_log` — `auditpg.RetentionModule` (`AUDIT_RETENTION_DAYS`). Свой job поверх kit-таблицы не заводить.
 - `time.Now()` → инжектить `clockkit.Clock`. Ошибка `Run` → лог кита, цикл не прерывается;
   процесс не ронять.
 

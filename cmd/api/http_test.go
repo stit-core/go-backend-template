@@ -15,9 +15,9 @@ import (
 func TestAuthRateLimit(t *testing.T) {
 	t.Parallel()
 	serve := func(rps, burst int) func(method, path string) int {
-		mws := authRateLimit(&appconfig.App{AuthRateLimit: appconfig.AuthRateLimit{RPS: rps, Burst: burst}})
-		require.Len(t, mws, 1)
-		h := mws[0](http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+		h := authRateLimit(appconfig.AuthRateLimit{RPS: rps, Burst: burst})(
+			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+		)
 		return func(method, path string) int {
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, path, http.NoBody))
@@ -36,5 +36,31 @@ func TestAuthRateLimit(t *testing.T) {
 	off := serve(0, 0)
 	for range 3 {
 		require.Equal(t, http.StatusNoContent, off(http.MethodPost, "/api/auth/login"))
+	}
+}
+
+// Ответы операций доменов — с Cache-Control: no-store, и отказ строгого лимита тоже; пробы httpkit кэш не
+// трогает.
+func TestMiddlewares_NoStore(t *testing.T) {
+	t.Parallel()
+	var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mws := middlewares(&appconfig.App{AuthRateLimit: appconfig.AuthRateLimit{RPS: 1, Burst: 1}})
+	for i := len(mws) - 1; i >= 0; i-- {
+		h = mws[i](h)
+	}
+	for _, tc := range []struct {
+		path        string
+		status      int
+		cacheHeader string
+	}{
+		{"/api/users/me", http.StatusOK, "no-store"},
+		{"/api/auth/login", http.StatusOK, "no-store"},
+		{"/api/auth/login", http.StatusTooManyRequests, "no-store"},
+		{"/health", http.StatusOK, ""},
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, tc.path, http.NoBody))
+		require.Equal(t, tc.status, rec.Code, tc.path)
+		require.Equal(t, tc.cacheHeader, rec.Header().Get("Cache-Control"), tc.path)
 	}
 }

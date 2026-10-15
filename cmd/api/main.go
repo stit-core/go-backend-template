@@ -49,6 +49,7 @@ var kitConfigs = []any{
 	authnkit.NewJWTConfig,
 	session.NewConfig,
 	bruteforcekit.NewConfig,
+	auditpg.NewRetentionConfig,
 	outboxkit.NewConfig,
 	outboxpg.NewConfig,
 }
@@ -74,6 +75,7 @@ var (
 		sessionpg.Module,
 		bruteforcepg.Module,
 		auditpg.Module,
+		auditpg.RetentionModule,
 		clockkit.Module,
 		appevents.Module,
 		// /ready отвечает 503, пока хоть одна зависимость не отвечает.

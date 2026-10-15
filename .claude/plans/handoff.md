@@ -345,3 +345,17 @@ DECIDE пауза писем сброса: 5m ок?
 RISK   пользователь, не дождавшийся письма, повторный запрос в паузу получает 204 без письма — следующее письмо
        через паузу после первого
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   required env AUDIT_RETENTION_DAYS — срок хранения audit_log в днях, [1, 36500], дефолта нет (без него старт
+       падает): job auditkit.retention раз в час удаляет записи старше, батчами по 5000; ответы /api/* — с
+       Cache-Control: no-store
+WHY    polish-code-security-adapters S6 — RSECT-05: audit_log рос без предела; RSECT-06: ответы с личными данными
+       могли оседать в общем кэше и истории браузера
+ACTION compose `environment:` каждого окружения: AUDIT_RETENTION_DAYS по требованиям хранения проекта (в
+       .env.example — 30 для локальной разработки); прокси перед api заголовок Cache-Control не переписывает
+WHO    проект (compose env)
+DECIDE срок хранения аудита в днях
+RISK   без AUDIT_RETENTION_DAYS сервис не стартует (auditkit.ErrConfig); первый прогон job'а на большой audit_log
+       удаляет хвост за несколько часов батчами
+===
