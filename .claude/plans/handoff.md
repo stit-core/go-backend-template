@@ -307,3 +307,13 @@ RISK   api этого релиза без колонки sent_at — подпи�
        их авторы запрашивают сброс снова; событие пишется на каждый запрос, и на адрес без учётной записи, —
        стрим verification растёт с анонимным трафиком: его держат лимиты /api/auth/* и NATS_JS_MAX_AGE
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   вне APP_ENV=dev сервис не стартует, если JWT_SECRET или JWT_PREVIOUS_SECRET равен ключу из примеров
+       окружения репо (`.env.example`, `test/stack/compose.yml`)
+WHY    polish-code-security-adapters S1 — NSEC-02: ключом из примеров подписывается токен любой роли
+ACTION проверить секреты окружений вне dev: JWT_SECRET и JWT_PREVIOUS_SECRET — свои, не из примеров репо
+WHO    проект (секреты compose)
+DECIDE —
+RISK   окружение с ключом из примеров не стартует: ErrUnsafe «JWT_SECRET from an example env» в логе старта
+===

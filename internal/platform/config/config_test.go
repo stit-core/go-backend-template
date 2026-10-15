@@ -2,11 +2,13 @@ package config_test
 
 import (
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
@@ -124,6 +126,46 @@ func TestGuard(t *testing.T) {
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}
+}
+
+// Ключ подписи из примеров окружения репо знает каждый читатель репо: вне dev он не пускает старт ни текущим, ни
+// прежним ключом. Значения берутся из самих файлов — пример с новым ключом без строки в Guard роняет тест.
+func TestGuard_ExampleSecrets(t *testing.T) {
+	t.Parallel()
+	secrets := exampleSecrets(t)
+	require.Len(t, secrets, 2, "JWT_SECRET of .env.example and of test/stack/compose.yml")
+	aud := []string{"backend"}
+	for _, secret := range secrets {
+		for _, jwt := range []authnkit.JWTConfig{
+			{Secret: secret, Audience: aud},
+			{Secret: "a-production-secret-of-at-least-32-bytes", PreviousSecret: secret, Audience: aud},
+		} {
+			prod := &appconfig.App{Env: "prod", Cookie: authgate.CookieConfig{Secure: true}}
+			err := appconfig.Guard(prod, logkit.RedactConfig{}, httpkit.Config{}, jwt)
+			require.ErrorIs(t, err, appconfig.ErrUnsafe, "secret %q", secret)
+			require.ErrorContains(t, err, "from an example env")
+
+			require.NoError(t, appconfig.Guard(&appconfig.App{Env: appconfig.Dev}, logkit.RedactConfig{}, httpkit.Config{}, jwt),
+				"dev runs with the example secret")
+		}
+	}
+}
+
+// exampleSecrets — значения JWT_SECRET в .env.example и в env стенда e2e.
+func exampleSecrets(t *testing.T) []string {
+	t.Helper()
+	var secrets []string
+	for file, line := range map[string]*regexp.Regexp{
+		"../../../.env.example":           regexp.MustCompile(`(?m)^JWT_SECRET=(\S+)\s*$`),
+		"../../../test/stack/compose.yml": regexp.MustCompile(`(?m)^\s+JWT_SECRET:\s*(\S+)\s*$`),
+	} {
+		data, err := os.ReadFile(file)
+		require.NoError(t, err)
+		m := line.FindSubmatch(data)
+		require.NotNil(t, m, "%s sets JWT_SECRET", file)
+		secrets = append(secrets, string(m[1]))
+	}
+	return secrets
 }
 
 // Модуль сам вызывает Guard: вне dev сервис с небезопасной конфигурацией не собирается.

@@ -218,8 +218,9 @@ DTO в порте — локальные (не re-export из B).
   тоже отказ: портом он не служит, к usecase его не привязать (archtest `TestDeliveryPortsBoundToUsecase`).
 - **Конфиги** — конфиг кита читает его `<kit>.NewConfig` (`kitConfigs` в `cmd/api`), конфиги
   самого приложения — структура `App` (`internal/platform/config`). Вне `APP_ENV=dev` старт не
-  пускает небезопасное: cookie без Secure, логи без маскирования, docs и access-токены без
-  `JWT_AUDIENCE` — `config.Guard`, лог-mailer — его конструктор (`verification/infra/logmail`).
+  пускает небезопасное: cookie без Secure, логи без маскирования, docs, access-токены без
+  `JWT_AUDIENCE` и ключ подписи из примеров окружения (`.env.example`, `test/stack`; тест сверяет их с
+  файлами) — `config.Guard`, лог-mailer — его конструктор (`verification/infra/logmail`).
   `context.Context` граф не провайдит: свой ctx компонент получает от хука или запроса. ctx,
   доступный корню графа, ловит `TestFxGraphHasNoContext`; именованный и `fx.Private` он не видит.
 - **Порядок хуков** держит httpkit: сервер слушает после OnStart всех модулей и гасится первым.

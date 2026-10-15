@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"go.uber.org/fx"
@@ -59,8 +60,14 @@ func Load() (*App, error) {
 	return &cfg, nil
 }
 
-// Guard не даёт стартовать вне dev с настройками, которые в проде отдают сессию по HTTP, секреты —
-// в лог, устройство API — анонимам, а access-токены — любому сервису на том же JWT_SECRET.
+// exampleJWTSecrets — ключи подписи из примеров окружения репо (.env.example, test/stack): их знает любой читатель.
+var exampleJWTSecrets = []string{
+	"local-dev-only-jwt-secret-at-least-32-bytes",
+	"smoke-only-secret-do-not-use-in-prod-min-32chars",
+}
+
+// Guard не даёт стартовать вне dev с настройками, которые в проде отдают сессию по HTTP, секреты — в лог, устройство
+// API — анонимам, а подпись access-токенов — сервису на том же JWT_SECRET или читателю примеров окружения.
 func Guard(app *App, redact logkit.RedactConfig, httpCfg httpkit.Config, jwt authnkit.JWTConfig) error {
 	if app.Env == Dev {
 		return nil
@@ -77,6 +84,12 @@ func Guard(app *App, redact logkit.RedactConfig, httpCfg httpkit.Config, jwt aut
 	}
 	if len(jwt.Audience) == 0 {
 		unsafe = append(unsafe, "JWT_AUDIENCE empty")
+	}
+	if slices.Contains(exampleJWTSecrets, jwt.Secret) {
+		unsafe = append(unsafe, "JWT_SECRET from an example env")
+	}
+	if slices.Contains(exampleJWTSecrets, jwt.PreviousSecret) {
+		unsafe = append(unsafe, "JWT_PREVIOUS_SECRET from an example env")
 	}
 	if len(unsafe) > 0 {
 		return fmt.Errorf("%w: APP_ENV=%q with %s", ErrUnsafe, app.Env, strings.Join(unsafe, ", "))
