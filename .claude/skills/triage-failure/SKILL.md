@@ -46,6 +46,7 @@ description: Разбор падения — красный тест, lint, buil
 ```bash
 go test -run Test<Name> -count=1 ./path/to/pkg
 go test -race -run Test<Name> -count=10 ./path/to/pkg   # для flaky/race
+# файл теста под //go:build integration (нужен Docker) — ещё -tags=integration: без тега прогон пуст («no tests to run»)
 ```
 
 ### 2. Прочитать сообщение целиком
@@ -102,7 +103,8 @@ go test -race -run Test<Name> -count=10 ./path/to/pkg   # для flaky/race
 - golibinfra баг → не лечи у себя workaround'ом: путь — `docs/reference/architecture.md § Граница с golibinfra` (план в golibinfra → тег → bump).
 - Тест чужой библиотеки flaky → не маркируй `t.Skip()`. Проверь, не глобальное ли state'овое загрязнение.
 - Красное не от твоего диффа (упал тест, которого дифф не касается): прогони его в изоляции
-  (`go test -race -run '^Test<Name>$' -count=20 ./<pkg>`) и гейт ещё раз. Гейт зелёный — флак: коммит по
+  (`go test -race -run '^Test<Name>$' -count=20 ./<pkg>`, тест под `//go:build integration` — ещё
+  `-tags=integration`) и гейт ещё раз. Гейт зелёный — флак: коммит по
   зелёному гейту, флак — пунктом бэклога с логом и строкой в отчёте (хабу или юзеру). Красный и без твоего
   диффа — баг базы: фикс отдельным `fix(...)` по этому скиллу или, если он вне твоей задачи, — стоп и вопрос
   юзеру (хабу). `t.Skip` и коммит без `✓ check clean` — нет.
@@ -125,7 +127,7 @@ go test -race -run Test<Name> -count=10 ./path/to/pkg   # для flaky/race
 ```bash
 make test PKG=./pkg                  # на свой пакет
 make lint PKG=./pkg                  # на свой пакет
-go test -run Test<Name> -count=20 ./pkg   # для flaky — 20 прогонов подряд
+go test -run Test<Name> -count=20 ./pkg   # для flaky — 20 прогонов подряд (integration — с -tags=integration)
 ```
 
 Готово и коммит — по CLAUDE.md § Готово.
