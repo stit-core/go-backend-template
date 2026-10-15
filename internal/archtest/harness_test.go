@@ -1006,7 +1006,7 @@ func TestStatusInfraTouch(t *testing.T) {
 		{name: "image", edit: func(t *testing.T, repo string) {
 			writeFiles(t, repo, map[string]string{"Dockerfile": "FROM scratch\nUSER 65532\n"})
 		}, want: []string{"Dockerfile"}},
-		{name: "config and its test", edit: func(t *testing.T, repo string) {
+		{name: "config", edit: func(t *testing.T, repo string) {
 			writeFiles(t, repo, map[string]string{"internal/platform/config/config.go": "package config\n\nvar A = 2\n"})
 		}, want: []string{"internal/platform/config/config.go"}},
 		{name: "config test only", edit: func(t *testing.T, repo string) {
