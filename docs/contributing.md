@@ -8,7 +8,7 @@ enforce'ится детерминированно, как вмешаться. (�
 | Слой | Где | Когда грузится | Сила |
 |---|---|---|---|
 | Ядро + роутер | `CLAUDE.md` (реальный файл) | всегда, каждый запуск | advisory |
-| Path-scoped правила | `.claude/rules/**/*.md` с `paths:` | когда matching-файл прочитан инструментом Read (не Bash, не Write) | advisory |
+| Path-scoped правила | `.claude/rules/**/*.md` с `paths:` | после Read, Write или Edit matching-файла и его чтения командой Bash (`cat`, `head`) — первую запись нового файла не застаёт | advisory |
 | Skills (процедуры) | `.claude/skills/<name>/SKILL.md` | по `description` или `/<name>` | procedural |
 | Settings / permissions | `.claude/settings.json` | старт сессии | детерминированно (deny) |
 
@@ -134,7 +134,7 @@ string-replace edit.
 | Симптом | Куда смотреть |
 |---|---|
 | Skill не активируется | `description` в frontmatter: ключевой сценарий первым, категории намерений вместо списка фраз; `description` + `when_to_use` ≤ 1536 символов (дальше листинг обрезает) |
-| Path-scoped rule не грузится | файл читали через Bash или создали через Write — открой его через Read; frontmatter `paths:` (не `globs:`!) — проверить glob |
+| Path-scoped rule не грузится | правило приходит после первого обращения к файлу (Read, Write, Edit, `cat`, `head`), а не до — нужно раньше: прочитай само правило через Read; frontmatter `paths:` (не `globs:`!) и glob держит archtest `TestRulesAndSkillsLoad` |
 | CLAUDE.md игнорируется | длина >200 строк, либо конфликт инструкций между секциями |
 | Коммит reject'нут | `scripts/git-hooks/commit-msg` — type ∈ {feat,fix,refactor,docs,test,chore,meta}, subject ≤72, у `feat` и `fix` — строка `Review:` в теле (CLAUDE.md § Готово) |
 | `make gen` / `gen-check` падает | queries ссылаются на несуществующие колонки / забыл `make gen` после правки интерфейса или HTTP-операции (`openapi.json`) / `моки разошлись с кодом` — mockery обновил их в дереве: обновлённые — в коммит, ручная правка мока не живёт / `новые моки не в индексе` — `git add` |
