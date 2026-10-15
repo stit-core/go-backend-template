@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make mutate — мутационный прогон по scripts/tools/mutants.txt (формат — шапка файла).
 
-Использование: make mutate [A="[--strict] <id> …" | A=--check]
+Использование: make mutate [A="[--strict] <id> …" | A="--check [<id> …]"]
 
 Мутации идут по HEAD в своём worktree .cache/mutate/wt: дерево разработчика прогон не трогает, незакоммиченное в
 прогон не входит. Сначала базовый прогон тестов: красный — отказ (мутации без смысла), а кеш go test после него
@@ -9,21 +9,29 @@
 ровно одно место файла, пробелы не важны) → gofumpt; правка SQL — sqlc generate, правка HTTP-слоя — openapi.json
 (дрейф сгенерированного мутацию не убивает) → go build ./... → юнит-тесты (go test ./...) → юнит + integration
 (go test -tags=integration ./..., нужен Docker) → worktree — снова HEAD. Без -race: мутации — про логику, гонки
-держит гейт.
+держит гейт. Временные файлы go каждой стадии — в .cache/mutate/tmp: стадию, снятую по таймауту или обрывом, они не
+переживают.
+
+Спецификация растёт с кодом: файл кода (Go-файл internal/, cmd/ и pkg/ с функцией — кроме тестов, сгенерированного
+и internal/testkit/ — и запросы sqlc) без единой мутации в отчёте назван — новой логике нужны свои блоки.
 
 Итог — убитые по стадиям и выжившие: известные эквивалентные (строка «=» в спецификации) и новые; ещё — мутации с
-устаревшим якорем и несобравшиеся (их правят в спецификации). Код 1 — есть новые выжившие или таймауты; с --strict —
-ещё устаревшие якоря и несобравшиеся правки: спецификация, разошедшаяся с кодом, меряет меньше (шаг релиза).
-Результаты — .cache/mutate/<HEAD>.tsv: оборванный прогон на том же коммите продолжается с места. A="<id> …" — эти
-мутации заново, A=--check — только якоря спецификации рабочего дерева.
+устаревшим якорем и несобравшиеся (их правят в спецификации) и файлы кода без мутаций. Код 1 — есть новые выжившие или
+таймауты; с --strict — ещё устаревшие якоря, несобравшиеся правки, эквивалентные, которые тесты убили (строка «=»
+неверна), и файлы кода без мутаций: спецификация, разошедшаяся с кодом, меряет меньше (шаг релиза). Результаты —
+.cache/mutate/<HEAD>.tsv: оборванный прогон на том же коммите продолжается с места. A="<id> …" — эти мутации заново,
+A=--check — только якоря спецификации рабочего дерева (с id — этих мутаций) и файлы кода без мутаций.
 """
+import contextlib
 import fcntl
 import os
 import pathlib
 import re
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 ROOT = pathlib.Path(
@@ -32,6 +40,7 @@ ROOT = pathlib.Path(
 SPEC = pathlib.Path("scripts", "tools", "mutants.txt")
 CACHE = ROOT / ".cache" / "mutate"
 WT = CACHE / "wt"
+TMP = CACHE / "tmp"
 # Правка этих путей меняет HTTP-контракт: openapi.json регенерируется, как сделал бы make gen.
 HTTP_PATHS = ("/delivery/http/", "internal/platform/authgate/", "cmd/api/", "pkg/")
 STAGE_TIMEOUT = 1800
@@ -49,21 +58,32 @@ def git(*args, cwd=ROOT):
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=True, env=ENV).stdout.decode()
 
 
+def kill(p):
+    """Группа процессов команды — SIGKILL; группы, которая уже вышла, нет — и снимать нечего."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(p.pid, signal.SIGKILL)
+
+
 def run(cmd):
     """Код выхода и вывод команды в worktree раннера; None — таймаут. Команда — своя группа процессов: таймаут и
-    обрыв прогона снимают её целиком, с тестовыми бинарями go test, а не один go."""
+    обрыв прогона снимают её целиком, с тестовыми бинарями go test, а не один go; её временные файлы go (GOTMPDIR —
+    сборка и бинари тестов) уходят вместе с ней."""
+    TMP.mkdir(parents=True, exist_ok=True)
+    tmp = tempfile.mkdtemp(dir=TMP)
     p = subprocess.Popen(cmd, cwd=WT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
-                         env=ENV, start_new_session=True)
+                         env=dict(ENV, GOTMPDIR=tmp), start_new_session=True)
     try:
         out = p.communicate(timeout=STAGE_TIMEOUT)[0]
         return p.returncode, out
     except subprocess.TimeoutExpired:
-        os.killpg(p.pid, signal.SIGKILL)
+        kill(p)
         return None, p.communicate()[0] + "\nTIMEOUT"
     except BaseException:
-        os.killpg(p.pid, signal.SIGKILL)
+        kill(p)
         p.wait()
         raise
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def parse(text):
@@ -112,6 +132,28 @@ def stale(m, tree):
         if found != 1:
             return f"«было» в {e['path']}: вхождений {found}"
     return ""
+
+
+GENERATED = re.compile(r"^// Code generated .* DO NOT EDIT\.$", re.M)
+QUERIES = re.compile(r"internal/domain/[^/]+/infra/postgres/queries/[^/]+\.sql")
+
+
+def untested(mutants, tree, files):
+    """Файлы кода дерева tree (пути files) без единой мутации: Go-файлы internal/, cmd/ и pkg/ с функцией, кроме
+    тестов, сгенерированного и internal/testkit/, и запросы sqlc."""
+    covered = {e["path"] for m in mutants for e in m["edits"]}
+    code = []
+    for f in files:
+        if f in covered or not (tree / f).is_file():
+            continue
+        if QUERIES.fullmatch(f):
+            code.append(f)
+        elif f.endswith(".go") and not f.endswith("_test.go") and f.startswith(("internal/", "cmd/", "pkg/")) \
+                and not f.startswith("internal/testkit/"):
+            text = (tree / f).read_text()
+            if re.search(r"^func ", text, re.M) and not GENERATED.search(text):
+                code.append(f)
+    return code
 
 
 def apply(m):
@@ -177,16 +219,8 @@ def mutate(m, log):
 def main(args):
     strict = "--strict" in args
     args = [a for a in args if a != "--strict"]
-    if args == ["--check"]:
-        mutants = parse((ROOT / SPEC).read_text())
-        bad = [(m["id"], stale(m, ROOT)) for m in mutants]
-        bad = [(mid, why) for mid, why in bad if why]
-        for mid, why in bad:
-            print(f"  {mid}: {why}")
-        if bad:
-            fail(f"мутаций с устаревшим якорем: {len(bad)} из {len(mutants)} — перепиши их блоки в {SPEC}")
-        print(f"OK: якоря {len(mutants)} мутаций — по одному месту в дереве")
-        return 0
+    if args[:1] == ["--check"]:
+        return check(args[1:], strict)
 
     CACHE.mkdir(parents=True, exist_ok=True)
     lock = open(CACHE / "lock", "w")
@@ -205,6 +239,7 @@ def main(args):
         print(f"→ незакоммиченное в прогон не входит: мутации идут по HEAD {head[:7]}")
     reset(head)
     mutants = parse((WT / SPEC).read_text())
+    bare = [] if args else untested(mutants, WT, git("ls-files", cwd=WT).splitlines())
     by_id = {m["id"]: m for m in mutants}
     unknown = [a for a in args if a not in by_id]
     if unknown:
@@ -245,10 +280,34 @@ def main(args):
         with results.open("a") as f:
             f.write("\t".join([m["id"], verdict, f"{dt}s", detail]) + "\n")
         print(f"[{k}/{len(todo)}] {m['id']} {m['layer']} — {verdict} {dt}s {detail[:120]}".rstrip(), flush=True)
-    return summary(selected, done, head, strict)
+    return summary(selected, done, head, strict, bare)
 
 
-def summary(selected, done, head, strict):
+def check(ids, strict):
+    """A=--check: якоря спецификации рабочего дерева (с ids — этих мутаций) и файлы кода без мутаций."""
+    mutants = parse((ROOT / SPEC).read_text())
+    by_id = {m["id"]: m for m in mutants}
+    unknown = [a for a in ids if a not in by_id]
+    if unknown:
+        fail("нет таких мутаций: " + " ".join(unknown))
+    selected = [by_id[a] for a in ids] if ids else mutants
+    bad = [(m["id"], stale(m, ROOT)) for m in selected]
+    bad = [(mid, why) for mid, why in bad if why]
+    for mid, why in bad:
+        print(f"  {mid}: {why}")
+    if bad:
+        fail(f"мутаций с устаревшим якорем: {len(bad)} из {len(selected)} — перепиши их блоки в {SPEC}")
+    bare = [] if ids else untested(mutants, ROOT, git("ls-files", "-co", "--exclude-standard").splitlines())
+    for f in bare:
+        print(f"  {f}: нет мутаций")
+    if bare and strict:
+        fail(f"файлов кода без мутаций: {len(bare)} — блоки в {SPEC} (rule tests-pipeline)")
+    print(f"OK: якоря {len(selected)} мутаций — по одному месту в дереве"
+          + (f"; файлов кода без мутаций: {len(bare)} — блоки в {SPEC}, с --strict — отказ" if bare else ""))
+    return 0
+
+
+def summary(selected, done, head, strict, bare):
     groups = {}
     for m in selected:
         verdict = done.get(m["id"], ("", ""))[0]
@@ -268,18 +327,23 @@ def summary(selected, done, head, strict):
         ("timeout", "таймаут", "перегони: make mutate A=\"<id>\""),
         ("stale", "устаревший якорь", "перепиши блок под код"),
         ("invalid", "не собирается", "поправь правку «стало»"),
-        ("equivalent-killed", "эквивалентная убита", "проверь строку «=»"),
+        ("equivalent-killed", "эквивалентная убита", "тест её видит — сними строку «=»"),
     ):
         if groups.get(key):
             print(f"{title} ({len(groups[key])}): {hint}")
             for m in groups[key]:
                 detail = done[m["id"]][1]
                 print(f"  {m['id']} {m['layer']} — {m['note']}" + (f" [{detail}]" if detail else ""))
-    counts = {key: len(groups.get(key, [])) for key in ("new", "timeout", "stale", "invalid")}
-    bad = counts["new"] + counts["timeout"] + (counts["stale"] + counts["invalid"] if strict else 0)
-    if bad:
+    if bare:
+        print(f"файлы кода без мутаций ({len(bare)}): новой логике — свои блоки в {SPEC} (rule tests-pipeline)")
+        for f in bare:
+            print(f"  {f}")
+    counts = {key: len(groups.get(key, [])) for key in ("new", "timeout", "stale", "invalid", "equivalent-killed")}
+    loose = counts["stale"] + counts["invalid"] + counts["equivalent-killed"] + len(bare)
+    if counts["new"] + counts["timeout"] + (loose if strict else 0):
         fail(f"новых выживших — {counts['new']}, таймаутов — {counts['timeout']}"
-             + (f", устаревших якорей — {counts['stale']}, несобравшихся — {counts['invalid']} (--strict)" if strict else ""))
+             + (f", устаревших якорей — {counts['stale']}, несобравшихся — {counts['invalid']}, эквивалентных убитых — "
+                f"{counts['equivalent-killed']}, файлов кода без мутаций — {len(bare)} (--strict)" if strict else ""))
     print("OK: новых выживших нет" + (", спецификация совпадает с кодом" if strict else ""))
     return 0
 

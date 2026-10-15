@@ -12,13 +12,14 @@ import (
 
 // TestNewDomainRefusesOrRollsBack: make new-domain с именем, на котором срез не собрался бы, и с таблицей,
 // которую уже создаёт миграция, отказывает до первой правки, а сбой после первой правки (здесь — make gen
-// без Makefile) откатывает все правки скрипта: дерево — как до запуска. Песочница — git-репо со скриптом,
-// go.mod, cmd/api, конфигами генераторов, миграциями репо и своей миграцией с занятой таблицей (у форка после prune
-// таблиц доменов идентичности нет); инструменты — заглушки.
+// без Makefile) откатывает все правки скрипта, и блоки мутаций среза тоже: дерево — как до запуска. Песочница —
+// git-репо со скриптом, go.mod, cmd/api, конфигами генераторов, спецификацией мутаций, миграциями репо и своей
+// миграцией с занятой таблицей (у форка после prune таблиц доменов идентичности нет); инструменты — заглушки.
 func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	files := readFiles(t, root, "scripts/new-domain.sh", "go.mod", "cmd/api/main.go", "cmd/api/http.go", "sqlc.yaml", ".mockery.yml", "openapi.json")
+	files := readFiles(t, root, "scripts/new-domain.sh", "go.mod", "cmd/api/main.go", "cmd/api/http.go", "sqlc.yaml", ".mockery.yml", "openapi.json",
+		"scripts/tools/mutants.txt")
 	migrations, err := os.ReadDir(filepath.Join(root, "migrations"))
 	if !os.IsNotExist(err) {
 		require.NoError(t, err)

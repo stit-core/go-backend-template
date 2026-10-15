@@ -68,7 +68,8 @@ integration, нужен Docker) + build (`./...` без тегов, как об�
 в `cmd/`, кроме `main`). Версии gofumpt, golangci-lint, sqlc и mockery — закреплённые в
 `scripts/tools/versions.sh`: их ставит `make setup`, а шаг с инструментом другой версии отказывает.
 `make gen` — sqlc, mockery и `openapi.json` (контракт API из регистраций huma, без запуска сервиса).
-`make mutate` — мутационный прогон вне гейта (rule `tests-pipeline`).
+`make mutate` — мутационный прогон вне гейта; новая логика — свои блоки в `scripts/tools/mutants.txt` тем же
+коммитом (rule `tests-pipeline`).
 
 ## Карта: где что
 

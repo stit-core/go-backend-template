@@ -2204,3 +2204,274 @@ migrations/0001_users.up.sql
 = значения статуса пишут сущность и SQL-литералы: CHECK — вторая линия защиты
 migrations/0001_users.up.sql
 -     CONSTRAINT users_status_check CHECK (status IN ('active', 'blocked', 'deleted')),
+
+# Сброс пароля (выпуск ссылки, её запрос и погашение), строгий лимит /api/auth/*, канон адреса и имени,
+# проверка seed-admin.
+
+## RA01 usecase/verification — IssuePasswordReset: событие без учётной записи доходит до поиска пользователя
+internal/domain/verification/usecase.go
+- if userID == "" || uc.d.Clock.Now().After(expiresAt) {
++ if uc.d.Clock.Now().After(expiresAt) {
+
+## RA02 usecase/verification — IssuePasswordReset: истёкший запрос всё равно выпускает ссылку
+internal/domain/verification/usecase.go
+- if userID == "" || uc.d.Clock.Now().After(expiresAt) {
++ if userID == "" {
+
+## RA03 usecase/verification — IssuePasswordReset: запрос в последний миг срока — без ссылки (граница)
+internal/domain/verification/usecase.go
+- if userID == "" || uc.d.Clock.Now().After(expiresAt) {
++ if userID == "" || !uc.d.Clock.Now().Before(expiresAt) {
+
+## RA04 usecase/verification — IssuePasswordReset: срок ссылки — от обработки события, а не от запроса
+internal/domain/verification/usecase.go
+- expiresAt := requestedAt.Add(passwordResetTTL)
++ expiresAt := uc.d.Clock.Now().Add(passwordResetTTL)
+
+## RA06 usecase/verification — IssuePasswordReset: удалённый пользователь — ошибка (бесконечный повтор доставки)
+internal/domain/verification/usecase.go
+- 	case errors.Is(err, ErrUserNotFound):
+- 		uc.d.Log.Info(ctx, "user gone before the password reset, skip", "user_id", userID)
+- 		return nil
++ 	case errors.Is(err, ErrUserNotFound):
++ 		return fmt.Errorf("load user: %w", err)
+
+## RA07 usecase/verification — IssuePasswordReset: не выпущенная ссылка (отправлена или погашена) всё равно уходит письмом
+internal/domain/verification/usecase.go
+- 	case !issued:
+- 		uc.d.Log.Info(ctx, "password reset not issued: sent or redeemed, skip", "user_id", userID)
+- 		return nil
++ 	case !issued:
++ 		uc.d.Log.Info(ctx, "password reset not issued: sent or redeemed, skip", "user_id", userID)
+
+## RA08 usecase/verification — IssuePasswordReset: «отправлено» не отмечается (повтор доставки шлёт письмо снова)
+internal/domain/verification/usecase.go
+- 	if err := uc.d.Repo.MarkPasswordResetSent(ctx, requestID); err != nil {
+- 		return fmt.Errorf("mark password reset sent: %w", err)
+- 	}
++ 	_ = requestID
+
+## RA09 usecase/verification — IssuePasswordReset: «отправлено» отмечается по ID пользователя
+internal/domain/verification/usecase.go
+- uc.d.Repo.MarkPasswordResetSent(ctx, requestID)
++ uc.d.Repo.MarkPasswordResetSent(ctx, userID)
+
+## RA10 usecase/verification — IssuePasswordReset: порядок — «отправлено» до отправки (сбой mailer теряет письмо)
+internal/domain/verification/usecase.go
+- 	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
+- 		return fmt.Errorf("send password reset email: %w", err)
+- 	}
+- 	if err := uc.d.Repo.MarkPasswordResetSent(ctx, requestID); err != nil {
+- 		return fmt.Errorf("mark password reset sent: %w", err)
+- 	}
++ 	if err := uc.d.Repo.MarkPasswordResetSent(ctx, requestID); err != nil {
++ 		return fmt.Errorf("mark password reset sent: %w", err)
++ 	}
++ 	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
++ 		return fmt.Errorf("send password reset email: %w", err)
++ 	}
+
+## RA11 usecase/verification — IssuePasswordReset: время запроса — время обработки (погашение до запроса не отличить)
+internal/domain/verification/usecase.go
+- authnkit.HashToken(token), requestedAt, expiresAt)
++ authnkit.HashToken(token), uc.d.Clock.Now(), expiresAt)
+
+## RA12 usecase/verification — IssuePasswordReset: письмо уходит не на адрес учётной записи (на ID)
+internal/domain/verification/usecase.go
+- uc.d.Mailer.SendPasswordReset(ctx, u.Email, token)
++ uc.d.Mailer.SendPasswordReset(ctx, u.ID, token)
+
+## RA13 usecase/verification — RequestPasswordReset: учётная запись, которую не пускают, — ответ без лимита и события (время выдаёт её)
+internal/domain/verification/usecase.go
+- 	case err == nil:
+- 		userID, result = u.ID, resultInactive
++ 	case err == nil:
++ 		return resultInactive, nil
+
+## RA14 usecase/verification — RequestPasswordReset: неизвестный адрес — ответ без лимита и события (время выдаёт учётную запись)
+internal/domain/verification/usecase.go
+- 	case !errors.Is(err, ErrUserNotFound):
+- 		return outcome.Error, fmt.Errorf("lookup user: %w", err)
+- 	}
++ 	case !errors.Is(err, ErrUserNotFound):
++ 		return outcome.Error, fmt.Errorf("lookup user: %w", err)
++ 	default:
++ 		return result, nil
++ 	}
+
+## RA15b usecase/verification — RequestPasswordReset: id запроса учётной записи — её ID (второй запрос не получает ссылки)
+internal/domain/verification/usecase.go
+- RequestID: idkit.NewV7(), UserID: userID,
++ RequestID: map[bool]string{true: userID, false: idkit.NewV7()}[userID != ""], UserID: userID,
+
+## RA16 usecase/verification — IssueEmailVerification: подтверждённый адрес снова получает письмо
+internal/domain/verification/usecase.go
+- 	case u.EmailVerified:
+- 		uc.d.Log.Info(ctx, "email already verified, skip", "user_id", userID)
+- 		return nil
+- 	}
++ 	}
+
+## RA17 usecase/verification — RequestPasswordReset: учётная запись, которую не пускают, — событие с её ID как у активной (метрика — OK)
+internal/domain/verification/usecase.go
+- 		userID, result = u.ID, resultInactive
++ 		userID, result = u.ID, outcome.OK
+
+## RA20 sql — UpsertPasswordReset: запрос до погашения ссылки получает рабочую ссылку
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- WHERE NOT EXISTS (
+-     SELECT 1 FROM password_resets
+-     WHERE user_id = sqlc.arg('user_id')::uuid AND used_at > sqlc.arg('requested_at')::timestamptz
+- )
++ WHERE sqlc.arg('requested_at')::timestamptz IS NOT NULL AND sqlc.arg('user_id')::uuid IS NOT NULL
+
+## RA21 sql — UpsertPasswordReset: условие погашения перевёрнуто (used_at < requested_at)
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- AND used_at > sqlc.arg('requested_at')::timestamptz
++ AND used_at < sqlc.arg('requested_at')::timestamptz
+
+## RA22 sql — UpsertPasswordReset: конфликт id перевыпускает токен чужой строки
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- WHERE password_resets.user_id = EXCLUDED.user_id
+-   AND password_resets.sent_at IS NULL
++ WHERE password_resets.sent_at IS NULL
+
+## RA23 sql — UpsertPasswordReset: отправленная ссылка перевыпускается (ссылка из письма гаснет, второе письмо)
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- AND password_resets.sent_at IS NULL
+-   AND password_resets.used_at IS NULL
++ AND password_resets.used_at IS NULL
+
+## RA24 sql — UpsertPasswordReset: погашенная ссылка перевыпускается
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- AND password_resets.sent_at IS NULL
+-   AND password_resets.used_at IS NULL
++ AND password_resets.sent_at IS NULL
+
+## RA25 sql — MarkPasswordResetSent: отмечает все ссылки таблицы
+= тесты не видят: репозиторный тест отмечает «отправлено» у одной ссылки из одной — соседнюю никто не проверяет (NTST-01)
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- UPDATE password_resets SET sent_at = NOW() WHERE id = $1;
++ UPDATE password_resets SET sent_at = NOW() WHERE id = $1 OR TRUE;
+
+## RA31 entity — validEmail: адрес в угловых скобках без имени принят («<a@b.c>» — второй ключ того же ящика)
+internal/domain/user/policy.go
+- err == nil && addr.Name == "" && addr.Address == email && strings.TrimSpace(email) == email &&
++ err == nil && addr.Name == "" && strings.TrimSpace(email) == email &&
+
+## RA32 entity — validEmail: пробел Unicode по краям адреса принят
+internal/domain/user/policy.go
+- addr.Address == email && strings.TrimSpace(email) == email &&
++ addr.Address == email &&
+
+## RA34 entity — validName: имя из одних пробелов принято
+internal/domain/user/policy.go
+- return strings.TrimSpace(name) != "" && utf8.RuneCountInString(name) <= maxNameLen
++ return name != "" && utf8.RuneCountInString(name) <= maxNameLen
+
+## RA35 entity — validName: имя ровно в 200 символов отвергнуто (граница)
+internal/domain/user/policy.go
+- utf8.RuneCountInString(name) <= maxNameLen
++ utf8.RuneCountInString(name) < maxNameLen
+
+## RA36b entity — validName: предел имени — в байтах, а не в символах (кириллица — вдвое короче)
+internal/domain/user/policy.go
+- utf8.RuneCountInString(name) <= maxNameLen
++ len(name) <= maxNameLen && utf8.ValidString(name)
+
+## RA37 trusted — LookupByEmail: адрес с пробелом по краям не находит учётную запись (вход и сброс по нему)
+internal/domain/user/trusted.go
+- return t.d.Repo.GetByEmail(ctx, emailKey(email))
++ return t.d.Repo.GetByEmail(ctx, email)
+
+## RA38 handler — register: схема не держит предел имени (отказ — кодом домена, а не VALIDATION_FAILED)
+internal/domain/user/delivery/http/dto.go
+- Name     string `json:"name"     maxLength:"200"  minLength:"1"   required:"true"`
++ Name     string `json:"name"     minLength:"1"   required:"true"`
+
+## RA39 handler — update: схема не держит предел имени
+internal/domain/user/delivery/http/dto.go
+- Name    *string      `json:"name,omitempty"   maxLength:"200"       minLength:"1"`
++ Name    *string      `json:"name,omitempty"   minLength:"1"`
+
+## RA40 usecase/auth — Login: пароль длиннее предела хэшера — 500, а не неверные учётные данные
+internal/domain/auth/usecase.go
+- case err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong):
++ case err != nil:
+
+## RA41 usecase/auth — Login: сбой хэшера — «неверный пароль» (ошибка сервиса молча становится 401)
+internal/domain/auth/usecase.go
+- case err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong):
++ case err != nil && false:
+
+## RA42b infra — лимитер сброса: адрес с пробелом впереди — свой счётчик
+internal/domain/verification/infra/bruteforce/limiter.go
+- l.guard.Attempt(ctx, subjectPrefix+strings.TrimSpace(email), ip)
++ l.guard.Attempt(ctx, subjectPrefix+email+strings.TrimSpace(""), ip)
+
+## RA43b infra — лимитер сброса: ключ — только IP (общий счётчик всех адресов клиента)
+internal/domain/verification/infra/bruteforce/limiter.go
+- l.guard.Attempt(ctx, subjectPrefix+strings.TrimSpace(email), ip)
++ l.guard.Attempt(ctx, subjectPrefix+strings.TrimSpace(ip), ip)
+
+## RA44 cmd/api — лимит /api/auth/* действует на всё, кроме /api/auth/*
+cmd/api/http.go
+- if strings.HasPrefix(r.URL.Path, authPathPrefix) {
++ if !strings.HasPrefix(r.URL.Path, authPathPrefix) {
+
+## RA45 cmd/api — строгий лимит — только у входа
+cmd/api/http.go
+- const authPathPrefix = "/api/auth/"
++ const authPathPrefix = "/api/auth/login"
+
+## RA46 cmd/api — строгий лимит: RPS и Burst перепутаны
+cmd/api/http.go
+- httpkit.RateLimitConfig{RPS: app.AuthRateLimit.RPS, Burst: app.AuthRateLimit.Burst}
++ httpkit.RateLimitConfig{RPS: app.AuthRateLimit.Burst, Burst: app.AuthRateLimit.RPS}
+
+## RA47b cmd/api — строгий лимит не применяется
+cmd/api/http.go
+- 				limited.ServeHTTP(w, r)
++ 				_ = limited
++ 				next.ServeHTTP(w, r)
+
+## RA48 platform/config — отрицательный Burst строгого лимита проходит
+internal/platform/config/config.go
+- if cfg.AuthRateLimit.RPS < 0 || cfg.AuthRateLimit.Burst < 0 {
++ if cfg.AuthRateLimit.RPS < 0 {
+
+## RA49 platform/config — строгий лимит по умолчанию выключен (RPS 0)
+internal/platform/config/config.go
+- RPS   int `default:"5"  envconfig:"HTTP_AUTH_RATE_LIMIT_RPS"`
++ RPS   int `default:"0"  envconfig:"HTTP_AUTH_RATE_LIMIT_RPS"`
+
+## RA50 cmd/seed — seed-admin не проверяет адрес и имя правилами user (недостижимый admin)
+cmd/seed-admin/main.go
+- 	if _, err := user.NewUser(email, "", name, identity.RoleAdmin); err != nil {
+- 		log.Error(ctx, "SEED_ADMIN_EMAIL or SEED_ADMIN_NAME breaks the rules of the user domain", "error", err)
+- 		return 1
+- 	}
++ 	if _, err := user.NewUser(email, "", name, identity.RoleAdmin); err != nil && false {
++ 		log.Error(ctx, "SEED_ADMIN_EMAIL or SEED_ADMIN_NAME breaks the rules of the user domain", "error", err)
++ 		return 1
++ 	}
+
+## RA51 nats — подписчик сброса: id запроса и ID пользователя перепутаны
+internal/domain/verification/delivery/nats/handler.go
+- h.uc.IssuePasswordReset(ctx, e.RequestID, e.UserID, e.At)
++ h.uc.IssuePasswordReset(ctx, e.UserID, e.RequestID, e.At)
+
+## RA52 nats — подписчик сброса: стрим user вместо своего
+internal/domain/verification/delivery/nats/handler.go
+- natskit.SubscribeStreamJSON(bus, ctx, streamVerification, SubjectPasswordResetRequested,
++ natskit.SubscribeStreamJSON(bus, ctx, streamUser, SubjectPasswordResetRequested,
+
+## RA53 adapter — verification-адаптер: EmailVerified всегда false (подтверждённому — письмо снова)
+internal/domain/verification/module/adapters.go
+- EmailVerified: u.EmailVerified,
++ EmailVerified: false,
+
+## RA54 nats — подписчик сброса: время запроса — время доставки
+internal/domain/verification/delivery/nats/handler.go
+- h.uc.IssuePasswordReset(ctx, e.RequestID, e.UserID, e.At)
++ h.uc.IssuePasswordReset(ctx, e.RequestID, e.UserID, time.Now())

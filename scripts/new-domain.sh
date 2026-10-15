@@ -7,8 +7,10 @@
 #
 # Создаёт рабочий срез — миграцию таблицы, sqlc-запросы, репозиторий с integration-тестом,
 # сущность, policy и usecase с тестами, HTTP-операции под cookie-сессией с тестами, fx-модуль —
-# подключает домен в cmd/api, вписывает sqlc.yaml и .mockery.yml, гонит make gen, проверяет, что срез
-# собирается (go vet с тегом integration), и ставит созданное в индекс: следующий шаг — make check.
+# подключает домен в cmd/api, вписывает sqlc.yaml, .mockery.yml и блоки мутаций среза в
+# scripts/tools/mutants.txt, гонит make gen, проверяет, что срез собирается (go vet с тегом integration) и
+# якоря его мутаций на месте (make mutate A=--check, нужен python3), и ставит созданное в индекс: следующий
+# шаг — make check.
 # Негодное имя и занятая таблица — отказ до первой правки; сбой после неё — откат всех правок скрипта.
 # Дальше домен растёт по skill `scaffold`.
 
@@ -110,7 +112,7 @@ last=$(ls migrations | grep -E '^[0-9]{4}_.*\.up\.sql$' | sort | tail -1 | cut -
 MIGRATION="migrations/$(printf '%04d' $((10#${last:-0} + 1)))_${TABLE}"
 
 # Дальше — правки. Сбой любой из них откатывает все: общие файлы — из копий, созданное — удаляется.
-shared=(sqlc.yaml .mockery.yml cmd/api/main.go cmd/api/http.go openapi.json)
+shared=(sqlc.yaml .mockery.yml scripts/tools/mutants.txt cmd/api/main.go cmd/api/http.go openapi.json)
 backup=$(mktemp -d)
 for f in "${shared[@]}"; do cp "$f" "$backup/${f//\//_}"; done
 completed=""
@@ -851,6 +853,7 @@ package postgres_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -868,7 +871,7 @@ func TestInsertAndGetByID(t *testing.T) {
 	e := &$NAME.$TITLE{Name: "first"}
 	require.NoError(t, repo.Insert(ctx, e))
 	require.NotEmpty(t, e.ID)
-	require.False(t, e.CreatedAt.IsZero(), "the database sets the creation time")
+	require.WithinDuration(t, time.Now(), e.CreatedAt, time.Minute, "the database sets the creation time")
 
 	got, err := repo.GetByID(ctx, e.ID)
 	require.NoError(t, err)
@@ -941,6 +944,147 @@ cat >>.mockery.yml <<EOF
       Usecase:
 EOF
 
+# Сила тестов среза — его мутации (rule tests-pipeline § Мутации): спецификация растёт с кодом с первого коммита.
+echo "→ вписываю блоки мутаций среза в scripts/tools/mutants.txt"
+UC=$DOMAIN_DIR/usecase.go ENT=$DOMAIN_DIR/entity.go POL=$DOMAIN_DIR/policy.go
+REPO=$DOMAIN_DIR/infra/postgres/repository.go SQL=$DOMAIN_DIR/infra/postgres/queries/$NAME.sql
+HANDLER=$DOMAIN_DIR/delivery/http/handler.go VIEW=$DOMAIN_DIR/delivery/http/view.go
+cat >>scripts/tools/mutants.txt <<EOF
+
+# Домен $NAME: срез make new-domain.
+
+## ${NAME}-01 usecase — Create: отказ policy не останавливает запись
+$UC
+- if d := uc.d.Policy.CanCreate(ctx, caller); !d.IsAllowed {
++ if d := uc.d.Policy.CanCreate(ctx, caller); !d.IsAllowed && caller.UserID == "" {
+
+## ${NAME}-02 usecase — Get: отказ policy не останавливает чтение
+$UC
+- if d := uc.d.Policy.CanGet(ctx, caller, id); !d.IsAllowed {
++ if d := uc.d.Policy.CanGet(ctx, caller, id); !d.IsAllowed && caller.UserID == "" {
+
+## ${NAME}-03 usecase — Create: сбой записи глотается
+$UC
+- if err := uc.d.Repo.Insert(ctx, e); err != nil {
++ if err := uc.d.Repo.Insert(ctx, e); err != nil && ctx.Err() != nil {
+
+## ${NAME}-04 usecase — Create: в запись уходит пустое имя
+$UC
+- if err := uc.d.Repo.Insert(ctx, e); err != nil {
++ e.Name = ""
++ if err := uc.d.Repo.Insert(ctx, e); err != nil {
+
+## ${NAME}-05 entity — New$TITLE: имя ровно в предел отвергнуто (граница)
+$ENT
+- utf8.RuneCountInString(name) > maxNameLen
++ utf8.RuneCountInString(name) >= maxNameLen
+
+## ${NAME}-06 entity — New$TITLE: NUL в имени пропускается
+$ENT
+- strings.ContainsRune(name, 0)
++ strings.ContainsRune(name, 1)
+
+## ${NAME}-07 entity — New$TITLE: имя из пробелов принято
+$ENT
+- strings.TrimSpace(name) == "" ||
++ name == "" ||
+
+## ${NAME}-08 policy — adminOnly: права админа у любой роли
+$POL
+- if caller.Role == identity.RoleAdmin {
++ if caller.Role != identity.RoleUnknown {
+
+## ${NAME}-09 policy — CanGet: читать может любой
+$POL
+- func (p *Policy) CanGet(_ context.Context, caller identity.Identity, _ string) policy.Decision {
+- 	return adminOnly(caller)
++ func (p *Policy) CanGet(_ context.Context, _ identity.Identity, _ string) policy.Decision {
++ 	return policy.Allow()
+
+## ${NAME}-10 repository — GetByID: имя не читается
+$REPO
+- Name: row.Name, CreatedAt: row.CreatedAt.Time}, nil
++ Name: "", CreatedAt: row.CreatedAt.Time}, nil
+
+## ${NAME}-11 repository — Insert: время создания не проставляется
+$REPO
+- e.CreatedAt = row.CreatedAt.Time
+
+## ${NAME}-12 repository — GetByID: битый id — сбой (500), а не «нет такого»
+$REPO
+- uid, err := pgkit.ParseUUID(id)
+- if err != nil {
+- 	return nil, $NAME.ErrNotFound
+- }
++ uid, err := pgkit.ParseUUID(id)
++ if err != nil {
++ 	return nil, err
++ }
+
+## ${NAME}-13 repository — GetByID: нет строки — сбой (500), а не «нет такого»
+$REPO
+- if pgkit.IsNoRows(err) {
+- 	return nil, $NAME.ErrNotFound
+- }
+
+## ${NAME}-14 repository — Insert: сбой БД — «нет такого» домена
+$REPO
+- return fmt.Errorf("$NAME repo: insert: %w", err)
++ return $NAME.ErrNotFound
+
+## ${NAME}-15 sql — Get${TITLE}ByID: условие перевёрнуто
+$SQL
+- WHERE id = \$1;
++ WHERE id != \$1;
+
+## ${NAME}-16 handler — create: имя не доходит до usecase
+$HANDLER
+- h.uc.Create(ctx, $NAME.CreateInput{Name: in.Body.Name})
++ h.uc.Create(ctx, $NAME.CreateInput{Name: ""})
+
+## ${NAME}-17 handler — create: 200 вместо 201
+$HANDLER
+- DefaultStatus: http.StatusCreated,
++ DefaultStatus: http.StatusOK,
+
+## ${NAME}-18 handler — get${TITLE}: операция открыта без сессии
+$HANDLER
+- huma.Register(api, getErrors.Declare(authgate.Secured(huma.Operation{
++ huma.Register(api, getErrors.Declare(httpkit.Public(huma.Operation{
+
+## ${NAME}-19 handler — ${UPPER}_NOT_FOUND: 400 вместо 404
+$HANDLER
+- Err: $NAME.ErrNotFound, Status: http.StatusNotFound,
++ Err: $NAME.ErrNotFound, Status: http.StatusBadRequest,
+
+## ${NAME}-20 handler — create: 422 имени не объявлен в OpenAPI
+$HANDLER
+- createErrors = httpkit.NewErrorMap(invalidNameRule, authgate.ForbiddenRule)
++ createErrors = httpkit.NewErrorMap(authgate.ForbiddenRule)
+
+## ${NAME}-21 view — ответ без created_at
+$VIEW
+- v.CreatedAt = e.CreatedAt
+
+## ${NAME}-22 view — в name — ID
+$VIEW
+- v.Name = e.Name
++ v.Name = e.ID
+
+## ${NAME}-23 handler — get: в ответе только ID
+$HANDLER
+- e, err := h.uc.Get(ctx, in.ID)
++ e, err := h.uc.Get(ctx, in.ID)
++ if err == nil && e != nil {
++ 	e = &$NAME.$TITLE{ID: e.ID}
++ }
+
+## ${NAME}-24 migration — created_at по умолчанию — константа, а не время записи
+${MIGRATION}.up.sql
+- created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
++ created_at TIMESTAMPTZ NOT NULL DEFAULT '2000-01-01'
+EOF
+
 # insert_before FILE START CLOSE LINE: LINE — перед первой строкой CLOSE после строки START.
 insert_before() {
     local file=$1 tmp
@@ -973,14 +1117,22 @@ make --no-print-directory gen
 echo "→ go vet: срез и cmd/api собираются"
 go vet -tags=integration "./$DOMAIN_DIR/..." ./cmd/api/
 
+echo "→ make mutate A=--check: якоря мутаций среза"
+mutants=$(grep -oE "^## ${NAME}-[0-9]+ " scripts/tools/mutants.txt | awk '{print $2}')
+# shellcheck disable=SC2086 # id мутаций — отдельными словами
+python3 -I scripts/tools/mutate.py --check $mutants
+
 completed=1
-git add "$DOMAIN_DIR" "${MIGRATION}.up.sql" "${MIGRATION}.down.sql" sqlc.yaml .mockery.yml cmd/api/main.go cmd/api/http.go openapi.json
+git add "$DOMAIN_DIR" "${MIGRATION}.up.sql" "${MIGRATION}.down.sql" sqlc.yaml .mockery.yml scripts/tools/mutants.txt \
+    cmd/api/main.go cmd/api/http.go openapi.json
 
 echo
 echo "✓ домен $NAME: срез Create и Get (POST /api/${ROUTE}, GET /api/${ROUTE}/{id}, только admin),"
-echo "  таблица ${TABLE}, подключение в cmd/api; созданное — в индексе git"
+echo "  таблица ${TABLE}, подключение в cmd/api, мутации ${NAME}-01…$(wc -w <<<"$mutants" | xargs printf '%02d')"
+echo "  в scripts/tools/mutants.txt; созданное — в индексе git"
 echo
 echo "Дальше:"
-echo "  1. make check (нужен Docker)"
+echo "  1. make check (нужен Docker); make mutate A=\"$(xargs <<<"$mutants")\" — мутации среза убиты"
+echo "     (новая логика домена — свои блоки в mutants.txt тем же коммитом, rule tests-pipeline § Мутации)"
 echo "  2. Домен — по артефакту strategy: .claude/skills/scaffold/references/domain.md § 4"
 echo "     (поля — в миграцию среза до первого коммита; права, операции, события)"

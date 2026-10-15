@@ -102,9 +102,14 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     заголовком в каталоге sqlc (CV09) и в `pkg/` (CV10), функция `cmd/api` без теста (CV14) — зелёные, запись
     непокрываемого на тело функции — OK (`N/s7g/ntst04`); ветка — красный своим шагом каждый; случаи в
     `TestCoverCheck`; `make check` → `✓ check clean` (`N/s7g/check-s5.log`)
-- [ ] **S6** — Мутации: мутации аудитора, файлы без мутаций, блоки скелета `new-domain`, `created_at` скелета,
+- [x] **S6** — Мутации: мутации аудитора, файлы без мутаций, блоки скелета `new-domain`, `created_at` скелета,
   раннер (временные каталоги, `killpg`), тест раннера; rule `tests-pipeline`, `CLAUDE.md § Команды`
   - Проверка: опыты AC5; `make check` → `✓ check clean` · Закрывает: AC5 · Зависит от: S5
+  - Сделано: спецификация — 401 мутация (+45 аудитора, RA25 — «=»), `make mutate A=--check` → OK; опыт в
+    `N/wt-s7g-br`: `make new-domain NAME=order` → блоки `order-01…24`, их якоря — OK, `make check` → `✓ check clean`
+    859/859 (`N/s7g/check-s6-order.log`), `make mutate` кусками → убиты 24 из 24 (юнит 17, integration 7), и
+    `created_at` (`order-24`, SC25 аудитора) — integration (`N/s7g/mutate-order.log`); `TestMutate`; `make check` →
+    `✓ check clean` (`N/s7g/check-s6.log`)
 - [ ] **S7** — Guard, allow, секреты и образы
   - Проверка: опыты AC6; `make check` → `✓ check clean` · Закрывает: AC6 · Зависит от: S4
 - [ ] **S8** — Имена `new-domain`, e2e-харнес, лёгкий Argon2 тестов `cmd/api`, мелочи RENF-16
@@ -152,9 +157,22 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - `init()` держит линтер (`gochecknoinits`), а не archtest: одно место для правил кода — golangci-lint.
 - Мягкие ожидания моков — в `TestTestsAssert` (сила теста), отдельного теста нет; ожидание — одним выражением
   цепочки, как во всём коде шаблона.
+- Мутации аудитора для нового кода — в `mutants.txt` как есть (id `RA…`, у пяти несобиравшихся — их вариант `…b`).
+  RA25 (`MarkPasswordResetSent … OR TRUE`) — со строкой «=»: тест, который её убивает, пишет трек
+  code+security+adapters; после его слияния `make mutate A="--strict RA25"` — отказ «эквивалентная убита», и строку
+  «=» снимает тот, кто сливает второй. Трек code+security+adapters правит и `IssuePasswordReset`,
+  `password_resets.sql`: устаревшие якоря `RA…` назовёт `make mutate A=--check` — блоки переписывают под код.
+- Рост спецификации машина держит пофайлово: файл кода без мутаций `make mutate` и `A=--check` называют, `--strict`
+  (шаг `/release`) — отказ; на каждую функцию — правило и ревью. С `--strict` отказ и за «=», которую тесты убили:
+  строка «=» неверна.
+- `make new-domain` дописывает блоки среза (`<домен>-01…24`, мутации аудитора SC01–SC25 без несобиравшейся SC24)
+  и сверяет их якоря `mutate.py --check <id…>` — только свои: устаревшие блоки форка срез не роняют; скрипту нужен
+  python3, как `make mutate` и `make e2e`.
+- Раннер: временные файлы go стадии — свой `GOTMPDIR` в `.cache/mutate/tmp`, снимается после стадии; `killpg` уже
+  вышедшей группы — не ошибка; `TestMutate` гоняет раннер в гейте — гейту нужен python3.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S5 закрыт: формы «код без тестов» красные. Дальше — S6 (мутации).
+S6 закрыт: спецификация мутаций растёт с кодом. Дальше — rebase на `main` (трек harness+lifecycle слит), затем S7 (guard, allow, секреты).

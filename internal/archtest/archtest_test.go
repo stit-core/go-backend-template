@@ -35,11 +35,15 @@
 //     guard-bash и commit-msg, подключение git-хуков: make setup, status, doctor);
 //   - make_test.go — TestMakeCheckCannotBeForged, TestCheckCoversItsOwnRun, TestPrePushGatesPushedCommit,
 //     TestGateStepsIgnoreShellEnvironment, TestHooksIgnoreCallerEnvironment (самозащита make check и pre-push от
-//     флагов, переменных и окружения вызывающего), TestReleaseGateIgnoresGNUmakefile,
+//     флагов, переменных и окружения вызывающего, subject пушимых коммитов), TestPreCommitChecksIndex (pre-commit
+//     судит индекс), TestReleaseGateIgnoresGNUmakefile,
 //     TestReleaseStopsWithoutModuleAccess, TestReleasePreflight, TestReleaseBuildForwardsSSHAgent (релиз);
 //   - steps_test.go — TestCoverCheck, TestLintUsesItsConfig, TestGenCheckComparesMocksWithTree,
-//     TestFmtAppliesLintRules, TestMigrationsCheck (шаги гейта);
+//     TestFmtAppliesLintRules, TestMigrationsCheck, TestToolVersions, TestGenBuildsFirst (шаги гейта, версии
+//     инструментов, make gen);
 //   - newdomain_test.go — TestNewDomainRefusesOrRollsBack (make new-domain: отказ до первой правки, откат после);
+//   - mutate_test.go — TestMutate (раннер make mutate: вердикты, --strict, файлы кода без мутаций, дерево
+//     разработчика);
 //   - release_test.go — TestReleaseImage (путь образа релиза).
 package archtest
 
