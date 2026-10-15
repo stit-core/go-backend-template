@@ -933,3 +933,80 @@ func TestNolintNames(t *testing.T) {
 		})
 	}
 }
+
+// TestStatusInfraTouch: секция == Infra-touch == make status зовёт INFRA-HANDOFF по существу, без шума: правка
+// строки переменной .env.example, образа и выпущенной миграции (есть в последнем теге релиза или обвязки — и под
+// старым именем переименования) — да; комментарий, невыпущенная миграция без эффекта и тесты — нет. Сигнал уже
+// правила infra-impact: он подсказывает, решает правило.
+func TestStatusInfraTouch(t *testing.T) {
+	t.Parallel()
+	status := readFiles(t, repoRoot(t), "scripts/tools/status.sh")
+	for _, tc := range []struct {
+		name string
+		edit func(t *testing.T, repo string)
+		want []string // строки сигнала; пусто — none
+	}{
+		{name: "comment in .env.example", edit: func(t *testing.T, repo string) {
+			writeFiles(t, repo, map[string]string{".env.example": "# переменная FOO — другой комментарий\nFOO=1\n"})
+		}},
+		{name: "variable in .env.example", edit: func(t *testing.T, repo string) {
+			writeFiles(t, repo, map[string]string{".env.example": "# переменная FOO\nFOO=2\n"})
+		}, want: []string{".env.example"}},
+		{name: "image", edit: func(t *testing.T, repo string) {
+			writeFiles(t, repo, map[string]string{"Dockerfile": "FROM scratch\nUSER 65532\n"})
+		}, want: []string{"Dockerfile"}},
+		{name: "config and its test", edit: func(t *testing.T, repo string) {
+			writeFiles(t, repo, map[string]string{"internal/platform/config/config.go": "package config\n\nvar A = 2\n"})
+		}, want: []string{"internal/platform/config/config.go"}},
+		{name: "config test only", edit: func(t *testing.T, repo string) {
+			writeFiles(t, repo, map[string]string{"internal/platform/config/config_test.go": "package config\n\nvar B = 2\n"})
+		}},
+		{name: "unreleased migration", edit: func(t *testing.T, repo string) {
+			writeFiles(t, repo, map[string]string{"migrations/0002_b.up.sql": "CREATE TABLE b (id int, name text);\n"})
+		}},
+		{name: "released migration", edit: func(t *testing.T, repo string) {
+			writeFiles(t, repo, map[string]string{"migrations/0001_a.up.sql": "CREATE TABLE a (id bigint);\n"})
+		}, want: []string{"migrations/0001_a.up.sql (выпущена: v0.1.0)"}},
+		{name: "released migration renamed", edit: func(t *testing.T, repo string) {
+			git(t, repo, "mv", "migrations/0001_a.up.sql", "migrations/0003_a.up.sql")
+		}, want: []string{"migrations/0001_a.up.sql (выпущена: v0.1.0)"}},
+		{name: "new migration with effect", edit: func(t *testing.T, repo string) {
+			writeFiles(t, repo, map[string]string{"migrations/0003_c.up.sql": "-- infra-handoff: backfill\nUPDATE a SET id = id;\n"})
+		}, want: []string{"migrations/0003_c.up.sql"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			writeFiles(t, repo, status)
+			writeFiles(t, repo, map[string]string{
+				".env.example":                            "# переменная FOO\nFOO=1\n",
+				"Dockerfile":                              "FROM scratch\n",
+				"internal/platform/config/config.go":      "package config\n\nvar A = 1\n",
+				"internal/platform/config/config_test.go": "package config\n\nvar B = 1\n",
+				"migrations/0001_a.up.sql":                "CREATE TABLE a (id int);\n",
+				"migrations/0001_a.down.sql":              "DROP TABLE a;\n",
+			})
+			git(t, repo, "init", "-q")
+			commitAll(t, repo)
+			git(t, repo, "tag", "-a", "v0.1.0", "-m", "release v0.1.0")
+			writeFiles(t, repo, map[string]string{"migrations/0002_b.up.sql": "CREATE TABLE b (id int);\n", "migrations/0002_b.down.sql": "DROP TABLE b;\n"})
+			commitAll(t, repo)
+			tc.edit(t, repo)
+			out, err := runIn(t, repo, "bash", "scripts/tools/status.sh")
+			require.NoError(t, err, out)
+			_, section, _ := strings.Cut(out, "== Infra-touch ==\n")
+			section, _, _ = strings.Cut(section, "\n\n")
+			if len(tc.want) == 0 {
+				require.Equal(t, "none", section)
+				return
+			}
+			var hits []string
+			for line := range strings.Lines(section) {
+				if hit, ok := strings.CutPrefix(strings.TrimRight(line, "\n"), "  "); ok {
+					hits = append(hits, hit)
+				}
+			}
+			require.Equal(t, tc.want, hits, section)
+		})
+	}
+}

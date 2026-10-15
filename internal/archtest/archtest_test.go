@@ -20,8 +20,9 @@
 //     генераторов), TestBuildConstraints (ограничение сборки — только integration у тестов),
 //     TestLinterDirectives (директив линтеров мимо //nolint нет);
 //   - harness_test.go — TestDomainsAreWired (домены подключены в cmd/api), TestProseReferencesExist (ссылки прозы
-//     на make-цели, пути и тесты), TestRulesAndSkillsLoad (доставка правил и скиллов: paths:, name:, шаг 0),
-//     TestNolintNamesEnabledLinters и TestNolintNames (//nolint — только включённых линтеров);
+//     на make-цели, пути, тесты, разделы и ссылки, факты гейта), TestRulesAndSkillsLoad (доставка правил и
+//     скиллов: шапка, paths:, name:, шаг 0), TestNolintNamesEnabledLinters и TestNolintNames (//nolint — только
+//     включённых линтеров), TestStatusInfraTouch (сигнал infra-touch make status);
 //   - template_test.go — TestTemplatePaths, TestTemplateUpdate, TestTemplateUpdateFirstBase,
 //     TestTemplateUpdateBeforeVersionTag, TestTemplateUpdatePaths, TestTemplateUpdateRemote (пути и версия
 //     обвязки .template, её перенос в форк make template-update), TestNoConflictMarkers и TestConflictMarkers;

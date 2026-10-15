@@ -1,6 +1,6 @@
 ---
 name: infra-handoff
-description: Оформить INFRA-HANDOFF-блок для хаба `<org>/infra`, когда изменение требует действия инфра-стороны — новый/изменённый required env или секрет, миграция с эффектом (destructive/lock/backfill/extension), cross-service subject или breaking API, новая runtime-зависимость в go.mod. Используй, когда правишь такие файлы (env/config/migrations/events/delivery-nats/cmd-api/go.mod), когда `make status` показал `== Infra-touch ==`, или юзер спрашивает, что из изменения нужно передать в инфру.
+description: Оформить INFRA-HANDOFF-блок для хаба `<org>/infra`, когда изменение требует действия инфра-стороны — новый/изменённый required env или секрет, миграция с эффектом (destructive/lock/backfill/extension), cross-service subject или breaking API, контракт образа (Dockerfile), новая runtime-зависимость в go.mod. Используй, когда правишь такие файлы (env/config/migrations/events/delivery-nats/cmd-api/go.mod/Dockerfile), когда `make status` показал `== Infra-touch ==`, или юзер спрашивает, что из изменения нужно передать в инфру.
 ---
 
 # Skill: infra-handoff
@@ -12,7 +12,7 @@ description: Оформить INFRA-HANDOFF-блок для хаба `<org>/infr
 ## Когда применять
 
 - `make status` → `== Infra-touch ==` не `none` (cockpit чейнит сюда)
-- Правишь: `.env.example*`, `internal/platform/config/**`, `migrations/**` или источники миграций в `cmd/migrate/**` (destructive/lock/backfill/extension), `**/events.go` или `**/delivery/nats/**` (cross-service subject), новый сетевой порт в `cmd/api/**`, `go.mod` (новая runtime-зависимость)
+- Правишь файл под `paths:` правила `infra-impact` — его таблица решает, инфра-изменение ли это
 - Юзер спрашивает, задевает ли изменение инфру или нужен ли новый секрет
 
 ## Когда НЕ применять
@@ -25,7 +25,7 @@ description: Оформить INFRA-HANDOFF-блок для хаба `<org>/infr
 
 ### 1. Классифицировать изменение
 
-Определи класс (см. таблицу в `.claude/rules/infra-impact.md`): env/секреты · миграция-с-эффектом · cross-service контракт · runtime-deps/ёмкость. Если ни один — это не инфра-изменение, выходи.
+Определи класс по таблице `.claude/rules/infra-impact.md`. Если ни один — это не инфра-изменение, выходи.
 
 ### 2. Определить действие инфра-стороны
 

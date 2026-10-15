@@ -249,8 +249,8 @@ stable`. **Скилл не повышает сам.**
    - **Онбординг** (пришёл из `/init-service`): 8/8 stable → дальше
      `/de-template`.
    - **Отдельно** (стек уже жил, поменялся): артефакты теперь актуальный
-     source of truth; если правка задевает инфра-поверхность (env /
-     секрет / NATS subject / runtime-dep) — оформи через `/infra-handoff`
+     source of truth; если правка задевает инфра-поверхность (таблица
+     rule `infra-impact`) — оформи через `/infra-handoff`
      для хаба `<org>/infra`.
 
 ## Запреты

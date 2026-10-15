@@ -103,9 +103,13 @@ blocked-by: —
   - Сделано: RED — новые случаи `TestCommitMsgHook` против хука S4: `chore(template)` без `Review:` принят, во время
     `cherry-pick` и `rebase` подсказки нет (`N/s7h/s5-red-commitmsg.log`); GREEN; job в `module/` — `TestLayout`
     зелёный (проба); `make check` → `✓ check clean`
-- [ ] **S6** — Инфра-поверхность: `Dockerfile*` в правиле и сигнале, список поверхности — в одном месте, сигнал
+- [x] **S6** — Инфра-поверхность: `Dockerfile*` в правиле и сигнале, список поверхности — в одном месте, сигнал
   `make status` по существу (RHAR-07, RENF-12, T10)
   - Проверка: сценарии AC4; `make check` → `✓ check clean` · Закрывает: AC4 · Зависит от: S5
+  - Сделано: RED — `TestStatusInfraTouch` против `status.sh` базы: 6 из 9 сценариев (шум на комментарии,
+    невыпущенной миграции и тесте; тишина на образе и переименовании) — `N/s7h/s6-red.log`; GREEN; сценарии на
+    настоящем дереве (`N/s7h/bin/exp-ac4.py`, `N/s7h/exp-ac4-{base,branch}.log`): база — 4 ошибки, ветка — все
+    верны; `make check` → `✓ check clean`
 - [ ] **S7** — Объём и акценты: `stack-deep-dive` без дублей, ячейки `contributing.md` списком, акценты прозы;
   `domain-mapping.md:80` (RHAR-10, HAR-12)
   - Проверка: счёт AC6; `make check` → `✓ check clean` · Закрывает: AC6 · Зависит от: S6
@@ -159,6 +163,13 @@ blocked-by: —
 - RHAR-12: allow `Bash(scripts/tools/*)` снят из `.claude/settings.json` (не мой файл, одна строка: разрешал то,
   что проза запрещает); `env-local` — агент в файл не пишет; ритм scaffold — тест слоя до его кода; дубль
   «Conventional Commits, make <verb>» снят из § Делать всегда.
+- RENF-12, T10, RHAR-07: сигнал `make status` — подсказка, перечень — таблица правила `infra-impact` (единственный,
+  остальные места на него ссылаются); шире `INFRA_RE` не стал: `openapi.json`, `cmd/api`, `delivery/nats` меняет
+  каждый новый домен — шум. Образ (`Dockerfile*`) — класс таблицы и `paths:` правила; `.env.example` — строка
+  переменной, не комментарий; миграция выпущена, если есть в последнем теге релиза или обвязки, предке HEAD
+  (у форка теги шаблона — не предки: считаются его релизы); переименование — оба имени; тесты — не инфра.
+  `TestStatusInfraTouch` — новый тест в `harness_test.go`, строка в перечне комментария пакета
+  `archtest_test.go` (не мой файл).
 - RLIF-11: `release.sh` в конце называет `git push origin main vX.Y.Z`, `/release` — шаг 3, `release.md` — строка.
 - Сломанные шапки: второй разбор Claude Code берёт в кавычки и закрытый flow-список, который YAML не разбирает
   (`[**/*.go]` — glob-класс одного символа, правило не грузится никогда); шапка, которую клиент не разобрал ни
@@ -182,6 +193,6 @@ blocked-by: —
 - Черновик аннотации `template/v1.2.0` — `N/annotation-template-v1.2.0.md` (S8 программы).
 
 ## Где мы сейчас
-S5 закрыт: маршрут, след ревью, перенос чужого коммита, флак вне диффа, релиз без TTY и push тега. Дальше — S6:
-инфра-поверхность и `make status` (RHAR-07, RENF-12, T10). Experiment-worktree `N/wt-s7h-base` (`1428558`) и
+S6 закрыт: сигнал infra-touch по существу, образ — в инфра-поверхности. Дальше — S7: объём и акценты прозы
+(RHAR-10, HAR-12), `domain-mapping.md:80`. Experiment-worktree `N/wt-s7h-base` (`1428558`) и
 `N/wt-s7h-br` — снять в конце трека.

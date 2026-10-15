@@ -122,17 +122,32 @@ fi
 echo
 
 # === Infra-touch === (незакоммиченный diff по инфра-поверхности → infra-handoff)
-# Сигнал без шума: новый домен (таблица, wiring в cmd/, подписчик) инфре ничего не задаёт. Env,
-# конфиг, go.mod и события — всегда; новая миграция — с эффектом для выкатки: маркер
-# `-- infra-handoff:` (rule sqlc-and-migrations) или новое расширение; правка закоммиченной — всегда.
+# Сигнал уже правила infra-impact: он ловит то, что видно по файлам без шума, решает правило. Новый домен
+# (таблица, wiring в cmd/, подписчик, операция) инфре ничего не задаёт. Всегда — конфиг, go.mod, события, образ;
+# .env.example — правка строки переменной, а не комментария; миграция — новая с эффектом для выкатки (маркер
+# `-- infra-handoff:`, rule sqlc-and-migrations, или расширение) и правка выпущенной: она есть в последнем теге
+# релиза или обвязки шаблона, предке HEAD. Тесты инфре ничего не задают.
 echo "== Infra-touch =="
-INFRA_RE='(^|/)\.env\.example|^internal/platform/config/|/events\.go$|^go\.mod$'
-# -uall: файлы внутри новых каталогов по одному; $NF — новый путь у переименования.
-CHANGED=$(git status --porcelain -uall 2>/dev/null | awk '{print $NF}')
+INFRA_RE='^internal/platform/config/|/events\.go$|^go\.mod$|^Dockerfile'
+# Против HEAD: правка, удаление и оба имени переименования; новые файлы — по одному.
+CHANGED=$({ git diff --name-only --no-renames HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } |
+    sort -u | grep -v '_test\.go$' || true)
 INFRA_HITS=$(grep -E "$INFRA_RE" <<<"$CHANGED" || true)
+if grep -qx '\.env\.example' <<<"$CHANGED" && { ! git cat-file -e HEAD:.env.example 2>/dev/null ||
+    git diff -U0 HEAD -- .env.example | grep -qE '^[+-][A-Z_][A-Z0-9_]*='; }; then
+    INFRA_HITS+=$'\n.env.example'
+fi
+released=()
+for match in 'v[0-9]*' 'template/v*'; do
+    tag=$(git describe --tags --abbrev=0 --match "$match" HEAD 2>/dev/null) && released+=("$tag")
+done
 for f in $(grep -E '^migrations/.*\.sql$' <<<"$CHANGED" || true); do
-    if git cat-file -e "HEAD:$f" 2>/dev/null; then
-        INFRA_HITS+=$'\n'"$f"
+    in=""
+    for tag in "${released[@]}"; do
+        if git cat-file -e "$tag:$f" 2>/dev/null; then in=$tag && break; fi
+    done
+    if [ -n "$in" ]; then
+        INFRA_HITS+=$'\n'"$f (выпущена: $in)"
     elif [ -f "$f" ] && grep -qiE '^[[:space:]]*--[[:space:]]*infra-handoff:|create[[:space:]]+extension' "$f"; then
         INFRA_HITS+=$'\n'"$f"
     fi

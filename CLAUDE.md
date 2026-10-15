@@ -123,11 +123,10 @@ mockery и `openapi.json` (контракт API из регистраций huma
 ## Границы
 
 ### Делать всегда
-- **Тронул инфра-поверхность** (required env или секрет; миграция с эффектом — destructive, lock,
-  backfill, extension; cross-service subject; breaking API; новый сетевой порт; runtime-dep в
-  `go.mod`) → до коммита INFRA-HANDOFF-блок: в отчёт хабу (прямой заход — юзеру, чтобы
-  передал) и тем же коммитом в накопитель `.claude/plans/handoff.md` (rule `infra-impact`, skill
-  `/infra-handoff`).
+- **Тронул инфра-поверхность** (таблица rule `infra-impact`: required env или секрет; миграция с эффектом —
+  destructive, lock, backfill, extension; cross-service subject; breaking API; контракт образа; новый сетевой
+  порт; runtime-dep в `go.mod`) → до коммита INFRA-HANDOFF-блок: в отчёт хабу (прямой заход — юзеру, чтобы
+  передал) и тем же коммитом в накопитель `.claude/plans/handoff.md` (skill `/infra-handoff`).
 - `make gen` после правки `queries/`, `migrations/`, интерфейсов из `.mockery.yml` или HTTP-операций.
 
 ### Сначала спросить

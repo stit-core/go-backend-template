@@ -1,6 +1,6 @@
 ---
 name: infra-impact
-description: Изменение инфра-поверхности (env/секрет/миграция-с-эффектом/cross-service-контракт/runtime-deps/go.mod) порождает INFRA-HANDOFF-блок для хаба `<org>/infra` до claim «готово»/коммита. Грузится при правке env/config/migrations/events/delivery-nats/cmd-api/go.mod.
+description: Изменение инфра-поверхности (env/секрет/миграция-с-эффектом/cross-service-контракт/контракт образа/runtime-deps/go.mod) порождает INFRA-HANDOFF-блок для хаба `<org>/infra` до claim «готово»/коммита. Грузится при правке env/config/migrations/events/delivery-nats/cmd-api/cmd-migrate/go.mod/Dockerfile.
 paths:
   - ".env.example"
   - "internal/platform/config/**"
@@ -10,6 +10,7 @@ paths:
   - "cmd/api/**"
   - "cmd/migrate/**"
   - "go.mod"
+  - "Dockerfile*"
 ---
 
 # Infra-impact
@@ -32,10 +33,12 @@ migrations-check — rule `sqlc-and-migrations`) без строки `-- infra-h
 | **Env/секреты** | новый/изменённый required env-var, читаемый приложением; новый required секрет-env (JWT/OIDC-класс) | проект (compose env / `.env`, значение не коммитим) |
 | **Миграция-с-эффектом** | destructive / долгий lock / data-backfill / новое PG-расширение | проект (downtime/порядок выкатки) |
 | **Cross-service контракт** | новый/изменённый NATS/outbox-subject для других сервисов; breaking API/схема | проект + потребители |
+| **Контракт образа** | `Dockerfile*`: база, пользователь (`USER`), точка входа и проверка здоровья, открытый порт, вшитые файлы | проект (compose: healthcheck, тома и их права, порт) |
 | **Runtime-deps/ёмкость** | новая внешняя зависимость (Redis/S3/NATS-фича); новый сетевой порт (listener); изменённые CPU/RAM/replicas/connpool | проект |
 
 Не-инфра: внутренняя логика, тесты, рефактор без смены env/контракта/зависимостей, code-default
-тюнинг без нового обязательного ENV.
+тюнинг без нового обязательного ENV. Эта таблица — единственный перечень инфра-поверхности: CLAUDE.md, скиллы и
+доки на неё ссылаются.
 
 ## Куда кладётся (чтобы доехало до релиза)
 
@@ -55,6 +58,8 @@ migrations-check — rule `sqlc-and-migrations`) без строки `-- infra-h
 
 ## Сигналы, что ты здесь
 
-- `make status` → `== Infra-touch ==` не `none` (cockpit чейнит сюда).
+- `make status` → `== Infra-touch ==` не `none` (cockpit чейнит сюда). Сигнал уже таблицы: он ловит то, что
+  видно по файлам без шума, — `.env.example` (строка переменной), конфиг, `go.mod`, события, `Dockerfile*` и
+  миграции с эффектом или выпущенные; остальное — по классу изменения.
 - Правишь файл под `paths:` этого правила (оно само в контексте).
 - `make release` напомнил, что накопитель пуст при инфра-изменениях.
