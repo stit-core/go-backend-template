@@ -389,7 +389,7 @@ func TestRulesAndSkillsLoad(t *testing.T) {
 		}
 		data, err := os.ReadFile(filepath.Join(root, f))
 		require.NoError(t, err)
-		text := string(data)
+		text := strings.ReplaceAll(string(data), "\r\n", "\n") // CRLF Claude Code читает так же
 		head := frontmatter(text)
 		switch {
 		case rule:
