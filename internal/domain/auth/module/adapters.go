@@ -8,7 +8,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 )
 
-// userAdapter — порты auth к домену user (UserReader, PasswordVerifier, PasswordSetter).
+// userAdapter — порты auth к домену user (UserReader, PasswordSetter).
 type userAdapter struct {
 	users *user.Trusted
 }
@@ -39,9 +39,9 @@ func (a *userAdapter) GetByEmail(ctx context.Context, email string) (*auth.User,
 	return userToAuth(u), nil
 }
 
-func (a *userAdapter) VerifyPassword(ctx context.Context, userID, plain string) (bool, error) {
-	ok, err := a.users.VerifyPassword(ctx, userID, plain)
-	return ok, mapUserErr(err)
+func (a *userAdapter) HashPassword(ctx context.Context, plain string) (string, error) {
+	hash, err := a.users.HashPassword(ctx, plain)
+	return hash, mapUserErr(err)
 }
 
 func (a *userAdapter) UpdatePassword(ctx context.Context, userID, hash string, version int) error {
@@ -55,6 +55,10 @@ func mapUserErr(err error) error {
 		return auth.ErrUserNotFound
 	case errors.Is(err, user.ErrConcurrentUpdate):
 		return auth.ErrConcurrentUpdate
+	case errors.Is(err, user.ErrWeakPassword):
+		return auth.ErrWeakPassword
+	case errors.Is(err, user.ErrPasswordTooLong):
+		return auth.ErrPasswordTooLong
 	}
 	return err
 }

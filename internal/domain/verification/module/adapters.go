@@ -31,6 +31,11 @@ func (a *userAdapter) GetByEmail(ctx context.Context, email string) (*verificati
 	return userToVerification(u), nil
 }
 
+func (a *userAdapter) HashPassword(ctx context.Context, plain string) (string, error) {
+	hash, err := a.users.HashPassword(ctx, plain)
+	return hash, mapUserErr(err)
+}
+
 func (a *userAdapter) UpdatePassword(ctx context.Context, userID, hash string, version int) error {
 	return mapUserErr(a.users.UpdatePassword(ctx, userID, hash, version))
 }
@@ -47,6 +52,10 @@ func mapUserErr(err error) error {
 		return verification.ErrUserNotFound
 	case errors.Is(err, user.ErrConcurrentUpdate):
 		return verification.ErrConcurrentUpdate
+	case errors.Is(err, user.ErrWeakPassword):
+		return verification.ErrWeakPassword
+	case errors.Is(err, user.ErrPasswordTooLong):
+		return verification.ErrPasswordTooLong
 	}
 	return err
 }

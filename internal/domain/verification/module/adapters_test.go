@@ -3,11 +3,13 @@
 package module
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -16,6 +18,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	usermocks "git.stit.tech/stit-core/go-backend-template/internal/domain/user/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 )
@@ -85,6 +88,8 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 	translated := map[error]error{
 		user.ErrNotFound:         verification.ErrUserNotFound,
 		user.ErrConcurrentUpdate: verification.ErrConcurrentUpdate,
+		user.ErrWeakPassword:     verification.ErrWeakPassword,
+		user.ErrPasswordTooLong:  verification.ErrPasswordTooLong,
 	}
 	infra := errors.New("db down")
 	type call func(a *userAdapter, repo *usermocks.MockRepository, err error) error
@@ -101,6 +106,15 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 		"GetByEmail": {"LookupByEmail", func(a *userAdapter, repo *usermocks.MockRepository, err error) error {
 			repo.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(nil, err).Once()
 			_, got := a.GetByEmail(context.Background(), "a@b.com")
+			return got
+		}},
+		// Исходы HashPassword — от пароля и хэшера: сбой (infra) — у адаптера с отказом хэшера.
+		"HashPassword": {"HashPassword", func(a *userAdapter, _ *usermocks.MockRepository, err error) error {
+			plain := map[error]string{user.ErrWeakPassword: "short", user.ErrPasswordTooLong: strings.Repeat("я", authnkit.MaxPasswordLen)}
+			if _, input := plain[err]; !input {
+				a = newUserAdapter(user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{HashErr: err}}))
+			}
+			_, got := a.HashPassword(context.Background(), cmp.Or(plain[err], "longenough"))
 			return got
 		}},
 		"UpdatePassword": {"UpdatePassword", func(a *userAdapter, repo *usermocks.MockRepository, err error) error {
@@ -133,4 +147,14 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 			require.ErrorIs(t, c.call(a, repo, infra), infra, "an infrastructure error passes through")
 		})
 	}
+}
+
+// Хэш нового пароля адаптер отдаёт как есть: правило и хэш — у владельца учётной записи.
+func TestUserAdapter_HashPassword(t *testing.T) {
+	t.Parallel()
+	a := newUserAdapter(user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{}}))
+
+	hash, err := a.HashPassword(context.Background(), "longenough")
+	require.NoError(t, err)
+	require.Equal(t, "hash:longenough", hash)
 }

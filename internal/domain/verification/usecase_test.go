@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
-	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/logtest"
 	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
 	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
@@ -55,7 +53,6 @@ type ucOpts struct {
 	pwSet    *mocks.MockPasswordSetter
 	emailSet *mocks.MockEmailVerificationSetter
 	mailer   *mocks.MockMailer
-	hasher   authnkit.Hasher
 	audit    auditkit.Logger
 	metrics  *verification.Metrics
 }
@@ -72,8 +69,6 @@ func withEmailSet(e *mocks.MockEmailVerificationSetter) ucOption {
 }
 
 func withMailer(m *mocks.MockMailer) ucOption { return func(o *ucOpts) { o.mailer = m } }
-
-func withHasher(h authnkit.Hasher) ucOption { return func(o *ucOpts) { o.hasher = h } }
 
 func withAudit(a auditkit.Logger) ucOption { return func(o *ucOpts) { o.audit = a } }
 
@@ -96,7 +91,6 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		pwSet:    mocks.NewMockPasswordSetter(t),
 		emailSet: mocks.NewMockEmailVerificationSetter(t),
 		mailer:   mocks.NewMockMailer(t),
-		hasher:   &authntest.DeterministicHasher{},
 	}
 	for _, fn := range opts {
 		fn(o)
@@ -117,7 +111,6 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Users:         o.users,
 		PasswordSet:   o.pwSet,
 		EmailVerifier: o.emailSet,
-		Hasher:        o.hasher,
 		Tx:            tx,
 		Events:        o.events,
 		Mailer:        o.mailer,
@@ -550,6 +543,18 @@ func resetToken(t *testing.T, pr *verification.PasswordResetToken, err error) *m
 	return repo
 }
 
+// newPassword — хэш нового пароля у владельца учётной записи: plain → "hash:"+plain или отказ err.
+func newPassword(t *testing.T, plain string, err error) *mocks.MockPasswordSetter {
+	t.Helper()
+	pwSet := mocks.NewMockPasswordSetter(t)
+	hash := ""
+	if err == nil {
+		hash = "hash:" + plain
+	}
+	pwSet.EXPECT().HashPassword(mock.Anything, plain).Return(hash, err).Once()
+	return pwSet
+}
+
 // pendingReset — непогашенная ссылка rid пользователя u1, выпущенная при его версии 3.
 func pendingReset(expiresAt time.Time) *verification.PasswordResetToken {
 	return &verification.PasswordResetToken{ID: "rid", UserID: "u1", UserVersion: 3, ExpiresAt: expiresAt}
@@ -561,7 +566,7 @@ func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
 	repo := resetToken(t, pendingReset(fixedNow), nil)
 	claim := repo.EXPECT().RedeemPasswordReset(mock.MatchedBy(pgkit.InTx), "rid", "u1").Return(nil).Once()
-	pwSet := mocks.NewMockPasswordSetter(t)
+	pwSet := newPassword(t, "newpassword123", nil)
 	pwSet.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(claim)
 	f := newUC(t, withRepo(repo), withPwSet(pwSet))
 
@@ -570,21 +575,24 @@ func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	require.Equal(t, audited("password_reset_confirmed"), f.audit.Last("password_reset_confirmed"))
 }
 
-// Отказ до транзакции: ни погашения, ни пароля, ни аудита.
+// Отказ до транзакции: ни погашения, ни пароля, ни аудита. Правило нового пароля — у владельца учётной записи:
+// его отказ доходит ошибкой verification после проверки ссылки.
 func TestConfirmPasswordReset_Rejected(t *testing.T) {
 	t.Parallel()
 	usedAt := fixedNow.Add(-time.Minute)
+	refused := func(plain string, err error) func(t *testing.T) []ucOption {
+		return func(t *testing.T) []ucOption {
+			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withPwSet(newPassword(t, plain, err))}
+		}
+	}
 	tests := []struct {
 		name     string
 		password string
 		opts     func(t *testing.T) []ucOption
 		want     error
 	}{
-		{"weak password", "short", func(*testing.T) []ucOption { return nil }, verification.ErrWeakPassword},
-		// Предел хэшера — в байтах: 1024 символа не из ASCII схема пропускает; токен не гасится.
-		{"new password over the hasher limit", strings.Repeat("я", authnkit.MaxPasswordLen), func(t *testing.T) []ucOption {
-			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil))}
-		}, verification.ErrPasswordTooLong},
+		{"weak password", "short", refused("short", verification.ErrWeakPassword), verification.ErrWeakPassword},
+		{"new password over the hasher limit", "long", refused("long", verification.ErrPasswordTooLong), verification.ErrPasswordTooLong},
 		{"unknown token", "newpassword123", func(t *testing.T) []ucOption {
 			return []ucOption{withRepo(resetToken(t, nil, verification.ErrInvalidResetToken))}
 		}, verification.ErrInvalidResetToken},
@@ -596,9 +604,7 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 		{"expired", "newpassword123", func(t *testing.T) []ucOption {
 			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(-time.Nanosecond)), nil))}
 		}, verification.ErrInvalidResetToken},
-		{"new password not hashed", "newpassword123", func(t *testing.T) []ucOption {
-			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withHasher(&authntest.DeterministicHasher{HashErr: errHashing})}
-		}, errHashing},
+		{"new password not hashed", "newpassword123", refused("newpassword123", errHashing), errHashing},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -647,7 +653,7 @@ func TestConfirmPasswordReset_RolledBack(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo := resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)
-			pwSet := mocks.NewMockPasswordSetter(t)
+			pwSet := newPassword(t, "newpassword123", nil)
 			tc.expect(repo, pwSet)
 			f := newUC(t, withRepo(repo), withPwSet(pwSet))
 

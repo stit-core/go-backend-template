@@ -1,6 +1,7 @@
 package user_test
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
@@ -73,29 +74,28 @@ func FuzzTrusted_LookupByEmail(f *testing.F) {
 	})
 }
 
-func TestTrusted_VerifyPassword(t *testing.T) {
+// Хэш нового пароля — по правилу пароля продукта; пароль длиннее предела хэшера — ошибка поля, сбой хэшера — ошибка.
+func TestTrusted_HashPassword(t *testing.T) {
 	t.Parallel()
-	withHash := &user.User{ID: "u1", PasswordHash: "hash:secret-1"}
 	tests := []struct {
-		name    string
-		plain   string
-		found   *user.User
-		repoErr error
-		want    bool
+		name   string
+		plain  string
+		hasher *authntest.DeterministicHasher
+		want   string
+		err    error
 	}{
-		{"match", "secret-1", withHash, nil, true},
-		{"mismatch", "other", withHash, nil, false},
-		{"over the hasher limit: a wrong password, not a failure", strings.Repeat("я", authnkit.MaxPasswordLen), withHash, nil, false},
-		{"unknown user", "secret-1", nil, user.ErrNotFound, false},
+		{name: "strong", plain: "secret-123", hasher: &authntest.DeterministicHasher{}, want: "hash:secret-123"},
+		{name: "weak", plain: "short", hasher: &authntest.DeterministicHasher{}, err: user.ErrWeakPassword},
+		{name: "over the hasher limit", plain: strings.Repeat("я", authnkit.MaxPasswordLen), hasher: &authntest.DeterministicHasher{}, err: user.ErrPasswordTooLong},
+		{name: "hasher failure", plain: "secret-123", hasher: &authntest.DeterministicHasher{HashErr: errHashing}, err: errHashing},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			repo := mocks.NewMockRepository(t)
-			repo.EXPECT().GetByID(mock.Anything, "u1").Return(tc.found, tc.repoErr).Once()
+			tr := user.NewTrusted(user.TrustedDeps{Repo: mocks.NewMockRepository(t), Hasher: tc.hasher, Tx: pgtest.Identity{}, Sessions: mocks.NewMockSessions(t)})
 
-			got, err := newTrusted(t, repo, nil).VerifyPassword(context.Background(), "u1", tc.plain)
-			require.ErrorIs(t, err, tc.repoErr)
+			got, err := tr.HashPassword(context.Background(), tc.plain)
+			require.ErrorIs(t, err, tc.err)
 			require.Equal(t, tc.want, got)
 		})
 	}
@@ -175,9 +175,13 @@ func TestTrusted_ErrorsAreDeclared(t *testing.T) {
 			_, err := tr.LookupByEmail(context.Background(), "a@b.com")
 			return err
 		}},
-		"VerifyPassword": {[]error{user.ErrNotFound}, func(tr *user.Trusted, repo *mocks.MockRepository, _ *mocks.MockSessions, repoErr error) error {
-			repo.EXPECT().GetByID(mock.Anything, "u1").Return(found(repoErr), repoErr).Once()
-			_, err := tr.VerifyPassword(context.Background(), "u1", "secret-1")
+		// Исходы HashPassword — от пароля и хэшера, а не от репозитория.
+		"HashPassword": {[]error{user.ErrWeakPassword, user.ErrPasswordTooLong}, func(tr *user.Trusted, _ *mocks.MockRepository, _ *mocks.MockSessions, outcome error) error {
+			plain := map[error]string{nil: "secret-123", user.ErrWeakPassword: "short", user.ErrPasswordTooLong: strings.Repeat("я", authnkit.MaxPasswordLen)}
+			if _, input := plain[outcome]; !input {
+				tr = user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{HashErr: outcome}})
+			}
+			_, err := tr.HashPassword(context.Background(), cmp.Or(plain[outcome], "secret-123"))
 			return err
 		}},
 		"UpdatePassword": {[]error{user.ErrNotFound, user.ErrConcurrentUpdate}, func(tr *user.Trusted, repo *mocks.MockRepository, sessions *mocks.MockSessions, repoErr error) error {

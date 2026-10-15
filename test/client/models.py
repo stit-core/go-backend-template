@@ -25,7 +25,6 @@ class LoginRequest(Wire):
 
 
 class ChangePasswordRequest(Wire):
-    user_id: str
     old_password: str
     new_password: str
 
@@ -39,7 +38,9 @@ class UserUpdateRequest(Wire):
 class UserView(Wire):
     id: str
     email: str
+    email_verified: bool
     name: str
+    role: str
     status: str
     version: int
     created_at: datetime

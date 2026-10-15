@@ -2,7 +2,6 @@ package user
 
 import (
 	"context"
-	"errors"
 
 	"go.uber.org/fx"
 
@@ -31,7 +30,7 @@ var TrustedErrors = map[string][]error{
 	"LookupByID":        {ErrNotFound},
 	"LockByID":          {ErrNotFound},
 	"LookupByEmail":     {ErrNotFound},
-	"VerifyPassword":    {ErrNotFound},
+	"HashPassword":      {ErrWeakPassword, ErrPasswordTooLong},
 	"UpdatePassword":    {ErrNotFound, ErrConcurrentUpdate},
 	"MarkEmailVerified": {ErrNotFound},
 }
@@ -52,17 +51,10 @@ func (t *Trusted) LookupByEmail(ctx context.Context, email string) (*User, error
 	return t.d.Repo.GetByEmail(ctx, emailKey(email))
 }
 
-func (t *Trusted) VerifyPassword(ctx context.Context, userID, plain string) (bool, error) {
-	u, err := t.d.Repo.GetByID(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	ok, err := t.d.Hasher.Verify(ctx, plain, u.PasswordHash)
-	// Пароль длиннее предела хэшера ни с одним хэшем не совпадает: это неверный пароль, а не сбой.
-	if errors.Is(err, authnkit.ErrPasswordTooLong) {
-		return false, nil
-	}
-	return ok, err
+// HashPassword — хэш нового пароля по правилу пароля продукта: правило и хэш у владельца учётной записи, а запись
+// (UpdatePassword) — в транзакции вызывающего, без хэширования внутри неё.
+func (t *Trusted) HashPassword(ctx context.Context, plain string) (string, error) {
+	return hashPassword(ctx, t.d.Hasher, plain)
 }
 
 // UpdatePassword меняет пароль и той же транзакцией закрывает все сессии пользователя: сессии старого

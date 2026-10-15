@@ -26,20 +26,15 @@ type UserReader interface {
 	LockByID(ctx context.Context, id string) (*User, error)
 }
 
-type PasswordVerifier interface {
-	VerifyPassword(ctx context.Context, userID, plain string) (bool, error)
-}
-
+// PasswordSetter: HashPassword — хэш нового пароля по правилу продукта (ErrWeakPassword, ErrPasswordTooLong),
+// UpdatePassword пишет его при версии учётной записи и закрывает все её сессии.
 type PasswordSetter interface {
+	HashPassword(ctx context.Context, plain string) (string, error)
 	UpdatePassword(ctx context.Context, userID, hash string, version int) error
 }
 
 type Tokens interface {
 	IssueAccess(ctx context.Context, u *User) (string, error)
-}
-
-type Authorizer interface {
-	CanChangePassword(ctx context.Context, caller identity.Identity, targetID string) policy.Decision
 }
 
 // LoginGuard: Attempt учитывает попытку до проверки пароля — неудача отдельной записи не требует;
@@ -52,19 +47,17 @@ type LoginGuard interface {
 type UsecaseDeps struct {
 	fx.In
 
-	Users          UserReader
-	PasswordVerify PasswordVerifier
-	PasswordSet    PasswordSetter
-	Hasher         authnkit.Hasher
-	Tokens         Tokens
-	Sessions       session.Store
-	Tx             pgkit.Transactor
-	Policy         Authorizer
-	Guard          LoginGuard
-	Audit          auditkit.Logger
-	Log            logkit.Logger
-	Clock          clockkit.Clock
-	Metrics        *Metrics
+	Users       UserReader
+	PasswordSet PasswordSetter
+	Hasher      authnkit.Hasher
+	Tokens      Tokens
+	Sessions    session.Store
+	Tx          pgkit.Transactor
+	Guard       LoginGuard
+	Audit       auditkit.Logger
+	Log         logkit.Logger
+	Clock       clockkit.Clock
+	Metrics     *Metrics
 }
 
 type Usecase struct {
@@ -111,11 +104,10 @@ func (uc *Usecase) login(ctx context.Context, in *LoginInput) (*LoginOutput, out
 		uc.auditLoginFailed(ctx, u.ID, resultBlocked)
 		return nil, resultBlocked, ErrInvalidCredentials
 	}
-	ok, err := uc.d.Hasher.Verify(ctx, in.Password, u.PasswordHash)
+	ok, err := uc.passwordMatches(ctx, in.Password, u.PasswordHash)
 	switch {
-	// Пароль длиннее предела хэшера ни с одним хэшем не совпадает: неверный, холостой хэш Verify посчитал сам.
-	case err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong):
-		return nil, outcome.Error, fmt.Errorf("verify password: %w", err)
+	case err != nil:
+		return nil, outcome.Error, err
 	case !ok:
 		uc.auditLoginFailed(ctx, u.ID, resultInvalidLogin)
 		return nil, resultInvalidLogin, ErrInvalidCredentials
@@ -226,23 +218,17 @@ func (uc *Usecase) Logout(ctx context.Context, refreshToken string) error {
 	return nil
 }
 
-func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) error {
+// ChangePassword меняет пароль вызывающего: старый пароль угадывают так же, как при входе, — попытки идут в счётчик
+// входа учётной записи; все её сессии закрывает запись пароля (PasswordSetter.UpdatePassword).
+func (uc *Usecase) ChangePassword(ctx context.Context, oldPassword, newPassword string) error {
 	caller, ok := identity.From(ctx)
 	if !ok {
 		return &policy.ForbiddenError{Reason: "no identity"}
 	}
-	if d := uc.d.Policy.CanChangePassword(ctx, caller, userID); !d.IsAllowed {
-		return &policy.ForbiddenError{Reason: d.Reason}
-	}
-	if !policy.PasswordStrong(newPassword) {
-		return ErrWeakPassword
-	}
-
-	current, err := uc.d.Users.GetByID(ctx, userID)
+	current, err := uc.d.Users.GetByID(ctx, caller.UserID)
 	if err != nil {
 		return fmt.Errorf("load user: %w", err)
 	}
-	// Старый пароль угадывают так же, как при входе: попытки идут в счётчик входа учётной записи.
 	ip := identity.IPFrom(ctx)
 	lock, err := uc.d.Guard.Attempt(ctx, current.Email, ip)
 	switch {
@@ -251,29 +237,37 @@ func (uc *Usecase) ChangePassword(ctx context.Context, userID, oldPassword, newP
 	case lock != nil:
 		return &LockedError{Wait: lock.RetryAfter}
 	}
-	verified, err := uc.d.PasswordVerify.VerifyPassword(ctx, userID, oldPassword)
-	if err != nil {
-		return fmt.Errorf("verify old password: %w", err)
-	}
-	if !verified {
+	matches, err := uc.passwordMatches(ctx, oldPassword, current.PasswordHash)
+	switch {
+	case err != nil:
+		return err
+	case !matches:
 		return ErrWrongOldPassword
 	}
 	if err := uc.d.Guard.RecordSuccess(ctx, current.Email, ip); err != nil {
 		uc.d.Log.Error(ctx, "guard record success", "error", err)
 	}
 
-	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
-	switch {
-	case errors.Is(err, authnkit.ErrPasswordTooLong):
-		return ErrPasswordTooLong
-	case err != nil:
-		return fmt.Errorf("hash new password: %w", err)
-	}
-	if err := uc.d.PasswordSet.UpdatePassword(ctx, userID, hash, current.Version); err != nil {
+	hash, err := uc.d.PasswordSet.HashPassword(ctx, newPassword)
+	if err != nil {
 		return err
 	}
-	uc.audit(ctx, auditkit.Entry{ActorID: caller.UserID, Action: "change_password", Resource: "user", ResourceID: userID})
+	if err := uc.d.PasswordSet.UpdatePassword(ctx, current.ID, hash, current.Version); err != nil {
+		return err
+	}
+	uc.d.Log.Info(ctx, "password changed", "user_id", current.ID)
+	uc.audit(ctx, auditkit.Entry{ActorID: current.ID, Action: "change_password", Resource: "user", ResourceID: current.ID})
 	return nil
+}
+
+// passwordMatches: пароль длиннее предела хэшера ни с одним хэшем не совпадает — неверный (холостой хэш Verify
+// посчитал сам), прочий сбой хэшера — ошибка, а не неверный пароль.
+func (uc *Usecase) passwordMatches(ctx context.Context, plain, hash string) (bool, error) {
+	ok, err := uc.d.Hasher.Verify(ctx, plain, hash)
+	if err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong) {
+		return false, fmt.Errorf("verify password: %w", err)
+	}
+	return ok && err == nil, nil
 }
 
 // audit дописывает время (IP клиента и ID запроса auditkit берёт из ctx); сбой записи аудита операцию не

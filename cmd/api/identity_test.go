@@ -601,7 +601,7 @@ func TestSessions(t *testing.T) {
 		}
 		t.Cleanup(restore)
 		status, _, _ := api.call(http.MethodPost, "/api/auth/change-password",
-			`{"user_id":"`+frankID+`","old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, c)
+			`{"old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, c)
 		restore()
 		require.Equal(t, http.StatusInternalServerError, status)
 
@@ -634,7 +634,7 @@ func TestSessions(t *testing.T) {
 		before := openSessions(t, db, aliceID)
 		change := func(oldPassword, newPassword string) (int, string) {
 			status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
-				`{"user_id":"`+aliceID+`","old_password":"`+oldPassword+`","new_password":"`+newPassword+`"}`, c)
+				`{"old_password":"`+oldPassword+`","new_password":"`+newPassword+`"}`, c)
 			return status, errorCode(t, body)
 		}
 		status, code := change(sessionPassword, overLimit)
@@ -652,7 +652,7 @@ func TestSessions(t *testing.T) {
 	t.Run("password change closes every session", func(t *testing.T) {
 		first, second := api.login(alice, sessionPassword), api.login(alice, sessionPassword)
 		status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
-			`{"user_id":"`+aliceID+`","old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, first)
+			`{"old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, first)
 		require.Equal(t, http.StatusNoContent, status, "change password: %s", body)
 
 		for _, c := range []map[string]string{first, second} {
@@ -683,7 +683,7 @@ func TestSessions(t *testing.T) {
 	// Ссылка сброса действует, пока учётная запись не менялась после письма: смена пароля её гасит.
 	t.Run("a reset link mailed before a password change does not change the password", func(t *testing.T) {
 		const grace = "grace@example.com"
-		graceID := api.register(grace)
+		api.register(grace)
 		mailed, _ := mail.sent()
 		status, _, _ := api.call(http.MethodPost, "/api/auth/password-reset/request", `{"email":"`+grace+`"}`, nil)
 		require.Equal(t, http.StatusNoContent, status)
@@ -692,7 +692,7 @@ func TestSessions(t *testing.T) {
 			15*time.Second, 100*time.Millisecond, "the subscriber of the request mails the reset")
 		c := api.login(grace, sessionPassword)
 		status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
-			`{"user_id":"`+graceID+`","old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, c)
+			`{"old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, c)
 		require.Equal(t, http.StatusNoContent, status, "change password: %s", body)
 
 		status, body, _ = api.call(http.MethodPost, "/api/auth/password-reset/confirm",
@@ -811,7 +811,7 @@ func TestSessions_LoginDuringPasswordChange(t *testing.T) {
 	}
 	time.Sleep(500 * time.Millisecond)
 	status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
-		`{"user_id":"`+id+`","old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, victim)
+		`{"old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, victim)
 	changed.Store(true)
 	require.Equal(t, http.StatusNoContent, status, "change password: %s", body)
 	time.Sleep(1500 * time.Millisecond)

@@ -68,7 +68,6 @@ type ucFixture struct {
 
 type ucOpts struct {
 	users    *mocks.MockUserReader
-	verify   *mocks.MockPasswordVerifier
 	setpw    *mocks.MockPasswordSetter
 	guard    *mocks.MockLoginGuard
 	tokens   auth.Tokens
@@ -80,10 +79,9 @@ type ucOpts struct {
 
 type ucOption func(*ucOpts)
 
-func withUsers(u *mocks.MockUserReader) ucOption          { return func(o *ucOpts) { o.users = u } }
-func withVerifier(v *mocks.MockPasswordVerifier) ucOption { return func(o *ucOpts) { o.verify = v } }
-func withSetter(s *mocks.MockPasswordSetter) ucOption     { return func(o *ucOpts) { o.setpw = s } }
-func withGuard(g *mocks.MockLoginGuard) ucOption          { return func(o *ucOpts) { o.guard = g } }
+func withUsers(u *mocks.MockUserReader) ucOption      { return func(o *ucOpts) { o.users = u } }
+func withSetter(s *mocks.MockPasswordSetter) ucOption { return func(o *ucOpts) { o.setpw = s } }
+func withGuard(g *mocks.MockLoginGuard) ucOption      { return func(o *ucOpts) { o.guard = g } }
 
 func withTokens(tk auth.Tokens) ucOption    { return func(o *ucOpts) { o.tokens = tk } }
 func withHasher(h authnkit.Hasher) ucOption { return func(o *ucOpts) { o.hasher = h } }
@@ -95,14 +93,12 @@ func withSessions(wrap func(session.Store) session.Store) ucOption {
 	return func(o *ucOpts) { o.sessions = wrap }
 }
 
-// newUC — usecase на строгих моках портов без ожиданий (вызов, которого кейс не ждёт, — провал), настоящей
-// policy и фейке хранилища сессий кита (sessiontest) с часами фикстуры: время сессий двигает кейс
-// (f.clock.Advance).
+// newUC — usecase на строгих моках портов без ожиданий (вызов, которого кейс не ждёт, — провал) и фейке хранилища
+// сессий кита (sessiontest) с часами фикстуры: время сессий двигает кейс (f.clock.Advance).
 func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	t.Helper()
 	o := &ucOpts{
 		users:  mocks.NewMockUserReader(t),
-		verify: mocks.NewMockPasswordVerifier(t),
 		setpw:  mocks.NewMockPasswordSetter(t),
 		guard:  mocks.NewMockLoginGuard(t),
 		tokens: tokens{},
@@ -124,19 +120,17 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 	}
 
 	uc := auth.NewUsecase(auth.UsecaseDeps{
-		Users:          o.users,
-		PasswordVerify: o.verify,
-		PasswordSet:    o.setpw,
-		Hasher:         o.hasher,
-		Tokens:         o.tokens,
-		Sessions:       issueInTx{Store: sessions, t: t},
-		Tx:             pgtest.Identity{},
-		Policy:         auth.NewPolicy(),
-		Guard:          o.guard,
-		Audit:          o.audit,
-		Log:            log,
-		Clock:          clock,
-		Metrics:        o.metrics,
+		Users:       o.users,
+		PasswordSet: o.setpw,
+		Hasher:      o.hasher,
+		Tokens:      o.tokens,
+		Sessions:    issueInTx{Store: sessions, t: t},
+		Tx:          pgtest.Identity{},
+		Guard:       o.guard,
+		Audit:       o.audit,
+		Log:         log,
+		Clock:       clock,
+		Metrics:     o.metrics,
 	})
 	return ucFixture{uc: uc, sessions: fake, clock: clock, audit: aud, log: log}
 }
@@ -719,138 +713,115 @@ func TestLogout_StoreFailure(t *testing.T) {
 	require.Empty(t, f.log.Entries(), "the failure goes to the caller: neither a log record nor a refused audit entry")
 }
 
-// pwUser отдаёт учётную запись u1 для смены пароля ровно один раз.
+// pwUser отдаёт учётную запись u1 с паролем «old» для смены пароля ровно один раз.
 func pwUser(t *testing.T) *mocks.MockUserReader {
 	t.Helper()
 	users := mocks.NewMockUserReader(t)
-	users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", Email: "a@b.com", Version: 7}, nil).Once()
+	users.EXPECT().GetByID(mock.Anything, "u1").Return(&auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:old", Version: 7}, nil).Once()
 	return users
 }
 
-// oldPassword — проверка старого пароля u1: верен ли "old".
-func oldPassword(t *testing.T, ok bool, err error) *mocks.MockPasswordVerifier {
-	t.Helper()
-	verify := mocks.NewMockPasswordVerifier(t)
-	verify.EXPECT().VerifyPassword(mock.Anything, "u1", "old").Return(ok, err).Once()
-	return verify
-}
-
-// newPassword — запись хэша нового пароля u1 с версией прочитанной учётной записи.
-func newPassword(t *testing.T, err error) *mocks.MockPasswordSetter {
+// newPassword — хэш нового пароля у владельца учётной записи (hashErr — его отказ) и, при хэше, запись его при версии
+// прочитанной учётной записи u1 с ответом writeErr.
+func newPassword(t *testing.T, plain string, hashErr, writeErr error) *mocks.MockPasswordSetter {
 	t.Helper()
 	setter := mocks.NewMockPasswordSetter(t)
-	setter.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:newpassword123", 7).Return(err).Once()
+	if hashErr != nil {
+		setter.EXPECT().HashPassword(mock.Anything, plain).Return("", hashErr).Once()
+		return setter
+	}
+	setter.EXPECT().HashPassword(mock.Anything, plain).Return("hash:"+plain, nil).Once()
+	setter.EXPECT().UpdatePassword(mock.Anything, "u1", "hash:"+plain, 7).Return(writeErr).Once()
 	return setter
 }
 
+// Смена пароля — у вызывающего: ключ — его UserID, старый пароль сверяется с хэшем учётной записи, новый хэширует
+// владелец учётной записи и пишет при её версии.
 func TestChangePassword(t *testing.T) {
 	t.Parallel()
 
 	t.Run("happy path propagates version", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)),
-			withSetter(newPassword(t, nil)))
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withSetter(newPassword(t, "newpassword123", nil, nil)))
 
-		require.NoError(t, f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123"))
+		require.NoError(t, f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123"))
 		require.Equal(t, audited(auditkit.Entry{ActorID: "u1", Action: "change_password", Resource: "user", ResourceID: "u1"}),
 			f.audit.Last("change_password"))
-	})
-
-	// Admin меняет чужой пароль: в аудите он — автор, учётная запись — цель.
-	t.Run("admin changes another user's password", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)),
-			withSetter(newPassword(t, nil)))
-
-		require.NoError(t, f.uc.ChangePassword(identitytest.Admin("a1"), "u1", "old", "newpassword123"))
-		require.Equal(t, audited(auditkit.Entry{ActorID: "a1", Action: "change_password", Resource: "user", ResourceID: "u1"}),
-			f.audit.Last("change_password"))
+		require.True(t, f.log.Has(slog.LevelInfo, "password changed"))
 	})
 
 	t.Run("concurrent update", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)),
-			withSetter(newPassword(t, auth.ErrConcurrentUpdate)))
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)),
+			withSetter(newPassword(t, "newpassword123", nil, auth.ErrConcurrentUpdate)))
 
-		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123")
 		require.ErrorIs(t, err, auth.ErrConcurrentUpdate)
 		require.False(t, f.audit.Has("change_password"))
 	})
 
-	t.Run("unknown user", func(t *testing.T) {
+	t.Run("account gone", func(t *testing.T) {
 		t.Parallel()
 		users := mocks.NewMockUserReader(t)
-		users.EXPECT().GetByID(mock.Anything, "u2").Return(nil, auth.ErrUserNotFound).Once()
+		users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, auth.ErrUserNotFound).Once()
 		f := newUC(t, withUsers(users))
 
-		err := f.uc.ChangePassword(identitytest.Admin("a1"), "u2", "old", "newpassword123")
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123")
 		require.ErrorIs(t, err, auth.ErrUserNotFound)
 	})
 
-	// Неверный старый пароль — попытка в счётчике входа учётной записи, успеха guard не видит.
-	t.Run("wrong old", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", false)), withVerifier(oldPassword(t, false, nil)))
+	// Неверный старый пароль — попытка в счётчике входа учётной записи, успеха guard не видит; пароль длиннее
+	// предела хэшера ни с одним хэшем не совпадает — тоже неверный.
+	for _, old := range []string{"wrong", strings.Repeat("я", authnkit.MaxPasswordLen)} {
+		t.Run("wrong old", func(t *testing.T) {
+			t.Parallel()
+			f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", false)))
 
-		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
-		require.ErrorIs(t, err, auth.ErrWrongOldPassword)
-		require.False(t, f.audit.Has("change_password"))
-	})
+			err := f.uc.ChangePassword(identitytest.Client("u1"), old, "newpassword123")
+			require.ErrorIs(t, err, auth.ErrWrongOldPassword)
+			require.False(t, f.audit.Has("change_password"))
+		})
+	}
 
-	t.Run("weak new", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t)
-		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "short")
-		require.ErrorIs(t, err, auth.ErrWeakPassword)
-	})
+	// Правило нового пароля — у владельца учётной записи: его отказ доходит ошибкой auth, пароль не пишется.
+	for _, refused := range []error{auth.ErrWeakPassword, auth.ErrPasswordTooLong} {
+		t.Run(refused.Error(), func(t *testing.T) {
+			t.Parallel()
+			f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withSetter(newPassword(t, "short", refused, nil)))
 
-	// Предел хэшера — в байтах: 1024 символа не из ASCII схема пропускает, это ошибка ввода, а не сбой.
-	t.Run("new over the hasher limit", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)))
-
-		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", strings.Repeat("я", authnkit.MaxPasswordLen))
-		require.ErrorIs(t, err, auth.ErrPasswordTooLong)
-		require.False(t, f.audit.Has("change_password"))
-	})
-
-	// Policy спрашивают о цели: клиент чужой пароль не меняет, до учётной записи запрос не доходит.
-	t.Run("not self, not admin", func(t *testing.T) {
-		t.Parallel()
-		f := newUC(t)
-		err := f.uc.ChangePassword(identitytest.Client("u1"), "u2", "old", "newpassword123")
-		var fe *policy.ForbiddenError
-		require.ErrorAs(t, err, &fe)
-	})
+			err := f.uc.ChangePassword(identitytest.Client("u1"), "old", "short")
+			require.ErrorIs(t, err, refused)
+			require.False(t, f.audit.Has("change_password"))
+		})
+	}
 
 	t.Run("no identity", func(t *testing.T) {
 		t.Parallel()
 		f := newUC(t)
-		err := f.uc.ChangePassword(identitytest.Anon(), "u1", "old", "newpassword123")
+		err := f.uc.ChangePassword(identitytest.Anon(), "old", "newpassword123")
 		var fe *policy.ForbiddenError
 		require.ErrorAs(t, err, &fe)
 	})
 }
 
-// Сбой проверки старого пароля или хэширования нового — ошибка сервиса: пароль не записан, аудита нет.
+// Сбой проверки старого пароля, хэширования нового или поиска учётной записи — ошибка сервиса: пароль не записан,
+// аудита нет.
 func TestChangePassword_Failure(t *testing.T) {
 	t.Parallel()
 	t.Run("old password check", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", false)),
-			withVerifier(oldPassword(t, false, errors.New("db down"))))
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", false)), withHasher(&verifyFails{err: errors.New("argon2: queue deadline")}))
 
-		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
-		require.ErrorContains(t, err, "db down")
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123")
+		require.ErrorContains(t, err, "queue deadline")
 		require.NotErrorIs(t, err, auth.ErrWrongOldPassword)
 		require.False(t, f.audit.Has("change_password"))
 	})
 	t.Run("hashing", func(t *testing.T) {
 		t.Parallel()
-		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withVerifier(oldPassword(t, true, nil)),
-			withHasher(&authntest.DeterministicHasher{HashErr: errHashing}))
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withSetter(newPassword(t, "newpassword123", errHashing, nil)))
 
-		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123")
 		require.ErrorIs(t, err, errHashing)
 		require.False(t, f.audit.Has("change_password"))
 	})
@@ -860,7 +831,7 @@ func TestChangePassword_Failure(t *testing.T) {
 		users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, errors.New("db down")).Once()
 		f := newUC(t, withUsers(users))
 
-		err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123")
 		require.ErrorContains(t, err, "db down")
 		require.NotErrorIs(t, err, auth.ErrUserNotFound)
 	})
@@ -872,18 +843,18 @@ func TestChangePassword_SideRecordsFail(t *testing.T) {
 	g := mocks.NewMockLoginGuard(t)
 	g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, nil).Once()
 	g.EXPECT().RecordSuccess(mock.Anything, "a@b.com", identitytest.IP).Return(errors.New("guard store down")).Once()
-	f := newUC(t, withUsers(pwUser(t)), withGuard(g), withVerifier(oldPassword(t, true, nil)), withSetter(newPassword(t, nil)),
+	f := newUC(t, withUsers(pwUser(t)), withGuard(g), withSetter(newPassword(t, "newpassword123", nil, nil)),
 		withAudit(&audittest.Recorder{LogErr: errAudit}))
 
-	require.NoError(t, f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123"))
+	require.NoError(t, f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123"))
 	require.True(t, f.log.Has(slog.LevelError, "guard record success"))
 	e, logged := f.log.Find(slog.LevelError, "audit change_password")
 	require.True(t, logged)
 	require.Contains(t, e.Str("error"), errAudit.Error())
 }
 
-// Старый пароль угадывают так же, как при входе: под блокировкой и при сбое guard'а он не проверяется —
-// строгий мок проверки пароля.
+// Старый пароль угадывают так же, как при входе: под блокировкой и при сбое guard'а он не проверяется — хэшер
+// фикстуры с отказом Verify не зовётся.
 func TestChangePassword_Guarded(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -900,11 +871,12 @@ func TestChangePassword_Guarded(t *testing.T) {
 			t.Parallel()
 			g := mocks.NewMockLoginGuard(t)
 			g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(tc.lock, tc.err).Once()
-			f := newUC(t, withUsers(pwUser(t)), withGuard(g))
+			f := newUC(t, withUsers(pwUser(t)), withGuard(g), withHasher(&verifyFails{err: errors.New("verified under the lock")}))
 
-			err := f.uc.ChangePassword(identitytest.Client("u1"), "u1", "old", "newpassword123")
+			err := f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123")
 			require.Error(t, err)
 			require.NotErrorIs(t, err, auth.ErrWrongOldPassword)
+			require.NotContains(t, err.Error(), "verified under the lock")
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
 			}

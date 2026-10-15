@@ -136,9 +136,16 @@ blocked-by: —
     корня, строка на каждый метод, лишних строк нет. `ra04` (метод в `trusted_rename.go`): без строки и с ошибкой
     вне строки — отказ (на базе archtest читал только `trusted.go`); правка rule `tests-pipeline` (трек gate) —
     две строки таблицы о `TrustedErrors`; `make check` → ✓
-- [ ] **S9** — RCOD-07, RCOD-14: пароль хеширует `user.Trusted.HashPassword`, проверяет `auth`; смена пароля —
+- [x] **S9** — RCOD-07, RCOD-14: пароль хеширует `user.Trusted.HashPassword`, проверяет `auth`; смена пароля —
   у вызывающего
   - Проверка: `rg` по снятым символам; `make check` → ✓ · Закрывает: AC6 · Зависит от: S7, S8
+  - Сделано: `user.Trusted.HashPassword` (правило пароля и хэшер владельца учётной записи, строка `TrustedErrors` —
+    `ErrWeakPassword`, `ErrPasswordTooLong`) вместо `VerifyPassword`; `auth` сверяет пароль своим хэшером по хэшу
+    порта (`passwordMatches` — вход и смена); `PasswordSetter` обоих потребителей — `HashPassword` и
+    `UpdatePassword`, у `verification` хэшера нет; `ChangePassword(ctx, old, new)` — пароль вызывающего, policy
+    `auth` и порт `PasswordVerifier` сняты, тело операции без `user_id`; e2e-харнес — без `user_id`, `UserView` — с
+    `role` и `email_verified`; `rg 'VerifyPassword|PasswordVerifier|CanChangePassword'` по коду и прозе → пусто
+    (кроме `scripts/tools/mutants.txt`); handoff-блок; `make check` → ✓
 - [ ] **S10** — RCOD-18 и RCOD-14: входы usecase значением, имена DTO, логи успеха, тип статуса во входе HTTP,
   порядок и проекция списка, мёртвый `StatusUnknown`
   - Проверка: `make check` → ✓ · Закрывает: AC6 · Зависит от: S9
@@ -188,6 +195,17 @@ blocked-by: —
   чужого файла, иначе правило называло бы снятый метод.
 - NSEC-02: список ключей из примеров — в `config`, а их сверку с файлами держит тест: форк, сменивший ключ в
   `.env.example`, получает красный тест, а не молча пропущенный гард.
+- RCOD-07: пароль хеширует только `user` (`Trusted.HashPassword` — правило пароля продукта и хэшер, ими же
+  `Register` и `EnsureAdmin`), сверяет только `auth` (`passwordMatches` по хэшу из `UserReader` — вход и смена), а не
+  `Trusted.VerifyPassword`: проверка через порт читала учётную запись второй раз и второй раз переводила предел
+  хэшера.
+- RCOD-14: смена пароля — только своего: policy и так пускала одного вызывающего (админ чужой пароль не меняет), и
+  `user_id` в теле был вторым способом назвать себя; policy `auth` снята вместе с портом.
+- Правки чужих файлов, S9: e2e-харнес (трек gate) — тело смены пароля без `user_id` (`test/smoke/test_auth.py`,
+  `test/client/models.py`) и `UserView` с `role` и `email_verified` (S7): модели e2e не пускают лишних полей;
+  `.mockery.yml` — строки снятых портов `ResetLimiter` (S4) и `PasswordVerifier`.
+- `scripts/tools/mutants.txt` (трек gate+tests) не правлю: якоря кода, который меняет трек, переписываются после
+  слияния треков — список устаревших (`make mutate A=--check`) — в отчёте трека.
 
 ## Открытые вопросы
 - [ ] **Q1** — Пускать ли вход с неподтверждённым адресом (RCOD-08): решение продукта — блокирует: — — к кому: владелец
@@ -195,4 +213,4 @@ blocked-by: —
   к кому: владелец
 
 ## Где мы сейчас
-S1–S8 закрыты. Следующий шаг — S9 (один способ пароля, смена пароля — у вызывающего).
+S1–S9 закрыты. Следующий шаг — S10 (входы usecase значением, имена DTO, логи успеха, порядок и проекция списка).

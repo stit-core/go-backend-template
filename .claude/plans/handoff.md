@@ -375,3 +375,14 @@ DECIDE —
 RISK   клиент, который различал AUTH_REFRESH_EXPIRED и AUTH_REFRESH_INVALID или ждал USER_INVALID_EMAIL на адресе с
        пробелом, получает другой код того же смысла («войти заново», «неверный адрес»)
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   контракт API: POST /api/auth/change-password меняет пароль вызывающего — поля user_id в теле нет, тело с ним
+       получает 422 VALIDATION_FAILED (схема тела не пускает лишних полей)
+WHY    polish-code-security-adapters S9 — RCOD-14: пароль меняет только его владелец, user_id был вторым способом
+       назвать себя
+ACTION клиентам API (SPA, мобильные) — перегенерировать клиент по openapi.json, user_id в теле смены пароля не слать
+WHO    потребители API
+DECIDE —
+RISK   клиент, который шлёт user_id, до обновления получает 422 на смене пароля
+===

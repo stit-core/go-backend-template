@@ -3,11 +3,13 @@
 package module
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -17,6 +19,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	usermocks "git.stit.tech/stit-core/go-backend-template/internal/domain/user/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
@@ -63,29 +66,6 @@ func TestUserAdapter_User(t *testing.T) {
 	}
 }
 
-func TestUserAdapter_VerifyPassword(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name  string
-		plain string
-		want  bool
-	}{
-		{"match", "pass1234", true},
-		{"mismatch", "wrong-password", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			a, repo := newAdapter(t)
-			repo.EXPECT().GetByID(mock.Anything, "u1").Return(&user.User{ID: "u1", PasswordHash: "hash:pass1234"}, nil).Once()
-
-			ok, err := a.VerifyPassword(context.Background(), "u1", tc.plain)
-			require.NoError(t, err)
-			require.Equal(t, tc.want, ok)
-		})
-	}
-}
-
 // Чтение под блокировкой идёт в транзакции входа: адаптер передаёт её ctx в user.Trusted, и строка
 // пользователя держится до открытия сессии.
 func TestUserAdapter_LocksInCallerTx(t *testing.T) {
@@ -105,6 +85,8 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 	translated := map[error]error{
 		user.ErrNotFound:         auth.ErrUserNotFound,
 		user.ErrConcurrentUpdate: auth.ErrConcurrentUpdate,
+		user.ErrWeakPassword:     auth.ErrWeakPassword,
+		user.ErrPasswordTooLong:  auth.ErrPasswordTooLong,
 	}
 	infra := errors.New("db down")
 	type call func(a *userAdapter, repo *usermocks.MockRepository, err error) error
@@ -128,9 +110,13 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 			_, got := a.GetByEmail(context.Background(), "a@b.com")
 			return got
 		}},
-		"VerifyPassword": {"VerifyPassword", func(a *userAdapter, repo *usermocks.MockRepository, err error) error {
-			repo.EXPECT().GetByID(mock.Anything, "u1").Return(nil, err).Once()
-			_, got := a.VerifyPassword(context.Background(), "u1", "secret")
+		// Исходы HashPassword — от пароля и хэшера: сбой (infra) — у адаптера с отказом хэшера.
+		"HashPassword": {"HashPassword", func(a *userAdapter, _ *usermocks.MockRepository, err error) error {
+			plain := map[error]string{user.ErrWeakPassword: "short", user.ErrPasswordTooLong: strings.Repeat("я", authnkit.MaxPasswordLen)}
+			if _, input := plain[err]; !input {
+				a = newUserAdapter(user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{HashErr: err}}))
+			}
+			_, got := a.HashPassword(context.Background(), cmp.Or(plain[err], "longenough"))
 			return got
 		}},
 		"UpdatePassword": {"UpdatePassword", func(a *userAdapter, repo *usermocks.MockRepository, err error) error {
@@ -159,4 +145,14 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 			require.ErrorIs(t, c.call(a, repo, infra), infra, "an infrastructure error passes through")
 		})
 	}
+}
+
+// Хэш нового пароля адаптер отдаёт как есть: правило и хэш — у владельца учётной записи.
+func TestUserAdapter_HashPassword(t *testing.T) {
+	t.Parallel()
+	a := newUserAdapter(user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{}}))
+
+	hash, err := a.HashPassword(context.Background(), "longenough")
+	require.NoError(t, err)
+	require.Equal(t, "hash:longenough", hash)
 }

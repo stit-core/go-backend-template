@@ -17,14 +17,12 @@ var Module = fx.Module(
 	fx.Provide(
 		newUserAdapter,
 		func(a *userAdapter) auth.UserReader { return a },
-		func(a *userAdapter) auth.PasswordVerifier { return a },
 		func(a *userAdapter) auth.PasswordSetter { return a },
 		// Токены и cookie сессии выдаёт вход: подпись и настройки cookie — у этого домена.
 		func(j *authnkit.HS256JWT) authnkit.JWTSigner { return j },
 		func(a *appconfig.App) authgate.CookieConfig { return a.Cookie },
 		authjwt.NewTokens,
 		authbruteforce.NewLoginGuard,
-		auth.NewPolicy,
 		auth.NewMetrics,
 		auth.NewUsecase,
 		authhttp.NewHandler,

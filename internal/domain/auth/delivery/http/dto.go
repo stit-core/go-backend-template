@@ -34,7 +34,6 @@ type AuthLogoutOutput struct {
 
 type AuthChangePasswordInput struct {
 	Body struct {
-		UserID      string `json:"user_id"      required:"true"`
 		OldPassword string `json:"old_password" maxLength:"1024" required:"true"`
 		NewPassword string `json:"new_password" maxLength:"1024" minLength:"8"   required:"true"`
 	}

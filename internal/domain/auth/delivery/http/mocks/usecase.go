@@ -39,16 +39,16 @@ func (_m *MockUsecase) EXPECT() *MockUsecase_Expecter {
 }
 
 // ChangePassword provides a mock function for the type MockUsecase
-func (_mock *MockUsecase) ChangePassword(ctx context.Context, userID string, oldPassword string, newPassword string) error {
-	ret := _mock.Called(ctx, userID, oldPassword, newPassword)
+func (_mock *MockUsecase) ChangePassword(ctx context.Context, oldPassword string, newPassword string) error {
+	ret := _mock.Called(ctx, oldPassword, newPassword)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ChangePassword")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
-		r0 = returnFunc(ctx, userID, oldPassword, newPassword)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, oldPassword, newPassword)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -62,14 +62,13 @@ type MockUsecase_ChangePassword_Call struct {
 
 // ChangePassword is a helper method to define mock.On call
 //   - ctx context.Context
-//   - userID string
 //   - oldPassword string
 //   - newPassword string
-func (_e *MockUsecase_Expecter) ChangePassword(ctx interface{}, userID interface{}, oldPassword interface{}, newPassword interface{}) *MockUsecase_ChangePassword_Call {
-	return &MockUsecase_ChangePassword_Call{Call: _e.mock.On("ChangePassword", ctx, userID, oldPassword, newPassword)}
+func (_e *MockUsecase_Expecter) ChangePassword(ctx interface{}, oldPassword interface{}, newPassword interface{}) *MockUsecase_ChangePassword_Call {
+	return &MockUsecase_ChangePassword_Call{Call: _e.mock.On("ChangePassword", ctx, oldPassword, newPassword)}
 }
 
-func (_c *MockUsecase_ChangePassword_Call) Run(run func(ctx context.Context, userID string, oldPassword string, newPassword string)) *MockUsecase_ChangePassword_Call {
+func (_c *MockUsecase_ChangePassword_Call) Run(run func(ctx context.Context, oldPassword string, newPassword string)) *MockUsecase_ChangePassword_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -83,15 +82,10 @@ func (_c *MockUsecase_ChangePassword_Call) Run(run func(ctx context.Context, use
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
-		}
 		run(
 			arg0,
 			arg1,
 			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -102,7 +96,7 @@ func (_c *MockUsecase_ChangePassword_Call) Return(err error) *MockUsecase_Change
 	return _c
 }
 
-func (_c *MockUsecase_ChangePassword_Call) RunAndReturn(run func(ctx context.Context, userID string, oldPassword string, newPassword string) error) *MockUsecase_ChangePassword_Call {
+func (_c *MockUsecase_ChangePassword_Call) RunAndReturn(run func(ctx context.Context, oldPassword string, newPassword string) error) *MockUsecase_ChangePassword_Call {
 	_c.Call.Return(run)
 	return _c
 }

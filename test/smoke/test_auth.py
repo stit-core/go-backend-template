@@ -127,7 +127,6 @@ def test_change_password(
     api: Api, user: RegisteredUser, stack: str
 ) -> None:
     login(api, user.email, user.password)
-    uid = api.me().id
     new_password = "new-pass-123456"
 
     # неверный old → 422 поля old_password: сессия цела, входить заново не нужно
@@ -136,7 +135,6 @@ def test_change_password(
             "POST",
             "/api/auth/change-password",
             json={
-                "user_id": uid,
                 "old_password": "WRONG-old",
                 "new_password": new_password,
             },
@@ -145,7 +143,7 @@ def test_change_password(
     )
     # верный old → 204; смена пароля закрывает все сессии учётной записи — refresh этой → 401
     api.change_password(
-        ChangePasswordRequest(user_id=uid, old_password=user.password, new_password=new_password)
+        ChangePasswordRequest(old_password=user.password, new_password=new_password)
     )
     assert api.status("POST", "/api/auth/refresh") == 401
     # старый пароль больше не логинит, новый — да

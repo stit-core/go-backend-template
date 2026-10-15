@@ -9,7 +9,6 @@ import (
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
-	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
@@ -24,7 +23,10 @@ type UserReader interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 }
 
+// PasswordSetter: HashPassword — хэш нового пароля по правилу продукта (ErrWeakPassword, ErrPasswordTooLong),
+// UpdatePassword пишет его при версии учётной записи и закрывает все её сессии.
 type PasswordSetter interface {
+	HashPassword(ctx context.Context, plain string) (string, error)
 	UpdatePassword(ctx context.Context, userID, hash string, version int) error
 }
 
@@ -65,7 +67,6 @@ type UsecaseDeps struct {
 	Users         UserReader
 	PasswordSet   PasswordSetter
 	EmailVerifier EmailVerificationSetter
-	Hasher        authnkit.Hasher
 	Tx            pgkit.Transactor
 	Events        outboxkit.Publisher
 	Mailer        Mailer
@@ -215,10 +216,6 @@ func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID str
 }
 
 func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword string) error {
-	if !policy.PasswordStrong(newPassword) {
-		return ErrWeakPassword
-	}
-
 	pr, err := uc.d.Repo.GetPasswordReset(ctx, authnkit.HashToken(token))
 	switch {
 	case err != nil:
@@ -229,12 +226,9 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 		return ErrInvalidResetToken
 	}
 
-	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
-	switch {
-	case errors.Is(err, authnkit.ErrPasswordTooLong):
-		return ErrPasswordTooLong
-	case err != nil:
-		return fmt.Errorf("hash new password: %w", err)
+	hash, err := uc.d.PasswordSet.HashPassword(ctx, newPassword)
+	if err != nil {
+		return err
 	}
 
 	// Погашение — первым в транзакции: параллельный confirm ждёт блокировку строк и получает ErrTokenUsed. Пароль

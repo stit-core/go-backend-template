@@ -15,7 +15,6 @@ packages:
   git.stit.tech/stit-core/go-backend-template/internal/domain/auth:
     interfaces:
       UserReader:
-      PasswordVerifier:
       PasswordSetter:
       LoginGuard:
   git.stit.tech/stit-core/go-backend-template/internal/domain/verification:

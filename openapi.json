@@ -54,13 +54,9 @@
           "old_password": {
             "maxLength": 1024,
             "type": "string"
-          },
-          "user_id": {
-            "type": "string"
           }
         },
         "required": [
-          "user_id",
           "old_password",
           "new_password"
         ],

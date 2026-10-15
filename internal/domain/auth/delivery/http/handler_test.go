@@ -229,7 +229,7 @@ func TestLogout_StoreFailure(t *testing.T) {
 func TestChangePassword_HappyPath(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().ChangePassword(callerIs("u1"), "u1", "old-password", "new-password1").Return(nil).Once()
+	uc.EXPECT().ChangePassword(callerIs("u1"), "old-password", "new-password1").Return(nil).Once()
 	api := setup(t, uc)
 
 	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password", strings.NewReader(changePasswordBody("new-password1")))
@@ -263,7 +263,7 @@ func TestChangePassword_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			uc := mocks.NewMockUsecase(t)
-			uc.EXPECT().ChangePassword(callerIs("u1"), "u1", "old-password", mock.Anything).Return(tc.err).Once()
+			uc.EXPECT().ChangePassword(callerIs("u1"), "old-password", mock.Anything).Return(tc.err).Once()
 			api := setup(t, uc)
 
 			resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",
@@ -277,7 +277,7 @@ func TestChangePassword_Errors(t *testing.T) {
 func TestChangePassword_WrongOldPassword(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", mock.Anything).Return(auth.ErrWrongOldPassword).Once()
+	uc.EXPECT().ChangePassword(mock.Anything, "old-password", mock.Anything).Return(auth.ErrWrongOldPassword).Once()
 	api := setup(t, uc)
 
 	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",
@@ -291,7 +291,7 @@ func TestChangePassword_WrongOldPassword(t *testing.T) {
 func TestChangePassword_WeakPassword(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", mock.Anything).Return(auth.ErrWeakPassword).Once()
+	uc.EXPECT().ChangePassword(mock.Anything, "old-password", mock.Anything).Return(auth.ErrWeakPassword).Once()
 	api := setup(t, uc)
 
 	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",
@@ -321,7 +321,7 @@ func TestChangePassword_PasswordTooLong(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("я", authnkit.MaxPasswordLen)
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().ChangePassword(mock.Anything, "u1", "old-password", long).Return(auth.ErrPasswordTooLong).Once()
+	uc.EXPECT().ChangePassword(mock.Anything, "old-password", long).Return(auth.ErrPasswordTooLong).Once()
 	api := setup(t, uc)
 
 	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password", strings.NewReader(changePasswordBody(long)))
@@ -332,7 +332,7 @@ func TestChangePassword_PasswordTooLong(t *testing.T) {
 
 	for field, body := range map[string]string{
 		"body.new_password": changePasswordBody(long + "я"),
-		"body.old_password": fmt.Sprintf(`{"user_id":"u1","old_password":%q,"new_password":"new-password"}`, long+"я"),
+		"body.old_password": fmt.Sprintf(`{"old_password":%q,"new_password":"new-password"}`, long+"я"),
 	} {
 		resp = api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password", strings.NewReader(body))
 		handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
@@ -353,5 +353,5 @@ func TestLogin_PasswordOverSchemaLimit(t *testing.T) {
 }
 
 func changePasswordBody(newPassword string) string {
-	return fmt.Sprintf(`{"user_id":"u1","old_password":"old-password","new_password":%q}`, newPassword)
+	return fmt.Sprintf(`{"old_password":"old-password","new_password":%q}`, newPassword)
 }

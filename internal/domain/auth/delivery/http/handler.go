@@ -16,7 +16,7 @@ type Usecase interface {
 	Login(ctx context.Context, in *auth.LoginInput) (*auth.LoginOutput, error)
 	Refresh(ctx context.Context, refreshToken string) (*auth.LoginOutput, error)
 	Logout(ctx context.Context, refreshToken string) error
-	ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) error
+	ChangePassword(ctx context.Context, oldPassword, newPassword string) error
 }
 
 type Handler struct {
@@ -104,7 +104,7 @@ func (h *Handler) logout(ctx context.Context, in *AuthLogoutInput) (*AuthLogoutO
 }
 
 func (h *Handler) changePassword(ctx context.Context, in *AuthChangePasswordInput) (*AuthChangePasswordOutput, error) {
-	if err := h.uc.ChangePassword(ctx, in.Body.UserID, in.Body.OldPassword, in.Body.NewPassword); err != nil {
+	if err := h.uc.ChangePassword(ctx, in.Body.OldPassword, in.Body.NewPassword); err != nil {
 		return nil, authErrors.Map(err)
 	}
 	return &AuthChangePasswordOutput{SetCookie: authgate.BuildExpiredAuthCookies(h.cookieCfg)}, nil
