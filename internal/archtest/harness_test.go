@@ -270,12 +270,14 @@ var (
 	anchorEnd = regexp.MustCompile("[),;:.`»/(|]|\\s[—+]\\s|$")
 	// sectionLabel — заголовок или жирная метка в начале строки и пункта списка: «## Готово», «- **Вход — …**».
 	sectionLabel = regexp.MustCompile(`(?m)^(?:#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*|[ \t]*(?:[-*][ \t]+)?\*\*(.+?)\*\*.*)$`)
+	// sectionNumber — номер в начале заголовка: «2. », «3) ».
+	sectionNumber = regexp.MustCompile(`^\d+[.)]\s+`)
 	// mdLink — цель markdown-ссылки «[текст](цель)».
 	mdLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 )
 
 // sectionAnchors — проверка якорей и ссылок документа: строки отказа «документ: ссылка»; якорь, для которого
-// foreign(документ, файл), не проверяется.
+// foreign(документ, файл), не проверяется. Нумерованный раздел годен и с номером, и по имени.
 func sectionAnchors(t *testing.T, root string, files []string, foreign func(doc, target string) bool) func(doc, text string) []string {
 	t.Helper()
 	tracked := map[string]bool{}
@@ -294,7 +296,12 @@ func sectionAnchors(t *testing.T, root string, files []string, foreign func(doc,
 		data, err := os.ReadFile(filepath.Join(root, f))
 		require.NoError(t, err)
 		for _, m := range sectionLabel.FindAllStringSubmatch(string(data), -1) {
-			labels[f] = append(labels[f], strings.ReplaceAll(m[1]+m[2], "`", ""))
+			label := strings.ReplaceAll(m[1]+m[2], "`", "")
+			labels[f] = append(labels[f], label)
+			// Нумерованный заголовок («### 2. Поднять контекст») проза зовёт и по имени, без номера.
+			if n := sectionNumber.FindStringIndex(label); n != nil {
+				labels[f] = append(labels[f], label[n[1]:])
+			}
 		}
 		return labels[f]
 	}
@@ -391,7 +398,7 @@ func TestSectionAnchors(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{
-		"b.md": "# B\n\n## Раздел — один\n\n## Что внутри\n",
+		"b.md": "# B\n\n## Раздел — один\n\n## Что внутри\n\n### 2. Поднять контекст — сразу\n",
 	})
 	for _, tc := range []struct {
 		text string
@@ -403,6 +410,9 @@ func TestSectionAnchors(t *testing.T) {
 		{text: "[нет](b.md#что-снаружи)", dead: true},
 		{text: "`b.md` § Раздел — один"},
 		{text: "`b.md` § Раздел два", dead: true},
+		{text: "`b.md` § Поднять контекст"},
+		{text: "`b.md` § 2. Поднять контекст"},
+		{text: "`b.md` § 3. Поднять контекст", dead: true},
 	} {
 		t.Run(tc.text, func(t *testing.T) {
 			t.Parallel()
