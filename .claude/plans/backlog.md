@@ -13,7 +13,7 @@ https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE). Medium-пункты и minor
 ## Гейт и тулинг
 
 - **minor-enforcement** — minor угла ENF: RENF-10 guard: `git-<подкоманда>` по пути, `.git//config`; 11
-  `cherry-pick --continue` давнего коммита — отказ, subject пушимых не проверяется; 12 infra-touch уже правила,
+  `cherry-pick --continue` давнего коммита — отказ, subject пушимых не проверяется, а без строки `Review:` — отказ и старому `feat`/`fix`; 12 infra-touch уже правила,
   миграции сверяет с HEAD, а не с тегом релиза; 13 tidy в allow; 14 секреты и `:latest` без машины; 15 версии
   инструментов; 16 мелочи; остаток gate: лишние отказы `new-domain`, списки снимаемых переменных в `Makefile` и
   хуках, `GOPACKAGESDRIVER`, `INSERT … VALUES` и `.gitkeep` в migrations-check, исключение выпущенных миграций
@@ -34,7 +34,8 @@ https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE). Medium-пункты и minor
   05 в таблице маршрута нет релиза, bump'а, job'а; 06 `/release` без TTY отменяется; 07 контракт образа
   (`Dockerfile*`) — вне инфра-поверхности, её список — в десяти местах; 09 RED-строка — в 20 fix-коммитах
   из 34; 10 объём правил; 11 локальный запуск не описан; 12 мелкие противоречия; 13 `pkg/util` проходит
-  `TestLayout`; акценты прозы (HAR-12). Триггер: с правкой прозы обвязки.
+  `TestLayout`; акценты прозы (HAR-12); остаток harness: две заведомо сломанные шапки (`paths: [**/*.go]`) — отказ с
+  не той причиной, `domain-mapping.md:80`. Триггер: с правкой прозы обвязки.
 - **minor-lifecycle** — minor угла LIF: RLIF-06 образцы после prune — в теге старше дерева форка; 07 порядок
   «golibinfra → обвязка» без переноса кода; 08 INFRA-HANDOFF шаблона форку не едут; 09 de-template: импорты
   после `sed`, `SECURITY.md`, клей идентичности; 10 прерывание переноса; 11 push тега релиза; 12 превью
