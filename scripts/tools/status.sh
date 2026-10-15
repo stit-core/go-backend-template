@@ -129,12 +129,13 @@ echo
 # релиза или обвязки шаблона, предке HEAD. Тесты инфре ничего не задают.
 echo "== Infra-touch =="
 INFRA_RE='^internal/platform/config/|/events\.go$|^go\.mod$|^Dockerfile'
-# Против HEAD: правка, удаление и оба имени переименования; новые файлы — по одному.
-CHANGED=$({ git diff --name-only --no-renames HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } |
-    sort -u | grep -v '_test\.go$' || true)
+# Против HEAD — в дереве и в индексе (правка, которую вернули в дереве после git add, едет в коммит): правка,
+# удаление и оба имени переименования; новые файлы — по одному.
+CHANGED=$({ git diff --name-only --no-renames HEAD 2>/dev/null; git diff --cached --name-only --no-renames 2>/dev/null
+    git ls-files --others --exclude-standard 2>/dev/null; } | sort -u | grep -v '_test\.go$' || true)
 INFRA_HITS=$(grep -E "$INFRA_RE" <<<"$CHANGED" || true)
 if grep -qx '\.env\.example' <<<"$CHANGED" && { ! git cat-file -e HEAD:.env.example 2>/dev/null ||
-    git diff -U0 HEAD -- .env.example | grep -qE '^[+-][A-Z_][A-Z0-9_]*='; }; then
+    { git diff -U0 HEAD -- .env.example; git diff --cached -U0 -- .env.example; } | grep -qE '^[+-][A-Z_][A-Z0-9_]*='; }; then
     INFRA_HITS+=$'\n.env.example'
 fi
 released=()

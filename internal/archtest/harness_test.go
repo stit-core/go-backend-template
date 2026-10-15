@@ -998,6 +998,11 @@ func TestStatusInfraTouch(t *testing.T) {
 		{name: "variable in .env.example", edit: func(t *testing.T, repo string) {
 			writeFiles(t, repo, map[string]string{".env.example": "# переменная FOO\nFOO=2\n"})
 		}, want: []string{".env.example"}},
+		{name: "variable in .env.example, in the index only", edit: func(t *testing.T, repo string) {
+			writeFiles(t, repo, map[string]string{".env.example": "# переменная FOO\nFOO=2\n"})
+			git(t, repo, "add", ".env.example")
+			writeFiles(t, repo, map[string]string{".env.example": "# переменная FOO\nFOO=1\n"})
+		}, want: []string{".env.example"}},
 		{name: "image", edit: func(t *testing.T, repo string) {
 			writeFiles(t, repo, map[string]string{"Dockerfile": "FROM scratch\nUSER 65532\n"})
 		}, want: []string{"Dockerfile"}},
