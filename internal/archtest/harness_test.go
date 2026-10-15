@@ -155,6 +155,7 @@ func TestProseReferencesExist(t *testing.T) {
 		return slices.ContainsFunc(pruned, func(p string) bool { return under(strings.TrimSuffix(ref, "/"), p) })
 	}
 
+	exempt := identityExempt(t, root)
 	linters := golangciEnabled(t)
 	var dead []string
 	for _, doc := range proseFiles(files) {
@@ -210,9 +211,9 @@ func TestProseReferencesExist(t *testing.T) {
 					}
 					continue
 				}
-				// Тест — функция *_test.go; тесты доменов внешней идентичности ушли вместе с ними.
+				// Тест — функция *_test.go.
 				if testName.MatchString(ref) {
-					if !tests[ref] && pruned == nil {
+					if !tests[ref] && !exempt(doc) {
 						dead = append(dead, doc+": "+ref)
 					}
 					continue
@@ -335,6 +336,24 @@ func proseFiles(files []string) []string {
 	return docs
 }
 
+// identityExempt — у проекта с внешней идентичностью ссылки файлов шаблона (они есть в каком-нибудь теге
+// template/v*) на её домены мертвы по решению — их проверяет самопроверка шаблона; свои файлы проекта
+// проверяются. Тегов шаблона нет — пропускаются все; идентичность своя — ни один.
+func identityExempt(t *testing.T, root string) func(rel string) bool {
+	t.Helper()
+	if !identityExternal(t) {
+		return func(string) bool { return false }
+	}
+	tags := strings.Fields(git(t, root, "tag", "--list", "template/v*"))
+	files := map[string]bool{}
+	for _, tag := range tags {
+		for _, f := range strings.Split(git(t, root, "ls-tree", "-r", "-z", "--name-only", tag), "\x00") {
+			files[f] = true
+		}
+	}
+	return func(rel string) bool { return len(tags) == 0 || files[rel] }
+}
+
 // readRulesFirst — процедуры, которые пишут код (каталог — каждый его .md): шагом 0 они читают свои правила.
 var readRulesFirst = []string{".claude/skills/scaffold/references", ".claude/skills/triage-failure/SKILL.md"}
 
@@ -350,13 +369,13 @@ var (
 // без paths: (грузится в каждую сессию), name: не по каталогу и процедура без шага 0 ничем не падают: агент
 // работает без правила, и этого никто не видит. paths: читается, как его читает Claude Code: список YAML или
 // строка через запятую, «{a,b}» раскрыт, glob ложится на файл по правилам .gitignore. Glob без файлов репо —
-// только локальный файл, который игнорирует git; у проекта с внешней идентичностью glob'ы слоёв, которые были
-// только у её доменов (events.go, delivery/nats), пустуют до своих доменов — их проверяет самопроверка шаблона.
+// только локальный файл, который игнорирует git, и у проекта с внешней идентичностью — glob правила шаблона
+// (identityExempt): слои, которые были только у её доменов (events.go, delivery/nats), пустуют до своих.
 func TestRulesAndSkillsLoad(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	files := trackedFiles(t, root)
-	external := identityExternal(t)
+	exempt := identityExempt(t, root)
 	for _, f := range files {
 		dir := path.Dir(f)
 		rule := dir == ".claude/rules" && path.Ext(f) == ".md"
@@ -376,7 +395,7 @@ func TestRulesAndSkillsLoad(t *testing.T) {
 				t.Errorf("%s: no paths: that Claude Code reads — the rule loads into every session; always-on text belongs in CLAUDE.md", f)
 			}
 			for _, g := range globs {
-				if !external && !globMatches(t, root, g.variants) {
+				if !globMatches(t, root, g.variants) && !exempt(f) {
 					t.Errorf("%s: paths: %q matches no file of the repo — the rule never loads", f, g.raw)
 				}
 			}
