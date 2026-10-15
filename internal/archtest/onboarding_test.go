@@ -160,6 +160,41 @@ func unnamedIdentityDependents(t *testing.T, root string, files []goFile) []stri
 // canonicalOrigin — origin канонического репо шаблона.
 var canonicalOrigin = regexp.MustCompile(`(?i)[:/]stit-core/go-backend-template(\.git)?/?$`)
 
+// canonicalRepo — origin репо — канонический шаблон; origin нет — не он.
+func canonicalRepo(t *testing.T, root string) bool {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "git", "config", "--get", "remote.origin.url")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return false
+	}
+	require.NoError(t, err, "git config --get remote.origin.url")
+	return canonicalOrigin.MatchString(strings.TrimSpace(string(out)))
+}
+
+// templateOwned — путь принадлежит шаблону: его называет .template/paths и не исключает «:(exclude)».
+func templateOwned(t *testing.T, root string) func(rel string) bool {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, ".template", "paths"))
+	require.NoError(t, err)
+	var owned, excluded []string
+	for line := range strings.Lines(string(data)) {
+		switch line = strings.TrimSpace(line); {
+		case line == "", strings.HasPrefix(line, "#"):
+		case strings.HasPrefix(line, ":(exclude)"):
+			excluded = append(excluded, strings.TrimPrefix(line, ":(exclude)"))
+		default:
+			owned = append(owned, line)
+		}
+	}
+	return func(rel string) bool {
+		in := func(p string) bool { return under(rel, p) }
+		return slices.ContainsFunc(owned, in) && !slices.ContainsFunc(excluded, in)
+	}
+}
+
 // TestCanonicalTemplate: в каноническом репо шаблона (origin — stit-core/go-backend-template) module path —
 // шаблона, артефактов стека нет: de-template и prune разрушили бы шаблон, identity: own сняло бы с его кода
 // проверку prune, а готовый стек следующий форк получил бы вместо своего — гейт его онбординга был бы зелёным
@@ -167,15 +202,7 @@ var canonicalOrigin = regexp.MustCompile(`(?i)[:/]stit-core/go-backend-template(
 func TestCanonicalTemplate(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	cmd := exec.CommandContext(t.Context(), "git", "config", "--get", "remote.origin.url")
-	cmd.Dir = root
-	out, err := cmd.Output()
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.ExitCode() == 1 {
-		return // origin нет — не канонический репо
-	}
-	require.NoError(t, err, "git config --get remote.origin.url")
-	if !canonicalOrigin.MatchString(strings.TrimSpace(string(out))) {
+	if !canonicalRepo(t, root) {
 		return
 	}
 	gomod, err := os.ReadFile(filepath.Join(root, "go.mod"))

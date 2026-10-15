@@ -120,7 +120,8 @@ var (
 // ссылки; артефакт docs/stack/<kind>.md — по его шаблону; /имя, которое не скилл, — путь контракта openapi.json,
 // встроенная команда или корень файловой системы; путь /api/… — операция openapi.json; правило с именем
 // включённого линтера — его правило. Опечатку в первом сегменте пути, ссылку простым текстом вне кода и якорь
-// файла, имя которого в репо не одно (README.md без пути), проверка не видит.
+// файла, имя которого в репо не одно (README.md без пути), проверка не видит; у форка — и раздел его файла, на
+// который ссылается проза шаблона (SECURITY.md переписывает de-template).
 func TestProseReferencesExist(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -170,7 +171,10 @@ func TestProseReferencesExist(t *testing.T) {
 		}
 		dead = append(dead, doc+": "+ref)
 	}
-	anchors := sectionAnchors(t, root, files)
+	// У форка проза шаблона называет и разделы файлов форка (SECURITY.md, README.md переписывает de-template): их
+	// сверяет самопроверка канонического репо шаблона.
+	owned, canonical := templateOwned(t, root), canonicalRepo(t, root)
+	anchors := sectionAnchors(t, root, files, func(doc, target string) bool { return !canonical && owned(doc) && !owned(target) })
 	claude, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
 	require.NoError(t, err)
 	dead = append(dead, gateFacts(string(makefile), string(claude))...)
@@ -271,8 +275,9 @@ var (
 	slugDrop = regexp.MustCompile(`[^\p{L}\p{N}\s_-]`)
 )
 
-// sectionAnchors — проверка якорей и ссылок документа: строки отказа «документ: ссылка».
-func sectionAnchors(t *testing.T, root string, files []string) func(doc, text string) []string {
+// sectionAnchors — проверка якорей и ссылок документа: строки отказа «документ: ссылка»; якорь, для которого
+// foreign(документ, файл), не проверяется.
+func sectionAnchors(t *testing.T, root string, files []string, foreign func(doc, target string) bool) func(doc, text string) []string {
 	t.Helper()
 	tracked := map[string]bool{}
 	byName := map[string][]string{} // имя .md → его пути
@@ -321,7 +326,7 @@ func sectionAnchors(t *testing.T, root string, files []string) func(doc, text st
 		var dead []string
 		for _, m := range sectionRef.FindAllStringSubmatch(text, -1) {
 			files := targets(doc, m[1], m[2])
-			if len(files) == 0 {
+			if len(files) == 0 || foreign(doc, files[0]) {
 				continue // файла нет — его ищет проверка путей, имя не одно — не видно
 			}
 			full := strings.Join(strings.Fields(m[3]), " ")
