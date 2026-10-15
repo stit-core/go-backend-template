@@ -47,9 +47,9 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | `usecase.go` | unit через строгие моки портов и настоящую policy, fixture `newUC(t, …)` |
 | `delivery/http` | handler-тест через `golibinfra/testkit/handlertest` (операции под `Security` — `handlertest.WithSecuritySchemes(authgate.CookieScheme(identitytest.Extract))`, личность — ctx запроса): happy path каждой операции — точный вход usecase и тело ответа; `errors_test.go` (white-box): таблица операции объявляет ошибки её usecase (список — по коду usecase); без 500 и без таблицы операции вне `Declare` — archtest `TestDomainErrorTables` |
 | `delivery/nats` | unit handler-функции (мок Usecase-порта) — включая дубль-доставку; контракт с поставщиком — `contract_test.go` (rule `events-and-messaging`) |
-| `module/adapters.go` | unit (white-box) поверх `Trusted` поставщика: маппинг полей, ctx вызывающего до `Trusted` (запись и чтение под блокировкой — в его транзакции) и каждая ошибка `TrustedErrors` → sentinel потребителя |
+| `module/adapters.go` | unit (white-box) поверх `Trusted` поставщика: маппинг полей, ctx вызывающего до `Trusted` (запись и чтение под блокировкой — в его транзакции) и каждая ошибка вызываемого метода (`TrustedErrors[метод]`) → sentinel потребителя |
 | `infra/<kit>/` | unit на настоящем ките или фейке из `testkit` |
-| `trusted.go` | unit через моки портов; методы отдают только ошибки `TrustedErrors` (`return` в `trusted.go` — archtest) |
+| `trusted.go` | unit через моки портов; метод отдаёт ровно свою строку `TrustedErrors` (`return` в методах `Trusted` — archtest) |
 | `infra/postgres/repository.go` | integration (build-tag) на каждый метод: запись видна чтением, условия SQL (версия, удалённые, регистр, фильтр, страница); битый id — sentinel «нет такого» (id не от клиента — ошибка), сбой БД (отменённый ctx) — ошибка с причиной, не sentinel домена |
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp`, корню графа `context.Context` не доступен; `fx.As` нет — archtest |
 | HTTP API | `cmd/api/api_test.go`: API проходит проверку старта httpkit (`Security` или `httpkit.Public`, уникальный метод+путь), операция без пометки — ошибка старта, пути операций доменов — под `/api/`, открыты ровно `publicOperations` (открыть операцию — правка списка), под `Security` — коды 401 сессии; `openapi.json` совпадает с кодом |

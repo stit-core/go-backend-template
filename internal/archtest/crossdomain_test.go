@@ -3,6 +3,7 @@ package archtest
 import (
 	"go/ast"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -38,46 +39,109 @@ func TestTrustedOnlyInModules(t *testing.T) {
 	}
 }
 
-// TestTrustedErrors: Trusted отдаёт ошибки домена только из TrustedErrors — их переводят адаптеры
-// потребителей, другая ушла бы им 500. Исходы репозитория держит тест trusted.go, свои return — этот.
+// TestTrustedErrors: метод Trusted отдаёт ошибки домена только из своей строки TrustedErrors (метод → ошибки) — их
+// переводит адаптер потребителя, другая ушла бы ему 500. Методы — по получателю в любом файле корня; исходы порта
+// держит тест Trusted, свои return — этот.
 func TestTrustedErrors(t *testing.T) {
 	t.Parallel()
+	byDomain := map[string][]goFile{} // домен → не-тестовые файлы корня
 	for _, f := range goFiles(t) {
-		domain, sub, ok := splitDomain(f.pkg)
-		if !ok || sub != "" || !strings.HasSuffix(f.path, "/trusted.go") {
+		if domain, sub, ok := splitDomain(f.pkg); ok && sub == "" && !f.test {
+			byDomain[domain] = append(byDomain[domain], f)
+		}
+	}
+	for domain, files := range byDomain {
+		var methods []*ast.FuncDecl
+		var listed map[string]map[string]bool // метод → ошибки его строки
+		where := "internal/domain/" + domain
+		for _, f := range files {
+			file := parseGo(t, f.path)
+			for _, decl := range file.Decls {
+				if fn, ok := decl.(*ast.FuncDecl); ok && receiverName(fn) == "Trusted" {
+					methods = append(methods, fn)
+				}
+			}
+			ast.Inspect(file, func(n ast.Node) bool {
+				vs, ok := n.(*ast.ValueSpec)
+				if !ok || len(vs.Names) != 1 || vs.Names[0].Name != "TrustedErrors" || len(vs.Values) != 1 {
+					return true
+				}
+				listed = trustedErrorLines(vs.Values[0])
+				return false
+			})
+		}
+		if len(methods) == 0 {
 			continue
 		}
-		file := parseGo(t, f.path)
-		listed := map[string]bool{}
-		ast.Inspect(file, func(n ast.Node) bool {
-			vs, ok := n.(*ast.ValueSpec)
-			if !ok || len(vs.Names) != 1 || vs.Names[0].Name != "TrustedErrors" || len(vs.Values) != 1 {
-				return true
-			}
-			if lit, ok := vs.Values[0].(*ast.CompositeLit); ok {
-				for _, elt := range lit.Elts {
-					if id, ok := elt.(*ast.Ident); ok {
-						listed[id.Name] = true
-					}
-				}
-			}
-			return false
-		})
+		if listed == nil {
+			t.Errorf("%s declares Trusted without TrustedErrors = map[string][]error{<method>: {<errors>}}: consumer adapters translate the listed errors of each method", where)
+			continue
+		}
 		sentinels := domainErrors(t, domain)
-		ast.Inspect(file, func(n ast.Node) bool {
-			ret, ok := n.(*ast.ReturnStmt)
+		declared := map[string]bool{}
+		for _, m := range methods {
+			declared[m.Name.Name] = true
+			allowed, ok := listed[m.Name.Name]
 			if !ok {
-				return true
+				t.Errorf("%s: Trusted.%s has no line in TrustedErrors: its consumers would not know which errors to translate", where, m.Name.Name)
+				continue
 			}
-			ast.Inspect(ret, func(n ast.Node) bool {
-				if id, ok := n.(*ast.Ident); ok && slices.Contains(sentinels, id.Name) && !listed[id.Name] {
-					t.Errorf("%s returns %s, which is not in TrustedErrors: consumer adapters translate only the listed errors", f.path, id.Name)
+			ast.Inspect(m.Body, func(n ast.Node) bool {
+				ret, ok := n.(*ast.ReturnStmt)
+				if !ok {
+					return true
 				}
-				return true
+				ast.Inspect(ret, func(n ast.Node) bool {
+					if id, ok := n.(*ast.Ident); ok && slices.Contains(sentinels, id.Name) && !allowed[id.Name] {
+						t.Errorf("%s: Trusted.%s returns %s, which is not in its line of TrustedErrors: consumer adapters translate only the listed errors", where, m.Name.Name, id.Name)
+					}
+					return true
+				})
+				return false
 			})
-			return false
-		})
+		}
+		for name := range listed {
+			if !declared[name] {
+				t.Errorf("%s: TrustedErrors lists %s, which Trusted does not declare", where, name)
+			}
+		}
 	}
+}
+
+// trustedErrorLines — строки литерала map[string][]error{"Метод": {ErrA, ErrB}}: метод → имена ошибок; nil — не
+// такой литерал.
+func trustedErrorLines(expr ast.Expr) map[string]map[string]bool {
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return nil
+	}
+	if _, isMap := lit.Type.(*ast.MapType); !isMap {
+		return nil
+	}
+	lines := map[string]map[string]bool{}
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.BasicLit)
+		if !ok {
+			continue
+		}
+		method, err := strconv.Unquote(key.Value)
+		if err != nil {
+			continue
+		}
+		lines[method] = map[string]bool{}
+		if errs, ok := kv.Value.(*ast.CompositeLit); ok {
+			for _, e := range errs.Elts {
+				if id, ok := e.(*ast.Ident); ok {
+					lines[method][id.Name] = true
+				}
+			}
+		}
+	}
+	return lines
 }
 
 // TestModulesEmbedNoForeignTypes: порт между доменами — типовой адаптер, который объявляет каждый метод и

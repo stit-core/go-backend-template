@@ -73,8 +73,8 @@ type UsecaseDeps struct {
 решение принял вызывающий. Методы `Usecase` с policy — только входам самого поставщика (HTTP,
 NATS); `Trusted` берут только адаптеры `module/` потребителей, свой `module/` лишь провайдит
 `NewTrusted` (archtest `TestTrustedOnlyInModules`). Нужной операции нет — добавь её в `Trusted`, а
-её ошибки — в `TrustedErrors` (что других нет, держат тест `Trusted` и archtest); канон —
-`internal/domain/user/trusted.go`.
+её ошибки — строкой в `TrustedErrors` (метод → ошибки, которые он отдаёт: что других нет и лишних нет, держат
+тест `Trusted` и archtest); канон — `internal/domain/user/trusted.go`.
 
 Адаптер — один тип на домен-поставщика, он реализует все порты потребителя к нему; тип **и его
 конструктор** — в `adapters.go` (не расщеплять между `module.go` и `adapters.go`); канон —
@@ -166,7 +166,7 @@ make test PKG=./internal/archtest/...
 ### 8. Тесты
 
 - `usecase_test.go` потребителя: используй `Mock<Provider>Reader` (свежесгенерированный). Тестируй именно поведение consumer'а.
-- `module/adapters_test.go` (white-box, обязателен): адаптер поверх настоящего `<provider>.Trusted` с моком его репозитория — маппинг полей, ctx вызывающего до `Trusted` (запись и чтение под блокировкой — в его транзакции, `mock.MatchedBy(pgkit.InTx)`) и каждая ошибка `<provider>.TrustedErrors` → sentinel потребителя на каждом методе (чужой sentinel не протекает, новая ошибка без перевода роняет тест). Перечень `calls` — карта «метод → вызов», её ключи тест сверяет с методами адаптера (`reflect.TypeFor[*<provider>Adapter]().Methods()`): новый метод без строки роняет тест. Канон — `internal/domain/auth/module/adapters_test.go`; новый метод `Trusted` — строкой в `calls` его теста (`internal/domain/user/trusted_test.go`), тест сверяет так же.
+- `module/adapters_test.go` (white-box, обязателен): адаптер поверх настоящего `<provider>.Trusted` с моком его репозитория — маппинг полей, ctx вызывающего до `Trusted` (запись и чтение под блокировкой — в его транзакции, `mock.MatchedBy(pgkit.InTx)`) и каждая ошибка метода `Trusted`, который зовёт метод адаптера (`<provider>.TrustedErrors[<метод>]`), → sentinel потребителя (чужой sentinel не протекает, новая ошибка без перевода роняет тест; порт только для чтения ошибок записи не переводит). Перечень `calls` — карта «метод адаптера → метод `Trusted` и вызов», её ключи тест сверяет с методами адаптера (`reflect.TypeFor[*<provider>Adapter]().Methods()`): новый метод без строки роняет тест. Канон — `internal/domain/auth/module/adapters_test.go`; новый метод `Trusted` — строкой в `calls` его теста (`internal/domain/user/trusted_test.go`, с исходами его порта) и в `TrustedErrors`, тест сверяет так же.
 
 ### 9. Верификация
 
