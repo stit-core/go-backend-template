@@ -110,8 +110,12 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     859/859 (`N/s7g/check-s6-order.log`), `make mutate` кусками → убиты 24 из 24 (юнит 17, integration 7), и
     `created_at` (`order-24`, SC25 аудитора) — integration (`N/s7g/mutate-order.log`); `TestMutate`; `make check` →
     `✓ check clean` (`N/s7g/check-s6.log`)
-- [ ] **S7** — Guard, allow, секреты и образы
+- [x] **S7** — Guard, allow, секреты и образы
   - Проверка: опыты AC6; `make check` → `✓ check clean` · Закрывает: AC6 · Зависит от: S4
+  - Сделано: `N/s7g/exp-s7-guard.log`: на 636 случаях `guard-cases.txt` guard базы — 17 расхождений (15 форм RENF-10
+    проходят, `rg --pretty` — ложный отказ), ветки — 0; обычные (158) и формы (129) аудитора — 0 расхождений; проба
+    `server.key` (`git add -f`) и `FROM golang:latest` — красные `TestNoSecretFiles`, `TestImagesPinned` (у аудитора
+    на базе — `✓ check clean`); allow без `tidy`, `find *` и `git branch*`; `make check` → `✓ check clean`
 - [ ] **S8** — Имена `new-domain`, e2e-харнес, лёгкий Argon2 тестов `cmd/api`, мелочи RENF-16
   - Проверка: опыты AC7; `make check` → `✓ check clean` · Закрывает: AC7 · Зависит от: S6
 - [ ] **S9** — Приёмка: полный `make mutate` кусками под замком, повтор опытов AC1–AC7
@@ -170,9 +174,20 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   python3, как `make mutate` и `make e2e`.
 - Раннер: временные файлы go стадии — свой `GOTMPDIR` в `.cache/mutate/tmp`, снимается после стадии; `killpg` уже
   вышедшей группы — не ошибка; `TestMutate` гоняет раннер в гейте — гейту нужен python3.
+- Ветка перенесена на `main` с треком harness+lifecycle (`7c03612`) после S6: конфликт — ячейка «git-хуки»
+  `docs/contributing.md`, сведён без потерь (правки `main` и pre-commit/pre-push трека).
+- Guard (RENF-10): путь сверяется нормализованным (`//`, `/./`), бинарь подкоманды (`git-commit`, и по пути) — та же
+  подкоманда, git, исполняющий строку (`rebase -x`, `submodule foreach`, `bisect run`), — интерпретатор, а вложенный
+  git — своя команда; `rg --pretty` — чтение. Случаи — в `internal/archtest/testdata/guard-cases.txt` (данные
+  `TestGuardBash` трека harness): +15 отказов и +9 пропусков; раздел «guard-bash» `docs/contributing.md` — те же формы.
+- Allow (RENF-13): `make tidy` и `go mod tidy` меняют `go.mod`/`go.sum` (зона «сначала спросить»), `find` пишет
+  (`-delete`, `-exec`), `git branch` с `-D`/`-f` — тоже: в allow остались только чтения `git branch`; deny не менялся.
+- Секреты и образы (RENF-14) — archtest `repo_test.go` по индексу (`git ls-files`): ловит `make check` до коммита и
+  pre-push на верхнем коммите; секрет промежуточного коммита, убранный следующим, гейт верхнего коммита не видит.
+  `.gitignore` знает `.env.*` (кроме `*.example`) — `.env.production` не уходит обычным `git add`.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S6 закрыт: спецификация мутаций растёт с кодом. Дальше — rebase на `main` (трек harness+lifecycle слит), затем S7 (guard, allow, секреты).
+S7 закрыт: guard видит формы RENF-10, allow — без записи, секреты и плавающие образы — красные. Дальше — S8.

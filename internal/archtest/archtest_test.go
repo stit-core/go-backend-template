@@ -44,6 +44,7 @@
 //   - newdomain_test.go — TestNewDomainRefusesOrRollsBack (make new-domain: отказ до первой правки, откат после);
 //   - mutate_test.go — TestMutate (раннер make mutate: вердикты, --strict, файлы кода без мутаций, дерево
 //     разработчика);
+//   - repo_test.go — TestNoSecretFiles (секретов в индексе нет), TestImagesPinned (образы — по digest и тегу);
 //   - release_test.go — TestReleaseImage (путь образа релиза).
 package archtest
 

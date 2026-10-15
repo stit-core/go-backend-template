@@ -50,18 +50,21 @@ Push в `main` разрешён (прямой или через PR); gate — `p
 ### guard-bash
 
 Блокирует:
-- `git commit -n`, `--no-veri…`, `send-pack` — и со словом в кавычках (`$'…'` тоже) или кодом для оболочки: `eval`
-  и оболочка (`sh`, `bash`, `dash`, `zsh`, `ksh`, `ash`, `mksh`, `csh`, `tcsh`, `fish` — и с каталогом, обёрткой и
-  опциями) с `-c` или `-s`, справа от `|`, с heredoc или here-string (`bash -e -c`, `| sudo bash -x`, `sh<<<'…'`);
+- `git commit -n`, `--no-veri…`, `send-pack` — и со словом в кавычках (`$'…'` тоже), бинарём подкоманды
+  (`git-commit`, `/usr/lib/git-core/git-send-pack`) или кодом для оболочки: `eval` и оболочка (`sh`, `bash`, `dash`,
+  `zsh`, `ksh`, `ash`, `mksh`, `csh`, `tcsh`, `fish` — и с каталогом, обёрткой и опциями) с `-c` или `-s`, справа от
+  `|`, с heredoc или here-string (`bash -e -c`, `| sudo bash -x`, `sh<<<'…'`), и git, исполняющий строку
+  (`git rebase -x`, `git submodule foreach`, `git bisect run`);
 - `SKIP_PREPUSH` и `hooksPath` в любой команде;
 - алиасы и include конфига git в команде (`git -c alias.…`, `git config include.path …`, `GIT_CONFIG_KEY_0=alias.…` —
   и значением в кавычках: `-c 'alias.c=commit -n'`); снятие секции `core` (`git config --remove-section` или
   `--rename-section core`);
-- команду с путём `scripts/git-hooks`, хука или `.git/config`, в которой не узнано чтение: запись перенаправлением,
-  команды-писатели (`chmod`, `rm`, `mv`, `tee`, `cp` в хук), текст `echo` и `printf` рядом с оболочкой-интерпретатором
-  (`echo '…' | bash`) и «читатели» с опцией или программой, которая пишет или запускает (`sed -i` и скрипт `sed` с
-  каталогом хуков или `.git/config`, программа `awk` с `>`, `|` или `system`, `sort -o`, действия `find`,
-  `git … --output`, `rg --pre`, значение `git -c` и переменной окружения с таким путём).
+- команду с путём `scripts/git-hooks`, хука или `.git/config` (и с `//` и `/./`), в которой не узнано чтение: запись
+  перенаправлением, команды-писатели (`chmod`, `rm`, `mv`, `tee`, `cp` в хук), текст `echo` и `printf` рядом с
+  оболочкой-интерпретатором (`echo '…' | bash`) и «читатели» с опцией или программой, которая пишет или запускает
+  (`sed -i` и скрипт `sed` с каталогом хуков или `.git/config`, программа `awk` с `>`, `|` или `system`, `sort -o`,
+  действия `find`, `git … --output`, `rg --pre` — `--pretty` читает, значение `git -c` и переменной окружения с таким
+  путём).
 
 Формы — `internal/archtest/testdata/guard-cases.txt`, `TestGuardBash`; подключение хука и `disableAllHooks` — и в
 локальном `.claude/settings.local.json` клона, где он есть, — `TestGuardWired`.

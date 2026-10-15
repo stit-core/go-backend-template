@@ -432,6 +432,23 @@ B env GIT_PAGER='chmod -x scripts/git-hooks/pre-push' git -p log
 B LESSOPEN='|chmod -x scripts/git-hooks/pre-push' less README.md
 B X=scripts/git-hooks/pre-push; chmod -x "$X"
 
+# --- отказ: бинарь подкоманды git (и по пути), путь хуков и .git/config с // и /./, git, вложенный в строку git
+B /usr/lib/git-core/git-commit -n -m x
+B /usr/lib/git-core/git-commit --no-verify -m x
+B git-commit -an -m x
+B /usr/lib/git-core/git-send-pack origin refs/heads/main
+B /usr/lib/git-core/git-http-push https://example.org/r.git main
+B git-push --no-verify origin main
+B sed -i '/^\[core\]/,+3d' .git//config
+B sed -i 's/a/b/' .git/./config
+B cp /dev/null .git///config
+B tee .git/.//config </dev/null
+B git bisect run git commit -n -m x
+B git submodule foreach git commit -n -m x
+B git rebase -x 'git commit --amend --no-edit -n' HEAD~1
+B git rebase --exec "git commit --amend --no-edit -n" HEAD~2
+B git submodule foreach 'git commit -an -m x'
+
 # --- отказ по замыслу, цена правил: интерпретатор в команде снимает кавычки со всей строки
 B git commit -m "fix: -n flag" && bash -c 'make check'
 B echo "pre-push ok" && bash -c 'make check'
@@ -577,6 +594,15 @@ A git rev-list -n 1 HEAD
 A sed -n 1,20p scripts/git-hooks/pre-push
 
 # --- пропуск: pre-commit и .git/config — чтение и текст о них; интерпретатор без обхода; `\|` и `\;` в кавычках
+A rg --pretty main scripts/git-hooks/pre-push
+A rg --pretty -n hooksPat scripts/git-hooks/pre-commit
+A cat .git//HEAD
+A git rebase -x 'make test' HEAD~2
+A git submodule foreach git status
+A git bisect run make test
+A ls /usr/lib/git-core/git-commit
+A /usr/lib/git-core/git-status --short
+A git cherry-pick -x abc1234
 A git commit -m "fix: -n and --no-verify in a message"
 A python3 - <<'EOF'⏎print('bash -c, SKIP_PREPUSH and hooksPath here are data')⏎EOF
 A git commit -q -F - <<'EOF'⏎fix: x⏎⏎git commit -n⏎EOF

@@ -3,19 +3,20 @@
 # exit 2 блокирует вызов, stderr уходит Claude.
 #
 # Блокирует: git commit с -n; git с --no-veri… (любая подкоманда); git send-pack и http-push (push без
-# pre-push); алиасы и include конфига git в команде (-c alias.…, git config include.path …, и значением
-# в кавычках: -c 'alias.c=commit -n'); снятие секции core (git config --remove-section или
-# --rename-section core — с ней уходит hooksPath); SKIP_PREPUSH и ключ hooksPath в любой команде
-# (прочитать — git config --list, поиск — инструментом Grep, сообщение коммита — heredoc); команду с
-# путём scripts/git-hooks, хука (pre-push, pre-commit, commit-msg) или .git/config, в которой не узнал
-# чтение, и запись туда перенаправлением. Слово с кавычками ($'…' тоже) или `\` внутри — как без них
-# ("git", $'git', --no-ver'i'fy).
+# pre-push) — и бинарём подкоманды (git-commit, /usr/lib/git-core/git-send-pack); алиасы и include конфига
+# git в команде (-c alias.…, git config include.path …, и значением в кавычках: -c 'alias.c=commit -n');
+# снятие секции core (git config --remove-section или --rename-section core — с ней уходит hooksPath);
+# SKIP_PREPUSH и ключ hooksPath в любой команде (прочитать — git config --list, поиск — инструментом Grep,
+# сообщение коммита — heredoc); команду с путём scripts/git-hooks, хука (pre-push, pre-commit, commit-msg)
+# или .git/config — и с // и /./ в пути, — в которой не узнал чтение, и запись туда перенаправлением. Слово
+# с кавычками ($'…' тоже) или `\` внутри — как без них ("git", $'git', --no-ver'i'fy).
 # Команда проверяется построчно; тела heredoc и строки в кавычках с пробелом — данные (сообщение
 # коммита может упоминать флаги), но у оболочки-интерпретатора (bash -e -c, sh -s, eval, | bash -x,
-# bash <<EOF, sh<<<'…') — код, как и текст echo и printf рядом с ней.
+# bash <<EOF, sh<<<'…') и у git, который исполняет строку (git rebase -x, git submodule foreach, git
+# bisect run), — код, как и текст echo и printf рядом с ней; вложенный git — своя команда.
 # Это барьер от случайного обхода, а не песочница: формы, которые он держит, — TestGuardBash
-# (internal/archtest/testdata/guard-cases.txt), чего не видит — docs/contributing.md § Кто что
-# enforce'ит. Ослабить сам гейт не даёт make check.
+# (internal/archtest/testdata/guard-cases.txt), чего не видит — docs/contributing.md § guard-bash.
+# Ослабить сам гейт не даёт make check.
 set -uo pipefail
 
 block() {
@@ -26,6 +27,8 @@ block() {
 # Значение "command" из JSON без jq: \" — вручную, остальное экранирование — printf %b.
 raw=$(sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p' | head -n 1)
 cmd=$(printf '%b' "$(printf '%s' "$raw" | sed 's/\\"/"/g')")
+# Путь сверяется нормализованным: .git//config и scripts/./git-hooks — те же файлы.
+cmd=$(printf '%s' "$cmd" | sed -E -e ':a' -e 's#/\./#/#g' -e 'ta' -e 's#/{2,}#/#g')
 
 # Без тел heredoc: от строки с `<<WORD` до строки-терминатора WORD.
 text=$(printf '%s\n' "$cmd" | awk '
@@ -51,6 +54,10 @@ re_interp="${before}(${shell})${rest}[[:space:]]+-[[:alnum:]]*[cs][[:alnum:]]*([
 re_interp+="|${start}eval([[:space:]]|\$)"
 re_interp+="|\\|&?([^;&|)${nl}]*[[:space:]/(])?(${shell})([[:space:];&|)<>]|\$)"
 re_interp+="|${before}(${shell})${rest}[[:space:]]*<<"
+# Git тоже исполняет строку оболочкой: git rebase -x и --exec, git submodule foreach, git bisect run.
+re_git_run="${before}git${rest}[[:space:]](rebase([[:space:]]+[^;&|${nl}]*)?[[:space:]](-x|--exec)([[:space:]=]|\$)"
+re_git_run+="|submodule([[:space:]]+[^;&|${nl}]*)?[[:space:]]foreach([[:space:]]|\$)|bisect[[:space:]]+run([[:space:]]|\$))"
+re_interp+="|$re_git_run"
 norm=$(printf '%s' "$text" | join_lines | unquote)
 interp=0
 if [[ $norm =~ $re_interp ]]; then
@@ -187,9 +194,11 @@ while IFS= read -r seg; do
     cmd=${bare[i]-}
     name=${cmd##*/}
     case "$name" in
-        git)
+        git | git-*)
+            # Бинарь подкоманды (git-commit, и по пути /usr/lib/git-core/…) — та же подкоманда git.
             sub="" skip=0 cfg=""
-            for w in "${bare[@]:i+1}"; do # подкоманда — первое слово не-флаг, кроме значений -C/-c…
+            [[ $name == git-* ]] && sub=${name#git-}
+            [ -n "$sub" ] || for w in "${bare[@]:i+1}"; do # подкоманда — первое слово не-флаг, кроме значений -C/-c…
                 case "$w" in
                     -c) skip=2 ;;
                     -C | --git-dir | --work-tree | --namespace | --config-env | --attr-source) skip=1 ;;
@@ -231,7 +240,7 @@ while IFS= read -r seg; do
             ;;
         rg)
             parse ''
-            has '^--pre' || continue # --pre запускает команду на каждом файле
+            has '^--pre(=|$)' || continue # --pre запускает команду на каждом файле (--pretty — нет)
             ;;
         cp)
             # Копия из хука — чтение. Назначение — последний операнд; опции — только без аргумента:
@@ -274,8 +283,19 @@ segments=$({
 while read -r -a words; do
     git=0 sub="" skip=0 prev=""
     for w in ${words[@]+"${words[@]}"}; do
+        # git, по пути или бинарём подкоманды (git-commit), — и вложенный в строку git bisect run, git
+        # submodule foreach, git rebase -x: каждый — своя команда со своей подкомандой.
+        if [[ $w == git || $w == */git ]]; then
+            git=1 sub="" skip=0
+            continue
+        elif [[ $w != -* && ${w##*/} == git-?* ]]; then
+            git=1 sub=${w##*/} skip=0
+            sub=${sub#git-}
+            [[ $sub == send-pack || $sub == http-push ]] && block "git $sub"
+            continue
+        fi
         if [ "$git" = 0 ]; then
-            [[ $w == git || $w == */git ]] && git=1
+            :
         elif [ -z "$sub" ]; then # подкоманда — первое слово не-флаг, кроме значений -C/-c/--git-dir…
             case "$w" in
                 -C | -c | --git-dir | --work-tree | --namespace | --config-env | --attr-source) skip=1 ;;
