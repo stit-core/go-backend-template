@@ -67,29 +67,33 @@ var barrierDeny = []string{
 	"Edit(go.sum)", "Edit(**/.claude/projects/**/memory/**)",
 }
 
-// guardFields — поля обработчика guard, которые барьер не гасят. Остальные гасят или обходят его (Claude Code,
-// hooks § Common fields и Command hook fields): if сужает вызовы, async и asyncRewake не ждут отказа, once
-// снимает хук после первого раза, args запускает command без оболочки, короткий timeout обрывает guard.
-var guardFields = map[string]bool{"type": true, "command": true, "shell": true, "statusMessage": true, "onFailure": true}
+// guardFields — поля обработчика guard, которые барьер не гасят; timeout — не короче секунды: guard работает
+// миллисекунды, а оборванный по таймауту хук вызов не держит (с onFailure: block — держит). Остальные гасят или
+// обходят guard (Claude Code, hooks § Common fields и Command hook fields): if сужает вызовы, async и asyncRewake
+// не ждут отказа, once снимает хук после первого раза, args запускает command без оболочки.
+var guardFields = map[string]bool{"type": true, "command": true, "shell": true, "statusMessage": true, "onFailure": true, "timeout": true}
 
 // guardHandler — обработчик запускает guard как есть: команда оболочки bash без полей, которые его гасят.
 func guardHandler(handler map[string]json.RawMessage) bool {
 	var typ, command, shell string
+	timeout := 1.0 // секунды; клиент принимает и дробные
 	for key, value := range handler {
-		var s *string
+		var into any
 		switch key {
 		case "type":
-			s = &typ
+			into = &typ
 		case "command":
-			s = &command
+			into = &command
 		case "shell":
-			s = &shell
+			into = &shell
+		case "timeout":
+			into = &timeout
 		}
-		if !guardFields[key] || s != nil && json.Unmarshal(value, s) != nil {
+		if !guardFields[key] || into != nil && json.Unmarshal(value, into) != nil {
 			return false
 		}
 	}
-	return typ == "command" && command == guardCommand && (shell == "" || shell == "bash")
+	return typ == "command" && command == guardCommand && (shell == "" || shell == "bash") && timeout >= 1
 }
 
 // exactTools — matcher из имён инструментов через «|» или «,»: Claude Code сравнивает их как строки.
@@ -142,7 +146,7 @@ func TestGuardWired(t *testing.T) {
 			wired = wired || bash && guardHandler(h)
 		}
 	}
-	require.True(t, wired, ".claude/settings.json: no PreToolUse hook of Bash runs %s as a plain bash command (fields if, async, once, args, timeout disarm it) — the guard is off", guardCommand)
+	require.True(t, wired, ".claude/settings.json: no PreToolUse hook of Bash runs %s as a plain bash command (fields if, async, once, args or a timeout under 1 s disarm it) — the guard is off", guardCommand)
 	for _, rule := range barrierDeny {
 		require.Contains(t, settings.Permissions.Deny, rule, ".claude/settings.json: deny lost %s — that weakens the gate (CLAUDE.md § Сначала спросить)", rule)
 	}
