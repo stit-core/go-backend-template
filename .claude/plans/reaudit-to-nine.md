@@ -98,8 +98,14 @@ blocked-by: —
     `release.sh` (userinfo origin вне вывода, имя образа, имя переменной тега); план трека удалён
 
 ### Волна 2
-- [ ] **S4** — Трек boundaries (`enforce-domain-boundaries`) принят и слит в `main`
+- [x] **S4** — Трек boundaries (`enforce-domain-boundaries`) принят и слит в `main`
   - Проверка: валидатор с ревью → PASS; `make check` → `✓ check clean` · Закрывает: AC1 · Зависит от: S2
+  - Сделано: `f825fac..da82ffa` fast-forward (перенос на `main` с gate — без конфликтов); валидатор — FAIL (B1: ключ
+    вызывающего в любом вызове) → фиксы, неблокирующие и добор gate (тест `new-domain` у форка с доменом `order` и
+    после prune, контроль U25) → FAIL (B2: фикс ложных отказов открыл три обхода правила policy) → фиксы
+    продолжателем → PASS: гейт в свежем worktree на `da82ffa` → `✓ check clean` при пороге 100 %, пробное слияние
+    с harness — ✓ (`N/validation-boundaries.md`); ревью — валидатор, дирижёр — состав диффа (продакшн-код не
+    тронут); остаток minor — в бэклоге; план трека удалён
 - [ ] **S5** — Трек harness (`close-harness-gaps`) принят и слит в `main`
   - Проверка: валидатор с ревью → PASS; `make check` → `✓ check clean` · Закрывает: AC1 · Зависит от: S1, S3
 
@@ -147,7 +153,10 @@ blocked-by: —
 - Из трека gate — в аннотацию `template/v1.2.0`: порог покрытия 100 % с явным списком непокрываемого (`cover.sh`),
   `gofumpt -extra` у `make fmt` и `fmt-check`, шаг build — `go build ./...` без тегов, ограничение сборки — только
   `integration` в тестах, `make mutate` (спецификация `scripts/tools/mutants.txt` — код форка), хуки — `bash -p`.
+- Из трека boundaries — в аннотацию `template/v1.2.0`, Breaking: новые правила archtest входа, ошибок, подписок и
+  policy (`delivery_test.go`); перечень китов входа `deliveryKits` — в `layout_settings_test.go` форка: после
+  `make template-update` его дописывают из шаблона.
 
 ## Где мы сейчас
-Волна 1 закрыта: S1–S3 в `main`. Boundaries — у валидатора (`N/validation-boundaries.md`); harness — исполнитель
-от нового `main`. Следующее: S4 и S5, затем переаудит S6.
+S1–S4 закрыты: gate, identity, lifecycle и boundaries — в `main` (`da82ffa`). Harness — последний круг фиксов, затем
+перенос на `main` (вписать свои тесты в комментарий пакета archtest) и перепроверка. Следующее: S5, затем переаудит S6.
