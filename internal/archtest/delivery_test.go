@@ -300,19 +300,21 @@ func mentions(node ast.Node, names map[string]bool) bool {
 
 // TestDeliveryPortsBoundToUsecase: порт входа (интерфейс пакета delivery/<транспорт>) получает usecase своего
 // домена — identity-closure над *<домен>.Usecase в его module/. Другое упоминание порта вне входа — поле fx.Out,
-// алиас, параметр, экспортируемый тип-функция пакета входа — отказ: порт над репозиторием, Trusted или хранилищем
-// кита отдал бы входу операции мимо usecase и policy.
+// алиас, параметр — отказ: порт над репозиторием, Trusted или хранилищем кита отдал бы входу операции мимо usecase и
+// policy. Экспортируемый тип-функция пакета входа вне входа — тоже отказ: портом он не служит, к usecase его не
+// привязать, а функция репозитория или Trusted дала бы то же.
 func TestDeliveryPortsBoundToUsecase(t *testing.T) {
 	t.Parallel()
 	files := goFiles(t)
-	ports := map[string]map[string]bool{} // путь импорта пакета delivery/<транспорт> → его порты
+	ports := map[string]map[string]bool{}     // путь импорта пакета delivery/<транспорт> → его порты-интерфейсы
+	funcTypes := map[string]map[string]bool{} // … → его экспортируемые типы-функции
 	for _, f := range files {
 		if _, sub, ok := splitDomain(f.pkg); !ok || f.test || !under(sub, "delivery") {
 			continue
 		}
 		pkg := module + "/" + f.pkg
 		if ports[pkg] == nil {
-			ports[pkg] = map[string]bool{}
+			ports[pkg], funcTypes[pkg] = map[string]bool{}, map[string]bool{}
 		}
 		ast.Inspect(parseGo(t, f.path), func(n ast.Node) bool {
 			if ts, ok := n.(*ast.TypeSpec); ok {
@@ -320,7 +322,7 @@ func TestDeliveryPortsBoundToUsecase(t *testing.T) {
 				case *ast.InterfaceType:
 					ports[pkg][ts.Name.Name] = true
 				case *ast.FuncType:
-					ports[pkg][ts.Name.Name] = ast.IsExported(ts.Name.Name)
+					funcTypes[pkg][ts.Name.Name] = ast.IsExported(ts.Name.Name)
 				}
 			}
 			return true
@@ -347,25 +349,30 @@ func TestDeliveryPortsBoundToUsecase(t *testing.T) {
 			return true
 		})
 		ast.Inspect(file, func(n ast.Node) bool {
-			if sel, ok := n.(*ast.SelectorExpr); ok && !bound[sel] {
-				if domain, ok := portDomain(sel, byName, ports); ok {
-					port := types.ExprString(sel)
-					t.Errorf("%s uses %s otherwise than as the result of func(uc *%s.Usecase) %s { return uc } in internal/domain/%s/module: an input port gets the usecase of its domain and its policy", f.path, port, domain, port, domain)
-				}
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok || bound[sel] {
+				return true
+			}
+			port := types.ExprString(sel)
+			if domain, ok := portDomain(sel, byName, ports); ok {
+				t.Errorf("%s uses %s otherwise than as the result of func(uc *%s.Usecase) %s { return uc } in internal/domain/%s/module: an input port gets the usecase of its domain and its policy", f.path, port, domain, port, domain)
+			}
+			if domain, ok := portDomain(sel, byName, funcTypes); ok {
+				t.Errorf("%s uses %s, a function type of internal/domain/%s/delivery: an input port is an interface of delivery, bound to *%s.Usecase by func(uc *%s.Usecase) <Port> { return uc } in its module — a function would hand the input an operation past the usecase and its policy", f.path, port, domain, domain, domain)
 			}
 			return true
 		})
 	}
 }
 
-// portDomain — домен порта входа, если выражение — <пакет delivery/<транспорт>>.<порт>.
-func portDomain(expr ast.Expr, byName map[string]string, ports map[string]map[string]bool) (string, bool) {
+// portDomain — домен входа, если выражение — <пакет delivery/<транспорт>>.<имя из names> (порт или тип-функция).
+func portDomain(expr ast.Expr, byName map[string]string, names map[string]map[string]bool) (string, bool) {
 	sel, ok := expr.(*ast.SelectorExpr)
 	if !ok {
 		return "", false
 	}
 	id, ok := sel.X.(*ast.Ident)
-	if !ok || !ports[byName[id.Name]][sel.Sel.Name] {
+	if !ok || !names[byName[id.Name]][sel.Sel.Name] {
 		return "", false
 	}
 	domain, _, _ := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/"))
