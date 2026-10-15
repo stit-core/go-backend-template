@@ -97,7 +97,9 @@ var (
 	slashName   = regexp.MustCompile(`^/([a-z][a-z0-9-]*)$`)
 	apiPath     = regexp.MustCompile(`^/api/[a-z0-9/_-]+$`)
 	kebabName   = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
-	testName    = regexp.MustCompile(`^Test[A-Z_]\w*$`)
+	testName    = regexp.MustCompile(`^Test[A-Z0-9_]\w*$`)
+	// testRef — имя теста в слове кода прозы: `-run '^TestX$'`, `TestA|TestB`, `TestX/sub`; «Test<Name>» — нет.
+	testRef = regexp.MustCompile(`(?:^|[^A-Za-z0-9_<])(Test[A-Z0-9_]\w*)`)
 	// fileName — файл без пути (`Makefile`, `.env.example`, `errors.go`): есть в репо под этим именем.
 	fileName = regexp.MustCompile(`^(Makefile|LICENSE|Dockerfile(\.\w+)?|\.?\w[\w.-]*\.(md|go|sql|ya?ml|json|sh|py|toml|txt|mod|sum|example))$`)
 	// namedBy — слово перед `имя`: rule или правило — .claude/rules/<имя>.md, skill или скилл — скилл;
@@ -191,6 +193,11 @@ func TestProseReferencesExist(t *testing.T) {
 				}
 			}
 			for _, word := range strings.Fields(span) {
+				for _, m := range testRef.FindAllStringSubmatch(word, -1) {
+					if !tests[m[1]] && !exempt(doc) {
+						dead = append(dead, doc+": "+m[1])
+					}
+				}
 				ref := strings.TrimRight(strings.TrimLeft(word, `"'(`), `"'.,;:()`) // точка в начале — .claude
 				ref, _, _ = strings.Cut(ref, ":")
 				ref = strings.TrimPrefix(ref, "./")
@@ -211,12 +218,8 @@ func TestProseReferencesExist(t *testing.T) {
 					}
 					continue
 				}
-				// Тест — функция *_test.go.
 				if testName.MatchString(ref) {
-					if !tests[ref] && !exempt(doc) {
-						dead = append(dead, doc+": "+ref)
-					}
-					continue
+					continue // имя теста сверено выше
 				}
 				top, _, isPath := strings.Cut(ref, "/")
 				near := path.Join(path.Dir(doc), top) // первый сегмент рядом с документом: references/…, stack/…
