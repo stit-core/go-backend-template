@@ -16,13 +16,14 @@ HEAD_LINE="$(head -n 1 "$COMMIT_MSG_FILE" | sed 's/[[:space:]]*$//')"
 [[ "$HEAD_LINE" =~ $GIT_PATTERN ]] && exit 0
 WHY="первая строка коммита должна быть Conventional Commit"
 if [[ "$HEAD_LINE" =~ $PATTERN ]]; then
-  TYPE=${BASH_REMATCH[1]}
+  TYPE=${BASH_REMATCH[1]}${BASH_REMATCH[2]}
   SUBJECT=${BASH_REMATCH[4]}
   CHARS=${SUBJECT//[$'\x80'-$'\xbf']/}
-  # След ревью — строка тела: первая строка начинается с типа и строкой Review: не бывает.
+  # След ревью — строка тела: первая строка начинается с типа и строкой Review: не бывает. Его требуют feat, fix
+  # и перенос обвязки chore(template): с ним в форк приходят гейт и код шаблона.
   if [ ${#CHARS} -gt 72 ]; then
     WHY="subject длиннее 72 символов (${#CHARS})"
-  elif [[ $TYPE != feat && $TYPE != fix ]] || grep -qE '^Review: +[^[:space:]]' "$COMMIT_MSG_FILE"; then
+  elif [[ $TYPE != feat* && $TYPE != fix* && $TYPE != "chore(template)" ]] || grep -qE '^Review: +[^[:space:]]' "$COMMIT_MSG_FILE"; then
     exit 0
   else
     WHY="у $TYPE в теле нет строки Review: — след ревью"
@@ -31,10 +32,20 @@ fi
 echo "ERROR: $WHY"
 echo "Формат: <type>(<scope>)?: <subject>  (≤72 символа)"
 echo "Допустимые types: ${TYPES//|/, }"
-echo "У feat и fix в теле — строка Review: <кто или чем> — <итог> (CLAUDE.md § Готово)"
+echo "У feat, fix и chore(template) в теле — строка Review: <кто или чем> — <итог> (CLAUDE.md § Готово)"
 echo "Сообщения самого git (Revert \"…\", fixup!/squash!/amend! …) тоже проходят"
 echo "Пример: feat(user): add password reset"
 echo
 echo "        Review: /code-review — находок нет"
+echo "Агент без собеседника: Review: принимает хаб (infra:<slug>) — дифф отдан, ревью не проводилось"
+# cherry-pick и rebase после конфликта приносят сообщение чужого коммита — его дописывают, а не обходят.
+for state in CHERRY_PICK_HEAD REBASE_HEAD; do
+  if [ -e "$(git rev-parse --git-path "$state" 2>/dev/null)" ]; then
+    echo "Перенос коммита ($state): сообщение — его, допиши subject и строку Review: — ревью переноса"
+    echo "  (Review: <кто или чем> — перенос <коммит>, <итог>): git commit -e (или -F <файл>) закончит этот"
+    echo "  коммит, цепочку продолжит git cherry-pick --continue или git rebase --continue"
+    break
+  fi
+done
 echo "Текущая первая строка: $HEAD_LINE"
 exit 1

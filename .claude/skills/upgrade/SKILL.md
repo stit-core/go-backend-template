@@ -96,8 +96,8 @@ git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-templat
 5. `make gen`, затем готово по CLAUDE.md § Готово: перенесённый код входа и сессий — ещё `/security-review`.
 6. Коммит `chore(template): обвязка template/vX.Y.Z`, в теле — что форк правил руками, строка на каждый
    пункт `Безопасность` и `Платформа` всех тегов до `TO` — `перенесено: <пункт> (PATHS)` или
-   `отклонено: <пункт> — <причина>` (движок печатает пункты после переноса), строка `Review:`; с bump
-   golibinfra — ещё пункты его `Breaking`, задевшие код.
+   `отклонено: <пункт> — <причина>` (движок печатает пункты после переноса), строка `Review:` (её требует
+   хук `commit-msg`); с bump golibinfra — ещё пункты его `Breaking`, задевшие код.
 
 Прервать перенос до коммита — `git restore --source=HEAD --staged --worktree -- .`: дерево и версия
 прежние, добавленные файлы уходят (`git reset --hard` и `git clean` — в deny); маркер конфликта в `Makefile`

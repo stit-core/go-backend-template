@@ -24,8 +24,9 @@ description: Выпустить версию бэкенда одной кома�
 
 Любой пункт не закрыт — не лезь:
 
-- [ ] Юзер явно сказал OK на релиз (тег + push в registry — действие видимое вне репо; `make release` ещё раз спросит confirm в TTY).
-- [ ] `make status` показывает: `main`, working tree clean, нет активных не-release планов.
+- [ ] Юзер явно сказал OK на этот релиз (тег + push в registry — действие видимое вне репо).
+- [ ] `make status` показывает: `main`, working tree clean; активный план — только тот, чей шаг — этот релиз
+  (незакрытый план — незаконченная работа в образе; разделы `## Handoff` активных планов релиз печатает сам).
 - [ ] `make check` зелёный (если нет — STOP, переключайся в `triage-failure`).
 - [ ] `make mutate A=--strict` → код 0: новых выживших мутаций, таймаутов, устаревших якорей и
   несобравшихся правок нет. Прогон — больше часа, нужен Docker: запускай в фоне; оборванный прогон того
@@ -53,6 +54,10 @@ description: Выпустить версию бэкенда одной кома�
 make release VERSION=vX.Y.Z
 ```
 
+Команду запускает оператор в своём терминале: подтверждение — `y` в TTY. У агента TTY нет, и без него
+`make release` отменяется; с OK юзера на этот релиз агент запускает её неинтерактивно —
+`RELEASE_YES=1 make release VERSION=vX.Y.Z` (путь образов из промпта — в выводе, сверь его).
+
 `scripts/release.sh` делает за тебя, по порядку:
 1. валидирует `VERSION` (semver; lightweight/`:latest`/`:edge` отвергаются);
 2. **confirm-промпт** `⚠ confirm release <v> from main@<sha> → <host>/<org>/<репо>{,-migrate}:<v>? [y/N]` — путь образов сверь с тем, что ждёт хаб (нет TTY/EOF → отмена, accidental release невозможен; origin, из которого путь не вывести, и имя репо, которое хаб не выкатит, — `1c-gateway`, `my.service`, — отказ);
@@ -62,6 +67,12 @@ make release VERSION=vX.Y.Z
 6. `release-preflight.sh tag` — на HEAD annotated semver-тег, и он — запрошенный;
 7. `docker buildx --platform linux/amd64 --push --ssh default` двух image'ей lockstep: `<host>/<org>/<репо>:<v>` (`cmd/api`) и `<host>/<org>/<репо>-migrate:<v>` (`cmd/migrate` + вшитые SQL, init-контейнер), `VERSION`/`GIT_SHA` зашиты в бинарник; приватные модули `go mod download` берёт по SSH ключом ssh-agent — в слои образа ключ не попадает;
 8. печатает агрегированный **INFRA-HANDOFF** (см. ниже), очищает накопитель коммитом и STOP.
+
+### 3. Push тега и `main`
+
+Тег и коммит очистки накопителя — локальные: `git push origin main vX.Y.Z` (pre-push гонит гейт). Без него
+следующий релиз из другого клона повторит отданный handoff, а `git show vX.Y.Z:.claude/plans/handoff.md` у
+остальных не сработает.
 
 Что уйдёт в хаб, видно заранее, без проверок, тега и образов: `make release VERSION=vX.Y.Z DRY_RUN=1`.
 

@@ -107,7 +107,7 @@ govulncheck ./... || { echo "release: govulncheck — код вызывает у
 existing=$(git describe --tags --exact-match --exclude 'template/*' HEAD 2>/dev/null || true)
 if [ -z "$existing" ]; then
     git tag -a "$VERSION" -m "release $VERSION"
-    echo "release: создан annotated tag $VERSION (push: git push origin $VERSION)"
+    echo "release: создан annotated tag $VERSION"
 elif [ "$existing" != "$VERSION" ]; then
     echo "release: на HEAD уже тег $existing ≠ запрошенному $VERSION" >&2
     exit 2
@@ -144,4 +144,5 @@ if grep -qvE '^(# Handoff|_пусто_|[[:space:]]*)$' "$HANDOFF" 2>/dev/null; t
 fi
 
 echo
+echo "release: тег и коммит очистки накопителя — локальные: git push origin main $VERSION (pre-push гонит гейт)"
 echo "=== STOP. Зона этого репо закрыта (image в registry). Деплой — не здесь. ==="

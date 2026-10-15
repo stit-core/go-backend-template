@@ -35,7 +35,6 @@
       "Bash(golangci-lint run*)",
       "Bash(sqlc*)",
       "Bash(mockery*)",
-      "Bash(scripts/tools/*)",
       "Bash(rg *)",
       "Bash(grep *)",
       "Bash(find *)",

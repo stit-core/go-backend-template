@@ -1,6 +1,6 @@
 ---
 name: scaffold
-description: Добавить новый строительный блок по конвенциям шаблона — domain (бизнес-домен в internal/domain/), endpoint (HTTP-метод существующего домена), event (outbox-событие + subscriber), migration (схема БД up/down + sqlc), field (поле сущности от колонки до ответа API), env (env-переменная конфига), port (cross-domain порт + адаптер). Используй, когда задача — завести такой блок: новый домен, ручку API, асинхронную реакцию на событие, изменение схемы БД, новое поле, настройку из окружения, данные одного домена для другого. Правка уже существующего блока — прямая правка, не scaffold.
+description: Добавить новый строительный блок по конвенциям шаблона — domain (бизнес-домен в internal/domain/), endpoint (HTTP-метод существующего домена), event (outbox-событие + subscriber), migration (схема БД up/down + sqlc), field (поле сущности от колонки до ответа API), env (env-переменная конфига), port (cross-domain порт + адаптер), job (периодическая задача домена). Используй, когда задача — завести такой блок: новый домен, ручку API, асинхронную реакцию на событие, изменение схемы БД, новое поле, настройку из окружения, данные одного домена для другого, работу по расписанию. Правка уже существующего блока — прямая правка, не scaffold.
 ---
 
 # Skill: scaffold (роутер)
@@ -20,6 +20,7 @@ description: Добавить новый строительный блок по 
 | Поле сущности через слои: колонка → sqlc → сущность → API | `field` | `references/field.md` | «добавь колонку `phone` в users и поле в ответ» |
 | Env-переменная конфига | `env` | `references/env.md` | «вынеси TTL в env», «нужен ключ API провайдера» |
 | Cross-domain порт + адаптер | `port` | `references/port.md` | «домену A нужны данные из B», «сделай adapter» |
+| Периодическая задача домена (`timerkit`) | `job` | `references/job.md` | «раз в час чисти …», «по расписанию» |
 
 Несколько вариантов в одной задаче (новый домен с событием) — веди по основному (`domain`),
 затем подключи нужные шаги из соседнего reference (`event`).
@@ -46,13 +47,13 @@ Reference даёт variant-специфичные шаги; этот ритм о
    `.mockery.yml` или HTTP-операции (`openapi.json`). Сгенерированное (`infra/postgres/db/*`,
    `**/mocks/*`, `openapi.json`) руками не правь.
 4. **Тесты по RED→GREEN.** Где появляется логика — сначала тест (red по нужной причине), потом
-   код до green. Какие файлы/пакеты — в reference.
+   код до green. Reference перечисляет слои в порядке кода, тест слоя пишется до его кода.
 5. **Готово** — по CLAUDE.md § Готово. По ходу — `make test PKG=./internal/domain/<name>/...`,
    `make lint PKG=...`.
 6. **Conventional Commit:** `feat(<scope>): <subject>` (точный scope/subject — в reference), в
    теле — строка `Review:` (CLAUDE.md § Готово).
-   Тронул инфра-поверхность (env/секрет/миграция-с-эффектом/cross-service-subject/новый
-   сетевой порт/go.mod) → оформи INFRA-HANDOFF (skill `infra-handoff`) до коммита.
+   Тронул инфра-поверхность (таблица rule `infra-impact`) → оформи INFRA-HANDOFF (skill `infra-handoff`)
+   до коммита.
 
 ## Anti-patterns (общие; variant-специфичные — в reference)
 
@@ -65,6 +66,6 @@ Reference даёт variant-специфичные шаги; этот ритм о
 
 ## См. также
 
-- `references/{domain,endpoint,event,migration,field,env,port}.md` — процедуры вариантов.
+- `references/{domain,endpoint,event,migration,field,env,port,job}.md` — процедуры вариантов.
 - Правила `domain-architecture`, `sqlc-and-migrations`, `events-and-messaging`,
   `tests-pipeline`, `infra-impact` — каждый reference читает свои шагом 0.

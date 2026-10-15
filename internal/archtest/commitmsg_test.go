@@ -13,7 +13,9 @@ import (
 
 // TestCommitMsgHook: первая строка коммита — Conventional Commit с типом из CLAUDE.md § Git workflow (тот же
 // список, что TYPES хука) или сообщение самого git; предел subject — 72 символа, а не байта, при любой локали
-// коммитящего (под LC_ALL=C русская буква — два байта); у feat и fix в теле — строка Review: (CLAUDE.md § Готово).
+// коммитящего (под LC_ALL=C русская буква — два байта); у feat, fix и переноса обвязки chore(template) в теле —
+// строка Review: (CLAUDE.md § Готово). Отказ переносу чужого коммита (cherry-pick, rebase) говорит, как его
+// дописать.
 func TestCommitMsgHook(t *testing.T) {
 	t.Parallel()
 	hook := filepath.Join(repoRoot(t), "scripts", "git-hooks", "commit-msg")
@@ -51,6 +53,9 @@ func TestCommitMsgHook(t *testing.T) {
 		{name: "git fixup", msg: "fixup! fix(gate): pre-push проверяет пушимый коммит\n"},
 		{name: "git squash", msg: "squash! fix(gate): pre-push проверяет пушимый коммит\n"},
 		{name: "git amend", msg: "amend! fix(gate): pre-push проверяет пушимый коммит\n"},
+		{name: "template transfer", msg: "chore(template): обвязка template/v1.2.0\n\nотклонено: c/auth — свой вход" + review},
+		{name: "chore of another scope", msg: "chore(deps): bump sqlc\n"},
+		{name: "template transfer without review", msg: "chore(template): обвязка template/v1.2.0\n\nперенесено: c/auth\n", why: noReview},
 		{name: "feat without review", msg: "feat(user): add password reset\n", why: noReview},
 		{name: "fix, body without review", msg: "fix: ключ ошибки логов — error\n\nтело\n", why: noReview},
 		{name: "review in the subject", msg: "fix(gate): Review: в subject\n", why: noReview},
@@ -88,5 +93,23 @@ func TestCommitMsgHook(t *testing.T) {
 				require.Contains(t, string(out), tc.why, "commit-msg refuses %q for another reason", tc.msg)
 			})
 		}
+	}
+
+	// Перенос коммита без следа ревью: отказ, и он объясняет, как дописать сообщение, — только во время переноса.
+	for state, hint := range map[string]bool{"CHERRY_PICK_HEAD": true, "REBASE_HEAD": true, "": false} {
+		t.Run("carry "+state, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			git(t, repo, "init", "-q")
+			if state != "" {
+				writeFiles(t, repo, map[string]string{".git/" + state: "0123456789012345678901234567890123456789\n"})
+			}
+			writeFiles(t, repo, map[string]string{"msg": "feat(user): старый коммит без следа\n"})
+			out, err := runIn(t, repo, "bash", hook, "msg")
+			var exit *exec.ExitError
+			require.ErrorAs(t, err, &exit, out)
+			require.Contains(t, out, noReview)
+			require.Equal(t, hint, strings.Contains(out, "Перенос коммита ("+state+")"), out)
+		})
 	}
 }
