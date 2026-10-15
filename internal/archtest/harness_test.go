@@ -620,7 +620,9 @@ func globMatches(t *testing.T, root string, variants []string) bool {
 	args := []string{"ls-files", "--cached", "--ignored"}
 	for _, v := range variants {
 		args = append(args, "--exclude="+v)
-		if !strings.ContainsAny(v, "*?[!") && gitIgnored(t, root, v) {
+		// Литерал — путь от корня репо: ведущий «/» лишь привязывает его к корню, «..» — за пределами репо.
+		lit := strings.TrimPrefix(v, "/")
+		if !strings.ContainsAny(v, "*?[!") && lit != ".." && !strings.HasPrefix(lit, "../") && gitIgnored(t, root, lit) {
 			return true
 		}
 	}
