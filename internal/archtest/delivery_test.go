@@ -2,6 +2,7 @@ package archtest
 
 import (
 	"go/ast"
+	"go/token"
 	"go/types"
 	"maps"
 	"os"
@@ -693,9 +694,8 @@ type policyWalk struct {
 }
 
 // asks — метод спрашивает policy (Can… порта policy: поля зависимостей или параметра) или передаёт порту
-// зависимостей (uc.d.Repo.GetByID) ключ вызывающего — UserID из identity.From или переменную с ним, в том числе от
-// своего метода или функции корня (uc.callerID); сам или своим методом, функцией корня. Вызов лога, кита или
-// функции пакета с UserID — не ключ: операция по-прежнему отдала бы чужое.
+// зависимостей (uc.d.Repo.GetByID) ключ вызывающего (callerScope); сам или своим методом, функцией корня. Вызов
+// лога, кита или функции пакета с UserID — не ключ: операция по-прежнему отдала бы чужое.
 func (w policyWalk) asks(fn *ast.FuncDecl) bool {
 	if fn == nil || fn.Body == nil {
 		return false
@@ -704,13 +704,10 @@ func (w policyWalk) asks(fn *ast.FuncDecl) bool {
 		return done
 	}
 	w.asked[fn] = false
-	params, sc := w.params(fn), callerScope{callers: map[string]bool{}, keys: map[string]bool{}}
+	params, sc := w.params(fn), w.scope(fn)
 	asked := false
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.AssignStmt:
-			w.bind(fn, x, sc)
-		case *ast.CallExpr:
+		if x, ok := n.(*ast.CallExpr); ok {
 			sel, isSel := x.Fun.(*ast.SelectorExpr)
 			switch {
 			case isSel && strings.HasPrefix(sel.Sel.Name, "Can") && w.port(sel.X, params, true),
@@ -734,13 +731,10 @@ func (w policyWalk) yields(fn *ast.FuncDecl) bool {
 		return done
 	}
 	w.yielded[fn] = false
-	sc := callerScope{callers: map[string]bool{}, keys: map[string]bool{}}
+	sc := w.scope(fn)
 	found := false
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.AssignStmt:
-			w.bind(fn, x, sc)
-		case *ast.ReturnStmt:
+		if x, ok := n.(*ast.ReturnStmt); ok {
 			found = found || len(x.Results) > 0 && sc.key(x.Results[0])
 		}
 		return !found
@@ -749,9 +743,39 @@ func (w policyWalk) yields(fn *ast.FuncDecl) bool {
 	return found
 }
 
-// callerScope — переменные функции: вызывающий из identity.From и ключи — его UserID.
-type callerScope struct{ callers, keys map[string]bool }
+// callerScope — переменные функции fn: вызывающий — переменная, каждая запись которой — identity.From(ctx); ключ —
+// переменная, каждая запись которой — ключ (key). Одна запись не ключа снимает метку: target := caller.UserID;
+// if id != "" { target = id } — не ключ.
+type callerScope struct {
+	w             policyWalk
+	fn            *ast.FuncDecl
+	callers, keys map[string]bool
+}
 
+// scope — callerScope функции fn: ключи — наибольшее множество, у каждой переменной которого все записи — ключ.
+func (w policyWalk) scope(fn *ast.FuncDecl) callerScope {
+	sc := callerScope{w: w, fn: fn, callers: map[string]bool{}, keys: map[string]bool{}}
+	vars := writes(fn)
+	for name, values := range vars {
+		sc.callers[name] = !slices.ContainsFunc(values, func(v ast.Expr) bool {
+			call, ok := v.(*ast.CallExpr)
+			return !ok || !isSelector(call.Fun, w.byName[fn], identityPath, "From")
+		})
+		sc.keys[name] = true
+	}
+	for changed := true; changed; {
+		changed = false
+		for name, values := range vars {
+			if sc.keys[name] && slices.ContainsFunc(values, func(v ast.Expr) bool { return v == nil || !sc.key(v) }) {
+				sc.keys[name], changed = false, true
+			}
+		}
+	}
+	return sc
+}
+
+// key — выражение — ключ вызывающего: <вызывающий>.UserID, переменная-ключ или вызов своего метода или функции
+// корня, которая отдаёт ключ (uc.callerID(ctx)).
 func (sc callerScope) key(expr ast.Expr) bool {
 	switch e := expr.(type) {
 	case *ast.Ident:
@@ -759,23 +783,75 @@ func (sc callerScope) key(expr ast.Expr) bool {
 	case *ast.SelectorExpr:
 		id, ok := e.X.(*ast.Ident)
 		return ok && e.Sel.Name == "UserID" && sc.callers[id.Name]
+	case *ast.CallExpr:
+		return sc.w.yields(sc.w.callee(sc.fn, e))
 	}
 	return false
 }
 
-// bind — x := identity.From(ctx) даёт вызывающего, x := <ключ> и x := <своя функция, которая отдаёт ключ> — ключ.
-func (w policyWalk) bind(fn *ast.FuncDecl, x *ast.AssignStmt, sc callerScope) {
-	id, ok := x.Lhs[0].(*ast.Ident)
-	if !ok || id.Name == "_" || len(x.Rhs) != 1 {
-		return
+// writes — записи переменных в функции (и её литералах): имя → значения. Значение кортежа (id, err :=
+// uc.callerID(ctx)) — вызов у первой переменной; nil — значения не видно: параметр, вторая переменная кортежа, range,
+// var без значения, x++, взятый адрес (&x). Запись поля или элемента (x.f = v) — запись x.
+func writes(fn ast.Node) map[string][]ast.Expr {
+	out := map[string][]ast.Expr{}
+	write := func(lhs, value ast.Expr) {
+		for lhs != nil {
+			switch x := lhs.(type) {
+			case *ast.Ident:
+				out[x.Name] = append(out[x.Name], value)
+				return
+			case *ast.SelectorExpr:
+				lhs = x.X
+			case *ast.IndexExpr:
+				lhs = x.X
+			case *ast.StarExpr:
+				lhs = x.X
+			case *ast.ParenExpr:
+				lhs = x.X
+			default:
+				return
+			}
+		}
 	}
-	call, isCall := x.Rhs[0].(*ast.CallExpr)
-	switch {
-	case isCall && isSelector(call.Fun, w.byName[fn], identityPath, "From"):
-		sc.callers[id.Name] = true
-	case isCall && w.yields(w.callee(fn, call)), sc.key(x.Rhs[0]):
-		sc.keys[id.Name] = true
+	tuple := func(names, values []ast.Expr) {
+		for i, name := range names {
+			switch {
+			case len(names) == len(values):
+				write(name, values[i])
+			case i == 0 && len(values) == 1:
+				write(name, values[0])
+			default:
+				write(name, nil)
+			}
+		}
 	}
+	ast.Inspect(fn, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.Field:
+			for _, name := range x.Names {
+				write(name, nil)
+			}
+		case *ast.ValueSpec:
+			names := make([]ast.Expr, len(x.Names))
+			for i, name := range x.Names {
+				names[i] = name
+			}
+			tuple(names, x.Values)
+		case *ast.AssignStmt:
+			tuple(x.Lhs, x.Rhs)
+		case *ast.RangeStmt:
+			write(x.Key, nil)
+			write(x.Value, nil)
+		case *ast.IncDecStmt:
+			write(x.X, nil)
+		case *ast.UnaryExpr:
+			if x.Op == token.AND {
+				write(x.X, nil)
+			}
+		}
+		return true
+	})
+	return out
 }
 
 // callee — свой метод (на получателе fn) или функция корня, которую зовёт вызов; nil — чужой вызов.
