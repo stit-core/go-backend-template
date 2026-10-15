@@ -22,33 +22,41 @@ import (
 // (scripts/tools/cover.sh) и из lint.
 var generatedHeader = regexp.MustCompile(`(?m)^// Code generated .* DO NOT EDIT\.$`)
 
-// generatorOutput — каталог, куда пишет генератор: sqlc (infra/postgres/db домена) и mockery (mocks).
-func generatorOutput(pkg string) bool {
-	return strings.HasSuffix(pkg, "/infra/postgres/db") || path.Base(pkg) == "mocks"
+// sqlcFiles — файлы, которые sqlc пишет в каталог вывода домена db: общие и по файлу запросов из соседнего
+// queries/ (users.sql → users.sql.go).
+func sqlcFiles(t *testing.T, db string) map[string]bool {
+	t.Helper()
+	files := map[string]bool{"db.go": true, "models.go": true, "querier.go": true, "copyfrom.go": true, "batch.go": true}
+	queries, err := filepath.Glob(filepath.Join(repoRoot(t), path.Dir(db), "queries", "*.sql"))
+	require.NoError(t, err)
+	for _, q := range queries {
+		files[filepath.Base(q)+".go"] = true
+	}
+	return files
 }
 
-// TestGeneratedHeaderOnlyInGeneratorOutput: заголовок сгенерированного выводит файл из покрытия и lint,
-// поэтому он стоит только там, куда пишут генераторы, — в выводе sqlc и mockery или в пакете pkg/, где
-// сгенерировано всё (клиент gRPC, OpenAPI); рукописный файл с ним обошёл бы гейт.
+// TestGeneratedHeaderOnlyInGeneratorOutput: заголовок сгенерированного выводит файл из покрытия и lint, поэтому
+// он стоит только у вывода генераторов гейта — sqlc (каталог infra/postgres/db домена, файлы, которые sqlc
+// пишет) и mockery (mocks), — а в каталоге вывода sqlc нет других файлов: рукописный файл под заголовком обошёл
+// бы гейт, а без него — make gen. Сгенерированный клиент pkg/ — генератор в make gen и его каталог в этом тесте:
+// правка гейта.
 func TestGeneratedHeaderOnlyInGeneratorOutput(t *testing.T) {
 	t.Parallel()
-	generated := map[string]bool{}
-	pkgFiles := map[string][]string{}
+	sqlc := map[string]map[string]bool{} // каталог вывода sqlc → его файлы
 	for _, f := range goFiles(t) {
 		src, err := os.ReadFile(filepath.Join(repoRoot(t), f.path))
 		require.NoError(t, err)
-		generated[f.path] = generatedHeader.Match(src)
-		if !f.test {
-			pkgFiles[f.pkg] = append(pkgFiles[f.pkg], f.path)
-		}
-	}
-	for file, gen := range generated {
-		pkg := path.Dir(file)
+		gen := generatedHeader.Match(src)
 		switch {
-		case !gen, generatorOutput(pkg):
-		case under(pkg, "pkg") && !slices.ContainsFunc(pkgFiles[pkg], func(f string) bool { return !generated[f] }):
-		default:
-			t.Errorf("%s: the generated-code header takes the file out of coverage and lint — only generator output carries it: sqlc (infra/postgres/db), mockery (mocks), a fully generated client package in pkg/", file)
+		case strings.HasSuffix(f.pkg, "/infra/postgres/db"):
+			if sqlc[f.pkg] == nil {
+				sqlc[f.pkg] = sqlcFiles(t, f.pkg)
+			}
+			if !gen || !sqlc[f.pkg][path.Base(f.path)] {
+				t.Errorf("%s: sqlc writes no such file — infra/postgres/db holds only the output of make gen (db.go, models.go, <file of queries/>.sql.go)", f.path)
+			}
+		case gen && path.Base(f.pkg) != "mocks":
+			t.Errorf("%s: the generated-code header takes the file out of coverage and lint — only the output of the generators of make gen carries it: sqlc (infra/postgres/db), mockery (mocks)", f.path)
 		}
 	}
 }

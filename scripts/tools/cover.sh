@@ -4,13 +4,14 @@
 # Использование:
 #   scripts/tools/cover.sh [--format=detailed] <profile> <floor>
 #
-# Scope — пакеты internal/ и pkg/ (профиль пишет test-int с -coverpkg, так что fx-провайдеры, которые
-# исполняет boot-тест cmd/api, засчитываются), кроме сгенерированного (заголовок «Code generated … DO
-# NOT EDIT.»: sqlc, mockery) и тестовой обвязки internal/testkit/. Два условия: доля statement'ов всех
-# блоков (и замыканий вне функций) не ниже floor и ни одной функции, у которой тесты не исполнили ни
-# одного statement'а, — новая функция без тестов не проходит при любом проценте. Блок из списка
-# непокрываемого (ниже) идёт исполненным. Отказ — с блоками и функциями (detailed — все блоки).
-# Последняя строка — `OK: …` / `FAIL: …`.
+# Профиль пишет test-int с -coverpkg (fx-провайдеры, которые исполняет boot-тест cmd/api, засчитываются); вне
+# scope — сгенерированное (заголовок «Code generated … DO NOT EDIT.»: sqlc, mockery) и тестовая обвязка
+# internal/testkit/. Два условия: доля statement'ов всех блоков internal/ и pkg/ (и замыканий вне функций) не
+# ниже floor и ни одной функции internal/, pkg/ и cmd/, у которой тесты не исполнили ни одного statement'а, —
+# новая функция без тестов не проходит при любом проценте. main пакета cmd/ — корень процесса: его исполняют
+# перезапущенный тестовый бинарь и образ, профиль этого не видит. Блок из списка непокрываемого (ниже) идёт
+# исполненным в доле, но не в функциях: запись не прячет функцию целиком. Отказ — с блоками и функциями
+# (detailed — все блоки). Последняя строка — `OK: …` / `FAIL: …`.
 
 set -uo pipefail
 export LC_ALL=C
@@ -21,7 +22,7 @@ for arg in "$@"; do
     case "$arg" in
         --format=*) FORMAT="${arg#--format=}" ;;
         -h | --help)
-            sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) ARGS+=("$arg") ;;
@@ -41,7 +42,7 @@ if [ ! -s "$profile" ]; then
 fi
 
 module=$(go list -m) || { echo "FAIL: go list -m"; exit 1; }
-generated=$(grep -rlE --include='*.go' '^// Code generated .* DO NOT EDIT\.$' internal pkg | sed "s|^|$module/|")
+generated=$(grep -rlE --include='*.go' '^// Code generated .* DO NOT EDIT\.$' internal pkg cmd 2>/dev/null | sed "s|^|$module/|")
 scoped=$(mktemp) || exit 1
 trap 'rm -f "$scoped"' EXIT
 
@@ -56,9 +57,10 @@ LIST
 )
 
 # Блок профиля: <файл>:<начало>,<конец> <statement'ов> <счётчик>; блок приходит от каждого тестового бинаря,
-# покрыт — если счётчик хоть одного больше нуля. Блоки scope идут ещё и в $scoped — для покрытия функций;
-# там блок пустого тела считается за statement: иначе -func даёт исполненной пустой функции 0.0% (0 из 0).
-report=$(awk -v module="$module/" -v testkit="$module/internal/testkit/" -v scoped="$scoped" '
+# покрыт — если счётчик хоть одного больше нуля. Блоки scope идут ещё и в $scoped — для покрытия функций, со
+# счётчиками тестов; там блок пустого тела считается за statement: иначе -func даёт исполненной пустой функции
+# 0.0% (0 из 0). Доля — блоки internal/ и pkg/, cmd/ — только в $scoped.
+report=$(awk -v module="$module/" -v testkit="$module/internal/testkit/" -v cmd="$module/cmd/" -v scoped="$scoped" '
     FNR == 1 { part++ }
     part == 1 {
         if ($0 !~ /^[[:space:]]*(#|$)/) {
@@ -73,6 +75,7 @@ report=$(awk -v module="$module/" -v testkit="$module/internal/testkit/" -v scop
         file = substr($1, 1, index($1, ":") - 1)
         if (file in gen || index(file, testkit) == 1) next
         lines[++nl] = $0
+        if (index(file, cmd) == 1) next
         if (!($1 in stmts)) { stmts[$1] = $2; fileOf[$1] = substr(file, length(module) + 1); order[++n] = $1 }
         if ($3 > 0) hit[$1] = 1
     }
@@ -99,7 +102,6 @@ report=$(awk -v module="$module/" -v testkit="$module/internal/testkit/" -v scop
         for (i = 1; i <= nl; i++) {
             $0 = lines[i]
             if ($2 == 0) $2 = 1
-            if ($1 in hit) $3 = 1
             print > scoped
         }
         for (i = 1; i <= n; i++) {
@@ -128,10 +130,10 @@ for kind in EMPTY WIDE STALE; do
     exit 1
 done
 funcs=$(go tool cover -func="$scoped") || { echo "FAIL: go tool cover -func"; exit 1; }
-untested=$(awk '$1 != "total:" && $NF == "0.0%" {print $1, $2}' <<<"$funcs")
+untested=$(awk -v cmd="$module/cmd/" '$1 != "total:" && $NF == "0.0%" && !($2 == "main" && index($1, cmd) == 1) {print $1, $2}' <<<"$funcs")
 
 pct=$(awk -v c="$covered" -v t="$total" 'BEGIN { printf "%.2f", 100 * c / t }')
-summary="$covered/$total statement'ов; юнит + integration, internal/ и pkg/ без сгенерированного и internal/testkit"
+summary="$covered/$total statement'ов internal/ и pkg/ без сгенерированного и internal/testkit, функции — и cmd/ без main; юнит + integration"
 [ "$excluded" -eq 0 ] || summary+="; непокрываемое списком — $excluded"
 low=""
 awk -v c="$covered" -v t="$total" -v f="$floor" 'BEGIN { exit !(100 * c / t < f) }' && low=1

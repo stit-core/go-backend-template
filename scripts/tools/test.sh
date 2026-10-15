@@ -6,7 +6,7 @@
 #
 # --integration — ещё и тесты с build-тегом integration (testcontainers, нужен Docker),
 # всегда без кеша результатов; по всему дереву (без pkg) прогон пишет и профиль покрытия
-# coverage.out (пакеты internal/ и pkg/ — порог по нему проверяет cover.sh), упавший — нет.
+# coverage.out (пакеты internal/, pkg/ и cmd/ — его проверяет cover.sh), упавший — нет.
 # Зелёный — одна строка сводки. Красный — вывод `go test` без строк прошедших пакетов
 # (падающие тесты, ошибки сборки и загрузки пакетов), не больше 25000 байт целыми строками, и под ним — все
 # упавшие тесты и пакеты (обрезка их не срезает); detailed — весь вывод. Последняя строка —
@@ -33,7 +33,7 @@ for arg in "$@"; do
 done
 COVER=()
 if [ -n "$INTEGRATION" ] && [ ${#PKGS[@]} -eq 0 ]; then
-    COVER=(-coverpkg=./internal/...,./pkg/... -coverprofile=coverage.out)
+    COVER=(-coverpkg=./internal/...,./pkg/...,./cmd/... -coverprofile=coverage.out)
 fi
 [ ${#PKGS[@]} -gt 0 ] || PKGS=(./...)
 

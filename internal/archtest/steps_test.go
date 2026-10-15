@@ -46,8 +46,9 @@ func pin(t *testing.T, tool string) string {
 
 // TestCoverCheck: порог покрытия — факт (100), блок, который тесты не исполнят по построению, идёт
 // исполненным только по записи списка непокрываемого cover.sh — ровно одной своей: запись без текста, без
-// такого блока или подходящая к двум блокам — отказ. Модуль игрушечный: ветка G с паникой тестами не
-// исполняется (с h.go — и такая же ветка H), профиль — настоящий go test.
+// такого блока или подходящая к двум блокам — отказ, а функцию без тестов запись не прячет. Функция без
+// тестов — отказ и в cmd/, кроме main: доля cmd/ в порог не идёт. Модуль игрушечный: ветка G с паникой тестами
+// не исполняется (с h.go — и такая же ветка H), профиль — настоящий go test с -coverpkg, как у test-int.
 func TestCoverCheck(t *testing.T) {
 	t.Parallel()
 	script := readFiles(t, repoRoot(t), "scripts/tools/cover.sh")["scripts/tools/cover.sh"]
@@ -71,6 +72,16 @@ func TestCoverCheck(t *testing.T) {
 		{name: "an entry without an uncovered block", entry: "internal/p/p.go:return 1", want: "запись непокрываемого без неисполненного блока"},
 		{name: "an entry without a text", entry: "internal/p/p.go:", want: "запись непокрываемого без текста блока"},
 		{name: "an entry over two blocks", entry: "internal/p/h.go:panic(\"unreachable", files: h, want: "подходит к нескольким неисполненным блокам"},
+		{name: "an entry over a whole function", entry: "internal/p/p.go:panic(\"unreachable\ninternal/p/k.go:unreachable: K", files: map[string]string{
+			"internal/p/k.go": "package p\n\n// K — её тесты не зовут.\nfunc K() string { return \"unreachable: K\" }\n",
+		}, want: "  example.com/cov/internal/p/k.go:4:"},
+		{name: "a function of cmd/ without tests", entry: "internal/p/p.go:panic(\"unreachable", files: map[string]string{
+			"cmd/app/main.go": "package main\n\nimport \"os\"\n\nfunc main() { os.Exit(code()) }\n\n// code — код выхода.\nfunc code() int { return 0 }\n",
+		}, want: "  example.com/cov/cmd/app/main.go:8:"},
+		{name: "main of cmd/ and its tested logic", entry: "internal/p/p.go:panic(\"unreachable", files: map[string]string{
+			"cmd/app/main.go":      "package main\n\nimport \"os\"\n\nfunc main() { os.Exit(code(os.Args[1:])) }\n\n// code — код выхода; ветку ошибки тест не берёт: доля cmd/ в порог не идёт.\nfunc code(args []string) int {\n\tif len(args) > 0 {\n\t\treturn 2\n\t}\n\treturn 0\n}\n",
+			"cmd/app/main_test.go": "package main\n\nimport \"testing\"\n\nfunc TestCode(t *testing.T) {\n\tif code(nil) != 0 {\n\t\tt.Fatal(\"code\")\n\t}\n}\n",
+		}, want: "непокрываемое списком — 1", ok: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -83,7 +94,7 @@ func TestCoverCheck(t *testing.T) {
 				"scripts/tools/cover.sh": strings.Replace(script, list, "    cat <<'LIST'\n"+tc.entry+"\nLIST\n", 1),
 			}, tc.files))
 			git(t, repo, "init", "-q", "-b", "main")
-			out, err := runIn(t, repo, "go", "test", "-coverprofile=coverage.out", "./...")
+			out, err := runIn(t, repo, "go", "test", "-coverpkg=./internal/...,./pkg/...,./cmd/...", "-coverprofile=coverage.out", "./...")
 			require.NoError(t, err, out)
 
 			out, err = step(t, repo, "scripts/tools/cover.sh", "coverage.out", "100")

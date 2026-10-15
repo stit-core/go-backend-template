@@ -38,6 +38,7 @@ linters:
     - nolintlint
     - testifylint
     - nonamedreturns # канон usecase: результаты без имён
+    - gochecknoinits # init() исполняет загрузка пакета: покрытие засчитало бы его код без теста
 
   settings:
     errcheck:

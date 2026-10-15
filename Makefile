@@ -231,9 +231,9 @@ test-bench: ## Бенчмарки
 mutate: ## Мутационный прогон вне гейта, нужен Docker (A="<id> …" — эти мутации заново, A=--check — только якоря, A=--strict — устаревший якорь тоже код 1)
 	@python3 -I scripts/tools/mutate.py $(A)
 
-# Покрытие — профиль одного прогона юнит + integration (make test-int) по internal/ и pkg/ без
-# сгенерированного и internal/testkit: доля statement'ов ≥ порога и ни одной функции без исполненного
-# statement'а (scripts/tools/cover.sh); make check проверяет профиль своего test-int, не гоняя тесты
+# Покрытие — профиль одного прогона юнит + integration (make test-int) без сгенерированного и internal/testkit:
+# доля statement'ов internal/ и pkg/ ≥ порога и ни одной функции internal/, pkg/ и cmd/ (кроме main) без
+# исполненного statement'а (scripts/tools/cover.sh); make check проверяет профиль своего test-int, не гоняя тесты
 # второй раз. Порог — факт, 100: запас ниже факта пропустил бы удалённые юнит-тесты usecase — их код
 # попутно исполняют integration-тесты; блок, который тесты не исполнят по построению, — в списке
 # непокрываемого cover.sh. Порог — константа гейта: ни окружение, ни командная строка его не меняют.

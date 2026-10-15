@@ -8,7 +8,7 @@
 //   - archtest_test.go — TestHTTPTypes (префикс, уникальность и envelope HTTP-типов), TestDomainErrorTables
 //     (таблица ошибок домена и ответ хендлера — nil или она), TestDomainErrorsInErrorsGo (ошибки корня — только
 //     в errors.go), TestSubjectLiteralOwnership и TestNoExportedSubjectInDomainRoot (владение subject'ами),
-//     TestTestsAssert (тесты без утверждений);
+//     TestTestsAssert (тесты и fuzz-цели без утверждений, мягкие ожидания моков);
 //   - crossdomain_test.go — TestTrustedOnlyInModules и TestTrustedErrors (Trusted между доменами), TestNoFxAs
 //     (привязка портов без fx.As), TestModulesEmbedNoForeignTypes (порт между доменами — типовой адаптер);
 //   - delivery_test.go — вход домена: TestDeliveryPackages (пакет delivery/<транспорт>),
@@ -54,6 +54,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -632,11 +633,13 @@ func TestNoExportedSubjectInDomainRoot(t *testing.T) {
 }
 
 // TestTestsAssert: покрытие считает исполненный код, поэтому тест без единого утверждения поднимает его,
-// ничего не проверив, — в любом пакете модуля: покрытие набирают и тесты pkg/ и cmd/. Тест домена и
-// платформы утверждает require, assert или проверкой тестового кита (rule tests-pipeline); остальным
-// засчитываются ещё t.Error*, t.Fatal*, t.Fail* и t, отданный проверке тестового кита — его пакета
-// (archkit.Check, testkit.MigrationLadder) или значения из него (envAllowlist.Check), а не любому вызову
-// (fmt.Println(t)).
+// ничего не проверив, — в любом пакете модуля: покрытие набирают и тесты pkg/ и cmd/, и fuzz-цели (сиды f.Add
+// идут в обычном go test). Тест домена и платформы утверждает require, assert или проверкой тестового кита
+// (rule tests-pipeline); остальным засчитываются ещё t.Error*, t.Fatal*, t.Fail* и t, отданный проверке
+// тестового кита — его пакета (archkit.Check, testkit.MigrationLadder) или значения из него
+// (envAllowlist.Check), а не любому вызову (fmt.Println(t)). Ожидание мока тоже утверждение, и мягкое — ничего не
+// обещает: .Maybe() (вызова может не быть) и цепочка EXPECT() без .Once(), .Twice() или .Times(n) (вызовов
+// сколько угодно) — отказ.
 func TestTestsAssert(t *testing.T) {
 	t.Parallel()
 	type testFile struct {
@@ -688,13 +691,61 @@ func TestTestsAssert(t *testing.T) {
 		for _, f := range files {
 			for _, decl := range f.file.Decls {
 				fn, ok := decl.(*ast.FuncDecl)
-				if ok && fn.Recv == nil && strings.HasPrefix(fn.Name.Name, "Test") && fn.Name.Name != "TestMain" &&
-					!asserts(fn.Body, f.byName, helpers, kits, bare) {
+				if !ok || fn.Body == nil {
+					continue
+				}
+				test := strings.HasPrefix(fn.Name.Name, "Test") && fn.Name.Name != "TestMain" || strings.HasPrefix(fn.Name.Name, "Fuzz")
+				if fn.Recv == nil && test && !asserts(fn.Body, f.byName, helpers, kits, bare) {
 					t.Errorf("%s: %s asserts nothing — no require, assert, Assert*/Require* of a test kit or testify/mock, or helper of the package that asserts (rule tests-pipeline): such a test raises coverage without checking anything", f.path, fn.Name.Name)
+				}
+				for _, soft := range softExpectations(fn.Body) {
+					t.Errorf("%s: %s: %s — a soft expectation of a mock promises nothing: a call that never happens or happens again passes; exact .Once(), .Twice() or .Times(n) (rule tests-pipeline)", f.path, fn.Name.Name, soft)
 				}
 			}
 		}
 	}
+}
+
+// softExpectations — мягкие ожидания моков в теле: .Maybe() и цепочка EXPECT() одним выражением без .Once(),
+// .Twice() или .Times(n); значение — что нашлось.
+func softExpectations(body ast.Node) []string {
+	var soft []string
+	ast.Inspect(body, func(n ast.Node) bool {
+		var expr ast.Expr
+		switch x := n.(type) {
+		case *ast.ExprStmt:
+			expr = x.X
+		case *ast.AssignStmt:
+			if len(x.Rhs) != 1 {
+				return true
+			}
+			expr = x.Rhs[0]
+		default:
+			return true
+		}
+		var chain []string // методы цепочки снаружи внутрь: Once, Return, GetByID, EXPECT
+		for {
+			call, ok := expr.(*ast.CallExpr)
+			if !ok {
+				break
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				break
+			}
+			chain = append(chain, sel.Sel.Name)
+			expr = sel.X
+		}
+		expect := slices.Index(chain, "EXPECT")
+		switch {
+		case slices.Contains(chain, "Maybe"):
+			soft = append(soft, ".Maybe()")
+		case expect > 0 && !slices.ContainsFunc(chain[:expect], func(m string) bool { return m == "Once" || m == "Twice" || m == "Times" }):
+			soft = append(soft, "EXPECT()."+chain[expect-1]+" without .Once(), .Twice() or .Times(n)")
+		}
+		return true
+	})
+	return soft
 }
 
 // helperDecls — кандидаты в утверждающие хелперы декларации: тело функции без получателя и
