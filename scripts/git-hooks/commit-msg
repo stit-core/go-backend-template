@@ -1,14 +1,15 @@
 #!/bin/bash -p
-# Разрешённые типы описывает CLAUDE.md § Git workflow, строку Review: — CLAUDE.md § Готово.
+# Разрешённые типы описывает CLAUDE.md § Git workflow (их список сверяет с TYPES archtest TestCommitMsgHook),
+# строку Review: — CLAUDE.md § Готово.
 # Строка интерпретатора — `bash -p`: окружение оболочки коммитящего (BASH_ENV, функции, SHELLOPTS)
 # хук не читает.
-# При смене списка править оба места одним коммитом.
 set -euo pipefail
 # Под LC_ALL=C символ — байт: длину subject считаем без байтов-продолжений UTF-8, и предел в 72
 # символа не зависит от локали того, кто коммитит.
 export LC_ALL=C
 COMMIT_MSG_FILE="$1"
-PATTERN='^(feat|fix|refactor|docs|test|chore|meta)(\([a-z0-9_/-]+\))?(!)?: (.+)$'
+TYPES='feat|fix|refactor|docs|test|chore|meta'
+PATTERN="^($TYPES)(\\([a-z0-9_/-]+\\))?(!)?: (.+)\$"
 # Сообщения, которые пишет сам git: git revert и git commit --fixup/--squash.
 GIT_PATTERN='^((Revert|Reapply) ".+"|(fixup|squash|amend)! .+)$'
 HEAD_LINE="$(head -n 1 "$COMMIT_MSG_FILE" | sed 's/[[:space:]]*$//')"
@@ -29,7 +30,7 @@ if [[ "$HEAD_LINE" =~ $PATTERN ]]; then
 fi
 echo "ERROR: $WHY"
 echo "Формат: <type>(<scope>)?: <subject>  (≤72 символа)"
-echo "Допустимые types: feat, fix, refactor, docs, test, chore, meta"
+echo "Допустимые types: ${TYPES//|/, }"
 echo "У feat и fix в теле — строка Review: <кто или чем> — <итог> (CLAUDE.md § Готово)"
 echo "Сообщения самого git (Revert \"…\", fixup!/squash!/amend! …) тоже проходят"
 echo "Пример: feat(user): add password reset"

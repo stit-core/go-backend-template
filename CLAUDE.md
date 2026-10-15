@@ -132,8 +132,8 @@ mockery и `openapi.json` (контракт API из регистраций huma
 - `migrations/` (skill `/scaffold`, вариант migration), `pkg/policy`, `internal/platform/authgate/`,
   `go.mod`/`go.sum`, `git tag -a` / `make release` (артефакт вне репо).
 - Ослабить гейт (`//nolint`; правка `Makefile`, `scripts/`, `.golangci.yml`, `internal/archtest`,
-  `.claude/settings.json`, `.claude/hooks/`, после которой он проверяет меньше) — только по явной
-  просьбе юзера.
+  `.claude/settings.json` и `.claude/settings.local.json`, `.claude/hooks/`, после которой он проверяет
+  меньше) — только по явной просьбе юзера.
 - Спросить некого (агент из хаба без собеседника): пункт этого списка, которого нет в задаче или
   плане хаба, не делай — вопрос в отчёт хабу и в «Открытые вопросы» плана, остальное продолжай.
 

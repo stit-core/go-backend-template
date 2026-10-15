@@ -119,10 +119,18 @@ func matchesBash(matcher string) (bool, bool) {
 }
 
 // TestGuardWired: барьер от случайного обхода держат хук guard-bash и deny .claude/settings.json, пока они
-// подключены. Хук, отвязанный от Bash, подменённый, выключенный (disableAllHooks) или обезвреженный полем
-// обработчика, и снятый запрет молчат: TestGuardBash проверяет скрипт, а не его подключение.
+// подключены. Хук, отвязанный от Bash, подменённый, выключенный (disableAllHooks — и в локальном
+// .claude/settings.local.json, которого нет в репо, но который Claude Code читает в этом клоне) или обезвреженный
+// полем обработчика, и снятый запрет молчат: TestGuardBash проверяет скрипт, а не его подключение.
 func TestGuardWired(t *testing.T) {
 	t.Parallel()
+	local, err := os.ReadFile(filepath.Join(repoRoot(t), ".claude", "settings.local.json"))
+	if !errors.Is(err, os.ErrNotExist) {
+		require.NoError(t, err)
+		var off struct{ DisableAllHooks bool }
+		require.NoError(t, json.Unmarshal(local, &off), ".claude/settings.local.json")
+		require.False(t, off.DisableAllHooks, ".claude/settings.local.json: disableAllHooks switches guard-bash off in this clone — that weakens the gate (CLAUDE.md § Сначала спросить)")
+	}
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".claude", "settings.json"))
 	require.NoError(t, err)
 	var settings struct {

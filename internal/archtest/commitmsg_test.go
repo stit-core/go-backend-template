@@ -4,19 +4,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// TestCommitMsgHook: первая строка коммита — Conventional Commit с типом из CLAUDE.md § Git workflow или
-// сообщение самого git; предел subject — 72 символа, а не байта, при любой локали коммитящего (под
-// LC_ALL=C русская буква — два байта); у feat и fix в теле — строка Review: (CLAUDE.md § Готово).
+// TestCommitMsgHook: первая строка коммита — Conventional Commit с типом из CLAUDE.md § Git workflow (тот же
+// список, что TYPES хука) или сообщение самого git; предел subject — 72 символа, а не байта, при любой локали
+// коммитящего (под LC_ALL=C русская буква — два байта); у feat и fix в теле — строка Review: (CLAUDE.md § Готово).
 func TestCommitMsgHook(t *testing.T) {
 	t.Parallel()
 	hook := filepath.Join(repoRoot(t), "scripts", "git-hooks", "commit-msg")
 	require.FileExists(t, hook) // скрипт читает bash: без этого кеш go test не видит его правок
+	files := readFiles(t, repoRoot(t), "scripts/git-hooks/commit-msg", "CLAUDE.md")
+	types := regexp.MustCompile(`(?m)^TYPES='([a-z|]+)'$`).FindStringSubmatch(files["scripts/git-hooks/commit-msg"])
+	require.NotNil(t, types, "commit-msg: no TYPES='…' line")
+	prose := regexp.MustCompile("типы `([a-z|]+)`").FindStringSubmatch(files["CLAUDE.md"])
+	require.NotNil(t, prose, "CLAUDE.md § Git workflow: no «типы `a|b|…`»")
+	require.Equal(t, types[1], prose[1], "the commit types of CLAUDE.md § Git workflow are not the types of the commit-msg hook")
 	long := strings.Repeat("я", 72)
 	const review = "\n\nReview: /code-review — находок нет\n"
 	const (

@@ -112,12 +112,15 @@ var (
 // TestProseReferencesExist: в коде прозы (CLAUDE.md, README, docs/, .claude/rules и skills) есть в репо
 // make-цели, пути (от корня репо или, если первый сегмент лежит рядом с документом, — от его каталога) и
 // файлы без пути, скиллы (`/имя`, skill `имя`), правила (rule `имя`, и каждое имя перечня после) и тесты
-// (`TestИмя` — функция *_test.go) — иначе агент идёт по мёртвой ссылке, а инвариант с пометкой теста
-// кажется машинным. Репо — то, что отслеживает git: локальное (test/.venv, неотслеживаемый
-// файл) есть не в каждом клоне. Плейсхолдеры (<d>, NNNN, *) — не ссылки; артефакт docs/stack/<kind>.md —
-// по его шаблону; /имя, которое не скилл, — путь контракта openapi.json, встроенная команда или корень
-// файловой системы; путь /api/… — операция openapi.json; правило с именем включённого линтера — его
-// правило. Опечатку в первом сегменте пути и ссылку простым текстом вне кода проверка не видит.
+// (`TestИмя` — функция *_test.go); в тексте прозы — раздел якоря «<файл>.md § <раздел>» и «rule `имя` § <раздел>»
+// (заголовок или жирная метка пункта, которые с него начинаются) и цель markdown-ссылки с её #якорем; состав
+// и порог make check в CLAUDE.md — те, что в рецепте check:: Makefile. Иначе агент идёт по мёртвой ссылке, а
+// инвариант с пометкой теста кажется машинным. Репо — то, что отслеживает git: локальное (test/.venv,
+// неотслеживаемый файл — отказ подсказывает git add) есть не в каждом клоне. Плейсхолдеры (<d>, NNNN, *) — не
+// ссылки; артефакт docs/stack/<kind>.md — по его шаблону; /имя, которое не скилл, — путь контракта openapi.json,
+// встроенная команда или корень файловой системы; путь /api/… — операция openapi.json; правило с именем
+// включённого линтера — его правило. Опечатку в первом сегменте пути, ссылку простым текстом вне кода и якорь
+// файла, имя которого в репо не одно (README.md без пути), проверка не видит.
 func TestProseReferencesExist(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -160,10 +163,22 @@ func TestProseReferencesExist(t *testing.T) {
 	exempt := identityExempt(t, root)
 	linters := golangciEnabled(t)
 	var dead []string
+	// Путь, которого нет в индексе git, но который есть на диске, — файл забыли добавить.
+	missing := func(doc, ref, rel string) {
+		if _, err := os.Stat(filepath.Join(root, rel)); err == nil {
+			ref += " (on disk, not tracked by git: git add)"
+		}
+		dead = append(dead, doc+": "+ref)
+	}
+	anchors := sectionAnchors(t, root, files)
+	claude, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
+	require.NoError(t, err)
+	dead = append(dead, gateFacts(string(makefile), string(claude))...)
 	for _, doc := range proseFiles(files) {
 		data, err := os.ReadFile(filepath.Join(root, doc))
 		require.NoError(t, err)
 		text := string(data)
+		dead = append(dead, anchors(doc, text)...)
 		listKind, prevEnd := "", 0 // имя перечня после rule/skill: «правила `a`, `b`»
 		for _, loc := range codeSpan.FindAllStringIndex(text, -1) {
 			span := strings.Trim(text[loc[0]:loc[1]], "`")
@@ -230,17 +245,181 @@ func TestProseReferencesExist(t *testing.T) {
 					}
 				case isPath && repo[top+"/"]:
 					if clean := goSymbol.ReplaceAllString(ref, ""); !inRepo(repo, clean) && !inPruned(clean) && !gitIgnored(t, root, ref) {
-						dead = append(dead, doc+": "+ref)
+						missing(doc, ref, clean)
 					}
 				case isPath && top != "" && top != ".." && repo[near+"/"]:
 					if clean := path.Join(path.Dir(doc), goSymbol.ReplaceAllString(ref, "")); !inRepo(repo, clean) && !inPruned(clean) && !gitIgnored(t, root, clean) {
-						dead = append(dead, doc+": "+ref)
+						missing(doc, ref, clean)
 					}
 				}
 			}
 		}
 	}
-	proseAllowlist.Check(t, dead, "the prose points to a missing make target, path, file, skill, rule or test")
+	proseAllowlist.Check(t, dead, "the prose points to a missing make target, path, file, skill, rule, test, section or link, or misstates make check")
+}
+
+var (
+	// sectionRef — якорь раздела: «<файл>.md § <раздел>» (имя файла и в обратных кавычках) и «rule `имя` § <раздел>».
+	sectionRef = regexp.MustCompile("(?:([\\w./-]+\\.md)`?|rule `([a-z0-9-]+)`)[ \t]*\n?[ \t]*§[ \t]*\n?[ \t]*([^§\n]*)")
+	// anchorEnd — где кончается имя раздела в тексте после «§».
+	anchorEnd = regexp.MustCompile("[),;:.`»/(|]|\\s[—+]\\s|$")
+	// sectionLabel — заголовок или жирная метка в начале строки и пункта списка: «## Готово», «- **Вход — …**».
+	sectionLabel = regexp.MustCompile(`(?m)^(?:#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*|[ \t]*(?:[-*][ \t]+)?\*\*(.+?)\*\*.*)$`)
+	// mdLink — цель markdown-ссылки «[текст](цель)».
+	mdLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
+	// slugDrop — знаки, которые якорь заголовка (slug) отбрасывает.
+	slugDrop = regexp.MustCompile(`[^\p{L}\p{N}\s_-]`)
+)
+
+// sectionAnchors — проверка якорей и ссылок документа: строки отказа «документ: ссылка».
+func sectionAnchors(t *testing.T, root string, files []string) func(doc, text string) []string {
+	t.Helper()
+	tracked := map[string]bool{}
+	byName := map[string][]string{} // имя .md → его пути
+	for _, f := range files {
+		tracked[f] = true
+		if path.Ext(f) == ".md" {
+			byName[path.Base(f)] = append(byName[path.Base(f)], f)
+		}
+	}
+	labels := map[string][]string{}
+	labelsOf := func(f string) []string {
+		if l, ok := labels[f]; ok {
+			return l
+		}
+		data, err := os.ReadFile(filepath.Join(root, f))
+		require.NoError(t, err)
+		for _, m := range sectionLabel.FindAllStringSubmatch(string(data), -1) {
+			labels[f] = append(labels[f], strings.ReplaceAll(m[1]+m[2], "`", ""))
+		}
+		return labels[f]
+	}
+	// targets — файлы ссылки на раздел: путь от корня или от документа, артефакт стека — его шаблон; имя без пути
+	// рядом с документом или единственное в репо.
+	targets := func(doc, name, rule string) []string {
+		switch {
+		case rule != "":
+			return []string{".claude/rules/" + rule + ".md"}
+		case strings.Contains(name, "/"):
+			name = strings.TrimPrefix(name, "./")
+			for _, f := range []string{name, path.Join(path.Dir(doc), name), "docs/stack/_templates/" + strings.TrimPrefix(name, "docs/stack/")} {
+				if tracked[f] {
+					return []string{f}
+				}
+			}
+			return nil
+		case tracked[path.Join(path.Dir(doc), name)]:
+			return []string{path.Join(path.Dir(doc), name)}
+		case len(byName[name]) == 1 || len(byName[name]) > 1 && !slices.ContainsFunc(byName[name], func(f string) bool {
+			return !strings.HasPrefix(f, "docs/stack/")
+		}):
+			return byName[name] // артефакт стека форка и его шаблон
+		}
+		return nil
+	}
+	return func(doc, text string) []string {
+		var dead []string
+		for _, m := range sectionRef.FindAllStringSubmatch(text, -1) {
+			files := targets(doc, m[1], m[2])
+			if len(files) == 0 {
+				continue // файла нет — его ищет проверка путей, имя не одно — не видно
+			}
+			full := strings.Join(strings.Fields(m[3]), " ")
+			anchor := strings.TrimSpace(full[:anchorEnd.FindStringIndex(full)[0]])
+			found := slices.ContainsFunc(files, func(f string) bool {
+				return slices.ContainsFunc(labelsOf(f), func(l string) bool {
+					return anchor != "" && strings.HasPrefix(l, anchor) || l != "" && strings.HasPrefix(full, l)
+				})
+			})
+			if !found {
+				dead = append(dead, doc+": "+strings.TrimSpace(m[1]+m[2])+" § "+anchor)
+			}
+		}
+		prose := codeSpan.ReplaceAllStringFunc(text, func(s string) string {
+			if strings.HasPrefix(s, "```") {
+				return ""
+			}
+			return s
+		})
+		for _, m := range mdLink.FindAllStringSubmatch(prose, -1) {
+			target, fragment, _ := strings.Cut(m[1], "#")
+			if strings.Contains(target, ":") {
+				continue // http(s), mailto — вне репо
+			}
+			f := doc
+			if target != "" {
+				f = path.Clean(path.Join(path.Dir(doc), target))
+				if !tracked[f] && !tracked[strings.TrimSuffix(f, "/")+"/README.md"] && !slices.ContainsFunc(files, func(g string) bool { return under(g, f) }) {
+					dead = append(dead, doc+": link "+m[1])
+					continue
+				}
+			}
+			if fragment != "" && path.Ext(f) == ".md" && !slices.ContainsFunc(labelsOf(f), func(l string) bool { return slug(l) == fragment }) {
+				dead = append(dead, doc+": link "+m[1])
+			}
+		}
+		return dead
+	}
+}
+
+// slug — якорь заголовка в ссылке «#…», как его строит Gitea: строчные, без знаков, пробел — «-».
+func slug(heading string) string {
+	return strings.ReplaceAll(strings.ToLower(slugDrop.ReplaceAllString(heading, "")), " ", "-")
+}
+
+var (
+	// gateStep — эхо-строка шага рецепта check::: «→ make lint», «→ go vet …», «→ migrations-check».
+	gateStep = regexp.MustCompile(`(?m)^\t@echo "→ (?:make |go )?([a-z][a-z-]*)`)
+	// coverFloor — порог покрытия гейта в Makefile.
+	coverFloor = regexp.MustCompile(`(?m)^override COVER_FLOOR := (\d+)$`)
+	percent    = regexp.MustCompile(`(\d+)\s?%`)
+)
+
+// gateFacts — состав и порог make check, как их называет CLAUDE.md (§ Команды: «`make check` = a + b (…) + …»),
+// против рецепта check:: и COVER_FLOOR Makefile: строки расхождения.
+func gateFacts(makefile, claude string) []string {
+	recipe := makefile[strings.Index(makefile, "\ncheck::")+1:]
+	if end := strings.Index(recipe, "\n\n"); end >= 0 {
+		recipe = recipe[:end]
+	}
+	var steps []string
+	for _, m := range gateStep.FindAllStringSubmatch(recipe, -1) {
+		steps = append(steps, m[1])
+	}
+	_, sentence, ok := strings.Cut(claude, "`make check` = ")
+	if !ok || len(steps) == 0 {
+		return []string{"CLAUDE.md: no «`make check` = <steps>» for the check:: recipe of Makefile (§ Команды)"}
+	}
+	var top strings.Builder // текст вне скобок: шаги через «+»
+	depth := 0
+	for i, r := range sentence {
+		if depth == 0 && r == '.' && (i+1 == len(sentence) || strings.ContainsRune(" \n", rune(sentence[i+1]))) {
+			sentence = sentence[:i]
+			break
+		}
+		switch {
+		case r == '(':
+			depth++
+		case r == ')':
+			depth--
+		case depth == 0:
+			top.WriteRune(r)
+		}
+	}
+	var named []string
+	for _, part := range strings.Split(top.String(), "+") {
+		if fields := strings.Fields(part); len(fields) > 0 {
+			named = append(named, fields[0])
+		}
+	}
+	var facts []string
+	if !slices.Equal(named, steps) {
+		facts = append(facts, "CLAUDE.md: make check = "+strings.Join(named, " + ")+", the check:: recipe of Makefile runs "+strings.Join(steps, " + "))
+	}
+	if floor, claim := coverFloor.FindStringSubmatch(makefile), percent.FindStringSubmatch(sentence); floor == nil || claim == nil || floor[1] != claim[1] {
+		facts = append(facts, "CLAUDE.md: the coverage floor of make check is not COVER_FLOOR of Makefile")
+	}
+	return facts
 }
 
 // testFuncs — функции Test… файлов *_test.go репо.
@@ -339,27 +518,31 @@ func proseFiles(files []string) []string {
 	return docs
 }
 
-// identityExempt — у проекта с внешней идентичностью мёртвые имена тестов и glob'ы файла, путь которого есть в
-// каком-нибудь теге template/v*, пропускаются, и после правки форком: его ссылки на её домены мертвы по решению, а
-// проверяет их самопроверка шаблона; свои файлы проекта проверяются. Тегов шаблона нет — пропускаются все;
-// идентичность своя — ни один.
+// identityExempt — у проекта с внешней идентичностью мёртвые имена тестов и glob'ы файла шаблона пропускаются, и после
+// правки форком: его ссылки на её домены мертвы по решению, а проверяет их самопроверка шаблона; свои файлы проекта
+// проверяются. Файл шаблона — путь из тега template/v* или из первого коммита репо: форк создан из шаблона, а теги
+// приносит первый make template-update. Идентичность своя — ни один.
 func identityExempt(t *testing.T, root string) func(rel string) bool {
 	t.Helper()
 	if !identityExternal(t) {
 		return func(string) bool { return false }
 	}
-	tags := strings.Fields(git(t, root, "tag", "--list", "template/v*"))
+	revs := strings.Fields(git(t, root, "tag", "--list", "template/v*"))
+	revs = append(revs, strings.Fields(git(t, root, "rev-list", "--max-parents=0", "HEAD"))...)
 	files := map[string]bool{}
-	for _, tag := range tags {
-		for _, f := range strings.Split(git(t, root, "ls-tree", "-r", "-z", "--name-only", tag), "\x00") {
+	for _, rev := range revs {
+		for _, f := range strings.Split(git(t, root, "ls-tree", "-r", "-z", "--name-only", rev), "\x00") {
 			files[f] = true
 		}
 	}
-	return func(rel string) bool { return len(tags) == 0 || files[rel] }
+	return func(rel string) bool { return files[rel] }
 }
 
-// readRulesFirst — процедуры, которые пишут код (каталог — каждый его .md): шагом 0 они читают свои правила.
-var readRulesFirst = []string{".claude/skills/scaffold/references", ".claude/skills/triage-failure/SKILL.md"}
+// readRulesFirst — процедуры, которые пишут код или блок по правилу (каталог — каждый его .md): шагом 0 они
+// читают свои правила.
+var readRulesFirst = []string{
+	".claude/skills/scaffold/references", ".claude/skills/triage-failure/SKILL.md", ".claude/skills/infra-handoff/SKILL.md",
+}
 
 var (
 	heading1 = regexp.MustCompile(`(?m)^# .*$`)
@@ -391,8 +574,10 @@ func TestRulesAndSkillsLoad(t *testing.T) {
 		data, err := os.ReadFile(filepath.Join(root, f))
 		require.NoError(t, err)
 		text := strings.ReplaceAll(string(data), "\r\n", "\n") // CRLF Claude Code читает так же
-		head := frontmatter(text)
+		head, parsed := frontmatter(text)
 		switch {
+		case !parsed:
+			t.Errorf("%s: the frontmatter does not parse — Claude Code reads it neither as YAML nor with values in quotes: name:, description: and paths: are lost", f)
 		case rule:
 			globs := ruleGlobs(head["paths"])
 			if len(globs) == 0 {
@@ -417,7 +602,7 @@ func TestRulesAndSkillsLoad(t *testing.T) {
 		}
 		rules := rulePath.FindAllStringSubmatch(first, -1)
 		if !stepZero.MatchString(first) || len(rules) == 0 {
-			t.Errorf("%s: the paragraph under the title is not «**Шаг 0** — прочитай инструментом Read <rules>»: the procedure writes code without its rules", f)
+			t.Errorf("%s: the paragraph under the title is not «**Шаг 0** — прочитай инструментом Read <rules>»: the procedure works without its rules", f)
 		}
 		for _, r := range rules {
 			if !slices.Contains(files, r[1]) {
@@ -430,22 +615,22 @@ func TestRulesAndSkillsLoad(t *testing.T) {
 // frontmatter — шапка .md между строками «---»: ключ верхнего уровня → значение после «ключ:» и пункты его
 // списка (блочного «- …» или flow «[a, b]», и в несколько строк) без кавычек и комментариев YAML. Шапку, которую
 // YAML не разберёт, Claude Code читает второй раз, взяв в кавычки значение «ключ: …» верхнего уровня со знаком
-// YAML (paths: **/*.go); не разобрал и так (пункт «- **/*.go») — шапки нет, nil.
-func frontmatter(text string) map[string][]string {
+// YAML (paths: **/*.go); false — не разобрал и так (пункт «- **/*.go»): шапки у файла для него нет. Без шапки —
+// nil, true.
+func frontmatter(text string) (map[string][]string, bool) {
 	lines := strings.Split(text, "\n")
 	if strings.TrimRight(lines[0], " \t") != "---" {
-		return nil
+		return nil, true
 	}
 	for i, line := range lines[1:] {
 		if strings.TrimRight(line, " \t") == "---" {
 			if keys, ok := yamlHead(lines[1:i+1], false); ok {
-				return keys
+				return keys, true
 			}
-			keys, _ := yamlHead(lines[1:i+1], true)
-			return keys
+			return yamlHead(lines[1:i+1], true)
 		}
 	}
-	return nil // шапка не закрыта — это не шапка
+	return nil, true // шапка не закрыта — это не шапка
 }
 
 var (
@@ -456,17 +641,17 @@ var (
 )
 
 // yamlHead — ключи строк шапки; false — YAML её не разберёт (и незакрытый flow-список). second — второй разбор
-// Claude Code: значение «ключ: …» верхнего уровня без кавычек и не flow-список, со знаком YAML, — строка как есть;
-// незакрытый «[» он берёт в кавычки, и строки списка под ним ломают разбор.
+// Claude Code: значение «ключ: …» верхнего уровня без кавычек и не разбираемый flow-список, со знаком YAML, — строка
+// как есть ([**/*.go] — glob-класс одного символа); незакрытый «[» он берёт в кавычки, и строки списка под ним ломают
+// разбор.
 func yamlHead(lines []string, second bool) (map[string][]string, bool) {
 	keys := map[string][]string{}
 	key, flow := "", ""
 	for _, raw := range lines {
 		if m := topValue.FindStringSubmatch(strings.TrimRight(raw, " \t")); second && m != nil {
 			v := m[2]
-			flowList := strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]")
-			if !quoted(v) && !flowList && yamlSign.MatchString(v) {
-				if strings.HasPrefix(v, "[") {
+			if !quoted(v) && !flowArray(v) && yamlSign.MatchString(v) {
+				if strings.HasPrefix(v, "[") && !strings.HasSuffix(v, "]") {
 					return nil, false
 				}
 				key = m[1]
@@ -507,6 +692,19 @@ func yamlHead(lines []string, second bool) (map[string][]string, bool) {
 		}
 	}
 	return keys, flow == ""
+}
+
+// flowArray — flow-список YAML, который разбирается: каждый пункт — строка YAML.
+func flowArray(v string) bool {
+	if !strings.HasPrefix(v, "[") || !strings.HasSuffix(v, "]") {
+		return false
+	}
+	for _, item := range splitFlow(v[1 : len(v)-1]) {
+		if _, ok := yamlScalar(item); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // quoted — значение YAML в кавычках.
