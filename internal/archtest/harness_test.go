@@ -427,7 +427,7 @@ func TestRulesAndSkillsLoad(t *testing.T) {
 }
 
 // frontmatter — шапка .md между строками «---»: ключ верхнего уровня → значение после «ключ:» и пункты его
-// списка (блочного «- …» или «[a, b]» в строку) без кавычек и комментариев YAML. Шапку, которую
+// списка (блочного «- …» или flow «[a, b]», и в несколько строк) без кавычек и комментариев YAML. Шапку, которую
 // YAML не разберёт, Claude Code читает второй раз, взяв в кавычки значение «ключ: …» верхнего уровня со знаком
 // YAML (paths: **/*.go); не разобрал и так (пункт «- **/*.go») — шапки нет, nil.
 func frontmatter(text string) map[string][]string {
@@ -454,16 +454,20 @@ var (
 	yamlSign = regexp.MustCompile("[{}\\[\\]*&#!|>%@`]|: ")
 )
 
-// yamlHead — ключи строк шапки; false — YAML её не разберёт. second — второй разбор Claude Code: значение
-// «ключ: …» верхнего уровня без кавычек и не flow-список, со знаком YAML, — строка как есть.
+// yamlHead — ключи строк шапки; false — YAML её не разберёт (и незакрытый flow-список). second — второй разбор
+// Claude Code: значение «ключ: …» верхнего уровня без кавычек и не flow-список, со знаком YAML, — строка как есть;
+// незакрытый «[» он берёт в кавычки, и строки списка под ним ломают разбор.
 func yamlHead(lines []string, second bool) (map[string][]string, bool) {
 	keys := map[string][]string{}
-	key := ""
+	key, flow := "", ""
 	for _, raw := range lines {
 		if m := topValue.FindStringSubmatch(strings.TrimRight(raw, " \t")); second && m != nil {
 			v := m[2]
 			flowList := strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]")
 			if !quoted(v) && !flowList && yamlSign.MatchString(v) {
+				if strings.HasPrefix(v, "[") {
+					return nil, false
+				}
 				key = m[1]
 				keys[key] = append(keys[key], v)
 				continue
@@ -473,6 +477,11 @@ func yamlHead(lines []string, second bool) (map[string][]string, bool) {
 		item := strings.TrimSpace(line)
 		var values []string
 		switch {
+		case flow != "":
+			if flow += " " + item; !strings.HasSuffix(flow, "]") {
+				continue
+			}
+			values, flow = splitFlow(flow[1:len(flow)-1]), ""
 		case item == "":
 		case strings.HasPrefix(item, "- ") && key != "":
 			values = append(values, item[2:])
@@ -482,6 +491,8 @@ func yamlHead(lines []string, second bool) (map[string][]string, bool) {
 			switch {
 			case strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]"):
 				values = splitFlow(v[1 : len(v)-1])
+			case strings.HasPrefix(v, "["):
+				flow = v
 			case v != "":
 				values = append(values, v)
 			}
@@ -494,7 +505,7 @@ func yamlHead(lines []string, second bool) (map[string][]string, bool) {
 			keys[key] = append(keys[key], s)
 		}
 	}
-	return keys, true
+	return keys, flow == ""
 }
 
 // quoted — значение YAML в кавычках.
