@@ -33,7 +33,7 @@ blocked-by: —
 
 ## Не входит
 - RHAR-08, п. 5 — «файл > ~400 строк разбивается» стоит в rule `domain-architecture` и
-  `docs/reference/architecture.md` (файлы трека boundaries): правка — дирижёру при слиянии (Handoff).
+  `docs/reference/architecture.md` (файлы трека boundaries): сделал boundaries коммитом `2e491ba`.
 - Мелочь рядом с RHAR-08: `docs/reference/domain-mapping.md:80` (типизированный ID — совет, а не
   утверждение о коде); RHAR-04–07, 09–13 — бэклог `minor-harness`.
 - Символы китов и имена env в прозе (мутации M13, M14 — вне заявленного объёма самопроверки).
@@ -63,7 +63,7 @@ blocked-by: —
     зелёные, с `identity: own` — 9 пустых glob'ов
 - [x] **AC4** — RHAR-08: утверждения п. 1, 2, 4 (smartdev, triage-failure, stack-deep-dive) и заголовки
   smartdev с «(фикс …)» поправлены; п. 3 правда (`make new-domain NAME=repo` — отказ до правки);
-  п. 5 — в Handoff. Проверка: `exp.py` G03–G06 → на базе «да», на ветке «нет»; N01 → «отказ до правки»
+  п. 5 — boundaries (`2e491ba`). Проверка: `exp.py` G03–G06 → на базе «да», на ветке «нет»; N01 → «отказ до правки»
   - Подтверждено: база — G03–G06 «да», ветка — «нет»; N01 — «отказ до правки» на базе и ветке (п. 3
     закрыл трек gate: имена из кода среза, `TestNewDomainRefusesOrRollsBack`); `ATTENTION:` печатает
     только `status.sh` — hooks, build, sqlc-drift, migrations, infra-touch, lint (`A=--full`), тестов он
@@ -199,8 +199,11 @@ blocked-by: —
     (domain, endpoint, env, event, field, migration, port), `upgrade` (`feat(deps)`); пример «Сделано» в
     `plan-template.md` показывает след `Review:`; пробное слияние с `nine/boundaries` — без конфликтов;
     `make check` → `✓ check clean`
-- [ ] **S19** — N6: Handoff трека — строки для аннотации `template/v1.2.0`
+- [x] **S19** — N6: Handoff трека — строки для аннотации `template/v1.2.0`
   - Проверка: раздел Handoff; `make check` ✓ · Закрывает: AC1–AC3 · Зависит от: S8–S18
+  - Сделано: Handoff — две строки «Гейт» для аннотации (`Review:` у `feat` и `fix`; новые сверки archtest и 13
+    тестов прозы в коде форка), пункт комментария пакета — в формате boundaries `33d0f2d`; пункт RHAR-08, п. 5
+    снят — его сделал boundaries коммитом `2e491ba`; `make check` → `✓ check clean`
 - [ ] **S20** — перенос на `main`, если он ушёл с `f825fac`: тесты трека — в перечень комментария пакета
   - Проверка: `git rebase main`; `make check` → `✓ check clean`; `exp.py` и кейсы круга — на итоге ·
     Закрывает: AC1–AC6 · Зависит от: S8–S19
@@ -257,14 +260,23 @@ blocked-by: —
   шаг скилла; прогон больше часа, и в Bash-вызове агента он идёт в фоне.
 
 ## Handoff
-- Дирижёру при слиянии: в комментарий пакета `internal/archtest` (файл трека boundaries) — «доставка
-  правил и скиллов (paths:, name:, шаг 0), подключение guard-bash и deny .claude/settings.json»
-  (`TestRulesAndSkillsLoad`, `TestGuardWired`).
-- Дирижёру при слиянии: RHAR-08, п. 5 — в rule `domain-architecture` («Файл > ~400 строк») и
-  `docs/reference/architecture.md` § Разбиение переростков — «файл кода (не `_test.go`)»: тесты доменов —
-  545–1012 строк, код — до 303.
+- Дирижёру при слиянии, если `main` не ушёл с `f825fac` до конца круга (иначе — S20): в комментарий пакета
+  `internal/archtest` (формат boundaries `33d0f2d`, перечень по файлам) — `TestRulesAndSkillsLoad` в строку
+  `harness_test.go` (доставка правил и скиллов: `paths:`, `name:`, шаг 0), у `TestProseReferencesExist` — «и
+  тесты», `TestGuardWired` — в строку `guard_test.go` (подключение guard-bash и запреты deny `settings.json`).
+- В аннотацию `template/v1.2.0`, раздел «Гейт»:
+  - хук `commit-msg` требует у `feat` и `fix` строку `Review: <кто или чем> — <итог>` в теле (CLAUDE.md
+    § Готово) → после переноса обвязки такой коммит без строки, а с ним `--amend` и `-C` прежнего — отказ:
+    дописать строку;
+  - archtest сверяет с репо имена тестов в прозе, glob'ы `paths:` правил (и в подкаталогах `.claude/rules/`),
+    `name:` скиллов, «Шаг 0» references scaffold и triage-failure, подключение guard-bash и запреты deny
+    `.claude/settings.json` → проза шаблона называет 13 тестов в коде форка (`cmd/api/*_test.go`,
+    `internal/platform/config`, домены идентичности; `TestBoot_AuthRateLimit` из `prune.md` в коде v1.1.0
+    нет): форк, который переименовал такой тест или не перенёс пункт «Безопасность»/«Платформа», получит
+    красный гейт — перенести код (`make template-update TO=… PATHS='<пути>'`) или поправить свою прозу; своё
+    правило, скилл и deny — по сообщению теста.
 
 ## Где мы сейчас
-Круг фиксов валидатора: S8–S18 закрыты — `paths:` и `name:` читаются, как у Claude Code; guard с полем, которое
+Круг фиксов валидатора: S8–S19 закрыты — `paths:` и `name:` читаются, как у Claude Code; guard с полем, которое
 его гасит, не засчитывается; matcher хука — как у клиента; при внешней идентичности пропуск только у файлов
-шаблона; правила в подкаталогах проверяются; тексты о доставке правил — правда; пределы хука названы; «Готово» — без формулировок программы; имя теста узнаётся в любой форме `-run`; шапка с CRLF читается; формы коммита называют `Review:`. Следующий шаг — S19 (N6). Кейсы круга — `N/harness/fix_cases.py`, раннеры валидатора — `N/val-harness/`.
+шаблона; правила в подкаталогах проверяются; тексты о доставке правил — правда; пределы хука названы; «Готово» — без формулировок программы; имя теста узнаётся в любой форме `-run`; шапка с CRLF читается; формы коммита называют `Review:`; Handoff — для аннотации. Следующий шаг — S20 (перенос на `main`). Кейсы круга — `N/harness/fix_cases.py`, раннеры валидатора — `N/val-harness/`.
