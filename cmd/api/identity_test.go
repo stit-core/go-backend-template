@@ -180,6 +180,11 @@ func TestIdentity(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, status, "the brute-force guard locks the account after repeated failures, whatever X-Forwarded-For says")
 	require.Equal(t, "AUTH_ACCOUNT_LOCKED", code)
 
+	// Оба письма — до правки users и до второй регистрации: подписчики читают users, а письмо второй учётной
+	// записи — третье; токены теста — эти два, сколько бы ни шли подписчики.
+	require.Eventually(t, func() bool { resets, verifies := mail.sent(); return len(resets) == 1 && len(verifies) == 1 },
+		15*time.Second, 100*time.Millisecond, "the service mails the email verification and the password reset")
+	resets, verifies := mail.sent()
 	db := pg.Pool(t)
 	require.Eventually(t, func() bool {
 		var n int
@@ -233,9 +238,6 @@ func TestIdentity(t *testing.T) {
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE action = 'login_failed' AND resource_id = $1`, brokenID).Scan(&loginFailed))
 	require.Zero(t, loginFailed, "a failure of the service is not a failed login")
 
-	require.Eventually(t, func() bool { resets, verifies := mail.sent(); return len(resets) == 1 && len(verifies) == 1 },
-		15*time.Second, 100*time.Millisecond, "the service mails the email verification and the password reset")
-	resets, verifies := mail.sent()
 	// Получатель гасит обе ссылки: подтверждения пишут свой аудит.
 	const newPassword = "new-password123"
 	require.Equal(t, http.StatusNoContent, call(t, anon, http.MethodPost, base+"/api/auth/email-verify",
