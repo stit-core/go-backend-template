@@ -7,7 +7,7 @@
 # Один словарь для агента: `make <verb>`. Concise-by-default; FORMAT=detailed
 # или VERBOSE=1 → полный вывод (test/lint/build). Passthrough-аргументы
 # идут через A= (status/plan-check) / Q=,P= (search) / NAME= (new-domain) /
-# VERSION= (release) / TO=,FROM= (template-update).
+# VERSION= (release) / TO=,FROM=,PATHS= (template-update).
 
 # Окружение оболочки вызывающего до рецептов не доходит: файл автозапуска bash (`exit 0` в нём — и шаг
 # «прошёл»), опции (SHELLOPTS=noexec — скрипт читается, но не исполняется) и экспортированные функции с
@@ -196,7 +196,7 @@ setup: ## Подключить git-хуки scripts/git-hooks (core.hooksPath) �
 doctor: ## Fail-fast preflight: auth/env/drift
 	@bash scripts/tools/doctor.sh $(A)
 
-template-update: ## Обвязка шаблона в форк: новые теги шаблона; TO=template/vX.Y.Z — перенос (FROM= — база, PATHS='<пути>' — и код форка)
+template-update: ## Обвязка шаблона в форк: новые теги шаблона; TO=template/vX.Y.Z — перенос (FROM= — база, PATHS='<пути>' — и код форка, PATHS=- — без него)
 	@bash scripts/tools/template-update.sh "$(TO)" "$(FROM)" "$(PATHS)"
 
 ##@ META

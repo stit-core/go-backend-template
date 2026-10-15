@@ -170,8 +170,9 @@ func TestTemplateUpdate(t *testing.T) {
 }
 
 // TestTemplateUpdateFirstBase: первый перенос идёт от коммита шаблона, из которого создан форк (дерево
-// первого коммита), — форк с кончика main между тегами не получает ложных конфликтов, а форк,
-// созданный до .template/, получает её тем же переносом.
+// первого коммита), — форк с кончика main между тегами не получает ложных конфликтов (превью называет базу
+// и где сверить, что из пунктов тега у него уже есть), а форк, созданный до .template/, получает её тем же
+// переносом. Форк, правленный до первого коммита, переносится от тега версии — и движок это говорит.
 func TestTemplateUpdateFirstBase(t *testing.T) {
 	t.Parallel()
 	script := templateScript(t)
@@ -192,12 +193,19 @@ func TestTemplateUpdateFirstBase(t *testing.T) {
 	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0")
 
 	for name, tc := range map[string]struct {
-		root map[string]string
-		base string // база в выводе переноса; "" — коммит шаблона по дереву, без имени
+		root     map[string]string
+		base     string // база в выводе переноса; "" — коммит шаблона по дереву, без имени
+		preview  string // строка о базе в превью; "" — не проверяется
+		transfer string // строка о базе в выводе переноса; "" — не проверяется
 	}{
-		"between tags":     {root: union(legacy, v1, between)},
+		"between tags":     {root: union(legacy, v1, between), preview: "у него уже есть — git log --oneline "},
 		"before .template": {root: legacy},
 		"at the tag":       {root: union(legacy, v1), base: "template/v1.0.0"},
+		"edited before the first commit": {
+			root: union(legacy, v1, map[string]string{"x.md": "fork\n"}), base: "template/v1.0.0",
+			preview:  "коммита шаблона с деревом первого коммита форка нет",
+			transfer: "коммита шаблона с деревом первого коммита форка нет",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -208,10 +216,12 @@ func TestTemplateUpdateFirstBase(t *testing.T) {
 			writeFiles(t, fork, map[string]string{"go.mod": "module example.com/fork\n"})
 			commitAll(t, fork)
 			git(t, fork, "remote", "add", "--no-tags", "template", tmpl)
+			require.Contains(t, bash(t, fork, script), tc.preview)
 			out := bash(t, fork, script, "template/v1.1.0")
 			if tc.base != "" {
 				require.Contains(t, out, "обвязка: "+tc.base+" → template/v1.1.0")
 			}
+			require.Contains(t, out, tc.transfer)
 			require.Equal(t, map[string]string{".template/version": "template/v1.1.0\n", "h/l.md": "l2\n", "h/n.md": "n2\n"},
 				readFiles(t, fork, ".template/version", "h/l.md", "h/n.md"))
 		})
@@ -269,14 +279,16 @@ func TestTemplateUpdateBeforeVersionTag(t *testing.T) {
 
 // TestTemplateUpdatePaths: код форка вне путей шаблона (домены идентичности, cmd, платформа) переносится по
 // запросу тем же трёхсторонним слиянием, что и обвязка, — make template-update TO=… PATHS='<пути>': module
-// path форка, правки форка целы; без PATHS код не едет, путь, которого нет в шаблоне, — отказ до переноса.
+// path форка, правки форка целы. После переноса код его интервала движок уже не возьмёт, поэтому пункты
+// «Безопасность» и «Платформа» аннотаций решаются до него: без PATHS — отказ с ними, PATHS=- — код не едет.
+// Путь, которого нет в шаблоне, и путь, который .template/paths исключает, — отказ до переноса.
 func TestTemplateUpdatePaths(t *testing.T) {
 	t.Parallel()
 	script := templateScript(t)
 	tmpl := t.TempDir()
 	v1 := map[string]string{
-		".template/paths": ".template\nh\n", ".template/version": "template/v1.0.0\n",
-		"go.mod": "module example.com/tmpl\n", "h/rule.md": "r1\n",
+		".template/paths": ".template\nh\n:(exclude)h/spec\n", ".template/version": "template/v1.0.0\n",
+		"go.mod": "module example.com/tmpl\n", "h/rule.md": "r1\n", "h/spec/mutants.txt": "m1\n",
 		"c/auth/login.go": "package auth\n\nimport \"example.com/tmpl/c/user\"\n\nvar Check = user.Weak\n",
 		"c/auth/limit.go": "package auth\n\nconst A = 1\n\nconst B = 2\n\nconst C = 3\n",
 		"c/cmd/main.go":   "package main\n\nfunc main() {}\n",
@@ -286,13 +298,14 @@ func TestTemplateUpdatePaths(t *testing.T) {
 	commitAll(t, tmpl)
 	git(t, tmpl, "tag", "-a", "template/v1.0.0", "-m", "template/v1.0.0")
 	writeFiles(t, tmpl, map[string]string{
-		".template/version": "template/v1.1.0\n", "h/rule.md": "r2\n",
+		".template/version": "template/v1.1.0\n", "h/rule.md": "r2\n", "h/spec/mutants.txt": "m2\n",
 		"c/auth/login.go": "package auth\n\nimport \"example.com/tmpl/c/user\"\n\nvar Check = user.Strict\n",
 		"c/auth/limit.go": "package auth\n\nconst A = 10\n\nconst B = 2\n\nconst C = 3\n",
 		"c/cmd/main.go":   "package main\n\nfunc main() { run() }\n",
 	})
 	commitAll(t, tmpl)
-	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0\n\nБезопасность:\n- c/auth: строгая проверка входа")
+	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m",
+		"template/v1.1.0\n\nБезопасность:\n- c/auth: строгая проверка входа\n  → PATHS='c/auth'\n\nОбвязка:\n- h/rule.md: r2")
 
 	fork := func(t *testing.T) string {
 		t.Helper()
@@ -309,8 +322,17 @@ func TestTemplateUpdatePaths(t *testing.T) {
 	}
 	code := []string{".template/version", "h/rule.md", "c/auth/login.go", "c/auth/limit.go", "c/cmd/main.go"}
 
+	undecided := fork(t)
+	out, err := runIn(t, undecided, "bash", script, "template/v1.1.0")
+	require.Error(t, err, out)
+	require.Contains(t, out, "template/v1.1.0 Безопасность:\n    - c/auth: строгая проверка входа\n      → PATHS='c/auth'\n")
+	require.NotContains(t, out, "h/rule.md: r2", "the harness part of the annotation is no decision about the code of the fork")
+	require.Contains(t, out, "PATHS=-")
+	require.Empty(t, git(t, undecided, "status", "--porcelain"), "a refused update leaves the tree as is")
+
 	harness := fork(t)
-	bash(t, harness, script, "template/v1.1.0")
+	out = bash(t, harness, script, "template/v1.1.0", "", "-")
+	require.Contains(t, out, "в теле коммита — перенесено или отклонено:\n  template/v1.1.0 Безопасность:\n")
 	require.Equal(t, map[string]string{
 		".template/version": "template/v1.1.0\n", "h/rule.md": "r2\n",
 		"c/auth/login.go": "package auth\n\nimport \"example.com/fork/c/user\"\n\nvar Check = user.Weak\n",
@@ -319,7 +341,7 @@ func TestTemplateUpdatePaths(t *testing.T) {
 	}, readFiles(t, harness, code...), "without PATHS the code of the fork stays as is")
 
 	requested := fork(t)
-	out := bash(t, requested, script, "template/v1.1.0", "", "c/auth")
+	out = bash(t, requested, script, "template/v1.1.0", "", "c/auth")
 	require.Contains(t, out, "код по запросу (PATHS): c/auth\n")
 	require.Equal(t, map[string]string{
 		".template/version": "template/v1.1.0\n", "h/rule.md": "r2\n",
@@ -335,10 +357,19 @@ func TestTemplateUpdatePaths(t *testing.T) {
 		"a path on the next line of PATHS is brought too")
 
 	typo := fork(t)
-	out, err := runIn(t, typo, "bash", script, "template/v1.1.0", "", "c/auth c/autth")
+	out, err = runIn(t, typo, "bash", script, "template/v1.1.0", "", "c/auth c/autth")
 	require.Error(t, err, out)
 	require.Contains(t, out, "PATHS: c/autth — нет ни в")
 	require.Empty(t, git(t, typo, "status", "--porcelain"), "a refused update leaves the tree as is")
+
+	// :(exclude) шаблона сильнее пути PATHS: перенос молча прошёл бы без него.
+	for _, p := range []string{"h/spec", "h/spec/mutants.txt"} {
+		excluded := fork(t)
+		out, err = runIn(t, excluded, "bash", script, "template/v1.1.0", "", "c/auth "+p)
+		require.Error(t, err, out)
+		require.Contains(t, out, "PATHS: "+p+" — путь форка: .template/paths его исключает (:(exclude)h/spec)")
+		require.Empty(t, git(t, excluded, "status", "--porcelain"), "a refused update leaves the tree as is")
+	}
 }
 
 // TestTemplateUpdateRemote: о новом теге шаблона форк узнаёт из make doctor — теги remote template

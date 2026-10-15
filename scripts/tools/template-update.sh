@@ -7,6 +7,8 @@
 #   make template-update TO=… FROM=<коммит>   база переноса — этот коммит шаблона
 #   make template-update TO=… PATHS='<пути>'  тем же переносом — и код форка по этим путям (каталог, файл
 #                                             или :(exclude)<путь>): разделы «Безопасность» и «Платформа»
+#   make template-update TO=… PATHS=-         код форка не брать: аннотации интервала с этими разделами
+#                                             без PATHS — отказ (после переноса движок их код не возьмёт)
 #   template-update.sh --status               строка версии для make status (без сети)
 #   template-update.sh --remote               теги remote template для make doctor (git ls-remote): exit 0 —
 #                                             новее версии форка нет, 1 — есть или remote нет, 2 — не ответил
@@ -89,11 +91,14 @@ git fetch -q --no-tags template 'refs/tags/template/*:refs/tags/template/*'
 
 # До первого переноса (версия та же, что в первом коммите форка) база — коммит шаблона с деревом
 # первого коммита: «Use this template» копирует кончик main, а он обычно новее тега версии.
-root=$(git rev-list --max-parents=0 HEAD | tail -1) tag=${TO:-$(latest)}
+root=$(git rev-list --max-parents=0 HEAD | tail -1) tag=${TO:-$(latest)} based=""
 if [ -z "$FROM" ] && [ -n "$tag" ] && [ "$(git show "$root:.template/version" 2>/dev/null || true)" = "$v" ]; then
     FROM=$(git log --format='%H %T' "$tag" | awk -v t="$(git rev-parse "$root^{tree}")" '$2 == t { print $1; exit }')
     # Форк с коммита тега своей версии: база — сам тег.
     [ -z "$FROM" ] || [ "$FROM" != "$(git rev-parse -q --verify "$v^{commit}" || true)" ] || FROM=$v
+    # Форк правили до первого коммита: такого коммита шаблона нет, база — тег версии, и об этом надо знать.
+    [ -n "$FROM" ] || [ -z "$v" ] ||
+        based="база переноса: $v — коммита шаблона с деревом первого коммита форка нет (его правили до первого коммита): сверь итог, другая база — FROM=<коммит шаблона>"
 fi
 FROM=${FROM:-$v}
 [ -n "$FROM" ] || fail "базы нет: ни .template/version, ни коммита шаблона с деревом первого коммита форка — FROM=<коммит шаблона> (skill /upgrade)"
@@ -101,7 +106,11 @@ git rev-parse -q --verify "$FROM^{commit}" >/dev/null || fail "FROM=$FROM: та�
 
 if [ -z "$TO" ]; then
     echo "обвязка форка: ${v:-—}"
-    [ "$FROM" = "$v" ] || echo "база переноса: $FROM — коммит шаблона, из которого создан форк"
+    [ -z "$based" ] || echo "$based"
+    if [ "$FROM" != "$v" ]; then
+        echo "база переноса: $FROM — коммит шаблона, из которого создан форк"
+        echo "форк создан не с тега: что из пунктов аннотаций ниже у него уже есть — git log --oneline $FROM..<тег>"
+    fi
     last=""
     for t in $(git tag -l 'template/v*' --sort=v:refname --no-merged "$FROM"); do
         [ -z "$v" ] || newer "$v" "$t" || continue
@@ -111,23 +120,45 @@ if [ -z "$TO" ]; then
     done
     [ -n "$last" ] || { echo "новее тегов шаблона нет"; exit 0; }
     echo "golibinfra: форк $(golibinfra <go.mod), шаблон на $last — $(git show "$last:go.mod" | golibinfra)"
-    echo "перенос: make template-update TO=<тег> — процедура в skill /upgrade"
+    echo "перенос: make template-update TO=<тег> PATHS='<пути>' (или PATHS=- — без кода форка) — процедура в skill /upgrade"
     exit 0
 fi
 
 ! git merge-base --is-ancestor "$TO" "$FROM" || fail "обвязка форка уже содержит $TO (база $FROM)"
 [ -z "$(git status --porcelain)" ] || fail "дерево не чистое — закоммить или спрячь (git stash -u)"
+
+# Пункты «Безопасность» и «Платформа» аннотаций интервала — код форка вне путей шаблона. Перенос берёт его только
+# вместе с обвязкой (PATHS): после переноса версия форка — TO, и код этого интервала движку уже не взять.
+items=$(for t in $(git tag -l 'template/v*' --sort=v:refname --merged "$TO" --no-merged "$FROM"); do
+    git tag -l --format='%(contents)' "$t" | awk -v t="$t" '
+        /^(Безопасность|Платформа):[ \t]*$/ { on = 1; print "  " t " " $0; next }
+        /^[ \t]*$/ || /^[^ \t-]/ { on = 0 }
+        on { print "    " $0 }'
+done)
+if [ -z "$PATHS" ] && [ -n "$items" ]; then
+    { echo "пункты кода форка до $TO (аннотации тегов):"; echo "$items"; } >&2
+    fail "реши их до переноса — после него код этого интервала движок не возьмёт: PATHS='<пути>' — перенести, PATHS=- — не брать (отказ — с причиной в теле коммита)"
+fi
+[ "$PATHS" != - ] || PATHS=""
+
+mapfile -t paths < <({ git show "$FROM:.template/paths" 2>/dev/null || true; git show "$TO:.template/paths"; } |
+    grep -vE '^[[:space:]]*(#|$)' | sort -u)
 # Пути — через пробел или с новой строки: read без -d читал бы одну строку и молча терял остальные.
 read -r -d '' -a extra <<<"$PATHS" || true
-# Опечатка в пути промолчала бы: перенос без этого пути выглядит так же, как перенос без изменений в нём.
 for p in "${extra[@]}"; do
-    p=${p#:(exclude)}
-    git cat-file -e "$TO:$p" 2>/dev/null || git cat-file -e "$FROM:$p" 2>/dev/null ||
-        fail "PATHS: $p — нет ни в $TO, ни в базе $FROM"
+    q=${p#:(exclude)}
+    # Опечатка в пути промолчала бы: перенос без этого пути выглядит так же, как перенос без изменений в нём.
+    git cat-file -e "$TO:$q" 2>/dev/null || git cat-file -e "$FROM:$q" 2>/dev/null ||
+        fail "PATHS: $q — нет ни в $TO, ни в базе $FROM"
+    [ "$q" = "$p" ] || continue
+    # :(exclude) шаблона сильнее пути PATHS: перенос молча прошёл бы без него.
+    while IFS= read -r x; do
+        if [ "$q" = "$x" ] || [[ $q == "$x"/* ]]; then
+            fail "PATHS: $q — путь форка: .template/paths его исключает (:(exclude)$x) — нужное из шаблона: git show $TO:<путь>"
+        fi
+    done < <(printf '%s\n' "${paths[@]}" | sed -n 's/^:(exclude)//p')
 done
-
-mapfile -t paths < <({ git show "$FROM:.template/paths" 2>/dev/null || true; git show "$TO:.template/paths"; printf '%s\n' "${extra[@]}"; } |
-    grep -vE '^[[:space:]]*(#|$)' | sort -u)
+paths+=("${extra[@]}")
 mapfile -t gofiles < <(git diff --no-renames --name-only "$FROM" "$TO" -- "${paths[@]}" | grep '\.go$' || true)
 NEW=$(module <go.mod)
 
@@ -177,7 +208,9 @@ rm -f "$patch"
 
 conflicts=$(git diff --name-only --diff-filter=U)
 echo "обвязка: $FROM → $TO, файлов в индексе: $(git diff --cached --name-only | wc -l | tr -d ' ')"
+[ -z "$based" ] || echo "$based"
 [ ${#extra[@]} -eq 0 ] || echo "код по запросу (PATHS): ${extra[*]}"
+[ -z "$items" ] || { echo "пункты кода форка до $TO — в теле коммита — перенесено или отклонено:"; echo "$items"; }
 [ -z "$conflicts" ] || { echo "конфликты — разреши и git add:"; sed 's/^/  /' <<<"$conflicts"; }
 [ ${#absent[@]} -eq 0 ] || { echo "нет в форке — не тронуты:"; printf '  %s\n' "${absent[@]}"; }
 [ ${#kept[@]} -eq 0 ] || { echo "шаблон удалил, форк менял — реши сам:"; printf '  %s\n' "${kept[@]}"; }
