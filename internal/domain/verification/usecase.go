@@ -34,6 +34,8 @@ type EmailVerificationSetter interface {
 
 // Repository: Mark*Used и Redeem* гасят токен, только если он не погашен, иначе — ErrTokenUsed.
 type Repository interface {
+	// LockPasswordResets ставит выпуски ссылок пользователя в очередь до конца транзакции из ctx.
+	LockPasswordResets(ctx context.Context, userID string) error
 	// UpsertPasswordReset выпускает ссылку: новую или новый токен своей неотправленной; отправленную, погашенную, чужую,
 	// после погашения ссылки и при другой ссылке пользователя моложе pause — нет (issued=false).
 	UpsertPasswordReset(ctx context.Context, r PasswordResetIssue, pause time.Duration) (issued bool, err error)
@@ -183,14 +185,23 @@ func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID str
 	}
 
 	token := authnkit.NewToken()
-	issued, err := uc.d.Repo.UpsertPasswordReset(ctx, PasswordResetIssue{
-		RequestID: requestID, UserID: userID, UserVersion: u.Version, TokenHash: authnkit.HashToken(token),
-		RequestedAt: requestedAt, ExpiresAt: expiresAt,
-	}, uc.d.Config.ResetMailPause)
-	switch {
-	case err != nil:
+	var issued bool
+	// Доставки подписчик обрабатывает параллельно: выпуски одного пользователя — по очереди, иначе пауза писем не
+	// увидела бы незакоммиченную ссылку соседнего запроса.
+	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		if err := uc.d.Repo.LockPasswordResets(txCtx, userID); err != nil {
+			return err
+		}
+		var err error
+		issued, err = uc.d.Repo.UpsertPasswordReset(txCtx, PasswordResetIssue{
+			RequestID: requestID, UserID: userID, UserVersion: u.Version, TokenHash: authnkit.HashToken(token),
+			RequestedAt: requestedAt, ExpiresAt: expiresAt,
+		}, uc.d.Config.ResetMailPause)
 		return err
-	case !issued:
+	}); err != nil {
+		return err
+	}
+	if !issued {
 		uc.d.Log.Info(ctx, "password reset not issued: sent, redeemed or paused, skip", "user_id", userID)
 		return nil
 	}

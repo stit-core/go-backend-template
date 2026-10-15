@@ -372,18 +372,20 @@ func TestRequestPasswordReset_Failure(t *testing.T) {
 }
 
 // resetIssued ждёт выпуск ссылки сброса запроса rid пользователя u1 версии 3, сделанного в requestedAt, сроком час
-// от него, с паузой писем конфига, и копит хэши выпущенных токенов; issued — ответы по порядку вызовов.
+// от него, с паузой писем конфига — в транзакции после очереди выпусков пользователя, — и копит хэши выпущенных
+// токенов; issued — ответы по порядку вызовов.
 func resetIssued(t *testing.T, requestedAt time.Time, hashes *[]string, issued ...bool) *mocks.MockRepository {
 	t.Helper()
 	repo := mocks.NewMockRepository(t)
 	for _, ok := range issued {
-		repo.EXPECT().UpsertPasswordReset(mock.Anything, mock.MatchedBy(func(r verification.PasswordResetIssue) bool {
+		lock := repo.EXPECT().LockPasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
+		repo.EXPECT().UpsertPasswordReset(mock.MatchedBy(pgkit.InTx), mock.MatchedBy(func(r verification.PasswordResetIssue) bool {
 			return r.RequestID == "rid" && r.UserID == "u1" && r.UserVersion == 3 &&
 				r.RequestedAt.Equal(requestedAt) && r.ExpiresAt.Equal(requestedAt.Add(time.Hour))
 		}), mailPause).RunAndReturn(func(_ context.Context, r verification.PasswordResetIssue, _ time.Duration) (bool, error) {
 			*hashes = append(*hashes, r.TokenHash)
 			return ok, nil
-		}).Once()
+		}).Once().NotBefore(lock)
 	}
 	return repo
 }
@@ -500,8 +502,14 @@ func TestIssuePasswordReset_Failure(t *testing.T) {
 			users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, errDown).Once()
 			return []ucOption{withUsers(users)}
 		}},
+		{"issues not queued", func(t *testing.T) []ucOption {
+			repo := mocks.NewMockRepository(t)
+			repo.EXPECT().LockPasswordResets(mock.Anything, "u1").Return(errDown).Once()
+			return []ucOption{withUsers(userByID(t, 1)), withRepo(repo)}
+		}},
 		{"link not stored", func(t *testing.T) []ucOption {
 			repo := mocks.NewMockRepository(t)
+			repo.EXPECT().LockPasswordResets(mock.Anything, "u1").Return(nil).Once()
 			repo.EXPECT().UpsertPasswordReset(mock.Anything, mock.Anything, mailPause).Return(false, errDown).Once()
 			return []ucOption{withUsers(userByID(t, 1)), withRepo(repo)}
 		}},

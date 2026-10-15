@@ -104,7 +104,9 @@ blocked-by: —
   - Сделано: `PASSWORD_RESET_MAIL_PAUSE` (5m) → `verification.Config` → условие `UpsertPasswordReset` (другая ссылка
     пользователя моложе паузы); `ResetLimiter` и `verification/infra/bruteforce` сняты; job `verification.purge_links`
     (`Usecase.PurgeLinks`, батч по 5000). RED `TestIdentity_ResetMailPause`: три запроса с трёх адресов — на базе 3
-    письма, на ветке 1; handoff-блок; `make check` → ✓
+    письма, на ветке 1; handoff-блок; `make check` → ✓. Гонка: подписчик обрабатывает доставки параллельно, и
+    выпуски в пересекающихся транзакциях не видели друг друга (эксперимент `N/s7c/exp/pause-overlap-base.log`: оба
+    выпущены) — выпуски ссылок пользователя идут по очереди (`LockPasswordResets`, `TestLockPasswordResets`)
 - [x] **S5** — `seed-admin` через `user.Usecase.EnsureAdmin`: правило пароля, сущность, аудит, версия; логгер
   входов `cmd/` — из `LOG_*`
   - Проверка: M01, M02, E9; `make check` → ✓ · Закрывает: AC3, AC6 · Зависит от: S3
@@ -160,6 +162,9 @@ blocked-by: —
   а не лимитом запроса: письма в ящик ограничены с любых адресов, настройка не делит блокировку входа, запрос
   делает одну работу для любого адреса без ветки «лимит», и адреса анонимных запросов не копятся в
   `bruteforce_attempts`. Лимит запроса на guard входа снят: поток запросов с адреса держит лимит `/api/auth/*`.
+- NSEC-01, очередь выпусков: транзакционная advisory-блокировка по пользователю (`pg_advisory_xact_lock`), а не
+  строка-слот на учётную запись: без новой таблицы и миграции, письмо уходит после коммита — блокировка не держится
+  на вводе-выводе mailer'а.
 - RCOD-17: образец конфига домена — `verification.Config` (пауза писем, `config.go` корня), образец job'а —
   `verification.purge_links`: оба — с настоящей нуждой, а не ради образца.
 - RCOD-12, RSECT-08: `seed-admin` — метод `user.Usecase.EnsureAdmin` без policy (вход оператора: решает доступ к

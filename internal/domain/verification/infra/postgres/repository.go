@@ -48,6 +48,13 @@ func (r *Repository) UpsertPasswordReset(ctx context.Context, issue verification
 	return true, nil
 }
 
+func (r *Repository) LockPasswordResets(ctx context.Context, userID string) error {
+	if err := r.q.LockPasswordResets(ctx, userID); err != nil {
+		return fmt.Errorf("verification repo: lock password resets: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) MarkPasswordResetSent(ctx context.Context, id string) error {
 	rid, err := pgkit.ParseUUID(id)
 	if err != nil {

@@ -60,6 +60,16 @@ func (q *Queries) GetPasswordReset(ctx context.Context, tokenHash string) (GetPa
 	return i, err
 }
 
+const lockPasswordResets = `-- name: LockPasswordResets :exec
+SELECT pg_advisory_xact_lock(hashtext('verification.password_resets'), hashtext($1::text))
+`
+
+// Выпуски ссылок одного пользователя — по очереди до конца транзакции: пауза писем видит ссылку соседнего выпуска.
+func (q *Queries) LockPasswordResets(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, lockPasswordResets, userID)
+	return err
+}
+
 const markPasswordResetSent = `-- name: MarkPasswordResetSent :exec
 UPDATE password_resets SET sent_at = NOW() WHERE id = $1
 `
