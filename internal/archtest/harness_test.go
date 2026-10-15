@@ -427,20 +427,49 @@ func TestRulesAndSkillsLoad(t *testing.T) {
 }
 
 // frontmatter — шапка .md между строками «---»: ключ верхнего уровня → значение после «ключ:» и пункты его
-// списка (блочного «- …» или «[a, b]» в строку) без кавычек и комментариев YAML. Шапки нет или её не разберёт
-// YAML (значение без кавычек с «*», «{» — ссылка на якорь и словарь) — nil: Claude Code её не прочтёт.
+// списка (блочного «- …» или «[a, b]» в строку) без кавычек и комментариев YAML. Шапку, которую
+// YAML не разберёт, Claude Code читает второй раз, взяв в кавычки значение «ключ: …» верхнего уровня со знаком
+// YAML (paths: **/*.go); не разобрал и так (пункт «- **/*.go») — шапки нет, nil.
 func frontmatter(text string) map[string][]string {
 	lines := strings.Split(text, "\n")
 	if strings.TrimRight(lines[0], " \t") != "---" {
 		return nil
 	}
-	keys := map[string][]string{}
-	key := ""
-	for _, line := range lines[1:] {
+	for i, line := range lines[1:] {
 		if strings.TrimRight(line, " \t") == "---" {
+			if keys, ok := yamlHead(lines[1:i+1], false); ok {
+				return keys
+			}
+			keys, _ := yamlHead(lines[1:i+1], true)
 			return keys
 		}
-		line = strings.TrimRight(yamlUncomment(line), " \t")
+	}
+	return nil // шапка не закрыта — это не шапка
+}
+
+var (
+	// topValue — «ключ: значение» верхнего уровня, как его видит второй разбор шапки Claude Code.
+	topValue = regexp.MustCompile(`^([a-zA-Z_-]+):\s+(\S.*)$`)
+	// yamlSign — знаки, из-за которых Claude Code при втором разборе берёт значение в кавычки.
+	yamlSign = regexp.MustCompile("[{}\\[\\]*&#!|>%@`]|: ")
+)
+
+// yamlHead — ключи строк шапки; false — YAML её не разберёт. second — второй разбор Claude Code: значение
+// «ключ: …» верхнего уровня без кавычек и не flow-список, со знаком YAML, — строка как есть.
+func yamlHead(lines []string, second bool) (map[string][]string, bool) {
+	keys := map[string][]string{}
+	key := ""
+	for _, raw := range lines {
+		if m := topValue.FindStringSubmatch(strings.TrimRight(raw, " \t")); second && m != nil {
+			v := m[2]
+			flowList := strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]")
+			if !quoted(v) && !flowList && yamlSign.MatchString(v) {
+				key = m[1]
+				keys[key] = append(keys[key], v)
+				continue
+			}
+		}
+		line := strings.TrimRight(yamlUncomment(raw), " \t")
 		item := strings.TrimSpace(line)
 		var values []string
 		switch {
@@ -450,21 +479,27 @@ func frontmatter(text string) map[string][]string {
 		case line[0] != ' ' && line[0] != '\t':
 			k, v, _ := strings.Cut(line, ":")
 			key, v = strings.TrimSpace(k), strings.TrimSpace(v)
-			if flow, ok := strings.CutPrefix(v, "["); ok && strings.HasSuffix(flow, "]") {
-				values = append(values, splitFlow(strings.TrimSuffix(flow, "]"))...)
-			} else if v != "" {
+			switch {
+			case strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]"):
+				values = splitFlow(v[1 : len(v)-1])
+			case v != "":
 				values = append(values, v)
 			}
 		}
 		for _, v := range values {
 			s, ok := yamlScalar(v)
 			if !ok {
-				return nil
+				return nil, false
 			}
 			keys[key] = append(keys[key], s)
 		}
 	}
-	return nil // шапка не закрыта — это не шапка
+	return keys, true
+}
+
+// quoted — значение YAML в кавычках.
+func quoted(v string) bool {
+	return len(v) >= 2 && (v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'')
 }
 
 // yamlUncomment — строка без комментария YAML: «#» в начале или после пробела, вне кавычек.
