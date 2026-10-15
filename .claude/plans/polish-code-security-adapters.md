@@ -105,9 +105,13 @@ blocked-by: —
     пользователя моложе паузы); `ResetLimiter` и `verification/infra/bruteforce` сняты; job `verification.purge_links`
     (`Usecase.PurgeLinks`, батч по 5000). RED `TestIdentity_ResetMailPause`: три запроса с трёх адресов — на базе 3
     письма, на ветке 1; handoff-блок; `make check` → ✓
-- [ ] **S5** — `seed-admin` через `user.Usecase.EnsureAdmin`: правило пароля, сущность, аудит, версия; логгер
+- [x] **S5** — `seed-admin` через `user.Usecase.EnsureAdmin`: правило пароля, сущность, аудит, версия; логгер
   входов `cmd/` — из `LOG_*`
   - Проверка: M01, M02, E9; `make check` → ✓ · Закрывает: AC3, AC6 · Зависит от: S3
+  - Сделано: `EnsureAdmin` — правило пароля (`hashPassword`, его же берёт `Register`), сущность, `FOR UPDATE` по
+    адресу, `Promote` при версии (растёт), закрытие сессий, аудит `seed_admin`; сырого SQL в `cmd/seed-admin` нет;
+    логгеры `cmd/migrate` и `cmd/seed-admin` — `logkit.NewConfig`. RED: `TestRun_RejectsWeakPassword` (код 0 с
+    паролем «1»), `TestRun_PromotionIsVersionedAndAudited` (версия 1, аудита нет) — на ветке PASS; `make check` → ✓
 - [ ] **S6** — Срок хранения аудита (job кита) и `Cache-Control: no-store` у ответов `/api/*`
   - Проверка: D14; `TestBoot`; `make check` → ✓ · Закрывает: AC4 · Зависит от: —
 - [ ] **S7** — Контракт API: 429 строгого лимита, таблицы logout и запроса сброса, адрес регистрации, cookie
@@ -143,6 +147,9 @@ blocked-by: —
   `bruteforce_attempts`. Лимит запроса на guard входа снят: поток запросов с адреса держит лимит `/api/auth/*`.
 - RCOD-17: образец конфига домена — `verification.Config` (пауза писем, `config.go` корня), образец job'а —
   `verification.purge_links`: оба — с настоящей нуждой, а не ради образца.
+- RCOD-12, RSECT-08: `seed-admin` — метод `user.Usecase.EnsureAdmin` без policy (вход оператора: решает доступ к
+  БД), а не `Trusted` (его берут только адаптеры доменов, archtest); событий он не публикует — outbox домена
+  монтирует только его `module/` (archkit), а подтверждённому admin письмо не нужно.
 - RCOD-10: своя ссылка и соседние гасятся одним оператором с `RETURNING id`; канон одиночного погашения в rule
   `sqlc-and-migrations` (трек gate) — `MarkEmailVerificationUsed`, строкой там же — погашение с соседями: правка
   чужого файла, иначе правило называло бы снятый метод.
@@ -155,4 +162,4 @@ blocked-by: —
   к кому: владелец
 
 ## Где мы сейчас
-S1–S4 закрыты. Следующий шаг — S5 (`seed-admin` через домен user).
+S1–S5 закрыты. Следующий шаг — S6 (срок хранения аудита, `Cache-Control`).

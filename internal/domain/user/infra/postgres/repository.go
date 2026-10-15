@@ -21,11 +21,12 @@ func NewRepository(database *pgkit.DB) user.Repository {
 
 func (r *Repository) Insert(ctx context.Context, u *user.User) error {
 	row, err := r.q.InsertUser(ctx, db.InsertUserParams{
-		Email:        u.Email,
-		PasswordHash: u.PasswordHash,
-		Name:         u.Name,
-		Status:       string(u.Status),
-		Role:         string(u.Role),
+		Email:         u.Email,
+		PasswordHash:  u.PasswordHash,
+		Name:          u.Name,
+		Status:        string(u.Status),
+		Role:          string(u.Role),
+		EmailVerified: u.EmailVerified,
 	})
 	if pgkit.IsUniqueViolation(err) {
 		return user.ErrAlreadyExists
@@ -86,6 +87,20 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*user.User, 
 	return rowToEntity(row), nil
 }
 
+func (r *Repository) GetByEmailForUpdate(ctx context.Context, email string) (*user.User, error) {
+	if strings.ContainsRune(email, 0) {
+		return nil, user.ErrNotFound
+	}
+	row, err := r.q.GetUserByEmailForUpdate(ctx, email)
+	if pgkit.IsNoRows(err) {
+		return nil, user.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("user repo: select by email for update: %w", err)
+	}
+	return rowToEntity(row), nil
+}
+
 func (r *Repository) Update(ctx context.Context, u *user.User) (*user.User, error) {
 	uid, err := pgkit.ParseUUID(u.ID)
 	if err != nil {
@@ -136,6 +151,21 @@ func (r *Repository) UpdatePassword(ctx context.Context, id, passwordHash string
 	}
 	if err != nil {
 		return nil, fmt.Errorf("user repo: update password: %w", err)
+	}
+	return rowToEntity(row), nil
+}
+
+func (r *Repository) Promote(ctx context.Context, id, passwordHash string, version int) (*user.User, error) {
+	uid, err := pgkit.ParseUUID(id)
+	if err != nil {
+		return nil, user.ErrNotFound
+	}
+	row, err := r.q.PromoteUser(ctx, db.PromoteUserParams{PasswordHash: passwordHash, ID: uid, Version: int32(version)})
+	if pgkit.IsNoRows(err) {
+		return nil, user.ErrConcurrentUpdate
+	}
+	if err != nil {
+		return nil, fmt.Errorf("user repo: promote: %w", err)
 	}
 	return rowToEntity(row), nil
 }

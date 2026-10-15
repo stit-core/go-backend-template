@@ -25,12 +25,16 @@ type Repository interface {
 	// а читает он её после коммита изменения, которое уже идёт.
 	GetByIDForShare(ctx context.Context, id string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	// GetByEmailForUpdate — GetByEmail под блокировкой строки до конца транзакции из ctx.
+	GetByEmailForUpdate(ctx context.Context, email string) (*User, error)
 	// Update пишет имя и статус u при версии в БД u.Version; иначе, и для удалённого, — ErrConcurrentUpdate.
 	Update(ctx context.Context, u *User) (*User, error)
 	// Delete удаляет мягко и без версии: уже удалённого или несуществующего нет — ErrNotFound, так что
 	// повтор и гонка с другой записью — не конфликт.
 	Delete(ctx context.Context, id string) error
 	UpdatePassword(ctx context.Context, id, passwordHash string, version int) (*User, error)
+	// Promote делает учётную запись admin с паролем passwordHash при версии version; иначе — ErrConcurrentUpdate.
+	Promote(ctx context.Context, id, passwordHash string, version int) (*User, error)
 	// SetEmailVerified: нет пользователя или удалён — ErrNotFound.
 	SetEmailVerified(ctx context.Context, id string) error
 	List(ctx context.Context, filter ListFilter, page paging.Page) ([]*User, error)
@@ -74,15 +78,9 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 }
 
 func (uc *Usecase) Register(ctx context.Context, in *CreateInput) (*User, error) {
-	if !policy.PasswordStrong(in.Password) {
-		return nil, ErrWeakPassword
-	}
-	hash, err := uc.d.Hasher.Hash(ctx, in.Password)
-	switch {
-	case errors.Is(err, authnkit.ErrPasswordTooLong):
-		return nil, ErrPasswordTooLong
-	case err != nil:
-		return nil, fmt.Errorf("hash password: %w", err)
+	hash, err := hashPassword(ctx, uc.d.Hasher, in.Password)
+	if err != nil {
+		return nil, err
 	}
 	u, err := NewUser(in.Email, hash, in.Name, identity.RoleClient)
 	if err != nil {
@@ -223,6 +221,54 @@ func (uc *Usecase) Delete(ctx context.Context, id string) error {
 	uc.d.Log.Info(ctx, "user deleted", "user_id", id)
 	uc.audit(ctx, auditkit.Entry{ActorID: caller.UserID, Action: "delete", Resource: "user", ResourceID: id})
 	return nil
+}
+
+// EnsureAdmin — вход оператора cmd/seed-admin, без policy: решает тот, кто держит доступ к БД. Учётная запись адреса
+// становится admin с этим паролем, нет такой — заводится с подтверждённым адресом; прежние сессии закрываются.
+func (uc *Usecase) EnsureAdmin(ctx context.Context, in CreateInput) (*User, error) {
+	hash, err := hashPassword(ctx, uc.d.Hasher, in.Password)
+	if err != nil {
+		return nil, err
+	}
+	admin, err := NewUser(in.Email, hash, in.Name, identity.RoleAdmin)
+	if err != nil {
+		return nil, err
+	}
+	admin.EmailVerified = true
+	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		existing, err := uc.d.Repo.GetByEmailForUpdate(txCtx, admin.Email)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			err = uc.d.Repo.Insert(txCtx, admin)
+		case err == nil:
+			admin, err = uc.d.Repo.Promote(txCtx, existing.ID, hash, existing.Version)
+		}
+		if err != nil {
+			return err
+		}
+		return uc.d.Sessions.RevokeAll(txCtx, admin.ID)
+	}); err != nil {
+		return nil, err
+	}
+
+	uc.d.Log.Info(ctx, "admin seeded", "user_id", admin.ID)
+	uc.audit(ctx, auditkit.Entry{Action: "seed_admin", Resource: "user", ResourceID: admin.ID})
+	return admin, nil
+}
+
+// hashPassword — правило пароля продукта и хэш: пароль длиннее предела хэшера — ошибка поля, а не сбой.
+func hashPassword(ctx context.Context, h authnkit.Hasher, plain string) (string, error) {
+	if !policy.PasswordStrong(plain) {
+		return "", ErrWeakPassword
+	}
+	hash, err := h.Hash(ctx, plain)
+	switch {
+	case errors.Is(err, authnkit.ErrPasswordTooLong):
+		return "", ErrPasswordTooLong
+	case err != nil:
+		return "", fmt.Errorf("hash password: %w", err)
+	}
+	return hash, nil
 }
 
 // audit дописывает время (IP клиента и ID запроса auditkit берёт из ctx); сбой записи аудита операцию не

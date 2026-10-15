@@ -115,6 +115,7 @@ func audited(actor, action, id string) *auditkit.Entry {
 var (
 	errHashing = errors.New("argon2: out of memory")
 	errAudit   = errors.New("audit_log: connection refused")
+	errDB      = errors.New("users: connection refused")
 )
 
 func requireForbidden(t *testing.T, err error) {
@@ -542,4 +543,107 @@ func TestDelete_SessionsNotClosed(t *testing.T) {
 	require.ErrorIs(t, f.uc.Delete(identitytest.Client("u1"), "u1"), errRevoke)
 	require.Zero(t, f.bus.Count())
 	require.Empty(t, f.audit.Entries())
+}
+
+// seedInput — вход seed-admin с паролем по правилу продукта.
+var seedInput = user.CreateInput{Email: "admin@b.com", Password: "longenough", Name: "Admin"}
+
+// seededEntry — запись аудита seed-admin над учётной записью id: оператора в ней нет, его решение — доступ к БД.
+func seededEntry(id string) *auditkit.Entry {
+	return &auditkit.Entry{Action: "seed_admin", Resource: "user", ResourceID: id, At: fixedNow}
+}
+
+// Нет учётной записи с адресом — seed заводит admin с подтверждённым адресом; есть — повышает её при её версии
+// (новый пароль, версия растёт). Прежние сессии закрываются той же транзакцией, запись — в аудите.
+func TestEnsureAdmin(t *testing.T) {
+	t.Parallel()
+	t.Run("new account", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetByEmailForUpdate(mock.MatchedBy(pgkit.InTx), "admin@b.com").Return(nil, user.ErrNotFound).Once()
+		repo.EXPECT().Insert(mock.MatchedBy(pgkit.InTx), &user.User{
+			Email: "admin@b.com", PasswordHash: "hash:longenough", Name: "Admin", Status: user.StatusActive,
+			Role: identity.RoleAdmin, Version: 1, EmailVerified: true,
+		}).RunAndReturn(func(_ context.Context, u *user.User) error { u.ID = "a1"; return nil }).Once()
+		f := newUC(t, withRepo(repo), withSessions(revoked(t, "a1", nil)))
+
+		got, err := f.uc.EnsureAdmin(context.Background(), seedInput)
+		require.NoError(t, err)
+		require.Equal(t, "a1", got.ID)
+		require.Equal(t, seededEntry("a1"), f.audit.Last("seed_admin"))
+		require.Zero(t, f.bus.Count(), "an operator input publishes no events")
+	})
+	t.Run("existing account", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetByEmailForUpdate(mock.MatchedBy(pgkit.InTx), "admin@b.com").Return(stored(), nil).Once()
+		promoted := &user.User{ID: "u1", Email: "a@b.com", Role: identity.RoleAdmin, Version: 4}
+		repo.EXPECT().Promote(mock.MatchedBy(pgkit.InTx), "u1", "hash:longenough", 3).Return(promoted, nil).Once()
+		f := newUC(t, withRepo(repo), withSessions(revoked(t, "u1", nil)))
+
+		got, err := f.uc.EnsureAdmin(context.Background(), seedInput)
+		require.NoError(t, err)
+		require.Same(t, promoted, got)
+		require.Equal(t, seededEntry("u1"), f.audit.Last("seed_admin"))
+	})
+}
+
+// Отказ seed-admin ничего не оставляет: правило пароля и сущности — до транзакции, сбой в ней — откат, аудита нет.
+func TestEnsureAdmin_Rejected(t *testing.T) {
+	t.Parallel()
+	lookup := func(found *user.User, err error) func(*mocks.MockRepository) {
+		return func(repo *mocks.MockRepository) {
+			repo.EXPECT().GetByEmailForUpdate(mock.Anything, "admin@b.com").Return(found, err).Once()
+		}
+	}
+	tests := []struct {
+		name     string
+		in       user.CreateInput
+		hasher   authnkit.Hasher // nil — исправный
+		repo     func(*mocks.MockRepository)
+		revokeOn string // "" — до закрытия сессий не доходит
+		want     error
+	}{
+		{name: "weak password", in: user.CreateInput{Email: "admin@b.com", Password: "1", Name: "Admin"}, want: user.ErrWeakPassword},
+		{name: "password over the hasher limit", in: user.CreateInput{
+			Email: "admin@b.com", Password: strings.Repeat("я", authnkit.MaxPasswordLen), Name: "Admin",
+		}, want: user.ErrPasswordTooLong},
+		{name: "password not hashed", in: seedInput, hasher: &authntest.DeterministicHasher{HashErr: errHashing}, want: errHashing},
+		{name: "not an address", in: user.CreateInput{Email: "not an address", Password: "longenough", Name: "Admin"}, want: user.ErrInvalidEmail},
+		{name: "blank name", in: user.CreateInput{Email: "admin@b.com", Password: "longenough", Name: " "}, want: user.ErrInvalidName},
+		{name: "lookup fails", in: seedInput, repo: lookup(nil, errDB), want: errDB},
+		{name: "address taken concurrently", in: seedInput, repo: func(repo *mocks.MockRepository) {
+			lookup(nil, user.ErrNotFound)(repo)
+			repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(user.ErrAlreadyExists).Once()
+		}, want: user.ErrAlreadyExists},
+		{name: "account changed concurrently", in: seedInput, repo: func(repo *mocks.MockRepository) {
+			lookup(stored(), nil)(repo)
+			repo.EXPECT().Promote(mock.Anything, "u1", "hash:longenough", 3).Return(nil, user.ErrConcurrentUpdate).Once()
+		}, want: user.ErrConcurrentUpdate},
+		{name: "sessions not closed", in: seedInput, revokeOn: "u1", repo: func(repo *mocks.MockRepository) {
+			lookup(stored(), nil)(repo)
+			repo.EXPECT().Promote(mock.Anything, "u1", "hash:longenough", 3).Return(stored(), nil).Once()
+		}, want: errRevoke},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := mocks.NewMockRepository(t)
+			if tc.repo != nil {
+				tc.repo(repo)
+			}
+			opts := []ucOption{withRepo(repo)}
+			if tc.hasher != nil {
+				opts = append(opts, withHasher(tc.hasher))
+			}
+			if tc.revokeOn != "" {
+				opts = append(opts, withSessions(revoked(t, tc.revokeOn, errRevoke)))
+			}
+			f := newUC(t, opts...)
+
+			_, err := f.uc.EnsureAdmin(context.Background(), tc.in)
+			require.ErrorIs(t, err, tc.want)
+			require.Empty(t, f.audit.Entries())
+		})
+	}
 }

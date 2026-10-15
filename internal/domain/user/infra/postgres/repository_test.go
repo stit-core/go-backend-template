@@ -46,6 +46,13 @@ func TestInsert(t *testing.T) {
 	require.NoError(t, repo.Delete(ctx, u.ID))
 	again := pgseed.InsertUser(t, repo, pgseed.WithEmail("alice@example.com"))
 	require.NotEqual(t, u.ID, again.ID)
+
+	verified := pgseed.NewUser()
+	verified.EmailVerified = true
+	require.NoError(t, repo.Insert(ctx, verified))
+	got, err = repo.GetByID(ctx, verified.ID)
+	require.NoError(t, err)
+	require.True(t, got.EmailVerified, "Insert stores the address check of the account")
 }
 
 func TestGetByID(t *testing.T) {
@@ -118,6 +125,60 @@ func TestGetByEmail(t *testing.T) {
 	// NUL Postgres в TEXT не хранит: такого адреса нет, а не ошибка драйвера.
 	_, err = repo.GetByEmail(ctx, "alice\x00@example.com")
 	require.ErrorIs(t, err, user.ErrNotFound)
+}
+
+// Поиск по адресу под блокировкой — тот же поиск, что GetByEmail, и держит строку до конца своей транзакции:
+// чужая запись в неё ждёт (здесь — упирается в lock_timeout).
+func TestGetByEmailForUpdate(t *testing.T) {
+	t.Parallel()
+	pg := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
+	repo := userpg.NewRepository(pg.DB(t))
+	ctx := context.Background()
+	u := pgseed.InsertUser(t, repo, pgseed.WithEmail("Alice@Example.com"))
+
+	require.NoError(t, pg.Transactor(t).WithTx(ctx, func(txCtx context.Context) error {
+		got, err := repo.GetByEmailForUpdate(txCtx, "alice@example.com")
+		require.NoError(t, err)
+		require.Equal(t, u, got)
+
+		writer, err := pg.Pool(t).Begin(ctx)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, writer.Rollback(ctx)) }()
+		_, err = writer.Exec(ctx, `SET LOCAL lock_timeout = '100ms'`)
+		require.NoError(t, err)
+		_, err = writer.Exec(ctx, `UPDATE users SET name = 'Other' WHERE id = $1`, u.ID)
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, "55P03", pgErr.Code, "a write into the locked row waits for the locking transaction")
+		return nil
+	}))
+	for _, email := range []string{"bob@example.com", "alice\x00@example.com"} {
+		_, err := repo.GetByEmailForUpdate(ctx, email)
+		require.ErrorIs(t, err, user.ErrNotFound, email)
+	}
+}
+
+// Повышение — запись учётной записи при её версии: роль admin, новый пароль, версия растёт; устаревшая версия и
+// удалённая учётная запись — ErrConcurrentUpdate.
+func TestPromote(t *testing.T) {
+	t.Parallel()
+	repo := setup(t)
+	ctx := context.Background()
+	u := pgseed.InsertUser(t, repo)
+	deleted := pgseed.InsertUser(t, repo)
+	require.NoError(t, repo.Delete(ctx, deleted.ID))
+
+	got, err := repo.Promote(ctx, u.ID, "hash:admin", u.Version)
+	require.NoError(t, err)
+	require.Equal(t, identity.RoleAdmin, got.Role)
+	require.Equal(t, "hash:admin", got.PasswordHash)
+	require.Equal(t, u.Version+1, got.Version)
+	require.Equal(t, u.Name, got.Name, "the name stays")
+
+	_, err = repo.Promote(ctx, u.ID, "hash:other", u.Version)
+	require.ErrorIs(t, err, user.ErrConcurrentUpdate, "stale version")
+	_, err = repo.Promote(ctx, deleted.ID, "hash:other", deleted.Version+1)
+	require.ErrorIs(t, err, user.ErrConcurrentUpdate, "deleted account")
 }
 
 // Список и счётчик видят одних и тех же — не удалённых, с фильтром статуса; список — новые первыми.
@@ -333,6 +394,8 @@ func TestRepository_Failures(t *testing.T) {
 		require.ErrorIs(t, err, user.ErrNotFound, "Update")
 		_, err = repo.UpdatePassword(ctx, "not-a-uuid", "hash", 1)
 		require.ErrorIs(t, err, user.ErrNotFound, "UpdatePassword")
+		_, err = repo.Promote(ctx, "not-a-uuid", "hash", 1)
+		require.ErrorIs(t, err, user.ErrNotFound, "Promote")
 		require.ErrorIs(t, repo.SetEmailVerified(ctx, "not-a-uuid"), user.ErrNotFound, "SetEmailVerified")
 	})
 
@@ -341,10 +404,12 @@ func TestRepository_Failures(t *testing.T) {
 		cancel()
 		const id = "00000000-0000-0000-0000-000000000001"
 		calls := map[string]func() error{
-			"Insert":          func() error { return repo.Insert(ctx, pgseed.NewUser()) },
-			"GetByID":         func() error { _, err := repo.GetByID(ctx, id); return err },
-			"GetByIDForShare": func() error { _, err := repo.GetByIDForShare(ctx, id); return err },
-			"GetByEmail":      func() error { _, err := repo.GetByEmail(ctx, "a@b.com"); return err },
+			"Insert":              func() error { return repo.Insert(ctx, pgseed.NewUser()) },
+			"GetByID":             func() error { _, err := repo.GetByID(ctx, id); return err },
+			"GetByIDForShare":     func() error { _, err := repo.GetByIDForShare(ctx, id); return err },
+			"GetByEmail":          func() error { _, err := repo.GetByEmail(ctx, "a@b.com"); return err },
+			"GetByEmailForUpdate": func() error { _, err := repo.GetByEmailForUpdate(ctx, "a@b.com"); return err },
+			"Promote":             func() error { _, err := repo.Promote(ctx, id, "hash", 1); return err },
 			"Update": func() error {
 				_, err := repo.Update(ctx, &user.User{ID: id, Name: "x", Status: user.StatusActive, Version: 1})
 				return err

@@ -1,27 +1,22 @@
-// Command seed-admin — идемпотентный bootstrap первого admin.
-//
-// В шаблоне нет публичного пути сделать admin (register даёт role=client).
-// One-off как cmd/migrate: SEED_ADMIN_EMAIL/PASSWORD → upsert юзера с
-// role=admin, хеш через golibinfra/authnkit (Argon2id, encoded PHC
-// self-describing — приложение верифицит на login без доп. конфига).
+// Command seed-admin — первый admin сервиса: регистрация даёт только роль client. One-off, как cmd/migrate:
+// SEED_ADMIN_EMAIL и SEED_ADMIN_PASSWORD (SEED_ADMIN_NAME) → user.Usecase.EnsureAdmin.
 package main
 
 import (
+	"cmp"
 	"context"
-	"errors"
-	"fmt"
 	"os"
 
-	"github.com/jackc/pgx/v5"
-
+	auditpg "git.stit.tech/stit-core/golibinfra/auditkit/pgstore"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit/session"
 	sessionpg "git.stit.tech/stit-core/golibinfra/authnkit/session/pgstore"
+	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	userpg "git.stit.tech/stit-core/go-backend-template/internal/domain/user/infra/postgres"
 )
 
 var (
@@ -32,7 +27,11 @@ var (
 func main() {
 	ctx := context.Background()
 
-	log, err := logkit.New(logkit.Config{Level: "info"})
+	cfg, err := logkit.NewConfig()
+	var log logkit.Logger
+	if err == nil {
+		log, err = logkit.New(cfg)
+	}
 	if err != nil {
 		_, _ = os.Stderr.WriteString("seed-admin: logger: " + err.Error() + "\n") //nolint:errcheck,forbidigo // логгера нет: stderr — последний канал
 		os.Exit(1)
@@ -43,19 +42,13 @@ func main() {
 }
 
 func run(ctx context.Context, log logkit.Logger) int {
-	email := os.Getenv("SEED_ADMIN_EMAIL")
-	password := os.Getenv("SEED_ADMIN_PASSWORD")
-	name := os.Getenv("SEED_ADMIN_NAME")
-	if name == "" {
-		name = "Admin"
+	in := user.CreateInput{
+		Email:    os.Getenv("SEED_ADMIN_EMAIL"),
+		Password: os.Getenv("SEED_ADMIN_PASSWORD"),
+		Name:     cmp.Or(os.Getenv("SEED_ADMIN_NAME"), "Admin"),
 	}
-	if email == "" || password == "" {
+	if in.Email == "" || in.Password == "" {
 		log.Error(ctx, "SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD are required")
-		return 1
-	}
-	// Адрес и имя — по правилам сущности user: учётной записи, которую не завела бы регистрация, seed не заводит.
-	if _, err := user.NewUser(email, "", name, identity.RoleAdmin); err != nil {
-		log.Error(ctx, "SEED_ADMIN_EMAIL or SEED_ADMIN_NAME breaks the rules of the user domain", "error", err)
 		return 1
 	}
 	poolCfg, err := pgkit.NewPoolConfig()
@@ -68,23 +61,16 @@ func run(ctx context.Context, log logkit.Logger) int {
 		log.Error(ctx, "session config", "error", err)
 		return 1
 	}
-
-	p, err := authnkit.NewArgon2idConfig()
+	argon, err := authnkit.NewArgon2idConfig()
 	if err != nil {
 		log.Error(ctx, "argon params", "error", err)
 		return 1
 	}
-	hasher, err := authnkit.NewArgon2idHasher(p)
+	hasher, err := authnkit.NewArgon2idHasher(argon)
 	if err != nil {
 		log.Error(ctx, "argon params", "error", err)
 		return 1
 	}
-	hash, err := hasher.Hash(ctx, password)
-	if err != nil {
-		log.Error(ctx, "hash password", "error", err)
-		return 1
-	}
-
 	pool, err := pgkit.NewPool(ctx, poolCfg)
 	if err != nil {
 		log.Error(ctx, "pg connect", "error", err)
@@ -98,51 +84,15 @@ func run(ctx context.Context, log logkit.Logger) int {
 		return 1
 	}
 
-	var id string
-	if err := pgkit.NewPoolTransactor(pool).WithTx(ctx, func(txCtx context.Context) error {
-		var err error
-		if id, err = upsertAdmin(txCtx, db, email, hash, name); err != nil {
-			return err
-		}
-		// Права и пароль сменились: прежние сессии учётной записи не получают ни того, ни другого.
-		return sessions.RevokeAll(txCtx, id)
-	}); err != nil {
+	users := user.NewUsecase(user.UsecaseDeps{
+		Repo: userpg.NewRepository(db), Hasher: hasher, Tx: pgkit.NewPoolTransactor(pool), Sessions: sessions,
+		Audit: auditpg.NewStore(db), Log: log, Clock: clockkit.Real{},
+	})
+	admin, err := users.EnsureAdmin(ctx, in)
+	if err != nil {
 		log.Error(ctx, "seed admin failed", "error", err)
 		return 1
 	}
-	log.Info(ctx, "seed admin: ok", "user_id", id)
+	log.Info(ctx, "seed admin: ok", "user_id", admin.ID)
 	return 0
-}
-
-// upsertAdmin идемпотентен: повторный запуск обновляет role/hash, не плодит строк. Уникальность users —
-// частичный индекс LOWER(email) WHERE status != 'deleted'; матчим по нему вручную в транзакции из ctx.
-func upsertAdmin(ctx context.Context, db *pgkit.DB, email, passwordHash, name string) (string, error) {
-	var id string
-	err := db.QueryRow(
-		ctx,
-		"SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND status <> 'deleted' FOR UPDATE",
-		email,
-	).Scan(&id)
-	switch {
-	case err == nil:
-		if _, err := db.Exec(
-			ctx,
-			"UPDATE users SET role = 'admin', password_hash = $1 WHERE id = $2",
-			passwordHash, id,
-		); err != nil {
-			return "", fmt.Errorf("update: %w", err)
-		}
-	case errors.Is(err, pgx.ErrNoRows):
-		if err := db.QueryRow(
-			ctx,
-			"INSERT INTO users (email, password_hash, name, status, role, email_verified) "+
-				"VALUES ($1, $2, $3, 'active', 'admin', true) RETURNING id",
-			email, passwordHash, name,
-		).Scan(&id); err != nil {
-			return "", fmt.Errorf("insert: %w", err)
-		}
-	default:
-		return "", fmt.Errorf("lookup: %w", err)
-	}
-	return id, nil
 }

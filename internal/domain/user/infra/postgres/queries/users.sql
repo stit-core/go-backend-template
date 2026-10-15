@@ -1,6 +1,6 @@
 -- name: InsertUser :one
-INSERT INTO users (email, password_hash, name, status, role)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO users (email, password_hash, name, status, role, email_verified)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, version, email_verified, created_at, updated_at;
 
 -- name: GetUserByID :one
@@ -22,6 +22,13 @@ FROM users
 WHERE LOWER(email) = LOWER($1)
   AND status != 'deleted';
 
+-- name: GetUserByEmailForUpdate :one
+SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
+FROM users
+WHERE LOWER(email) = LOWER($1)
+  AND status != 'deleted'
+FOR UPDATE;
+
 -- name: UpdateUser :one
 UPDATE users
 SET name = $1,
@@ -42,6 +49,16 @@ WHERE id = $1
 -- name: UpdateUserPassword :one
 UPDATE users
 SET password_hash = $1,
+    version = version + 1
+WHERE id = $2
+  AND version = $3
+  AND status != 'deleted'
+RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at;
+
+-- name: PromoteUser :one
+UPDATE users
+SET role = 'admin',
+    password_hash = $1,
     version = version + 1
 WHERE id = $2
   AND version = $3

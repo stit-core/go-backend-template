@@ -66,6 +66,32 @@ func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error
 	return i, err
 }
 
+const getUserByEmailForUpdate = `-- name: GetUserByEmailForUpdate :one
+SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
+FROM users
+WHERE LOWER(email) = LOWER($1)
+  AND status != 'deleted'
+FOR UPDATE
+`
+
+func (q *Queries) GetUserByEmailForUpdate(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmailForUpdate, lower)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Status,
+		&i.Role,
+		&i.Version,
+		&i.EmailVerified,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
 FROM users
@@ -118,17 +144,18 @@ func (q *Queries) GetUserByIDForShare(ctx context.Context, id pgtype.UUID) (User
 }
 
 const insertUser = `-- name: InsertUser :one
-INSERT INTO users (email, password_hash, name, status, role)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO users (email, password_hash, name, status, role, email_verified)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, version, email_verified, created_at, updated_at
 `
 
 type InsertUserParams struct {
-	Email        string
-	PasswordHash string
-	Name         string
-	Status       string
-	Role         string
+	Email         string
+	PasswordHash  string
+	Name          string
+	Status        string
+	Role          string
+	EmailVerified bool
 }
 
 type InsertUserRow struct {
@@ -146,6 +173,7 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (InsertU
 		arg.Name,
 		arg.Status,
 		arg.Role,
+		arg.EmailVerified,
 	)
 	var i InsertUserRow
 	err := row.Scan(
@@ -203,6 +231,41 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 		return nil, err
 	}
 	return items, nil
+}
+
+const promoteUser = `-- name: PromoteUser :one
+UPDATE users
+SET role = 'admin',
+    password_hash = $1,
+    version = version + 1
+WHERE id = $2
+  AND version = $3
+  AND status != 'deleted'
+RETURNING id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
+`
+
+type PromoteUserParams struct {
+	PasswordHash string
+	ID           pgtype.UUID
+	Version      int32
+}
+
+func (q *Queries) PromoteUser(ctx context.Context, arg PromoteUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, promoteUser, arg.PasswordHash, arg.ID, arg.Version)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Status,
+		&i.Role,
+		&i.Version,
+		&i.EmailVerified,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const setUserEmailVerified = `-- name: SetUserEmailVerified :execrows

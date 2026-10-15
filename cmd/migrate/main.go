@@ -23,7 +23,11 @@ var (
 func main() {
 	ctx := context.Background()
 
-	log, err := logkit.New(logkit.Config{Level: "info"})
+	cfg, err := logkit.NewConfig()
+	var log logkit.Logger
+	if err == nil {
+		log, err = logkit.New(cfg)
+	}
 	if err != nil {
 		_, _ = os.Stderr.WriteString("migrate: logger: " + err.Error() + "\n") //nolint:errcheck,forbidigo // логгера нет: stderr — последний канал
 		os.Exit(1)

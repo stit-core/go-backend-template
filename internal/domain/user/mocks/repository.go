@@ -230,6 +230,74 @@ func (_c *MockRepository_GetByEmail_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// GetByEmailForUpdate provides a mock function for the type MockRepository
+func (_mock *MockRepository) GetByEmailForUpdate(ctx context.Context, email string) (*user.User, error) {
+	ret := _mock.Called(ctx, email)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByEmailForUpdate")
+	}
+
+	var r0 *user.User
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*user.User, error)); ok {
+		return returnFunc(ctx, email)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *user.User); ok {
+		r0 = returnFunc(ctx, email)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*user.User)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, email)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRepository_GetByEmailForUpdate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByEmailForUpdate'
+type MockRepository_GetByEmailForUpdate_Call struct {
+	*mock.Call
+}
+
+// GetByEmailForUpdate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - email string
+func (_e *MockRepository_Expecter) GetByEmailForUpdate(ctx interface{}, email interface{}) *MockRepository_GetByEmailForUpdate_Call {
+	return &MockRepository_GetByEmailForUpdate_Call{Call: _e.mock.On("GetByEmailForUpdate", ctx, email)}
+}
+
+func (_c *MockRepository_GetByEmailForUpdate_Call) Run(run func(ctx context.Context, email string)) *MockRepository_GetByEmailForUpdate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRepository_GetByEmailForUpdate_Call) Return(user1 *user.User, err error) *MockRepository_GetByEmailForUpdate_Call {
+	_c.Call.Return(user1, err)
+	return _c
+}
+
+func (_c *MockRepository_GetByEmailForUpdate_Call) RunAndReturn(run func(ctx context.Context, email string) (*user.User, error)) *MockRepository_GetByEmailForUpdate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetByID provides a mock function for the type MockRepository
 func (_mock *MockRepository) GetByID(ctx context.Context, id string) (*user.User, error) {
 	ret := _mock.Called(ctx, id)
@@ -493,6 +561,86 @@ func (_c *MockRepository_List_Call) Return(users []*user.User, err error) *MockR
 }
 
 func (_c *MockRepository_List_Call) RunAndReturn(run func(ctx context.Context, filter user.ListFilter, page paging.Page) ([]*user.User, error)) *MockRepository_List_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Promote provides a mock function for the type MockRepository
+func (_mock *MockRepository) Promote(ctx context.Context, id string, passwordHash string, version int) (*user.User, error) {
+	ret := _mock.Called(ctx, id, passwordHash, version)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Promote")
+	}
+
+	var r0 *user.User
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int) (*user.User, error)); ok {
+		return returnFunc(ctx, id, passwordHash, version)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int) *user.User); ok {
+		r0 = returnFunc(ctx, id, passwordHash, version)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*user.User)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, int) error); ok {
+		r1 = returnFunc(ctx, id, passwordHash, version)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRepository_Promote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Promote'
+type MockRepository_Promote_Call struct {
+	*mock.Call
+}
+
+// Promote is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - passwordHash string
+//   - version int
+func (_e *MockRepository_Expecter) Promote(ctx interface{}, id interface{}, passwordHash interface{}, version interface{}) *MockRepository_Promote_Call {
+	return &MockRepository_Promote_Call{Call: _e.mock.On("Promote", ctx, id, passwordHash, version)}
+}
+
+func (_c *MockRepository_Promote_Call) Run(run func(ctx context.Context, id string, passwordHash string, version int)) *MockRepository_Promote_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRepository_Promote_Call) Return(user1 *user.User, err error) *MockRepository_Promote_Call {
+	_c.Call.Return(user1, err)
+	return _c
+}
+
+func (_c *MockRepository_Promote_Call) RunAndReturn(run func(ctx context.Context, id string, passwordHash string, version int) (*user.User, error)) *MockRepository_Promote_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -95,6 +95,38 @@ func TestRun_RejectsAdminOutsideUserRules(t *testing.T) {
 	require.Zero(t, users, "a refused seed writes nothing")
 }
 
+// Пароль admin — по правилу пароля продукта: со слабым паролем seed учётную запись не заводит и не повышает.
+func TestRun_RejectsWeakPassword(t *testing.T) {
+	pg := seedEnv(t, "admin@example.com")
+	t.Setenv("SEED_ADMIN_PASSWORD", "1")
+
+	require.Equal(t, 1, run(t.Context(), logkit.Nop()))
+
+	var users int
+	require.NoError(t, pg.DB(t).QueryRow(t.Context(), `SELECT count(*) FROM users`).Scan(&users))
+	require.Zero(t, users, "a refused seed writes nothing")
+}
+
+// Повышение — изменение учётной записи: версия строки растёт (ссылка сброса, выданная до него, пароль не меняет), а
+// запись о нём — в аудите.
+func TestRun_PromotionIsVersionedAndAudited(t *testing.T) {
+	pg := seedEnv(t, "admin@example.com")
+	db := pg.DB(t)
+	var id string
+	require.NoError(t, db.QueryRow(
+		t.Context(),
+		`INSERT INTO users (email, password_hash, name, status, role) VALUES ('admin@example.com', 'x', 'Early', 'active', 'client') RETURNING id`,
+	).Scan(&id))
+
+	require.Equal(t, 0, run(t.Context(), logkit.Nop()))
+
+	var version, audited int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT version FROM users WHERE id = $1`, id).Scan(&version))
+	require.Equal(t, 2, version, "the promotion is a change of the account")
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE action = 'seed_admin' AND resource_id = $1`, id).Scan(&audited))
+	require.Equal(t, 1, audited, "the promotion is in the audit")
+}
+
 // Первый запуск заводит admin с подтверждённым адресом, повторный идемпотентен: admin с этим адресом один.
 func TestRun_CreatesAdminOnce(t *testing.T) {
 	pg := seedEnv(t, "admin@example.com")
