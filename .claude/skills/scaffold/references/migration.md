@@ -156,6 +156,8 @@ Integration-тесты поднимают Postgres через `golibinfra/testki
 
 ```
 feat(<domain>): add NNNN_name migration
+
+Review: <кто или чем> — <итог>
 ```
 
 Kit-таблицы (`audit_log`, `bruteforce_attempts`, `authn_sessions`, `outbox_<domain>`) мигрирует golibinfra

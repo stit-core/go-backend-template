@@ -115,7 +115,7 @@ policy-порт `Authorizer` (тесты берут настоящую policy) �
 
 Готово и коммит — по CLAUDE.md § Готово; для итерации — `make test PKG=./internal/domain/<name>/...`,
 `make lint PKG=...`. Коммит — `feat(<name>): scaffold <name> domain`; с событиями —
-`feat(<name>): scaffold <name> domain with outbox events`.
+`feat(<name>): scaffold <name> domain with outbox events`; в теле — строка `Review:`.
 
 ## Что не делать
 

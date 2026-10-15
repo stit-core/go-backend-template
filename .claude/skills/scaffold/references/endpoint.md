@@ -173,7 +173,7 @@ make build
 
 ### 10. Коммит
 
-`feat(<domain>): add <METHOD> <path>` — например, `feat(user): add POST /api/users/{id}/avatar`.
+`feat(<domain>): add <METHOD> <path>` — например, `feat(user): add POST /api/users/{id}/avatar`; в теле — строка `Review:` (CLAUDE.md § Готово).
 
 ## Anti-patterns
 

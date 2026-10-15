@@ -181,7 +181,7 @@ make gen-check
 
 ### 10. Коммит
 
-`feat(<consumer>): add <Provider>Reader port + adapter`
+`feat(<consumer>): add <Provider>Reader port + adapter`, в теле — строка `Review:` (CLAUDE.md § Готово).
 
 ## Anti-patterns
 
