@@ -80,8 +80,11 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     зовётся, `make gen` — FTL mockery без причины, `test.sh` рвёт UTF-8; ветка — верный вердикт в каждом; тесты
     `TestToolVersions`, `TestGenBuildsFirst`, расширены `TestLintUsesItsConfig`, `TestFmtAppliesLintRules`,
     `TestMigrationsCheck`; `make check` → `✓ check clean` (`N/s7g/check-s2.log`)
-- [ ] **S3** — migrations-check: `INSERT`, `.gitkeep`, выпущенные по содержимому; rule `sqlc-and-migrations`
+- [x] **S3** — migrations-check: `INSERT`, `.gitkeep`, выпущенные по содержимому; rule `sqlc-and-migrations`
   - Проверка: `TestMigrationsCheck`, опыт AC2; `make check` → `✓ check clean` · Закрывает: AC2 · Зависит от: S2
+  - Сделано: опыты `N/s7g/bin/exp-s3.sh` → `N/s7g/exp-s3-{base,branch}.log`: база — `.gitkeep` вне конвенции,
+    `INSERT … VALUES` в `users` и своя `0001_users` форка с `CREATE EXTENSION` проходят, шаблонная `0003` под
+    номером `0002` — отказ; ветка — наоборот; шесть случаев в `TestMigrationsCheck`; `make check` → `✓ check clean`
 - [ ] **S4** — Хуки: pre-commit — снимок индекса, pre-push — subject пушимых коммитов и `-f Makefile`;
   переменные make — в хуках, оболочки — в `Makefile`
   - Проверка: опыты AC3; `make check` → `✓ check clean` · Закрывает: AC3 · Зависит от: S2
@@ -110,10 +113,16 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   скрипты и мимо make.
 - `GOPACKAGESDRIVER` снимает `Makefile` вместе с `MOCKERY_*`: его читают golangci-lint и mockery, шаги гейта идут
   через make.
+- migrations-check: `INSERT` в таблицу не из этого файла — эффект (и `… VALUES`, и `… SELECT`): правка данных
+  прод-таблицы, выкатке нужен порядок; в таблицу файла — сид, как индекс по ней. Выпущенные миграции шаблона — по
+  sha256 содержимого (без CR): своя `0001_users` форка проверяется целиком, а шаблонная под другим номером
+  (NLIF-02) остаётся выпущенной. `.gitkeep` — единственный посторонний файл: каталог форка без таблиц иначе не
+  держится в git.
+- `scaffold/references/migration.md` (трек code+security+adapters) — одна строка перечня классов migrations-check:
+  reference называет, что гейт не пропустит.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S2 закрыт: шаги гейта не зависят от локали, версий инструментов и `.cache/`, `make gen` называет несобранный код.
-Дальше — S3 (migrations-check).
+S3 закрыт: migrations-check знает `INSERT`, `.gitkeep` и выпущенные миграции по содержимому. Дальше — S4 (хуки).

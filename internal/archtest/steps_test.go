@@ -207,10 +207,12 @@ func TestFmtAppliesLintRules(t *testing.T) {
 	require.NoError(t, err, out)
 }
 
-// TestMigrationsCheck: migrations-check пропускает только каталог по конвенции, а up с эффектом для выкатки
-// — разрушительный, правку данных, долгий lock, расширение, код (DO, CALL, SELECT верхнего уровня) — только с
-// маркером `-- infra-handoff:`. Индекс по таблице этого же файла и CONCURRENTLY, действия FK, триггер на UPDATE
-// и UPDATE в теле объявленной функции — не эффект; выпущенные миграции репо проходят как есть.
+// TestMigrationsCheck: migrations-check пропускает только каталог по конвенции (и .gitkeep каталога без
+// миграций), а up с эффектом для выкатки — разрушительный, правку данных (и INSERT в существующую таблицу),
+// долгий lock, расширение, код (DO, CALL, SELECT верхнего уровня) — только с маркером `-- infra-handoff:`, при
+// любой локали вызывающего. Индекс по таблице этого же файла и CONCURRENTLY, INSERT в неё, действия FK, триггер на
+// UPDATE и UPDATE в теле объявленной функции — не эффект; выпущенные миграции шаблона проходят как есть — по
+// содержимому, и под другим номером, а своя миграция форка с их именем проверяется целиком.
 func TestMigrationsCheck(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -257,6 +259,18 @@ func TestMigrationsCheck(t *testing.T) {
 		{name: "SELECT of a function declared in the file", files: second("CREATE FUNCTION fill() RETURNS void AS $body$\nBEGIN\n    UPDATE users SET role = 'client';\nEND\n$body$ LANGUAGE plpgsql;\nSELECT fill();\n"), want: "select fill()"},
 		{name: "UPDATE in the body of a declared function", files: second("CREATE FUNCTION touch() RETURNS trigger AS $$\nBEGIN\n    UPDATE users SET name = NEW.name;\n    RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;\n"), want: "OK: migrations (2 пар", ok: true},
 		{name: "an effect with the marker", files: second("-- infra-handoff: роли пересчитываются — окно выкатки\nUPDATE users SET role = 'client';\n"), want: "OK: migrations (2 пар", ok: true},
+		{name: ".gitkeep of a directory without migrations", files: map[string]string{".gitkeep": ""}, want: "OK: migrations (пусто)", ok: true},
+		{name: ".gitkeep beside migrations", files: union(users, map[string]string{".gitkeep": ""}), want: "OK: migrations (1 пар", ok: true},
+		{name: "INSERT into an existing table", files: second("INSERT INTO users (id, name, role) VALUES (gen_random_uuid(), 'root', 'admin');\n"), want: "insert into users (id, name, role) values"},
+		{name: "INSERT into a table of the file", files: second("CREATE TABLE roles (name TEXT PRIMARY KEY);\nINSERT INTO roles (name) VALUES ('admin'), ('client');\n"), want: "OK: migrations (2 пар", ok: true},
+		{name: "a released migration under another number", files: union(users, map[string]string{
+			"0002_pending_idx.up.sql":   readFiles(t, root, "migrations/0003_email_verifications_idempotency.up.sql")["migrations/0003_email_verifications_idempotency.up.sql"],
+			"0002_pending_idx.down.sql": "DROP INDEX email_verifications_pending_user_idx;\n",
+		}), want: "OK: migrations (2 пар", ok: true},
+		{name: "a migration of the fork named as a released one", files: map[string]string{
+			"0001_users.up.sql":   "CREATE EXTENSION IF NOT EXISTS citext;\nCREATE TABLE users (id UUID PRIMARY KEY, email CITEXT);\n",
+			"0001_users.down.sql": "DROP TABLE users;\n",
+		}, want: "create extension if not exists citext"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

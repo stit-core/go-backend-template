@@ -71,9 +71,9 @@ CREATE INDEX idx_orders_user_id ON orders(user_id);
 Миграция с эффектом для выкатки (разрушительный оператор, правка данных, долгий lock, расширение) —
 добавь в up строку `-- infra-handoff: <что сделать инфре>` и оформи блок (skill `infra-handoff`).
 Без неё migrations-check не пропустит `DROP`, `TRUNCATE`, `RENAME`, `ALTER … TYPE`, `DELETE`,
-`UPDATE … SET`, `DO`, `CALL`, `SELECT` верхнего уровня, `SET NOT NULL`, `CREATE INDEX` без `CONCURRENTLY` по
-существующей таблице и `CREATE EXTENSION`; индекс по таблице, созданной в том же файле, и тело объявленной
-функции эффектом не считаются.
+`UPDATE … SET`, `INSERT` в существующую таблицу, `DO`, `CALL`, `SELECT` верхнего уровня, `SET NOT NULL`,
+`CREATE INDEX` без `CONCURRENTLY` по существующей таблице и `CREATE EXTENSION`; индекс и `INSERT` по таблице,
+созданной в том же файле, и тело объявленной функции эффектом не считаются.
 
 ### 4. Down-миграция
 

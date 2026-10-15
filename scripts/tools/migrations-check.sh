@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Валидатор migrations/: каждая NNNN — ровно одна пара .up.sql/.down.sql, нумерация непрерывна с 0001,
-# посторонних файлов и каталогов нет; down не пуст; up с эффектом для выкатки — только с маркером
-# `-- infra-handoff: <…>`. Эффект: разрушительный оператор (DROP, TRUNCATE, ALTER … TYPE, RENAME), правка
-# данных (DELETE, UPDATE … SET), код, которого машина не видит (DO, CALL, SELECT верхнего уровня), долгий lock
-# (SET NOT NULL, CREATE INDEX без CONCURRENTLY по таблице не из этого файла), расширение (CREATE EXTENSION).
-# Тело $$…$$ (функция, DO) — не оператор файла: CREATE FUNCTION его только объявляет. Шаг make check.
+# посторонних файлов и каталогов нет (.gitkeep держит в git каталог без миграций); down не пуст; up с эффектом
+# для выкатки — только с маркером `-- infra-handoff: <…>`. Эффект: разрушительный оператор (DROP, TRUNCATE,
+# ALTER … TYPE, RENAME), правка данных (DELETE, UPDATE … SET, INSERT в таблицу не из этого файла), код, которого
+# машина не видит (DO, CALL, SELECT верхнего уровня), долгий lock (SET NOT NULL, CREATE INDEX без CONCURRENTLY по
+# таблице не из этого файла), расширение (CREATE EXTENSION). Тело $$…$$ (функция, DO) — не оператор файла:
+# CREATE FUNCTION его только объявляет. Шаг make check.
 set -euo pipefail
 # Диапазоны и регистр — ASCII при любой локали вызывающего: в турецкой [a-z] не берёт «i», а tr оставляет «I».
 export LC_ALL=C
@@ -16,7 +17,7 @@ if [ ! -d "$dir" ]; then
 	echo "FAIL: migrations: нет каталога $dir"
 	exit 1
 fi
-if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -printf '%f\n')" ]; then
+if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 ! -name .gitkeep -printf '%f\n')" ]; then
 	echo "OK: migrations (пусто)"
 	exit 0
 fi
@@ -43,7 +44,7 @@ done
 
 # golang-migrate читает только файлы этого каталога по маске: остальное — не миграция, а подкаталог — не
 # накатится никогда.
-extra=$(find "$dir" -mindepth 1 -maxdepth 1 -printf '%f\n' | grep -vE '^[0-9]{4}_[a-z0-9_]+\.(up|down)\.sql$' || true)
+extra=$(find "$dir" -mindepth 1 -maxdepth 1 ! -name .gitkeep -printf '%f\n' | grep -vE '^[0-9]{4}_[a-z0-9_]+\.(up|down)\.sql$' || true)
 if [ -n "$extra" ]; then
 	echo "FAIL: migrations: файлы и каталоги вне конвенции NNNN_snake_case.{up,down}.sql:"
 	echo "$extra" | sed 's/^/  /'
@@ -58,9 +59,11 @@ for f in "$dir"/[0-9][0-9][0-9][0-9]_*.down.sql; do
 	fi
 done
 
-# Выпущенные миграции с операторами классов данных, lock и расширения: выпущенную миграцию не правят, её
-# эффект принят выкаткой — у них проверяются только разрушительные операторы.
-released=" 0001_users.up.sql 0003_email_verifications_idempotency.up.sql "
+# Выпущенные миграции шаблона с операторами классов данных, lock и расширения (0001_users, 0003_…): выпущенную
+# миграцию не правят, её эффект принят выкаткой — у них проверяются только разрушительные операторы. Узнаются по
+# sha256 содержимого, а не по имени: своя миграция форка с тем же именем проверяется целиком, а перенумерованная
+# шаблонная остаётся выпущенной.
+released=" d48f1e99a8764c226ff81cdd7a500d1b2477d9752373d3497ce187211a7a0a81 abf11077de3d54b4a046e203eee209189a7f0fd2eed3f01c55d18b5757553254 "
 
 # Up с эффектом нужен порядок или окно выкатки: маркер делает это видимым в файле, а INFRA-HANDOFF-блок —
 # в хабе (rule infra-impact). Операторы — по строке, в нижнем регистре, без комментариев, строк в кавычках и
@@ -69,7 +72,7 @@ for f in "$dir"/[0-9][0-9][0-9][0-9]_*.up.sql; do
 	[ -e "$f" ] || continue
 	grep -qE '^[[:space:]]*--[[:space:]]*infra-handoff:[[:space:]]*[^[:space:]]' "$f" && continue
 	only_destructive=""
-	[[ $released == *" ${f##*/} "* ]] && only_destructive=1
+	[[ $released == *" $(tr -d '\r' <"$f" | sha256sum | cut -d' ' -f1) "* ]] && only_destructive=1
 	hits=$(sed -e 's/--.*//' -e "s/'[^']*'//g" "$f" | tr '\n' ' ' | tr '[:upper:]' '[:lower:]' |
 		awk '{
 			out = ""
@@ -92,11 +95,16 @@ for f in "$dir"/[0-9][0-9][0-9][0-9]_*.up.sql; do
 				effect = "(^|[^a-z0-9_])delete[[:space:]]+from" w "|(^|[^a-z0-9_])update[[:space:]]+(only[[:space:]]+)?[^[:space:]]+([[:space:]]+(as[[:space:]]+)?[a-z0-9_]+)?[[:space:]]+set" w \
 					"|^[[:space:]]*(do|call|select)" w "|set[[:space:]]+not[[:space:]]+null" w "|create[[:space:]]+extension" w
 				create_index = "create[[:space:]]+(unique[[:space:]]+)?index[[:space:]]+(concurrently[[:space:]]+)?((if[[:space:]]+not[[:space:]]+exists[[:space:]]+)?[^[:space:]]+[[:space:]]+)?on[[:space:]]+(only[[:space:]]+)?[^[:space:](]+"
+				insert = "(^|[^a-z0-9_])insert[[:space:]]+into[[:space:]]+[^[:space:](]+"
 				for (i = 1; i <= NR; i++) {
 					s = stmt[i]
 					if (s ~ destructive) { print s; continue }
 					if (only_destructive) continue
 					if (s ~ effect) { print s; continue }
+					if (match(s, insert)) {
+						t = substr(s, RSTART, RLENGTH); sub(/.*[[:space:]]/, "", t); gsub(/"/, "", t)
+						if (!(t in created)) { print s; continue }
+					}
 					if (match(s, create_index) && s !~ /index[[:space:]]+concurrently/) {
 						t = substr(s, RSTART, RLENGTH); sub(/.*[[:space:]]/, "", t); gsub(/"/, "", t)
 						if (!(t in created)) print s
