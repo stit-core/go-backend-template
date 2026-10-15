@@ -500,7 +500,7 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 					case !ok:
 						t.Errorf("%s: operation %s under Security calls %s, which *%s.Usecase does not declare", files[i].path, id, name, domain)
 					case !(policyWalk{root, map[*ast.FuncDecl]bool{}, map[*ast.FuncDecl]bool{}}).asks(m):
-						t.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor passes the caller's UserID to a port of its dependencies (uc.d.Repo…): any signed-in caller would get it (rule domain-architecture)", files[i].path, id, domain, name)
+						t.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor only reads the caller's own record, as Me does (uc.d.Repo.GetByID(ctx, caller.UserID)): any signed-in caller would get it (rule domain-architecture)", files[i].path, id, domain, name)
 					}
 				}
 				return true
