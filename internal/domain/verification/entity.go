@@ -2,11 +2,23 @@ package verification
 
 import "time"
 
+// PasswordResetToken — ссылка сброса; UserVersion — версия учётной записи на момент письма (0 — ссылка без версии).
 type PasswordResetToken struct {
-	ID        string
-	UserID    string
-	ExpiresAt time.Time
-	UsedAt    *time.Time
+	ID          string
+	UserID      string
+	UserVersion int
+	ExpiresAt   time.Time
+	UsedAt      *time.Time
+}
+
+// PasswordResetIssue — выпуск ссылки сброса запроса RequestID: хэш токена и версия учётной записи на момент письма.
+type PasswordResetIssue struct {
+	RequestID   string
+	UserID      string
+	UserVersion int
+	TokenHash   string
+	RequestedAt time.Time
+	ExpiresAt   time.Time
 }
 
 type EmailVerificationToken struct {

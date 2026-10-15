@@ -12,16 +12,17 @@ import (
 )
 
 const getPasswordReset = `-- name: GetPasswordReset :one
-SELECT id, user_id, expires_at, used_at
+SELECT id, user_id, user_version, expires_at, used_at
 FROM password_resets
 WHERE token_hash = $1
 `
 
 type GetPasswordResetRow struct {
-	ID        pgtype.UUID
-	UserID    pgtype.UUID
-	ExpiresAt pgtype.Timestamptz
-	UsedAt    pgtype.Timestamptz
+	ID          pgtype.UUID
+	UserID      pgtype.UUID
+	UserVersion *int32
+	ExpiresAt   pgtype.Timestamptz
+	UsedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) GetPasswordReset(ctx context.Context, tokenHash string) (GetPasswordResetRow, error) {
@@ -30,6 +31,7 @@ func (q *Queries) GetPasswordReset(ctx context.Context, tokenHash string) (GetPa
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.UserVersion,
 		&i.ExpiresAt,
 		&i.UsedAt,
 	)
@@ -45,36 +47,43 @@ func (q *Queries) MarkPasswordResetSent(ctx context.Context, id pgtype.UUID) err
 	return err
 }
 
-const markPasswordResetUsed = `-- name: MarkPasswordResetUsed :execrows
-UPDATE password_resets SET used_at = NOW() WHERE id = $1 AND used_at IS NULL
+const redeemPasswordResets = `-- name: RedeemPasswordResets :many
+UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL RETURNING id
 `
 
-func (q *Queries) MarkPasswordResetUsed(ctx context.Context, id pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, markPasswordResetUsed, id)
+// Все непогашенные ссылки пользователя — одним оператором: строки блокируются в одном порядке, и подтверждения
+// двух ссылок одного пользователя не ждут друг друга по кругу (40P01).
+func (q *Queries) RedeemPasswordResets(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, redeemPasswordResets, userID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
-}
-
-const revokePasswordResets = `-- name: RevokePasswordResets :exec
-UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL
-`
-
-func (q *Queries) RevokePasswordResets(ctx context.Context, userID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, revokePasswordResets, userID)
-	return err
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertPasswordReset = `-- name: UpsertPasswordReset :one
-INSERT INTO password_resets (id, user_id, token_hash, expires_at)
-SELECT $1::uuid, $2::uuid, $3::text, $4::timestamptz
+INSERT INTO password_resets (id, user_id, token_hash, expires_at, user_version)
+SELECT $1::uuid, $2::uuid, $3::text, $4::timestamptz,
+       $5::int
 WHERE NOT EXISTS (
     SELECT 1 FROM password_resets
-    WHERE user_id = $2::uuid AND used_at > $5::timestamptz
+    WHERE user_id = $2::uuid AND used_at > $6::timestamptz
 )
 ON CONFLICT (id) DO UPDATE
-SET token_hash = EXCLUDED.token_hash
+SET token_hash = EXCLUDED.token_hash,
+    user_version = EXCLUDED.user_version
 WHERE password_resets.user_id = EXCLUDED.user_id
   AND password_resets.sent_at IS NULL
   AND password_resets.used_at IS NULL
@@ -86,18 +95,20 @@ type UpsertPasswordResetParams struct {
 	UserID      pgtype.UUID
 	TokenHash   string
 	ExpiresAt   pgtype.Timestamptz
+	UserVersion int32
 	RequestedAt pgtype.Timestamptz
 }
 
-// Ссылка сброса запроса id: новая или новый токен своей неотправленной. Отправленную, погашенную и чужую не
-// трогает; запрос, после которого пользователь погасил ссылку сброса, ссылки не получает — подтверждение гасит
-// и запросы в полёте. Не выпущено — RETURNING пуст.
+// Ссылка сброса запроса id с версией пользователя на момент письма: новая или новый токен своей неотправленной.
+// Отправленную, погашенную и чужую не трогает; запрос, после которого пользователь погасил ссылку сброса, ссылки
+// не получает — подтверждение гасит и запросы в полёте. Не выпущено — RETURNING пуст.
 func (q *Queries) UpsertPasswordReset(ctx context.Context, arg UpsertPasswordResetParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertPasswordReset,
 		arg.ID,
 		arg.UserID,
 		arg.TokenHash,
 		arg.ExpiresAt,
+		arg.UserVersion,
 		arg.RequestedAt,
 	)
 	var id pgtype.UUID

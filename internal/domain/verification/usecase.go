@@ -33,17 +33,15 @@ type EmailVerificationSetter interface {
 	MarkEmailVerified(ctx context.Context, userID string) error
 }
 
-// Repository: Mark*Used гасит токен, только если он не погашен, иначе — ErrTokenUsed.
+// Repository: Mark*Used и Redeem* гасят токен, только если он не погашен, иначе — ErrTokenUsed.
 type Repository interface {
-	// UpsertPasswordReset выпускает ссылку сброса запроса id, сделанного в requestedAt: новую или с новым токеном
-	// своей неотправленной. Отправленную, погашенную и чужую не трогает, запросу, после которого пользователь
-	// погасил ссылку сброса, ссылки не выпускает (issued=false).
-	UpsertPasswordReset(ctx context.Context, id, userID, tokenHash string, requestedAt, expiresAt time.Time) (issued bool, err error)
+	// UpsertPasswordReset выпускает ссылку: новую или новый токен своей неотправленной (отправленную, погашенную, чужую
+	// и ссылку запроса, после которого пользователь погасил ссылку сброса, — нет: issued=false).
+	UpsertPasswordReset(ctx context.Context, r PasswordResetIssue) (issued bool, err error)
 	MarkPasswordResetSent(ctx context.Context, id string) error
 	GetPasswordReset(ctx context.Context, tokenHash string) (*PasswordResetToken, error)
-	MarkPasswordResetUsed(ctx context.Context, id string) error
-	// RevokePasswordResets гасит все непогашенные токены сброса пользователя.
-	RevokePasswordResets(ctx context.Context, userID string) error
+	// RedeemPasswordReset гасит ссылку id вместе со всеми непогашенными ссылками её пользователя userID.
+	RedeemPasswordReset(ctx context.Context, id, userID string) error
 	// UpsertEmailVerification выпускает ожидающее подтверждение пользователя: неотправленное —
 	// с новым токеном и тем же id, отправленное не трогает (issued=false).
 	UpsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (id string, issued bool, err error)
@@ -181,8 +179,12 @@ func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outc
 // не истекла и пользователь не погасил ссылку сброса после запроса; отправленную ссылку повтор пропускает,
 // неотправленную — отправляет заново с новым токеном.
 func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID string, requestedAt time.Time) error {
+	now := uc.d.Clock.Now()
+	if requestedAt.After(now) {
+		requestedAt = now // часы публикатора спешат или событие записано мимо outbox: срок не дольше TTL от обработки
+	}
 	expiresAt := requestedAt.Add(passwordResetTTL)
-	if userID == "" || uc.d.Clock.Now().After(expiresAt) {
+	if userID == "" || now.After(expiresAt) {
 		return nil
 	}
 	u, err := uc.d.Users.GetByID(ctx, userID)
@@ -198,7 +200,10 @@ func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID str
 	}
 
 	token := authnkit.NewToken()
-	issued, err := uc.d.Repo.UpsertPasswordReset(ctx, requestID, userID, authnkit.HashToken(token), requestedAt, expiresAt)
+	issued, err := uc.d.Repo.UpsertPasswordReset(ctx, PasswordResetIssue{
+		RequestID: requestID, UserID: userID, UserVersion: u.Version, TokenHash: authnkit.HashToken(token),
+		RequestedAt: requestedAt, ExpiresAt: expiresAt,
+	})
 	switch {
 	case err != nil:
 		return err
@@ -238,25 +243,17 @@ func (uc *Usecase) ConfirmPasswordReset(ctx context.Context, token, newPassword 
 		return fmt.Errorf("hash new password: %w", err)
 	}
 
-	current, err := uc.d.Users.GetByID(ctx, pr.UserID)
-	if errors.Is(err, ErrUserNotFound) {
-		return ErrInvalidResetToken // токен удалённого пользователя
-	}
-	if err != nil {
-		return fmt.Errorf("load user: %w", err)
-	}
-
-	// Погашение — первым в транзакции: параллельный confirm ждёт блокировку строки и получает
-	// ErrTokenUsed, не меняя пароль. Остальные ссылки сброса гаснут с ним, а запрос до погашения ссылки уже не
-	// получит (UpsertPasswordReset): старое письмо пароль не сменит.
+	// Погашение — первым в транзакции: параллельный confirm ждёт блокировку строк и получает ErrTokenUsed. Пароль
+	// пишется при версии учётной записи на момент письма: изменённой или удалённой после него ссылка его не меняет.
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
-		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
+		if err := uc.d.Repo.RedeemPasswordReset(txCtx, pr.ID, pr.UserID); err != nil {
 			return err
 		}
-		if err := uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID); err != nil {
-			return err
+		err := uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, pr.UserVersion)
+		if errors.Is(err, ErrConcurrentUpdate) || errors.Is(err, ErrUserNotFound) {
+			return ErrInvalidResetToken
 		}
-		return uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version)
+		return err
 	}); err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -20,21 +21,22 @@ func NewRepository(database *pgkit.DB) verification.Repository {
 	return &Repository{q: db.New(database)}
 }
 
-func (r *Repository) UpsertPasswordReset(ctx context.Context, id, userID, tokenHash string, requestedAt, expiresAt time.Time) (bool, error) {
-	rid, err := pgkit.ParseUUID(id)
+func (r *Repository) UpsertPasswordReset(ctx context.Context, issue verification.PasswordResetIssue) (bool, error) {
+	rid, err := pgkit.ParseUUID(issue.RequestID)
 	if err != nil {
 		return false, fmt.Errorf("verification repo: invalid password reset id: %w", err)
 	}
-	uid, err := pgkit.ParseUUID(userID)
+	uid, err := pgkit.ParseUUID(issue.UserID)
 	if err != nil {
 		return false, fmt.Errorf("verification repo: invalid user id: %w", err)
 	}
 	_, err = r.q.UpsertPasswordReset(ctx, db.UpsertPasswordResetParams{
 		ID:          rid,
 		UserID:      uid,
-		TokenHash:   tokenHash,
-		ExpiresAt:   pgtype.Timestamptz{Time: expiresAt, Valid: true},
-		RequestedAt: pgtype.Timestamptz{Time: requestedAt, Valid: true},
+		TokenHash:   issue.TokenHash,
+		ExpiresAt:   pgtype.Timestamptz{Time: issue.ExpiresAt, Valid: true},
+		UserVersion: int32(issue.UserVersion),
+		RequestedAt: pgtype.Timestamptz{Time: issue.RequestedAt, Valid: true},
 	})
 	if pgkit.IsNoRows(err) {
 		return false, nil
@@ -64,29 +66,33 @@ func (r *Repository) GetPasswordReset(ctx context.Context, tokenHash string) (*v
 	if err != nil {
 		return nil, fmt.Errorf("verification repo: get password reset: %w", err)
 	}
-	return &verification.PasswordResetToken{
+	pr := &verification.PasswordResetToken{
 		ID:        pgkit.UUIDString(row.ID),
 		UserID:    pgkit.UUIDString(row.UserID),
 		ExpiresAt: row.ExpiresAt.Time,
 		UsedAt:    pgkit.NullableTime(row.UsedAt),
-	}, nil
-}
-
-func (r *Repository) MarkPasswordResetUsed(ctx context.Context, id string) error {
-	uid, err := pgkit.ParseUUID(id)
-	if err != nil {
-		return verification.ErrInvalidResetToken
 	}
-	return used(r.q.MarkPasswordResetUsed(ctx, uid))
+	if row.UserVersion != nil {
+		pr.UserVersion = int(*row.UserVersion)
+	}
+	return pr, nil
 }
 
-func (r *Repository) RevokePasswordResets(ctx context.Context, userID string) error {
+func (r *Repository) RedeemPasswordReset(ctx context.Context, id, userID string) error {
+	rid, err := pgkit.ParseUUID(id)
+	if err != nil {
+		return fmt.Errorf("verification repo: invalid password reset id: %w", err)
+	}
 	uid, err := pgkit.ParseUUID(userID)
 	if err != nil {
 		return fmt.Errorf("verification repo: invalid user id: %w", err)
 	}
-	if err := r.q.RevokePasswordResets(ctx, uid); err != nil {
-		return fmt.Errorf("verification repo: revoke password resets: %w", err)
+	redeemed, err := r.q.RedeemPasswordResets(ctx, uid)
+	if err != nil {
+		return fmt.Errorf("verification repo: redeem password reset: %w", err)
+	}
+	if !slices.Contains(redeemed, rid) {
+		return verification.ErrTokenUsed
 	}
 	return nil
 }
@@ -138,21 +144,16 @@ func (r *Repository) GetEmailVerification(ctx context.Context, tokenHash string)
 }
 
 func (r *Repository) MarkEmailVerificationUsed(ctx context.Context, id string) error {
-	uid, err := pgkit.ParseUUID(id)
+	vid, err := pgkit.ParseUUID(id)
 	if err != nil {
-		return verification.ErrInvalidVerificationToken
+		return fmt.Errorf("verification repo: invalid email verification id: %w", err)
 	}
-	return used(r.q.MarkEmailVerificationUsed(ctx, uid))
-}
-
-// used — итог условного погашения: ни одной строки — токен уже погашен, в том числе параллельным
-// запросом, который успел раньше.
-func used(rows int64, err error) error {
+	rows, err := r.q.MarkEmailVerificationUsed(ctx, vid)
 	switch {
 	case err != nil:
-		return fmt.Errorf("verification repo: mark token used: %w", err)
+		return fmt.Errorf("verification repo: mark email verification used: %w", err)
 	case rows == 0:
-		return verification.ErrTokenUsed
+		return verification.ErrTokenUsed // погашена раньше, в том числе параллельным запросом
 	}
 	return nil
 }

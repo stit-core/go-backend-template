@@ -632,6 +632,28 @@ func TestSessions(t *testing.T) {
 		require.Zero(t, openSessions(t, db, aliceID))
 	})
 
+	// Ссылка сброса действует, пока учётная запись не менялась после письма: смена пароля её гасит.
+	t.Run("a reset link mailed before a password change does not change the password", func(t *testing.T) {
+		const grace = "grace@example.com"
+		graceID := api.register(grace)
+		mailed, _ := mail.sent()
+		status, _, _ := api.call(http.MethodPost, "/api/auth/password-reset/request", `{"email":"`+grace+`"}`, nil)
+		require.Equal(t, http.StatusNoContent, status)
+		var resets []string
+		require.Eventually(t, func() bool { resets, _ = mail.sent(); return len(resets) == len(mailed)+1 },
+			15*time.Second, 100*time.Millisecond, "the subscriber of the request mails the reset")
+		c := api.login(grace, sessionPassword)
+		status, body, _ := api.call(http.MethodPost, "/api/auth/change-password",
+			`{"user_id":"`+graceID+`","old_password":"`+sessionPassword+`","new_password":"`+newPassword+`"}`, c)
+		require.Equal(t, http.StatusNoContent, status, "change password: %s", body)
+
+		status, body, _ = api.call(http.MethodPost, "/api/auth/password-reset/confirm",
+			`{"token":"`+resets[len(resets)-1]+`","password":"reset-password123"}`, nil)
+		require.Equal(t, http.StatusBadRequest, status, "the link of the earlier password: %s", body)
+		require.Equal(t, "VERIFICATION_INVALID_RESET_TOKEN", errorCode(t, body))
+		api.login(grace, newPassword)
+	})
+
 	t.Run("blocking closes every session, the blocked does not log in", func(t *testing.T) {
 		const admin, carol = "admin@example.com", "carol@example.com"
 		adminID := api.register(admin)

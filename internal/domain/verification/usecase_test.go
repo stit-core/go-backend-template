@@ -397,17 +397,19 @@ func TestRequestPasswordReset_Failure(t *testing.T) {
 	}
 }
 
-// resetIssued ждёт выпуск ссылки сброса запроса rid пользователя u1, сделанного в requestedAt, сроком час от
-// него и копит хэши выпущенных токенов; issued — ответы по порядку вызовов.
+// resetIssued ждёт выпуск ссылки сброса запроса rid пользователя u1 версии 3, сделанного в requestedAt, сроком час
+// от него и копит хэши выпущенных токенов; issued — ответы по порядку вызовов.
 func resetIssued(t *testing.T, requestedAt time.Time, hashes *[]string, issued ...bool) *mocks.MockRepository {
 	t.Helper()
 	repo := mocks.NewMockRepository(t)
 	for _, ok := range issued {
-		repo.EXPECT().UpsertPasswordReset(mock.Anything, "rid", "u1", mock.Anything, requestedAt, requestedAt.Add(time.Hour)).
-			RunAndReturn(func(_ context.Context, _, _, hash string, _, _ time.Time) (bool, error) {
-				*hashes = append(*hashes, hash)
-				return ok, nil
-			}).Once()
+		repo.EXPECT().UpsertPasswordReset(mock.Anything, mock.MatchedBy(func(r verification.PasswordResetIssue) bool {
+			return r.RequestID == "rid" && r.UserID == "u1" && r.UserVersion == 3 &&
+				r.RequestedAt.Equal(requestedAt) && r.ExpiresAt.Equal(requestedAt.Add(time.Hour))
+		})).RunAndReturn(func(_ context.Context, r verification.PasswordResetIssue) (bool, error) {
+			*hashes = append(*hashes, r.TokenHash)
+			return ok, nil
+		}).Once()
 	}
 	return repo
 }
@@ -462,6 +464,20 @@ func TestIssuePasswordReset_Redelivery(t *testing.T) {
 	require.Equal(t, []string{authnkit.HashToken(mailed[0]), authnkit.HashToken(mailed[1])}, hashes[:2])
 }
 
+// Срок ссылки — от времени запроса, но не позже обработки: событие с At из будущего (часы публикатора спешат или
+// событие записано мимо outbox) ссылку не продлевает.
+func TestIssuePasswordReset_RequestFromTheFuture(t *testing.T) {
+	t.Parallel()
+	var hashes []string
+	repo := resetIssued(t, fixedNow, &hashes, true)
+	repo.EXPECT().MarkPasswordResetSent(mock.Anything, "rid").Return(nil).Once()
+	mailer := mocks.NewMockMailer(t)
+	mailer.EXPECT().SendPasswordReset(mock.Anything, "a@b.com", mock.Anything).Return(nil).Once()
+	f := newUC(t, withRepo(repo), withUsers(userByID(t, 1)), withMailer(mailer))
+
+	require.NoError(t, f.uc.IssuePasswordReset(context.Background(), "rid", "u1", fixedNow.Add(30*24*time.Hour)))
+}
+
 // Письма нет, повтора доставки тоже: у адреса нет учётной записи, ссылка запроса истекла, учётную запись
 // удалили или заблокировали после запроса.
 func TestIssuePasswordReset_Skipped(t *testing.T) {
@@ -512,7 +528,7 @@ func TestIssuePasswordReset_Failure(t *testing.T) {
 		}},
 		{"link not stored", func(t *testing.T) []ucOption {
 			repo := mocks.NewMockRepository(t)
-			repo.EXPECT().UpsertPasswordReset(mock.Anything, "rid", "u1", mock.Anything, mock.Anything, mock.Anything).Return(false, errDown).Once()
+			repo.EXPECT().UpsertPasswordReset(mock.Anything, mock.Anything).Return(false, errDown).Once()
 			return []ucOption{withUsers(userByID(t, 1)), withRepo(repo)}
 		}},
 		{"sent mark not stored", func(t *testing.T) []ucOption {
@@ -552,23 +568,23 @@ func resetToken(t *testing.T, pr *verification.PasswordResetToken, err error) *m
 	return repo
 }
 
+// pendingReset — непогашенная ссылка rid пользователя u1, выпущенная при его версии 3.
 func pendingReset(expiresAt time.Time) *verification.PasswordResetToken {
-	return &verification.PasswordResetToken{ID: "rid", UserID: "u1", ExpiresAt: expiresAt}
+	return &verification.PasswordResetToken{ID: "rid", UserID: "u1", UserVersion: 3, ExpiresAt: expiresAt}
 }
 
-// Погашение, отзыв прочих ссылок сброса и запись пароля — одной транзакцией, погашение — первым: параллельный
-// confirm ждёт его блокировку. Ссылка годна до своего срока включительно: здесь — в последний его миг.
+// Погашение ссылки с соседними и запись пароля при версии учётной записи на момент письма — одной транзакцией,
+// погашение — первым: параллельный confirm ждёт его блокировку. Ссылка годна до своего срока включительно.
 func TestConfirmPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
 	repo := resetToken(t, pendingReset(fixedNow), nil)
-	claim := repo.EXPECT().MarkPasswordResetUsed(mock.MatchedBy(pgkit.InTx), "rid").Return(nil).Once()
-	repo.EXPECT().RevokePasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once().NotBefore(claim)
+	claim := repo.EXPECT().RedeemPasswordReset(mock.MatchedBy(pgkit.InTx), "rid", "u1").Return(nil).Once()
 	pwSet := mocks.NewMockPasswordSetter(t)
 	pwSet.EXPECT().UpdatePassword(mock.MatchedBy(pgkit.InTx), "u1", "hash:newpassword123", 3).Return(nil).Once().NotBefore(claim)
-	f := newUC(t, withRepo(repo), withUsers(userByID(t, 1)), withPwSet(pwSet))
+	f := newUC(t, withRepo(repo), withPwSet(pwSet))
 
 	require.NoError(t, f.uc.ConfirmPasswordReset(identitytest.Anon(), "tok", "newpassword123"))
-	require.Equal(t, 1, f.tx.Calls(), "the claim, the revocation of the other links and the password write share one transaction")
+	require.Equal(t, 1, f.tx.Calls(), "the redemption of the links and the password write share one transaction")
 	require.Equal(t, audited("password_reset_confirmed"), f.audit.Last("password_reset_confirmed"))
 }
 
@@ -601,16 +617,6 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 		{"new password not hashed", "newpassword123", func(t *testing.T) []ucOption {
 			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withHasher(&authntest.DeterministicHasher{HashErr: errHashing})}
 		}, errHashing},
-		{"user deleted after the request", "newpassword123", func(t *testing.T) []ucOption {
-			users := mocks.NewMockUserReader(t)
-			users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, verification.ErrUserNotFound).Once()
-			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withUsers(users)}
-		}, verification.ErrInvalidResetToken},
-		{"user lookup fails", "newpassword123", func(t *testing.T) []ucOption {
-			users := mocks.NewMockUserReader(t)
-			users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, errDown).Once()
-			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)), withUsers(users)}
-		}, errDown},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -624,26 +630,36 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 	}
 }
 
-// Сбой в транзакции откатывает её целиком: погашение не переживает несменённый пароль, аудита нет.
+// Отказ в транзакции откатывает её целиком: погашение не переживает несменённый пароль, аудита нет. Учётная
+// запись, изменённая или удалённая после письма, — негодная ссылка.
 func TestConfirmPasswordReset_RolledBack(t *testing.T) {
 	t.Parallel()
+	redeemed := func(repo *mocks.MockRepository) {
+		repo.EXPECT().RedeemPasswordReset(mock.Anything, "rid", "u1").Return(nil).Once()
+	}
 	tests := []struct {
 		name   string
 		expect func(repo *mocks.MockRepository, pwSet *mocks.MockPasswordSetter)
 		want   error
 	}{
-		{"claimed in parallel", func(repo *mocks.MockRepository, _ *mocks.MockPasswordSetter) {
-			repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(verification.ErrTokenUsed).Once()
+		{"redeemed in parallel", func(repo *mocks.MockRepository, _ *mocks.MockPasswordSetter) {
+			repo.EXPECT().RedeemPasswordReset(mock.Anything, "rid", "u1").Return(verification.ErrTokenUsed).Once()
 		}, verification.ErrTokenUsed},
-		{"other links not revoked", func(repo *mocks.MockRepository, _ *mocks.MockPasswordSetter) {
-			repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(nil).Once()
-			repo.EXPECT().RevokePasswordResets(mock.Anything, "u1").Return(errDown).Once()
+		{"links not redeemed", func(repo *mocks.MockRepository, _ *mocks.MockPasswordSetter) {
+			repo.EXPECT().RedeemPasswordReset(mock.Anything, "rid", "u1").Return(errDown).Once()
 		}, errDown},
-		{"password changed concurrently", func(repo *mocks.MockRepository, pwSet *mocks.MockPasswordSetter) {
-			repo.EXPECT().MarkPasswordResetUsed(mock.Anything, "rid").Return(nil).Once()
-			repo.EXPECT().RevokePasswordResets(mock.Anything, "u1").Return(nil).Once()
+		{"account changed after the mail", func(repo *mocks.MockRepository, pwSet *mocks.MockPasswordSetter) {
+			redeemed(repo)
 			pwSet.EXPECT().UpdatePassword(mock.Anything, "u1", mock.Anything, 3).Return(verification.ErrConcurrentUpdate).Once()
-		}, verification.ErrConcurrentUpdate},
+		}, verification.ErrInvalidResetToken},
+		{"account gone", func(repo *mocks.MockRepository, pwSet *mocks.MockPasswordSetter) {
+			redeemed(repo)
+			pwSet.EXPECT().UpdatePassword(mock.Anything, "u1", mock.Anything, 3).Return(verification.ErrUserNotFound).Once()
+		}, verification.ErrInvalidResetToken},
+		{"password not written", func(repo *mocks.MockRepository, pwSet *mocks.MockPasswordSetter) {
+			redeemed(repo)
+			pwSet.EXPECT().UpdatePassword(mock.Anything, "u1", mock.Anything, 3).Return(errDown).Once()
+		}, errDown},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -651,7 +667,7 @@ func TestConfirmPasswordReset_RolledBack(t *testing.T) {
 			repo := resetToken(t, pendingReset(fixedNow.Add(time.Hour)), nil)
 			pwSet := mocks.NewMockPasswordSetter(t)
 			tc.expect(repo, pwSet)
-			f := newUC(t, withRepo(repo), withUsers(userByID(t, 1)), withPwSet(pwSet))
+			f := newUC(t, withRepo(repo), withPwSet(pwSet))
 
 			require.ErrorIs(t, f.uc.ConfirmPasswordReset(identitytest.Anon(), "tok", "newpassword123"), tc.want)
 			require.Equal(t, 1, f.tx.Calls())

@@ -68,7 +68,9 @@ paths:
 - Одноразовое погашение (токен, инвайт, купон) — условный `UPDATE … SET used_at = NOW() WHERE
   id = $1 AND used_at IS NULL` (`:execrows`, 0 строк → sentinel «уже использован») первым в
   транзакции эффекта: чтение `used_at` и безусловный `UPDATE` пропускают параллельный повтор.
-  Канон — `MarkPasswordResetUsed` домена `verification`.
+  Канон — `MarkEmailVerificationUsed` домена `verification`; своя ссылка с соседними — одним оператором
+  `… WHERE user_id = $1 AND used_at IS NULL RETURNING id` (`RedeemPasswordReset`): два оператора берут
+  блокировки строк в разном порядке, и два погашения ждут друг друга по кругу.
 - **Kit-таблицы** (`outbox_<domain>`/`audit_log`/`bruteforce_attempts`/`authn_sessions`) схему держат
   `golibinfra/{outboxkit,auditkit,bruteforcekit,authnkit/session}/pgstore` (`Migrations`,
   `TableMigrations(table)`), `cmd/migrate` накатывает рядом — таблица версий у каждого
