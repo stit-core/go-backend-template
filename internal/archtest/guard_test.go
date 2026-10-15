@@ -70,7 +70,8 @@ var barrierDeny = []string{
 // guardFields — поля обработчика guard, которые барьер не гасят; timeout — не короче секунды: guard работает
 // миллисекунды, а оборванный по таймауту хук вызов не держит (с onFailure: block — держит). Остальные гасят или
 // обходят guard (Claude Code, hooks § Common fields и Command hook fields): if сужает вызовы, async и asyncRewake
-// не ждут отказа, once снимает хук после первого раза, args запускает command без оболочки.
+// не ждут отказа, args запускает command без оболочки. once клиент исполняет только у хуков скилла, в settings.json
+// поле лишнее — белый список его не берёт.
 var guardFields = map[string]bool{"type": true, "command": true, "shell": true, "statusMessage": true, "onFailure": true, "timeout": true}
 
 // guardHandler — обработчик запускает guard как есть: команда оболочки bash без полей, которые его гасят.
@@ -146,7 +147,7 @@ func TestGuardWired(t *testing.T) {
 			wired = wired || bash && guardHandler(h)
 		}
 	}
-	require.True(t, wired, ".claude/settings.json: no PreToolUse hook of Bash runs %s as a plain bash command (fields if, async, once, args or a timeout under 1 s disarm it) — the guard is off", guardCommand)
+	require.True(t, wired, ".claude/settings.json: no PreToolUse hook of Bash runs %s as a plain bash command (fields if, async, args or a timeout under 1 s disarm it) — the guard is off", guardCommand)
 	for _, rule := range barrierDeny {
 		require.Contains(t, settings.Permissions.Deny, rule, ".claude/settings.json: deny lost %s — that weakens the gate (CLAUDE.md § Сначала спросить)", rule)
 	}
