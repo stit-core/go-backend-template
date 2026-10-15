@@ -56,7 +56,8 @@ make release VERSION=vX.Y.Z
 
 Команду запускает оператор в своём терминале: подтверждение — `y` в TTY. У агента TTY нет, и без него
 `make release` отменяется; с OK юзера на этот релиз агент запускает её неинтерактивно —
-`RELEASE_YES=1 make release VERSION=vX.Y.Z` (путь образов из промпта — в выводе, сверь его).
+`RELEASE_YES=1 make release VERSION=vX.Y.Z`. Без промпта релиз не остановится, поэтому путь образов сверь до
+старта: `make release VERSION=vX.Y.Z DRY_RUN=1` — строка `<РЕПО>_TAG → vX.Y.Z (<путь>{,-migrate}: …)`.
 
 `scripts/release.sh` делает за тебя, по порядку:
 1. валидирует `VERSION` (semver; lightweight/`:latest`/`:edge` отвергаются);

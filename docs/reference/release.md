@@ -20,7 +20,8 @@ semver-тег, и он — запрошенный) → `docker buildx --push --s
 - `<host>/<org>/<репо>-migrate:vX.Y.Z` — `cmd/migrate` + вшитые SQL (init-контейнер)
 
 → агрегированный INFRA-HANDOFF → STOP. Тег и коммит очистки накопителя — в origin: `git push origin main vX.Y.Z`.
-Подтверждение — `y` в TTY оператора; агент без TTY запускает релиз только с OK юзера: `RELEASE_YES=1`.
+Подтверждение — `y` в TTY оператора; агент без TTY запускает релиз только с OK юзера: `RELEASE_YES=1`, путь образов
+сверив до старта (`DRY_RUN=1`).
 
 Оба образа — distroless без shell и `wget`, процесс — UID 65532. Проверка здоровья контейнера api —
 сам бинарь, подкоманда `healthcheck` (`GET /health` по `HTTP_ADDR`, код выхода 0 — здоров); e2e-стек
