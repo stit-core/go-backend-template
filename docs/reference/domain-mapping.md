@@ -77,7 +77,7 @@ Strategy-репо у проекта нет — вход домена тот же
 | Boundary | конкретный набор полей и контейнеров внутри `entity.go`; репозиторий загружает/сохраняет всё это атомарно |
 | Spanning Invariants | методы на root, имеющие доступ ко всем child'ам |
 | Contained Entities | дополнительные struct'ы в `entity.go` или `entity_<child>.go`; не имеют публичного репозитория |
-| Identity → ID type | поле `ID` (рекомендуется `type <Name>ID string` для type-safety) |
+| Identity → ID type | поле `ID string` — UUID строкой, как у эталона `user.User` и среза `make new-domain` |
 | Visibility `published` | разрешено упоминать в DTO других контекстов через port-адаптер |
 
 ## Value Objects

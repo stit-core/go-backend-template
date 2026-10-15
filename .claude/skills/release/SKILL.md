@@ -5,7 +5,7 @@ description: Выпустить версию бэкенда одной кома�
 
 # Skill: release
 
-Канонический release-флоу. **Зона ответственности этого репо: код → image в registry. На STOP — всё.** Build локальный, push в `<host>/<org>/<репо>{,-migrate}` (путь — из origin, у каждого сервиса орги свой) под одним lockstep `vX.Y.Z`-тегом. Воркер отдельным образом не собирается — outbox drain, NATS subscribers, jobs живут в `cmd/api/`.
+Канонический release-флоу. Зона ответственности этого репо: код → image в registry. На STOP — всё. Build локальный, push в `<host>/<org>/<репо>{,-migrate}` (путь — из origin, у каждого сервиса орги свой) под одним lockstep `vX.Y.Z`-тегом. Воркер отдельным образом не собирается — outbox drain, NATS subscribers, jobs живут в `cmd/api/`.
 
 Дальше — handoff в хаб `<org>/infra`: rollout — `make bump SVC=<репо> TAG=<v>` там (правит `<РЕПО>_TAG` в `.env` на VPS + force-recreate; у `<org>/backend` — `BACKEND_TAG`). Эти шаги не выполняются здесь — `make release` печатает агрегированный INFRA-HANDOFF-блок, и он уходит в хаб.
 
@@ -61,12 +61,12 @@ make release VERSION=vX.Y.Z
 `scripts/release.sh` делает за тебя, по порядку:
 1. валидирует `VERSION` (semver; lightweight/`:latest`/`:edge` отвергаются);
 2. **confirm-промпт** `⚠ confirm release <v> from main@<sha> → <host>/<org>/<репо>{,-migrate}:<v>? [y/N]` — путь образов сверь с тем, что ждёт хаб (нет TTY/EOF → отмена, accidental release невозможен; origin, из которого путь не вывести, и имя репо, которое хаб не выкатит, — `1c-gateway`, `my.service`, — отказ);
-3. `release-preflight.sh env` — окружение релиза, fail-fast до гейта и тега: ветка=main / clean / ключи ssh-agent читают приватные модули `go.mod` / `docker buildx` / **`make doctor`** (docker-auth, sqlc-drift, непарные миграции, git-хуки);
+3. `release-preflight.sh env` — окружение релиза, fail-fast до гейта и тега: ветка=main / clean / ключи ssh-agent читают приватные модули `go.mod` / `docker buildx` / `make doctor` (docker-auth, sqlc-drift, непарные миграции, git-хуки);
 4. чистое дерево, `make check`, `make e2e-smoke` (собранный бинарь со стеком в docker) и `govulncheck` (уязвимость, которую вызывает код; нужна сеть) — тег и образы только у проверенного HEAD (красный → fail до тега);
 5. annotated tag, если на HEAD ещё нет (иначе использует существующий; конфликт версий → fail);
 6. `release-preflight.sh tag` — на HEAD annotated semver-тег, и он — запрошенный;
 7. `docker buildx --platform linux/amd64 --push --ssh default` двух image'ей lockstep: `<host>/<org>/<репо>:<v>` (`cmd/api`) и `<host>/<org>/<репо>-migrate:<v>` (`cmd/migrate` + вшитые SQL, init-контейнер), `VERSION`/`GIT_SHA` зашиты в бинарник; приватные модули `go mod download` берёт по SSH ключом ssh-agent — в слои образа ключ не попадает;
-8. печатает агрегированный **INFRA-HANDOFF** (см. ниже), очищает накопитель коммитом и STOP.
+8. печатает агрегированный INFRA-HANDOFF (см. ниже), очищает накопитель коммитом и STOP.
 
 ### 3. Push тега и `main`
 
@@ -106,10 +106,10 @@ make release VERSION=vX.Y.Z
 
 ## Anti-patterns
 
-- ❌ `git tag vX.Y.Z` без `-a`. Lightweight tag отвергнет release-preflight.
-- ❌ `make release` минуя зелёный `make check`. Если красный — STOP, в `triage-failure`.
-- ❌ `make release` не на main. Preflight отвергнет — не трать время.
-- ❌ `docker login <host>` или `ssh-add` сам. Креды оператора.
-- ❌ `:latest` / `:edge` / любой не-semver tag.
-- ❌ Релизить, не передав INFRA-HANDOFF-блок в `<org>/infra` — без `make bump` на инфра-стороне продолжит крутиться старый image.
-- ❌ Выполнять `make bump` / `make ship` / `ssh <vps>` из этого репо. Другой репо/креды. Наша роль — image в registry + текст-handoff в хаб.
+- `git tag vX.Y.Z` без `-a`. Lightweight tag отвергнет release-preflight.
+- `make release` минуя зелёный `make check`. Если красный — STOP, в `triage-failure`.
+- `make release` не на main. Preflight отвергнет — не трать время.
+- `docker login <host>` или `ssh-add` сам. Креды оператора.
+- `:latest` / `:edge` / любой не-semver tag.
+- Релизить, не передав INFRA-HANDOFF-блок в `<org>/infra` — без `make bump` на инфра-стороне продолжит крутиться старый image.
+- Выполнять `make bump` / `make ship` / `ssh <vps>` из этого репо. Другой репо/креды. Наша роль — image в registry + текст-handoff в хаб.

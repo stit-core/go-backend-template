@@ -30,7 +30,7 @@ sibling-checkout'ами (`../<name>`).
 |---|---|
 | `<org>/strategy` (`business-strategy-template`) | design-time source of truth: бизнес, продукты, сервисы и их домены |
 | `<org>/infra` (`project-infra-template-compose`) | runtime проекта (docker-compose на VPS) и операционный хаб: общий план, рассылка агентов по сиблингам, выкатка тегов (`make bump`) |
-| `<org>/backend` (`go-backend-template`) | **этот репо** — Go-сервис |
+| `<org>/backend` (`go-backend-template`) | этот репо — Go-сервис |
 | `<org>/frontend` (`spa-frontend-template`) | React SPA (кабинет, всё за логином) |
 | `<org>/site` (`ssr-frontend-template`) | Astro SSR-сайт (индексируемый контент) |
 | `<org>/<bot>` (`telegram-bot-template`) | Telegram-бот (Python, aiogram) |

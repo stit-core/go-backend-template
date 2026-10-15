@@ -1,6 +1,6 @@
 # Контракт `draft → stable`
 
-Артефакт становится `stable`, когда **все 6 пунктов одновременно** ✅.
+Артефакт становится `stable`, когда все 6 пунктов одновременно ✅.
 Скилл проверяет, архитектор подтверждает, скилл применяет правку `status:`.
 
 ## Чек-лист
@@ -36,8 +36,8 @@
 ### 3. Cross-kind sync согласован
 
 Решения kit-артефактов (`auth`/`persistence`/`messaging`/`observability`/
-`dependencies`) роллапнуты в `config` и `runtime`. См. SKILL.md §
-Cross-kind sync — там полная матрица.
+`dependencies`) роллапнуты в `config` и `runtime`; что куда — раздел «Cross-kind» kind'а в
+`references/field-checklists.md`.
 
 Программная проверка:
 - каждый env, упомянутый в `Generates` или в теле kit-артефакта, есть
@@ -80,7 +80,7 @@ make validate-stack-docs
 ✅/❌, архитектор соотносит и выбирает «соответствует ✅» / «нет, ближе к ❌»
 (через Other).
 
-См. **§ Тест-критерий по kind** ниже.
+См. § Тест-критерий по kind ниже.
 
 ### 6. State чист по `**blocker**`-вопросам
 
@@ -185,7 +185,7 @@ make validate-stack-docs
 > runtime-deps с режимом отказа; capacity-оценка есть?
 
 - ✅ Kits: httpkit, pgkit, authnkit, outboxkit, natskit, auditkit,
-  bruteforcekit, clockkit, logkit; **не подключено**:
+  bruteforcekit, clockkit, logkit; не подключено:
   cachekit, flagkit, storagekit; External: Postgres (req),
   email-провайдер (Postmark, fallback=N/A, timeout=5s); Capacity:
   1 CPU/512MB, 2 replicas, pool=50.
@@ -208,13 +208,5 @@ make validate-stack-docs
 
 ## Что НЕ делать
 
-- **Не повышать сам**, без подтверждения.
-- **Не понижать `stable → draft` сам** — только подсветить и предложить.
-- **Не считать `Generates` заполненной**, если она содержит
-  «соответствующие пути в коде» без конкретных путей — это TBD,
-  не Generates.
-- **Не считать cross-kind sync согласованным**, если drift найден,
-  но архитектор сказал «потом» — оставить в state как `**blocker**`,
-  stable не выдавать.
-- **Не игнорировать `**blocker**`-вопросы**.
-- **Не маркировать stable при красном валидаторе.**
+Не считать cross-kind sync согласованным, если drift найден, а архитектор сказал «потом»: drift — `**blocker**` в
+state, stable не выдаётся. Остальное — пункты чек-листа выше и запреты SKILL.md.

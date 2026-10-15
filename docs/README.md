@@ -15,7 +15,7 @@
 - [reference/ecosystem.md](reference/ecosystem.md) — роль репо и соседи, как сюда приходят агенты (из хаба `<org>/infra` или прямым заходом), что репо отдаёт и берёт, контракт с `<org>/infra`.
 
 ## Design source-of-truth
-- **Домены** — в **соседнем strategy-репо** орга (`../strategy`, форк `business-strategy-template`): `docs/projects/<slug>/services/<svc>/domains/`, внутри сервиса, который реализует этот репо. Проектирование — скиллом `/domain-deep-dive` там; маппинг в Go-код — [reference/domain-mapping.md](reference/domain-mapping.md).
+- **Домены** — в соседнем strategy-репо орга (`../strategy`, форк `business-strategy-template`): `docs/projects/<slug>/services/<svc>/domains/`, внутри сервиса, который реализует этот репо. Проектирование — скиллом `/domain-deep-dive` там; маппинг в Go-код — [reference/domain-mapping.md](reference/domain-mapping.md).
 - [stack/README.md](stack/README.md) — артефакты платформы/стека (8 kinds, вход для `/de-template`). Остаётся в этом репо.
 
 Точка входа агента в репо — `CLAUDE.md` (ядро + роутер). Дневной флоу — skill `/smartdev`.

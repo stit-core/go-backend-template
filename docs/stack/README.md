@@ -1,6 +1,6 @@
 # Stack artifacts
 
-Дизайн платформы/стека сервиса — **первичный source of truth** и **вход для skill
+Дизайн платформы/стека сервиса — первичный source of truth и **вход для skill
 `de-template`**. Зеркалит модель доменов (она живёт в соседнем strategy-репо): 8 singleton-
 артефактов (по одному на kind), заполняются через `/stack-deep-dive`, валидируются
 `make validate-stack-docs`.
@@ -22,7 +22,7 @@ subjects, как версионируется и деплоится образ.
 | `observability` | `observability.md` | структурные логи в stdout (logkit), уровни, что логируется |
 | `dependencies` | `dependencies.md` | golibinfra kits, внешние runtime-deps, ёмкость |
 
-Каждый артефакт обязан иметь секцию **Generates** — что из него родится в коде. Это
+Каждый артефакт обязан иметь секцию Generates — что из него родится в коде. Это
 контракт для `de-template`: маппинг живёт рядом с источником, не отдельным файлом.
 
 ## Frontmatter

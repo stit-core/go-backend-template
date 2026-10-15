@@ -6,13 +6,13 @@ description: Развернуть платформу форка go-backend-templ
 # Skill: de-template (движок развёртывания)
 
 Превращает форк шаблона в проект, который ничего не помнит про `go-backend-template`, кроме версии
-обвязки `.template/` — по ней приходят обновления (`/upgrade`). Читает **stable** `docs/stack` и
+обвязки `.template/` — по ней приходят обновления (`/upgrade`). Читает stable `docs/stack` и
 разворачивает платформу по секциям `Generates` восьми stack-артефактов. Домены — не здесь: свои
 разворачивает `scaffold` (вариант domain), домены идентичности остаются или уходят по решению
-`docs/stack/auth.md` (prune — этап init-service после своих доменов). Движок **skill-only**: механика —
+`docs/stack/auth.md` (prune — этап init-service после своих доменов). Движок skill-only: механика —
 по точным командам ниже, wiring — диффом поверх скелета, который юзер ревьюит.
 
-Запускается **один раз** на форке, этапом онбординга (`/init-service`). Финал — зелёный `make check`.
+Запускается один раз на форке, этапом онбординга (`/init-service`). Финал — зелёный `make check`.
 
 ## Когда применять
 
@@ -96,13 +96,13 @@ stream covers subjects: user.>»), `SESSION_*`, `BRUTEFORCE_SUBJECT_*`. Сним
 
 `.claude/plans/` — форк стартует без планов и handoff шаблона: только `backlog.md` и `handoff.md` с
 `_пусто_` (init-service делает это на этапе 0, до своего плана); план онбординга (`onboarding`,
-`/init-service`) остаётся. `.template/` — **оставь**: версия
+`/init-service`) остаётся. `.template/` — оставь: версия
 обвязки, пути шаблона и доменов идентичности.
 
 ## Phase B — doc-driven wiring
 
 Шесть оставшихся `Generates` (runtime/messaging/observability/auth/persistence/dependencies)
-разворачиваются как **reviewable diff поверх скелета** — `cmd/api/main.go` композиция, fx-модули,
+разворачиваются как reviewable diff поверх скелета — `cmd/api/main.go` композиция, fx-модули,
 logging, subjects, authgate, pgkit, киты. Процедура и маппинг `Generates`→код — `references/wiring.md`.
 Не правь сгенерированное (`infra/postgres/db/*`, `mocks/*`) — только `make gen`.
 
@@ -114,14 +114,14 @@ make check      # готово — по CLAUDE.md § Готово
 
 ## Anti-patterns
 
-- ❌ Запуск на каноническом шаблоне (см. Gate) — уничтожает шаблон.
-- ❌ Старт до `stable`-артефактов — движку не из чего разворачивать.
-- ❌ Module path в прозе: там он — путь шаблона.
-- ❌ Удаление доменов здесь — свои растут через `scaffold`, домены идентичности — решение `auth.md`, prune
+- Запуск на каноническом шаблоне (см. Gate) — уничтожает шаблон.
+- Старт до `stable`-артефактов — движку не из чего разворачивать.
+- Module path в прозе: там он — путь шаблона.
+- Удаление доменов здесь — свои растут через `scaffold`, домены идентичности — решение `auth.md`, prune
   после своих доменов (`/init-service`).
-- ❌ Wiring «по памяти» вместо `Generates`-секций — артефакты source of truth.
-- ❌ Правка сгенерированного руками вместо `make gen`.
-- ❌ Коммит значений секретов в `.env.example` (только имена ключей).
+- Wiring «по памяти» вместо `Generates`-секций — артефакты source of truth.
+- Правка сгенерированного руками вместо `make gen`.
+- Коммит значений секретов в `.env.example` (только имена ключей).
 
 ## См. также
 

@@ -9,7 +9,7 @@
 > В форке после `/de-template` это уже свой путь (`git.stit.tech/<org>/backend`),
 > не путь шаблона. Подставляй фактический — не копируй буквально.
 
-**Gate (soft).** Домены проектируются **не в этом репо**, а в соседнем strategy-репо орга
+**Gate (soft).** Домены проектируются не в этом репо, а в соседнем strategy-репо орга
 (`<org>/strategy`, форк `business-strategy-template`) — внутри сервиса-владельца. Скаффолдь по
 **stable**-артефактам оттуда: `<strategy-path>/docs/projects/<slug>/services/<svc>/domains/<ctx>/`,
 где `<slug>` / `<svc>` / `<strategy-path>` — это `project-slug` / `service-slug` / `strategy-path`
