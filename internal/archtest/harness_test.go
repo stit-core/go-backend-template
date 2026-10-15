@@ -345,40 +345,49 @@ var (
 )
 
 // TestRulesAndSkillsLoad: правило приходит в контекст, когда инструмент Read открыл файл под его paths:,
-// скилл зовут по name:, а процедура, которая пишет код, читает свои правила шагом 0 — новый файл пишут
-// Write, и правило по paths: не придёт. Glob, который не ложится ни на один файл репо, правило без paths:
-// (грузится в каждую сессию), name: не по каталогу и процедура без шага 0 ничем не падают: агент работает
-// без правила, и этого никто не видит. Glob без файлов репо — только локальный файл, который игнорирует git;
-// у проекта с внешней идентичностью glob'ы слоёв, которые были только у её доменов (events.go, delivery/nats),
-// пустуют до своих доменов — их проверяет самопроверка шаблона.
+// скилл зовут по name: (без него — по каталогу), а процедура, которая пишет код, читает свои правила шагом 0 —
+// новый файл пишут Write, и правило по paths: не придёт. Glob, который не ложится ни на один файл репо, правило
+// без paths: (грузится в каждую сессию), name: не по каталогу и процедура без шага 0 ничем не падают: агент
+// работает без правила, и этого никто не видит. paths: читается, как его читает Claude Code: список YAML или
+// строка через запятую, «{a,b}» раскрыт, glob ложится на файл по правилам .gitignore. Glob без файлов репо —
+// только локальный файл, который игнорирует git; у проекта с внешней идентичностью glob'ы слоёв, которые были
+// только у её доменов (events.go, delivery/nats), пустуют до своих доменов — их проверяет самопроверка шаблона.
 func TestRulesAndSkillsLoad(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	files := trackedFiles(t, root)
 	external := identityExternal(t)
 	for _, f := range files {
-		switch dir := path.Dir(f); {
-		case dir == ".claude/rules" && path.Ext(f) == ".md":
-			globs := frontmatter(t, root, f)["paths"]
-			if len(globs) == 0 {
-				t.Errorf("%s: no paths: — the rule loads into every session", f)
-			}
-			for _, g := range globs {
-				if !external && !globMatches(t, root, g) && (strings.ContainsAny(g, "*?[") || !gitIgnored(t, root, g)) {
-					t.Errorf("%s: paths: %q matches no file of the repo — the rule never loads", f, g)
-				}
-			}
-		case path.Dir(dir) == ".claude/skills" && path.Base(f) == "SKILL.md":
-			if name := frontmatter(t, root, f)["name"]; !slices.Equal(name, []string{path.Base(dir)}) {
-				t.Errorf("%s: name: %q — the skill is called by its directory, %q", f, name, path.Base(dir))
-			}
-		}
-		if path.Ext(f) != ".md" || !slices.ContainsFunc(readRulesFirst, func(p string) bool { return under(f, p) }) {
+		dir := path.Dir(f)
+		rule := dir == ".claude/rules" && path.Ext(f) == ".md"
+		skill := path.Dir(dir) == ".claude/skills" && path.Base(f) == "SKILL.md"
+		procedure := path.Ext(f) == ".md" && slices.ContainsFunc(readRulesFirst, func(p string) bool { return under(f, p) })
+		if !rule && !skill && !procedure {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(root, f))
 		require.NoError(t, err)
 		text := string(data)
+		head := frontmatter(text)
+		switch {
+		case rule:
+			globs := ruleGlobs(head["paths"])
+			if len(globs) == 0 {
+				t.Errorf("%s: no paths: that Claude Code reads — the rule loads into every session; always-on text belongs in CLAUDE.md", f)
+			}
+			for _, g := range globs {
+				if !external && !globMatches(t, root, g.variants) {
+					t.Errorf("%s: paths: %q matches no file of the repo — the rule never loads", f, g.raw)
+				}
+			}
+		case skill:
+			if name, ok := head["name"]; ok && !slices.Equal(name, []string{path.Base(dir)}) {
+				t.Errorf("%s: name: %q — the skill is called by its directory, %q", f, name, path.Base(dir))
+			}
+		}
+		if !procedure {
+			continue
+		}
 		var first string
 		if loc := heading1.FindStringIndex(text); loc != nil {
 			first, _, _ = strings.Cut(strings.TrimLeft(text[loc[1]:], "\n"), "\n\n")
@@ -395,39 +404,173 @@ func TestRulesAndSkillsLoad(t *testing.T) {
 	}
 }
 
-// frontmatter — ключи шапки .md между строками "---": значение после «ключ:» и пункты «- …» под ним, без кавычек.
-func frontmatter(t *testing.T, root, rel string) map[string][]string {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, rel))
-	require.NoError(t, err)
-	head, ok := strings.CutPrefix(string(data), "---\n")
-	require.True(t, ok, "%s: no frontmatter", rel)
-	head, _, ok = strings.Cut(head, "\n---\n")
-	require.True(t, ok, "%s: the frontmatter is not closed", rel)
+// frontmatter — шапка .md между строками «---»: ключ верхнего уровня → значение после «ключ:» и пункты его
+// списка (блочного «- …» или «[a, b]» в строку) без кавычек и комментариев YAML. Шапки нет или её не разберёт
+// YAML (значение без кавычек с «*», «{» — ссылка на якорь и словарь) — nil: Claude Code её не прочтёт.
+func frontmatter(text string) map[string][]string {
+	lines := strings.Split(text, "\n")
+	if strings.TrimRight(lines[0], " \t") != "---" {
+		return nil
+	}
 	keys := map[string][]string{}
 	key := ""
-	for _, line := range strings.Split(head, "\n") {
-		if item, ok := strings.CutPrefix(strings.TrimSpace(line), "- "); ok && key != "" {
-			keys[key] = append(keys[key], strings.Trim(item, `"'`))
-			continue
+	for _, line := range lines[1:] {
+		if strings.TrimRight(line, " \t") == "---" {
+			return keys
 		}
-		if k, v, ok := strings.Cut(line, ":"); ok {
-			key = k
-			if v = strings.Trim(strings.TrimSpace(v), `"'`); v != "" {
-				keys[key] = append(keys[key], v)
+		line = strings.TrimRight(yamlUncomment(line), " \t")
+		item := strings.TrimSpace(line)
+		var values []string
+		switch {
+		case item == "":
+		case strings.HasPrefix(item, "- ") && key != "":
+			values = append(values, item[2:])
+		case line[0] != ' ' && line[0] != '\t':
+			k, v, _ := strings.Cut(line, ":")
+			key, v = strings.TrimSpace(k), strings.TrimSpace(v)
+			if flow, ok := strings.CutPrefix(v, "["); ok && strings.HasSuffix(flow, "]") {
+				values = append(values, splitFlow(strings.TrimSuffix(flow, "]"))...)
+			} else if v != "" {
+				values = append(values, v)
+			}
+		}
+		for _, v := range values {
+			s, ok := yamlScalar(v)
+			if !ok {
+				return nil
+			}
+			keys[key] = append(keys[key], s)
+		}
+	}
+	return nil // шапка не закрыта — это не шапка
+}
+
+// yamlUncomment — строка без комментария YAML: «#» в начале или после пробела, вне кавычек.
+func yamlUncomment(line string) string {
+	var quote rune
+	for i, r := range line {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '"' || r == '\'':
+			quote = r
+		case r == '#' && (i == 0 || line[i-1] == ' ' || line[i-1] == '\t'):
+			return line[:i]
+		}
+	}
+	return line
+}
+
+// yamlScalar — значение без кавычек YAML: «"…"» с \" и \\ или «'…'» с удвоенной кавычкой. ok=false — без
+// кавычек значение начинается со знака YAML (якорь, словарь, тег): строкой его YAML не прочтёт.
+func yamlScalar(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	switch {
+	case len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"':
+		return strings.NewReplacer(`\"`, `"`, `\\`, `\`).Replace(s[1 : len(s)-1]), true
+	case len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'':
+		return strings.ReplaceAll(s[1:len(s)-1], "''", "'"), true
+	}
+	return s, s == "" || strings.IndexByte("*&!{}@`", s[0]) < 0
+}
+
+// splitFlow — пункты flow-списка YAML «a, "b"» между запятыми вне кавычек.
+func splitFlow(s string) []string {
+	var parts []string
+	var quote byte
+	from := 0
+	for i := 0; i <= len(s); i++ {
+		switch {
+		case i == len(s) || s[i] == ',' && quote == 0:
+			if part := strings.TrimSpace(s[from:i]); part != "" {
+				parts = append(parts, part)
+			}
+			from = i + 1
+		case quote != 0 && s[i] == quote:
+			quote = 0
+		case quote == 0 && (s[i] == '"' || s[i] == '\''):
+			quote = s[i]
+		}
+	}
+	return parts
+}
+
+// splitBraces — glob'ы строки paths: между запятыми вне «{…}», как делит Claude Code.
+func splitBraces(s string) []string {
+	var parts []string
+	depth, from := 0, 0
+	for i := 0; i <= len(s); i++ {
+		switch {
+		case i == len(s) || s[i] == ',' && depth == 0:
+			if part := strings.TrimSpace(s[from:i]); part != "" {
+				parts = append(parts, part)
+			}
+			from = i + 1
+		case s[i] == '{':
+			depth++
+		case s[i] == '}':
+			depth--
+		}
+	}
+	return parts
+}
+
+// ruleGlob — glob paths: как написан и его варианты для сверки.
+type ruleGlob struct {
+	raw      string
+	variants []string
+}
+
+var braceGroup = regexp.MustCompile(`^([^{]*)\{([^}]+)\}(.*)$`)
+
+// ruleGlobs — glob'ы paths:, как их читает Claude Code: пункт списка и строка делятся по запятым вне «{…}»,
+// «{a,b}» раскрыт, «/**» на конце снят. nil — paths: нет или он из одних «**»: правило грузится всегда.
+func ruleGlobs(values []string) []ruleGlob {
+	var globs []ruleGlob
+	always := true
+	for _, value := range values {
+		for _, raw := range splitBraces(value) {
+			g := ruleGlob{raw: raw}
+			for todo := []string{raw}; len(todo) > 0; {
+				s := todo[len(todo)-1]
+				todo = todo[:len(todo)-1]
+				if m := braceGroup.FindStringSubmatch(s); m != nil {
+					for alt := range strings.SplitSeq(m[2], ",") {
+						todo = append(todo, m[1]+strings.TrimSpace(alt)+m[3])
+					}
+				} else if s = strings.TrimSuffix(s, "/**"); s != "" {
+					g.variants = append(g.variants, s)
+					always = always && s == "**"
+				}
+			}
+			if len(g.variants) > 0 {
+				globs = append(globs, g)
 			}
 		}
 	}
-	return keys
+	if always {
+		return nil
+	}
+	return globs
 }
 
-// globMatches — glob ложится на файл индекса git: «**» — любые каталоги, «*» — внутри одного.
-func globMatches(t *testing.T, root, glob string) bool {
+// globMatches — вариант glob'а ложится на файл индекса git по правилам .gitignore (без «/» — на любой глубине,
+// как у Claude Code) или называет локальный файл, который игнорирует git.
+func globMatches(t *testing.T, root string, variants []string) bool {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", "ls-files", "--", ":(glob)"+glob)
+	args := []string{"ls-files", "--cached", "--ignored"}
+	for _, v := range variants {
+		args = append(args, "--exclude="+v)
+		if !strings.ContainsAny(v, "*?[!") && gitIgnored(t, root, v) {
+			return true
+		}
+	}
+	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = root
 	out, err := cmd.Output()
-	require.NoError(t, err, "git ls-files %s", glob)
+	require.NoError(t, err, "git ls-files %v", variants)
 	return len(out) > 0
 }
 
