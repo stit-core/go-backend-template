@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -91,6 +92,27 @@ func guardHandler(handler map[string]json.RawMessage) bool {
 	return typ == "command" && command == guardCommand && (shell == "" || shell == "bash")
 }
 
+// exactTools — matcher из имён инструментов через «|» или «,»: Claude Code сравнивает их как строки.
+var exactTools = regexp.MustCompile(`^[a-zA-Z0-9_|, -]+$`)
+
+// matchesBash — matcher записи PreToolUse берёт инструмент Bash так, как его читает Claude Code: пусто и «*» —
+// любой инструмент, имена через «|» или «,» — точное совпадение, иначе — регулярное выражение без якорей.
+// Второе значение false — выражение, которое RE2 не разбирает (lookahead JavaScript).
+func matchesBash(matcher string) (bool, bool) {
+	switch {
+	case matcher == "" || matcher == "*":
+		return true, true
+	case exactTools.MatchString(matcher):
+		names := strings.FieldsFunc(matcher, func(r rune) bool { return r == '|' || r == ',' })
+		return slices.ContainsFunc(names, func(name string) bool { return strings.TrimSpace(name) == "Bash" }), true
+	}
+	re, err := regexp.Compile(matcher)
+	if err != nil {
+		return false, false
+	}
+	return re.MatchString("Bash"), true
+}
+
 // TestGuardWired: барьер от случайного обхода держат хук guard-bash и deny .claude/settings.json, пока они
 // подключены. Хук, отвязанный от Bash, подменённый, выключенный (disableAllHooks) или обезвреженный полем
 // обработчика, и снятый запрет молчат: TestGuardBash проверяет скрипт, а не его подключение.
@@ -112,12 +134,9 @@ func TestGuardWired(t *testing.T) {
 	require.False(t, settings.DisableAllHooks, ".claude/settings.json: disableAllHooks switches guard-bash off")
 	wired := false
 	for _, entry := range settings.Hooks.PreToolUse {
-		// Matcher — имя инструмента или регулярное выражение; пусто и «*» — любой инструмент.
-		bash := entry.Matcher == "" || entry.Matcher == "*"
-		if !bash {
-			re, err := regexp.Compile("^(?:" + entry.Matcher + ")$")
-			require.NoError(t, err, ".claude/settings.json: matcher %q", entry.Matcher)
-			bash = re.MatchString("Bash")
+		bash, ok := matchesBash(entry.Matcher)
+		if !ok {
+			continue // чужая запись: guard с таким matcher'ом засчитать нечем
 		}
 		for _, h := range entry.Hooks {
 			wired = wired || bash && guardHandler(h)
