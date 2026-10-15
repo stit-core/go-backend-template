@@ -398,7 +398,8 @@ func usecaseClosure(fn *ast.FuncType, body *ast.BlockStmt, byName map[string]str
 // TestSecuredOperationsAskPolicy: метод usecase за операцией под Security (не httpkit.Public) спрашивает policy
 // (…Policy.Can…) — сам или своим методом; без policy — только чтение самого вызывающего: его UserID из
 // identity.From — аргумент вызова порта зависимостей (uc.d.Repo.GetByID — Me), а не лога, кита или функции пакета.
-// Иначе операция отдала бы ресурс любому вошедшему.
+// Иначе операция отдала бы ресурс любому вошедшему. Операцию правило читает литералом в вызове регистрации или
+// переменной пакета (operation); другую форму — отказ: открытость операции была бы не видна.
 func TestSecuredOperationsAskPolicy(t *testing.T) {
 	t.Parallel()
 	byDomain := map[string][]goFile{} // домен → не-тестовые файлы delivery/http
@@ -428,26 +429,29 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 				return true
 			})
 		}
-		ports := map[string]bool{}        // поля пакета с типом-портом: через них хендлер зовёт usecase
-		values := map[string][]ast.Expr{} // значения переменных пакета: операцию объявляют и переменной
-		pkgByName := map[string]string{}  // импорты пакета
+		ports := map[string]bool{}       // поля пакета с типом-портом: через них хендлер зовёт usecase
+		vars := map[string]ast.Expr{}    // значения переменных пакета: операцию объявляют и так (operation)
+		local := map[string]bool{}       // имена, которые объявляют или пишут функции пакета
+		pkgByName := map[string]string{} // импорты пакета
 		for _, file := range parsed {
 			maps.Copy(pkgByName, importsByName(file))
-			ast.Inspect(file, func(n ast.Node) bool {
-				switch x := n.(type) {
-				case *ast.ValueSpec:
-					for j, name := range x.Names {
-						if j < len(x.Values) {
-							values[name.Name] = append(values[name.Name], x.Values[j])
+			for _, decl := range file.Decls {
+				switch d := decl.(type) {
+				case *ast.GenDecl:
+					for _, spec := range d.Specs {
+						if vs, ok := spec.(*ast.ValueSpec); ok && len(vs.Names) == len(vs.Values) {
+							for j, name := range vs.Names {
+								vars[name.Name] = vs.Values[j]
+							}
 						}
 					}
-				case *ast.AssignStmt:
-					for j, lhs := range x.Lhs {
-						if id, ok := lhs.(*ast.Ident); ok && len(x.Lhs) == len(x.Rhs) {
-							values[id.Name] = append(values[id.Name], x.Rhs[j])
-						}
+				case *ast.FuncDecl:
+					for name := range writes(d) {
+						local[name] = true
 					}
 				}
+			}
+			ast.Inspect(file, func(n ast.Node) bool {
 				if field, ok := n.(*ast.Field); ok {
 					if id, ok := field.Type.(*ast.Ident); ok && ifaces[id.Name] {
 						for _, name := range field.Names {
@@ -457,6 +461,9 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 				}
 				return true
 			})
+		}
+		for name := range local {
+			delete(vars, name) // одноимённая переменная функции подставила бы чужую операцию
 		}
 		for i, file := range parsed {
 			byName := importsByName(file)
@@ -470,15 +477,19 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 				if !ok || len(call.Args) <= arg {
 					return true
 				}
-				op := operationExprs(call.Args[1], values)
-				if public(op, pkgByName) {
+				lit, open := operation(call.Args[1], vars, pkgByName, map[string]bool{})
+				switch {
+				case lit == nil:
+					t.Errorf("%s: operation %s is neither a huma.Operation literal in the call nor a package var that no function redeclares: archtest reads httpkit.Public only there (rule domain-architecture)", files[i].path, types.ExprString(call.Args[1]))
+					return true
+				case open:
 					return true
 				}
 				body := handlerBody(call.Args[arg], funcs)
 				if body == nil {
 					return true // хендлер не из пакета — отказ TestInputsRegisterInDelivery
 				}
-				id := operationID(op)
+				id := operationID(lit)
 				called := usecaseCalls(body, funcs, ports, map[string]bool{})
 				if len(called) == 0 {
 					t.Errorf("%s: operation %s under Security calls no usecase method: the handler reaches its domain through the usecase", files[i].path, id)
@@ -498,50 +509,41 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 	}
 }
 
-// operationExprs — выражение операции в huma.Register и значения переменных пакета в нём: операцию объявляют и
-// переменной (registerOp = httpkit.Public(huma.Operation{…})).
-func operationExprs(op ast.Expr, values map[string][]ast.Expr) []ast.Expr {
-	out, seen := []ast.Expr{op}, map[string]bool{}
-	for i := 0; i < len(out); i++ {
-		ast.Inspect(out[i], func(n ast.Node) bool {
-			if id, ok := n.(*ast.Ident); ok && !seen[id.Name] {
-				seen[id.Name] = true
-				out = append(out, values[id.Name]...)
-			}
-			return true
-		})
+// operation — литерал huma.Operation операции и открыта ли она (httpkit.Public). Литерал — прямо в вызове
+// регистрации или в значении переменной пакета (registerOp = httpkit.Public(huma.Operation{…})), под вызовами с одним
+// аргументом (<таблица>.Declare, httpkit.Public, authgate.Secured); nil — операции правило не видит: переменная
+// функции, параметр, вызов с другими аргументами.
+func operation(expr ast.Expr, vars map[string]ast.Expr, byName map[string]string, seen map[string]bool) (*ast.CompositeLit, bool) {
+	switch x := expr.(type) {
+	case *ast.CompositeLit:
+		if isSelector(x.Type, byName, humaPath, "Operation") {
+			return x, false
+		}
+	case *ast.CallExpr:
+		if len(x.Args) == 1 {
+			lit, open := operation(x.Args[0], vars, byName, seen)
+			return lit, open || isSelector(x.Fun, byName, httpkitPath, "Public")
+		}
+	case *ast.Ident:
+		if value, ok := vars[x.Name]; ok && !seen[x.Name] {
+			seen[x.Name] = true
+			return operation(value, vars, byName, seen)
+		}
 	}
-	return out
-}
-
-// public — операция открыта пометкой httpkit.Public.
-func public(op []ast.Expr, byName map[string]string) bool {
-	return slices.ContainsFunc(op, func(e ast.Expr) bool {
-		found := false
-		ast.Inspect(e, func(n ast.Node) bool {
-			if call, ok := n.(*ast.CallExpr); ok && isSelector(call.Fun, byName, httpkitPath, "Public") {
-				found = true
-			}
-			return !found
-		})
-		return found
-	})
+	return nil, false
 }
 
 // operationID — OperationID литерала операции; "?" — его нет.
-func operationID(op []ast.Expr) string {
-	id := "?"
-	for _, e := range op {
-		ast.Inspect(e, func(n ast.Node) bool {
-			if kv, ok := n.(*ast.KeyValueExpr); ok && isIdent(kv.Key, "OperationID") {
-				if lit, ok := kv.Value.(*ast.BasicLit); ok {
-					id, _ = strconv.Unquote(lit.Value)
-				}
+func operationID(lit *ast.CompositeLit) string {
+	for _, e := range lit.Elts {
+		if kv, ok := e.(*ast.KeyValueExpr); ok && isIdent(kv.Key, "OperationID") {
+			if value, ok := kv.Value.(*ast.BasicLit); ok {
+				id, _ := strconv.Unquote(value.Value)
+				return id
 			}
-			return true
-		})
+		}
 	}
-	return id
+	return "?"
 }
 
 // handlerBody — тело хендлера huma.Register: метод или функция пакета, литерал; nil — не найден.

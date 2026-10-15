@@ -82,7 +82,8 @@ paths:
   без строки — красный `TestHTTPOperations`. Операцию регистрирует вызов `huma.Register` (поток — `sse.Register`)
   в `delivery/http` своего домена, хендлер — метод, функция или литерал этого пакета (без обёрток, декораторов и
   коротких форм `huma.Get`…), подписку — `natskit` в `delivery/nats`
-  (archtest `TestInputsRegisterInDelivery`); `Register` доменов зовёт `registerHTTP`
+  (archtest `TestInputsRegisterInDelivery`); операция — литерал в вызове или переменная пакета (archtest
+  `TestSecuredOperationsAskPolicy`); `Register` доменов зовёт `registerHTTP`
   (`cmd/api/http.go`). Ошибки — таблица домена `<домен>Errors`: правило на каждую ошибку `errors.go`,
   хендлер отдаёт ошибкой только `nil` или `<домен>Errors.Map(err)`, таблица операции из тех же правил —
   `Declare` при регистрации (оба — archtest `TestDomainErrorTables`); ошибка поля — 422 с `Field`.

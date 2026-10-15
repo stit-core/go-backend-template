@@ -107,7 +107,9 @@ huma.Register(api, newMethodErrors.Declare(authgate.Secured(huma.Operation{
 
 Операция живёт в `delivery/http` своего домена: вызов `huma.Register` и хендлер — метод, функция или литерал этого
 пакета, без подпакетов (`delivery/http/admin`), обёрток регистрации, декораторов хендлера и коротких форм
-`huma.Get`… — иначе отказ archtest `TestInputsRegisterInDelivery`.
+`huma.Get`… — иначе отказ archtest `TestInputsRegisterInDelivery`. Сама операция — литерал `huma.Operation` в
+вызове или переменная пакета: открытость операции правило policy читает только там (иначе отказ
+`TestSecuredOperationsAskPolicy`).
 
 `authgate.Secured` — операция под cookie: `Security` и коды 401 сессии в OpenAPI. Публичная
 операция — `httpkit.Public(huma.Operation{…})` и её `OperationID` в `publicOperations`
