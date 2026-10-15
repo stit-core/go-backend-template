@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/stretchr/testify/require"
 
@@ -271,8 +272,6 @@ var (
 	sectionLabel = regexp.MustCompile(`(?m)^(?:#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*|[ \t]*(?:[-*][ \t]+)?\*\*(.+?)\*\*.*)$`)
 	// mdLink — цель markdown-ссылки «[текст](цель)».
 	mdLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
-	// slugDrop — знаки, которые якорь заголовка (slug) отбрасывает.
-	slugDrop = regexp.MustCompile(`[^\p{L}\p{N}\s_-]`)
 )
 
 // sectionAnchors — проверка якорей и ссылок документа: строки отказа «документ: ссылка»; якорь, для которого
@@ -367,9 +366,51 @@ func sectionAnchors(t *testing.T, root string, files []string, foreign func(doc,
 	}
 }
 
-// slug — якорь заголовка в ссылке «#…», как его строит Gitea: строчные, без знаков, пробел — «-».
+// slug — якорь заголовка в ссылке «#…», как его строит Gitea (sanitized_anchor_name): буквы и цифры строчными,
+// серия остальных знаков между ними — один «-», по краям — ничего.
 func slug(heading string) string {
-	return strings.ReplaceAll(strings.ToLower(slugDrop.ReplaceAllString(heading, "")), " ", "-")
+	var b strings.Builder
+	dash := false
+	for _, r := range heading {
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) {
+			dash = true
+			continue
+		}
+		if dash && b.Len() > 0 {
+			b.WriteByte('-')
+		}
+		dash = false
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
+}
+
+// TestSectionAnchors: якорь «<файл>.md § раздел» и цель markdown-ссылки с #якорем сверяются с заголовками и
+// метками файла; #якорь — по правилу Gitea.
+func TestSectionAnchors(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"b.md": "# B\n\n## Раздел — один\n\n## Что внутри\n",
+	})
+	for _, tc := range []struct {
+		text string
+		dead bool
+	}{
+		{text: "[ниже](b.md#раздел-один)"},
+		{text: "[ниже](b.md#раздел--один)", dead: true},
+		{text: "[внутри](b.md#что-внутри)"},
+		{text: "[нет](b.md#что-снаружи)", dead: true},
+		{text: "`b.md` § Раздел — один"},
+		{text: "`b.md` § Раздел два", dead: true},
+	} {
+		t.Run(tc.text, func(t *testing.T) {
+			t.Parallel()
+			// Своя проверка у каждого случая: проверка кеширует метки файлов в map, параллельные случаи делили бы его.
+			dead := sectionAnchors(t, root, []string{"a.md", "b.md"}, func(string, string) bool { return false })("a.md", tc.text)
+			require.Equal(t, tc.dead, len(dead) > 0, "%v", dead)
+		})
+	}
 }
 
 var (
