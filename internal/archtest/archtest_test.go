@@ -20,16 +20,17 @@
 //     генераторов), TestBuildConstraints (ограничение сборки — только integration у тестов),
 //     TestLinterDirectives (директив линтеров мимо //nolint нет);
 //   - harness_test.go — TestDomainsAreWired (домены подключены в cmd/api), TestProseReferencesExist (ссылки прозы
-//     на make-цели и пути), TestNolintNamesEnabledLinters и TestNolintNames (//nolint — только включённых
-//     линтеров);
+//     на make-цели, пути и тесты), TestRulesAndSkillsLoad (доставка правил и скиллов: paths:, name:, шаг 0),
+//     TestNolintNamesEnabledLinters и TestNolintNames (//nolint — только включённых линтеров);
 //   - template_test.go — TestTemplatePaths, TestTemplateUpdate, TestTemplateUpdateFirstBase,
 //     TestTemplateUpdateBeforeVersionTag, TestTemplateUpdatePaths, TestTemplateUpdateRemote (пути и версия
 //     обвязки .template, её перенос в форк make template-update), TestNoConflictMarkers и TestConflictMarkers;
 //   - onboarding_test.go — TestIdentityPaths, TestIdentityDependents, TestPruneNamesIdentityDependents (пути
 //     доменов идентичности и процедура их prune), TestCanonicalTemplate (канонический репо шаблона),
 //     TestStackValidator (валидатор stack-артефактов);
-//   - guard_test.go, commitmsg_test.go, hooks_test.go — TestGuardBash, TestCommitMsgHook, TestHooksVisible и
-//     TestSetupWiresHooksFirst (хуки guard-bash и commit-msg, подключение git-хуков: make setup, status, doctor);
+//   - guard_test.go, commitmsg_test.go, hooks_test.go — TestGuardBash, TestGuardWired (подключение guard-bash и
+//     запреты deny .claude/settings.json), TestCommitMsgHook, TestHooksVisible и TestSetupWiresHooksFirst (хуки
+//     guard-bash и commit-msg, подключение git-хуков: make setup, status, doctor);
 //   - make_test.go — TestMakeCheckCannotBeForged, TestCheckCoversItsOwnRun, TestPrePushGatesPushedCommit,
 //     TestGateStepsIgnoreShellEnvironment, TestHooksIgnoreCallerEnvironment (самозащита make check и pre-push от
 //     флагов, переменных и окружения вызывающего), TestReleaseGateIgnoresGNUmakefile,

@@ -250,6 +250,14 @@ blocked-by: —
   - Сделано: строка «Самопроверка обвязки» `docs/contributing.md` и комментарий `identityExempt` называют предел,
     как он есть: при внешней идентичности пропускаются любые мёртвые имена тестов и glob'ы в файлах с путём из
     тега `template/v*`, и после правки форком (X5, X6 валидатора); `make check` → `✓ check clean`
+- [x] **S27** — перенос на `main` (`5d88ad9`, трек boundaries слит): тесты трека — в перечень комментария пакета
+  - Проверка: `git rebase main`; кейсы валидатора и свои — на итоге; `make check` → `✓ check clean` · Закрывает:
+    AC1–AC6 · Зависит от: S21–S26
+  - Сделано: перенос без конфликтов; комментарий пакета `internal/archtest` (формат boundaries `33d0f2d`) —
+    `TestRulesAndSkillsLoad` и «и тесты» у `TestProseReferencesExist` в строке `harness_test.go`, `TestGuardWired`
+    — в строке `guard_test.go`; `exp.py`, `val_archtest.py` (W06, W13 — зелёные по решению о `timeout`),
+    `fix_cases.py` (64 из 64) на итоге — как ждали; `make check` → `✓ check clean` (первый прогон упал на старте
+    контейнера Postgres — Docker «DeadlineExceeded: failed to create shim task», повтор зелёный)
 
 ## Решения
 - Полный `make mutate A=--strict` — на `f825fac` в своём worktree: код под мутациями (домены, platform,
@@ -295,6 +303,8 @@ blocked-by: —
   Infra-touch. `ALTER TABLE` над пустой таблицей — лишняя операция выкатки, `DROP COLUMN` `name` — ещё и
   миграция с эффектом (маркер и handoff). Вывод `make new-domain` не повторяет § 4, а ссылается на него.
 - Чужой файл `scripts/new-domain.sh` (в волне 2 ничей): две строки `echo` «Дальше» — ссылка на § 4.
+- Чужой файл `internal/archtest/archtest_test.go` (трек boundaries, слит): в перечень комментария пакета — тесты
+  трека, по просьбе дирижёра после переноса на `main`.
 - Чужие файлы N11: строки коммита references scaffold `endpoint`, `event`, `port` (трек boundaries), `env`,
   `field`, `migration`, skill `upgrade` и пример «Сделано» `plan-template.md` (в волне 2 ничьи) — правило
   «сменилась конвенция — скилл и reference тем же коммитом»; правки по строке, слияние с boundaries чистое.
@@ -304,10 +314,6 @@ blocked-by: —
   шаг скилла; прогон больше часа, и в Bash-вызове агента он идёт в фоне.
 
 ## Handoff
-- Дирижёру при слиянии, если `main` не ушёл с `f825fac` до конца круга (иначе — S20): в комментарий пакета
-  `internal/archtest` (формат boundaries `33d0f2d`, перечень по файлам) — `TestRulesAndSkillsLoad` в строку
-  `harness_test.go` (доставка правил и скиллов: `paths:`, `name:`, шаг 0), у `TestProseReferencesExist` — «и
-  тесты», `TestGuardWired` — в строку `guard_test.go` (подключение guard-bash и запреты deny `settings.json`).
 - В аннотацию `template/v1.2.0`, раздел «Гейт»:
   - хук `commit-msg` требует у `feat` и `fix` строку `Review: <кто или чем> — <итог>` в теле (CLAUDE.md
     § Готово) → после переноса обвязки такой коммит без строки, а с ним `--amend` и `-C` прежнего — отказ:
@@ -321,6 +327,6 @@ blocked-by: —
     правило, скилл и deny — по сообщению теста.
 
 ## Где мы сейчас
-Последний круг (перепроверка `95701b3`, раздел «Перепроверка 95701b3» `N/validation-harness.md`): S21 (B3)
-закрыт — `paths: **/*.go` без кавычек читается вторым разбором, как у клиента; S22 — `timeout` у guard от 1
-секунды; S23 — причина отказа `once` — правда; S24 — ведущий «/» в glob'е; S25 — многострочный flow-список; S26 — предел N2 описан, как есть. Следующий шаг — перенос на `main` (`5d88ad9`). Кейсы — `N/harness/fix_cases.py`, раннеры валидатора — `N/val-harness/`.
+Последний круг закрыт: S21–S26 (B3, `timeout` и `once` у guard, ведущий «/», многострочный flow, предел N2), S27 —
+перенос на `main` `5d88ad9` и перечень комментария пакета. Дальше — перепроверка валидатором. Кейсы —
+`N/harness/fix_cases.py`, раннеры валидатора — `N/val-harness/`.
