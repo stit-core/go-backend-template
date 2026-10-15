@@ -22,7 +22,7 @@ func TestNewUser(t *testing.T) {
 	}{
 		{"happy client", "a@b.com", "h", "Alice", identity.RoleClient, nil},
 		{"happy admin", "a@b.com", "h", "Alice", identity.RoleAdmin, nil},
-		{"default role", "a@b.com", "h", "Alice", identity.RoleUnknown, nil},
+		{"no role", "a@b.com", "h", "Alice", identity.RoleUnknown, user.ErrInvalidRole},
 		{"bad email", "not-an-email", "h", "A", identity.RoleClient, user.ErrInvalidEmail},
 		{"letter case is kept", "Bob@Example.com", "h", "A", identity.RoleClient, nil},
 		// Адрес — только в форме, которую разбирает mail.ParseAddress: иначе один ящик получил бы несколько
@@ -52,11 +52,7 @@ func TestNewUser(t *testing.T) {
 			u, err := user.NewUser(tc.email, tc.hash, tc.uname, tc.role)
 			require.ErrorIs(t, err, tc.wantErr)
 			if err == nil {
-				wantRole := tc.role
-				if wantRole == identity.RoleUnknown {
-					wantRole = identity.RoleClient
-				}
-				require.Equal(t, wantRole, u.Role)
+				require.Equal(t, tc.role, u.Role)
 			}
 		})
 	}
@@ -113,7 +109,7 @@ func TestUserCanLogin(t *testing.T) {
 	}{
 		{"active", user.StatusActive, true},
 		{"blocked", user.StatusBlocked, false},
-		{"unknown", user.StatusUnknown, false},
+		{"deleted", user.StatusDeleted, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

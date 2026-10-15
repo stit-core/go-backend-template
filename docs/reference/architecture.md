@@ -94,10 +94,11 @@ Generic-примитив, нужный не только этому сервис
 
 ### Канон именования
 
-- **Domain-DTO** (`dto.go`): `<Op>Input` / `<Op>Output` (`LoginInput`, `CreateInput`).
-  Вспомогательные value-типы — описательно (`ListFilter`); страница списка — общий `paging.Page`
-  (`pkg/paging`), он же встраивается во вход list-операции huma.
-  Output-DTO заводится, когда результат ≠ entity и ≠ скаляр.
+- **Domain-DTO** (`dto.go`): `<Op>Input` / `<Op>Output` (`LoginInput`, `RegisterInput`); вход usecase — значением.
+  Вспомогательные value-типы и итог нескольких операций — описательно (`ListFilter`, `auth.Session` у `Login` и
+  `Refresh`); страница списка — общий `paging.Page` (`pkg/paging`), он же встраивается во вход list-операции huma.
+  Output-DTO заводится, когда результат ≠ entity и ≠ скаляр. Поле HTTP-DTO — тип провода (`string`, `*string`), в
+  тип домена его переводит хендлер.
 - **События** (`events.go`): `<Aggregate><PastEvent>` (`UserRegistered`,
   `EmailVerificationRequested`); payload — без json-тегов (wire = Go-имена; смена формата =
   новый subject `.v2`), timestamp-поле — `At time.Time`. Subject — unexported const

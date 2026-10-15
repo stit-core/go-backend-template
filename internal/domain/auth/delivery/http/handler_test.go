@@ -88,7 +88,7 @@ func data(t *testing.T, resp *httptest.ResponseRecorder) userView {
 func TestLogin_HappyPath(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Login(mock.Anything, &auth.LoginInput{Email: "a@b.com", Password: "pass1234"}).Return(&auth.LoginOutput{
+	uc.EXPECT().Login(mock.Anything, auth.LoginInput{Email: "a@b.com", Password: "pass1234"}).Return(&auth.Session{
 		AccessToken: "access-token", RefreshToken: "refresh-token",
 		User: &auth.User{ID: "u1", Email: "a@b.com", PasswordHash: "hash:pass1234", Name: "Alice", CanLogin: true, Role: identity.RoleClient, Version: 3},
 	}, nil).Once()
@@ -126,7 +126,7 @@ func TestRefresh_HappyPath(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
 	uc.EXPECT().Refresh(mock.Anything, "old-refresh").
-		Return(&auth.LoginOutput{AccessToken: "new-access", RefreshToken: "new-refresh", User: &auth.User{ID: "u1"}}, nil).Once()
+		Return(&auth.Session{AccessToken: "new-access", RefreshToken: "new-refresh", User: &auth.User{ID: "u1"}}, nil).Once()
 	api := setup(t, uc)
 
 	resp := api.Do(http.MethodPost, "/api/auth/refresh", "Cookie: refresh_token=old-refresh")

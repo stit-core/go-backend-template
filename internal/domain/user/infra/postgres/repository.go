@@ -196,7 +196,17 @@ func (r *Repository) List(ctx context.Context, filter user.ListFilter, page pagi
 	}
 	out := make([]*user.User, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, rowToEntity(row))
+		out = append(out, &user.User{
+			ID:            pgkit.UUIDString(row.ID),
+			Email:         row.Email,
+			Name:          row.Name,
+			Status:        user.Status(row.Status),
+			Role:          identityRole(row.Role),
+			Version:       int(row.Version),
+			EmailVerified: row.EmailVerified,
+			CreatedAt:     row.CreatedAt.Time,
+			UpdatedAt:     row.UpdatedAt.Time,
+		})
 	}
 	return out, nil
 }

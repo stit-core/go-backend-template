@@ -102,26 +102,26 @@ func (_c *MockUsecase_ChangePassword_Call) RunAndReturn(run func(ctx context.Con
 }
 
 // Login provides a mock function for the type MockUsecase
-func (_mock *MockUsecase) Login(ctx context.Context, in *auth.LoginInput) (*auth.LoginOutput, error) {
+func (_mock *MockUsecase) Login(ctx context.Context, in auth.LoginInput) (*auth.Session, error) {
 	ret := _mock.Called(ctx, in)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Login")
 	}
 
-	var r0 *auth.LoginOutput
+	var r0 *auth.Session
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *auth.LoginInput) (*auth.LoginOutput, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, auth.LoginInput) (*auth.Session, error)); ok {
 		return returnFunc(ctx, in)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *auth.LoginInput) *auth.LoginOutput); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, auth.LoginInput) *auth.Session); ok {
 		r0 = returnFunc(ctx, in)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*auth.LoginOutput)
+			r0 = ret.Get(0).(*auth.Session)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, *auth.LoginInput) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, auth.LoginInput) error); ok {
 		r1 = returnFunc(ctx, in)
 	} else {
 		r1 = ret.Error(1)
@@ -136,20 +136,20 @@ type MockUsecase_Login_Call struct {
 
 // Login is a helper method to define mock.On call
 //   - ctx context.Context
-//   - in *auth.LoginInput
+//   - in auth.LoginInput
 func (_e *MockUsecase_Expecter) Login(ctx interface{}, in interface{}) *MockUsecase_Login_Call {
 	return &MockUsecase_Login_Call{Call: _e.mock.On("Login", ctx, in)}
 }
 
-func (_c *MockUsecase_Login_Call) Run(run func(ctx context.Context, in *auth.LoginInput)) *MockUsecase_Login_Call {
+func (_c *MockUsecase_Login_Call) Run(run func(ctx context.Context, in auth.LoginInput)) *MockUsecase_Login_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 *auth.LoginInput
+		var arg1 auth.LoginInput
 		if args[1] != nil {
-			arg1 = args[1].(*auth.LoginInput)
+			arg1 = args[1].(auth.LoginInput)
 		}
 		run(
 			arg0,
@@ -159,12 +159,12 @@ func (_c *MockUsecase_Login_Call) Run(run func(ctx context.Context, in *auth.Log
 	return _c
 }
 
-func (_c *MockUsecase_Login_Call) Return(loginOutput *auth.LoginOutput, err error) *MockUsecase_Login_Call {
-	_c.Call.Return(loginOutput, err)
+func (_c *MockUsecase_Login_Call) Return(session *auth.Session, err error) *MockUsecase_Login_Call {
+	_c.Call.Return(session, err)
 	return _c
 }
 
-func (_c *MockUsecase_Login_Call) RunAndReturn(run func(ctx context.Context, in *auth.LoginInput) (*auth.LoginOutput, error)) *MockUsecase_Login_Call {
+func (_c *MockUsecase_Login_Call) RunAndReturn(run func(ctx context.Context, in auth.LoginInput) (*auth.Session, error)) *MockUsecase_Login_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -227,23 +227,23 @@ func (_c *MockUsecase_Logout_Call) RunAndReturn(run func(ctx context.Context, re
 }
 
 // Refresh provides a mock function for the type MockUsecase
-func (_mock *MockUsecase) Refresh(ctx context.Context, refreshToken string) (*auth.LoginOutput, error) {
+func (_mock *MockUsecase) Refresh(ctx context.Context, refreshToken string) (*auth.Session, error) {
 	ret := _mock.Called(ctx, refreshToken)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Refresh")
 	}
 
-	var r0 *auth.LoginOutput
+	var r0 *auth.Session
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*auth.LoginOutput, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*auth.Session, error)); ok {
 		return returnFunc(ctx, refreshToken)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *auth.LoginOutput); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *auth.Session); ok {
 		r0 = returnFunc(ctx, refreshToken)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*auth.LoginOutput)
+			r0 = ret.Get(0).(*auth.Session)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -284,12 +284,12 @@ func (_c *MockUsecase_Refresh_Call) Run(run func(ctx context.Context, refreshTok
 	return _c
 }
 
-func (_c *MockUsecase_Refresh_Call) Return(loginOutput *auth.LoginOutput, err error) *MockUsecase_Refresh_Call {
-	_c.Call.Return(loginOutput, err)
+func (_c *MockUsecase_Refresh_Call) Return(session *auth.Session, err error) *MockUsecase_Refresh_Call {
+	_c.Call.Return(session, err)
 	return _c
 }
 
-func (_c *MockUsecase_Refresh_Call) RunAndReturn(run func(ctx context.Context, refreshToken string) (*auth.LoginOutput, error)) *MockUsecase_Refresh_Call {
+func (_c *MockUsecase_Refresh_Call) RunAndReturn(run func(ctx context.Context, refreshToken string) (*auth.Session, error)) *MockUsecase_Refresh_Call {
 	_c.Call.Return(run)
 	return _c
 }

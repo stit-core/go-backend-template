@@ -27,6 +27,9 @@ blocked-by: —
   `TestTestsAssert` и правила тегов сборки), rules `domain-architecture`, `events-and-messaging`,
   `scaffold/references/{port,endpoint,event,field,env,migration}.md`, `docs/reference/{architecture,domain-mapping}.md`.
   Параллельно идут треки S7 harness+lifecycle и gate+tests.
+- Дополнение дирижёра (15.10), после S14: N4 валидации трека harness (`N/validation-s7-harness.md` § 3) — prune под
+  код трека, `.template/identity` и `init-service/references/prune.md` (файлы трека harness — правка минимальная);
+  остаток RHAR-10 (`R/template-harness.md`) — блоки «Верификация» четырёх references.
 
 ## Не входит
 - NADP-03 (closure конверсией и алиасом), view и SQL-функция над чужой таблицей (часть RADP-05) и CTE с именем
@@ -76,6 +79,12 @@ blocked-by: —
   ручная сверка; `make new-domain NAME=order` во временном worktree → `✓ check clean`
 - [ ] **AC11** — Гейт и handoff: `make check` → `✓ check clean`; блоки INFRA-HANDOFF — в `.claude/plans/handoff.md`.
   Проверка: `flock N/gate.lock make check`; чтение накопителя
+- [ ] **AC12** — N4 (валидация трека harness): prune доменов идентичности по тексту `prune.md` на итоге ветки после
+  `main` с треком harness+lifecycle — `✓ check clean`: `0007` в `.template/identity`, шаги 2, 3, 6 называют
+  `authlimit`, retention аудита и `PASSWORD_RESET_MAIL_PAUSE`. Проверка: опыт AC2 трека harness (`N/s7h/`)
+  на итоге ветки
+- [ ] **AC13** — RHAR-10 (остаток): блоки «Верификация» `scaffold/references/{endpoint,migration,port,event}.md` — без
+  пересказа того, что держат гейт и правила. Проверка: ручная сверка; `make check` → ✓
 
 ## Шаги
 - [x] **S1** — NSEC-02: `config.Guard` отвергает ключи подписи из примеров окружения; тест сверяет их с файлами
@@ -146,9 +155,16 @@ blocked-by: —
     `auth` и порт `PasswordVerifier` сняты, тело операции без `user_id`; e2e-харнес — без `user_id`, `UserView` — с
     `role` и `email_verified`; `rg 'VerifyPassword|PasswordVerifier|CanChangePassword'` по коду и прозе → пусто
     (кроме `scripts/tools/mutants.txt`); handoff-блок; `make check` → ✓
-- [ ] **S10** — RCOD-18 и RCOD-14: входы usecase значением, имена DTO, логи успеха, тип статуса во входе HTTP,
+- [x] **S10** — RCOD-18 и RCOD-14: входы usecase значением, имена DTO, логи успеха, тип статуса во входе HTTP,
   порядок и проекция списка, мёртвый `StatusUnknown`
   - Проверка: `make check` → ✓ · Закрывает: AC6 · Зависит от: S9
+  - Сделано: `user.Register(ctx, RegisterInput)` и `auth.Login(ctx, LoginInput)` — значением; `EnsureAdmin` — свой
+    `EnsureAdminInput`; итог `Login` и `Refresh` — `auth.Session`; логи успеха `ConfirmEmail` и `Logout`; статус во
+    входе правки — `*string`, тип домена — в хендлере; `ListUsers` — `ORDER BY created_at DESC, id DESC`, без
+    `password_hash`; `StatusUnknown` и роль по умолчанию у `NewUser` сняты (`RoleUnknown` — `ErrInvalidRole`).
+    RED на базе: `TestList` (строка списка с хэшем) и `TestList_SameCreatedAt` (страницы при равном `created_at` —
+    не по id) — FAIL (`N/s7c/exp/s10-list-base.log`), на ветке PASS; формулировка `event.md` о подписчике своего
+    события — уже на базе; канон `architecture.md`, `field.md`; `make check` → ✓
 - [ ] **S11** — RADP-13: примеры правил archtest (`testdata/rules`); NADP-01, NADP-02, RADP-11, T3 — правила и
   примеры
   - Проверка: AC8; кейсы AC7 этих находок; `make check` → ✓ · Закрывает: AC7, AC8 · Зависит от: S8
@@ -160,6 +176,11 @@ blocked-by: —
 - [ ] **S14** — Приёмка: эксперименты на базе и ветке, гейт, handoff
   - Проверка: `N/s7c/exp/{base,branch}.tsv`; `make check` → `✓ check clean` · Зависит от: S13
   - Закрывает: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC11
+- [ ] **S15** — N4: `git rebase main` (трек harness+lifecycle), `0007` в `.template/identity`, шаги 2, 3, 6
+  `init-service/references/prune.md` под код трека; prune по тексту на итоге
+  - Проверка: опыт AC2 трека harness → `✓ check clean`; `make check` → ✓ · Закрывает: AC12 · Зависит от: S14
+- [ ] **S16** — RHAR-10 (остаток): блоки «Верификация» четырёх references — коротко, без пересказа гейта и правил
+  - Проверка: ручная сверка; `make check` → ✓ · Закрывает: AC13 · Зависит от: S15
 
 ## Решения
 - RCOD-18 (ссылка сброса переживает смену пароля): ссылка хранит версию учётной записи на момент письма
@@ -204,6 +225,16 @@ blocked-by: —
 - Правки чужих файлов, S9: e2e-харнес (трек gate) — тело смены пароля без `user_id` (`test/smoke/test_auth.py`,
   `test/client/models.py`) и `UserView` с `role` и `email_verified` (S7): модели e2e не пускают лишних полей;
   `.mockery.yml` — строки снятых портов `ResetLimiter` (S4) и `PasswordVerifier`.
+- RCOD-18, входы и имена: вход usecase — значением (`<Op>Input`), у `EnsureAdmin` — свой `EnsureAdminInput`, а не
+  `RegisterInput` другой операции; итог `Login` и `Refresh` — один описательный `auth.Session`, а не копия
+  `RefreshOutput`; поле HTTP-DTO — тип провода (`*string` статуса, как `string` фильтра списка), тип домена — в
+  хендлере.
+- RCOD-18, список: проекция без `password_hash` со своим типом строки — забытую в ней колонку сборка не видит, её
+  ловит `TestList` (строки целиком; `field.md` шаги 3, 4, 7); второй ключ порядка — `id`: страницы не плывут на
+  равном `created_at`.
+- RCOD-18, копии `uc.audit` и преамбулы identity → policy — явные в каждом домене и методе: преамбула — три строки
+  канона, вызов policy archtest читает в методе операции, а общий помощник аудита — примитив кита (`auditkit`),
+  не шаблона.
 - `scripts/tools/mutants.txt` (трек gate+tests) не правлю: якоря кода, который меняет трек, переписываются после
   слияния треков — список устаревших (`make mutate A=--check`) — в отчёте трека.
 
@@ -213,4 +244,5 @@ blocked-by: —
   к кому: владелец
 
 ## Где мы сейчас
-S1–S9 закрыты. Следующий шаг — S10 (входы usecase значением, имена DTO, логи успеха, порядок и проекция списка).
+S1–S10 закрыты. Следующий шаг — S11 (примеры правил archtest; NADP-01, NADP-02, RADP-11, T3). Дополнение дирижёра:
+после S14 — S15 (N4, prune под код трека после rebase на `main`) и S16 (RHAR-10, блоки «Верификация»).

@@ -72,11 +72,11 @@ WHERE id = $1
   AND status != 'deleted';
 
 -- name: ListUsers :many
-SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
+SELECT id, email, name, status, role, version, email_verified, created_at, updated_at
 FROM users
 WHERE status != 'deleted'
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $1
 OFFSET $2;
 

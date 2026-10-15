@@ -1,6 +1,12 @@
 package user
 
-type CreateInput struct {
+type RegisterInput struct {
+	Email    string
+	Password string
+	Name     string
+}
+
+type EnsureAdminInput struct {
 	Email    string
 	Password string
 	Name     string

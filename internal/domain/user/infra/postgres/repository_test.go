@@ -4,6 +4,7 @@ package postgres_test
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
 
@@ -181,15 +182,20 @@ func TestPromote(t *testing.T) {
 	require.ErrorIs(t, err, user.ErrConcurrentUpdate, "deleted account")
 }
 
-// Список и счётчик видят одних и тех же — не удалённых, с фильтром статуса; список — новые первыми.
+// Список и счётчик видят одних и тех же — не удалённых, с фильтром статуса; список — новые первыми, без хэша пароля.
 func TestList(t *testing.T) {
 	t.Parallel()
 	repo := setup(t)
 	ctx := context.Background()
 
-	client := pgseed.InsertUser(t, repo, pgseed.WithRole(identity.RoleClient))
-	admin := pgseed.InsertUser(t, repo, pgseed.WithRole(identity.RoleAdmin))
-	blocked := pgseed.InsertUser(t, repo, pgseed.WithStatus(user.StatusBlocked))
+	listed := func(opts ...pgseed.UserOption) *user.User {
+		u := *pgseed.InsertUser(t, repo, opts...)
+		u.PasswordHash = ""
+		return &u
+	}
+	client := listed(pgseed.WithRole(identity.RoleClient))
+	admin := listed(pgseed.WithRole(identity.RoleAdmin))
+	blocked := listed(pgseed.WithStatus(user.StatusBlocked))
 	require.NoError(t, repo.Delete(ctx, pgseed.InsertUser(t, repo).ID))
 
 	tests := []struct {
@@ -220,6 +226,35 @@ func TestList(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []*user.User{client}, second)
 	})
+}
+
+// Страницы не плывут: у записей одной транзакции created_at равен, их порядок — по id.
+func TestList_SameCreatedAt(t *testing.T) {
+	t.Parallel()
+	pg := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
+	repo := userpg.NewRepository(pg.DB(t))
+	ctx := context.Background()
+	var want []string
+	require.NoError(t, pg.Transactor(t).WithTx(ctx, func(txCtx context.Context) error {
+		for range 5 {
+			u := pgseed.NewUser()
+			require.NoError(t, repo.Insert(txCtx, u))
+			want = append(want, u.ID)
+		}
+		return nil
+	}))
+	slices.Sort(want)
+	slices.Reverse(want)
+
+	var got []string
+	for number := 1; number <= 3; number++ {
+		page, err := repo.List(ctx, user.ListFilter{}, paging.Page{Number: number, Size: 2})
+		require.NoError(t, err)
+		for _, u := range page {
+			got = append(got, u.ID)
+		}
+	}
+	require.Equal(t, want, got)
 }
 
 func TestUpdate(t *testing.T) {

@@ -33,7 +33,7 @@ func FuzzNewUser(f *testing.F) {
 		addr, mailErr := mail.ParseAddress(email)
 		validEmail := mailErr == nil && addr.Name == "" && addr.Address == email && strings.TrimSpace(email) == email && len(email) <= 254
 		validName := strings.TrimSpace(name) != "" && utf8.RuneCountInString(name) <= 200 && !strings.ContainsRune(name, 0)
-		validRole := role == identity.RoleAdmin || role == identity.RoleClient || role == identity.RoleUnknown
+		validRole := role == identity.RoleAdmin || role == identity.RoleClient
 
 		switch {
 		case !validEmail:
@@ -48,6 +48,9 @@ func FuzzNewUser(f *testing.F) {
 			// Guard входа и поиск по адресу обрезают пробелы по краям: адрес сущности их не несёт, и у ящика
 			// одна учётная запись.
 			require.Equal(t, strings.TrimSpace(u.Email), u.Email)
+		default:
+			require.ErrorIs(t, err, user.ErrInvalidRole, "role %q", role)
+			require.Nil(t, u)
 		}
 	})
 }

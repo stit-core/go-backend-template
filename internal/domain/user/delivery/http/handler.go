@@ -14,7 +14,7 @@ import (
 )
 
 type Usecase interface {
-	Register(ctx context.Context, in *user.CreateInput) (*user.User, error)
+	Register(ctx context.Context, in user.RegisterInput) (*user.User, error)
 	GetByID(ctx context.Context, id string) (*user.User, error)
 	Me(ctx context.Context) (*user.User, error)
 	List(ctx context.Context, filter user.ListFilter, page paging.Page) ([]*user.User, int, error)
@@ -81,7 +81,7 @@ func Register(api huma.API, h *Handler) {
 }
 
 func (h *Handler) register(ctx context.Context, in *UserRegisterInput) (*UserRegisterOutput, error) {
-	u, err := h.uc.Register(ctx, &user.CreateInput{
+	u, err := h.uc.Register(ctx, user.RegisterInput{
 		Email:    in.Body.Email,
 		Password: in.Body.Password,
 		Name:     in.Body.Name,
@@ -138,11 +138,12 @@ func (h *Handler) list(ctx context.Context, in *UserListInput) (*UserListOutput,
 }
 
 func (h *Handler) update(ctx context.Context, in *UserUpdateInput) (*UserUpdateOutput, error) {
-	u, err := h.uc.Update(ctx, in.ID, user.UpdateInput{
-		Name:    in.Body.Name,
-		Status:  in.Body.Status,
-		Version: in.Body.Version,
-	})
+	upd := user.UpdateInput{Name: in.Body.Name, Version: in.Body.Version}
+	if in.Body.Status != nil {
+		s := user.Status(*in.Body.Status)
+		upd.Status = &s
+	}
+	u, err := h.uc.Update(ctx, in.ID, upd)
 	if err != nil {
 		return nil, userErrors.Map(err)
 	}

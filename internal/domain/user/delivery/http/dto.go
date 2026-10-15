@@ -1,9 +1,6 @@
 package http
 
-import (
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
-	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
-)
+import "git.stit.tech/stit-core/go-backend-template/pkg/paging"
 
 type UserRegisterInput struct {
 	Body struct {
@@ -52,9 +49,9 @@ type UserListOutput struct {
 type UserUpdateInput struct {
 	ID   string `path:"id"`
 	Body struct {
-		Name    *string      `json:"name,omitempty"   maxLength:"200"       minLength:"1"`
-		Status  *user.Status `json:"status,omitempty" enum:"active,blocked"`
-		Version int          `json:"version"          required:"true"`
+		Name    *string `json:"name,omitempty"   maxLength:"200"       minLength:"1"`
+		Status  *string `json:"status,omitempty" enum:"active,blocked"`
+		Version int     `json:"version"          required:"true"`
 	}
 }
 

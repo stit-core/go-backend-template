@@ -7,7 +7,8 @@ type LoginInput struct {
 	Password string
 }
 
-type LoginOutput struct {
+// Session — итог входа и обновления сессии: токены cookie и пользователь.
+type Session struct {
 	AccessToken  string
 	RefreshToken string
 	User         *User

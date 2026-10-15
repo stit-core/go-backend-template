@@ -307,7 +307,7 @@ func (_c *MockUsecase_Me_Call) RunAndReturn(run func(ctx context.Context) (*user
 }
 
 // Register provides a mock function for the type MockUsecase
-func (_mock *MockUsecase) Register(ctx context.Context, in *user.CreateInput) (*user.User, error) {
+func (_mock *MockUsecase) Register(ctx context.Context, in user.RegisterInput) (*user.User, error) {
 	ret := _mock.Called(ctx, in)
 
 	if len(ret) == 0 {
@@ -316,17 +316,17 @@ func (_mock *MockUsecase) Register(ctx context.Context, in *user.CreateInput) (*
 
 	var r0 *user.User
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *user.CreateInput) (*user.User, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, user.RegisterInput) (*user.User, error)); ok {
 		return returnFunc(ctx, in)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *user.CreateInput) *user.User); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, user.RegisterInput) *user.User); ok {
 		r0 = returnFunc(ctx, in)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*user.User)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, *user.CreateInput) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, user.RegisterInput) error); ok {
 		r1 = returnFunc(ctx, in)
 	} else {
 		r1 = ret.Error(1)
@@ -341,20 +341,20 @@ type MockUsecase_Register_Call struct {
 
 // Register is a helper method to define mock.On call
 //   - ctx context.Context
-//   - in *user.CreateInput
+//   - in user.RegisterInput
 func (_e *MockUsecase_Expecter) Register(ctx interface{}, in interface{}) *MockUsecase_Register_Call {
 	return &MockUsecase_Register_Call{Call: _e.mock.On("Register", ctx, in)}
 }
 
-func (_c *MockUsecase_Register_Call) Run(run func(ctx context.Context, in *user.CreateInput)) *MockUsecase_Register_Call {
+func (_c *MockUsecase_Register_Call) Run(run func(ctx context.Context, in user.RegisterInput)) *MockUsecase_Register_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 *user.CreateInput
+		var arg1 user.RegisterInput
 		if args[1] != nil {
-			arg1 = args[1].(*user.CreateInput)
+			arg1 = args[1].(user.RegisterInput)
 		}
 		run(
 			arg0,
@@ -369,7 +369,7 @@ func (_c *MockUsecase_Register_Call) Return(user1 *user.User, err error) *MockUs
 	return _c
 }
 
-func (_c *MockUsecase_Register_Call) RunAndReturn(run func(ctx context.Context, in *user.CreateInput) (*user.User, error)) *MockUsecase_Register_Call {
+func (_c *MockUsecase_Register_Call) RunAndReturn(run func(ctx context.Context, in user.RegisterInput) (*user.User, error)) *MockUsecase_Register_Call {
 	_c.Call.Return(run)
 	return _c
 }

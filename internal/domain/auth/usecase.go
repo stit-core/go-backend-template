@@ -70,13 +70,13 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 }
 
 // Login и Refresh пишут исход в метрику ровно один раз: его возвращают login и refresh.
-func (uc *Usecase) Login(ctx context.Context, in *LoginInput) (*LoginOutput, error) {
+func (uc *Usecase) Login(ctx context.Context, in LoginInput) (*Session, error) {
 	out, result, err := uc.login(ctx, in)
 	uc.d.Metrics.RecordLogin(ctx, result)
 	return out, err
 }
 
-func (uc *Usecase) login(ctx context.Context, in *LoginInput) (*LoginOutput, outcome.Result, error) {
+func (uc *Usecase) login(ctx context.Context, in LoginInput) (*Session, outcome.Result, error) {
 	ip := identity.IPFrom(ctx)
 	lock, err := uc.d.Guard.Attempt(ctx, in.Email, ip)
 	switch {
@@ -132,7 +132,7 @@ func (uc *Usecase) login(ctx context.Context, in *LoginInput) (*LoginOutput, out
 	}
 	uc.d.Log.Info(ctx, "user logged in", "user_id", u.ID)
 	uc.audit(ctx, auditkit.Entry{ActorID: u.ID, Action: "login", Resource: "user", ResourceID: u.ID})
-	return &LoginOutput{AccessToken: access, RefreshToken: refresh.Value, User: u}, outcome.OK, nil
+	return &Session{AccessToken: access, RefreshToken: refresh.Value, User: u}, outcome.OK, nil
 }
 
 // openSession открывает сессию под строкой пользователя, которую держит её транзакция: смена пароля, роли
@@ -165,14 +165,14 @@ func (uc *Usecase) auditLoginFailed(ctx context.Context, userID string, reason o
 	})
 }
 
-func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*LoginOutput, error) {
+func (uc *Usecase) Refresh(ctx context.Context, refreshToken string) (*Session, error) {
 	out, result, err := uc.refresh(ctx, refreshToken)
 	uc.d.Metrics.RecordRefresh(ctx, result)
 	return out, err
 }
 
 // refresh: чья сессия, известно только после Rotate — пускают ли пользователя, проверяется после него.
-func (uc *Usecase) refresh(ctx context.Context, refreshToken string) (*LoginOutput, outcome.Result, error) {
+func (uc *Usecase) refresh(ctx context.Context, refreshToken string) (*Session, outcome.Result, error) {
 	next, err := uc.d.Sessions.Rotate(ctx, refreshToken)
 	var reused *session.ReusedError
 	switch {
@@ -202,7 +202,7 @@ func (uc *Usecase) refresh(ctx context.Context, refreshToken string) (*LoginOutp
 	if err != nil {
 		return nil, outcome.Error, fmt.Errorf("issue access token: %w", err)
 	}
-	return &LoginOutput{AccessToken: access, RefreshToken: next.Value, User: u}, outcome.OK, nil
+	return &Session{AccessToken: access, RefreshToken: next.Value, User: u}, outcome.OK, nil
 }
 
 // Logout: неизвестный токен и закрытая раньше сессия — тоже выход; аудит — у сессии, которую закрыл
@@ -213,6 +213,7 @@ func (uc *Usecase) Logout(ctx context.Context, refreshToken string) error {
 		return fmt.Errorf("revoke session: %w", err)
 	}
 	if subject != "" {
+		uc.d.Log.Info(ctx, "user logged out", "user_id", subject)
 		uc.audit(ctx, auditkit.Entry{ActorID: subject, Action: "logout", Resource: "user", ResourceID: subject})
 	}
 	return nil

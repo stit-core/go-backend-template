@@ -37,6 +37,7 @@ type Repository interface {
 	Promote(ctx context.Context, id, passwordHash string, version int) (*User, error)
 	// SetEmailVerified: нет пользователя или удалён — ErrNotFound.
 	SetEmailVerified(ctx context.Context, id string) error
+	// List — новые первыми (равное время — по id), без хэша пароля.
 	List(ctx context.Context, filter ListFilter, page paging.Page) ([]*User, error)
 	Count(ctx context.Context, filter ListFilter) (int, error)
 }
@@ -77,7 +78,7 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 	return &Usecase{d: d}
 }
 
-func (uc *Usecase) Register(ctx context.Context, in *CreateInput) (*User, error) {
+func (uc *Usecase) Register(ctx context.Context, in RegisterInput) (*User, error) {
 	hash, err := hashPassword(ctx, uc.d.Hasher, in.Password)
 	if err != nil {
 		return nil, err
@@ -225,7 +226,7 @@ func (uc *Usecase) Delete(ctx context.Context, id string) error {
 
 // EnsureAdmin — вход оператора cmd/seed-admin, без policy: решает тот, кто держит доступ к БД. Учётная запись адреса
 // становится admin с этим паролем, нет такой — заводится с подтверждённым адресом; прежние сессии закрываются.
-func (uc *Usecase) EnsureAdmin(ctx context.Context, in CreateInput) (*User, error) {
+func (uc *Usecase) EnsureAdmin(ctx context.Context, in EnsureAdminInput) (*User, error) {
 	hash, err := hashPassword(ctx, uc.d.Hasher, in.Password)
 	if err != nil {
 		return nil, err

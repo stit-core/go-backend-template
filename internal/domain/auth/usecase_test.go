@@ -225,7 +225,7 @@ func TestLogin(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withUsers(signIn(t, alice())), withGuard(loginGuard(t, "a@b.com", true)))
 
-		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
 		require.Equal(t, alice(), out.User, "the response names the account: address, name and role")
@@ -242,7 +242,7 @@ func TestLogin(t *testing.T) {
 		f := newUC(t, withUsers(signIn(t, alice())), withGuard(loginGuard(t, "a@b.com", true)),
 			withSessions(func(s session.Store) session.Store { return failingSessions{s} }))
 
-		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.ErrorIs(t, err, errStore)
 		require.Nil(t, out)
 		require.False(t, f.audit.Has("login"))
@@ -252,7 +252,7 @@ func TestLogin(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withUsers(found(t, alice())), withGuard(loginGuard(t, "a@b.com", false)))
 
-		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "wrong"})
+		out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "wrong"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 		require.Nil(t, out)
 		require.Zero(t, f.sessions.Active("u1"))
@@ -268,7 +268,7 @@ func TestLogin(t *testing.T) {
 		blocked.CanLogin = false
 		f := newUC(t, withUsers(found(t, blocked)), withGuard(loginGuard(t, "a@b.com", false)))
 
-		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 		require.Nil(t, out)
 		require.Zero(t, f.sessions.Active("u1"))
@@ -284,7 +284,7 @@ func TestLogin(t *testing.T) {
 		users.EXPECT().GetByEmail(mock.Anything, "x@y.com").Return(nil, auth.ErrUserNotFound).Once()
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "x@y.com", false)))
 
-		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
+		_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "x@y.com", Password: "p"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 		require.Empty(t, f.audit.Entries(), "an unknown address does not reach the audit")
 	})
@@ -295,7 +295,7 @@ func TestLogin(t *testing.T) {
 		users.EXPECT().GetByEmail(mock.Anything, "x@y.com").Return(nil, errors.New("db down")).Once()
 		f := newUC(t, withUsers(users), withGuard(loginGuard(t, "x@y.com", false)))
 
-		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "x@y.com", Password: "p"})
+		_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "x@y.com", Password: "p"})
 		require.Error(t, err)
 		require.NotErrorIs(t, err, auth.ErrInvalidCredentials)
 		require.False(t, f.audit.Has("login_failed"))
@@ -308,7 +308,7 @@ func TestLogin(t *testing.T) {
 			Return(&auth.LockState{RetryAfter: 15 * time.Minute}, nil).Once()
 		f := newUC(t, withGuard(g))
 
-		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "p"})
+		_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "p"})
 		require.ErrorIs(t, err, auth.ErrAccountLocked)
 		require.EqualError(t, err, auth.ErrAccountLocked.Error())
 		var locked *auth.LockedError
@@ -324,7 +324,7 @@ func TestLogin(t *testing.T) {
 		g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, errors.New("guard store down")).Once()
 		f := newUC(t, withGuard(g))
 
-		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.ErrorContains(t, err, "guard store down")
 		require.NotErrorIs(t, err, auth.ErrInvalidCredentials, "a guard failure is not a wrong password")
 		require.False(t, f.audit.Has("login"))
@@ -336,7 +336,7 @@ func TestLogin(t *testing.T) {
 		g.EXPECT().Attempt(mock.Anything, "", identitytest.IP).Return(nil, auth.ErrInvalidCredentials).Once()
 		f := newUC(t, withGuard(g))
 
-		_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "", Password: "pass1234"})
+		_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "", Password: "pass1234"})
 		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 	})
 
@@ -347,7 +347,7 @@ func TestLogin(t *testing.T) {
 		g.EXPECT().RecordSuccess(mock.Anything, "a@b.com", identitytest.IP).Return(errors.New("guard store down")).Once()
 		f := newUC(t, withUsers(signIn(t, alice())), withGuard(g))
 
-		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
 		require.True(t, f.audit.Has("login"))
@@ -361,7 +361,7 @@ func TestLogin(t *testing.T) {
 		t.Parallel()
 		f := newUC(t, withUsers(signIn(t, alice())), withGuard(loginGuard(t, "a@b.com", true)), withAudit(&audittest.Recorder{LogErr: errAudit}))
 
-		out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+		out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 		require.NoError(t, err)
 		require.Equal(t, "access.u1.client", out.AccessToken)
 		e, logged := f.log.Find(slog.LevelError, "audit login")
@@ -399,7 +399,7 @@ func TestLogin_OnePasswordCheckPerAttempt(t *testing.T) {
 			h := &authntest.DeterministicHasher{}
 			f := newUC(t, withUsers(tc.users(t)), withGuard(loginGuard(t, "a@b.com", tc.succeeded)), withHasher(h))
 
-			_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: tc.password})
+			_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: tc.password})
 			require.Equal(t, tc.succeeded, err == nil, "login error: %v", err)
 			require.Equal(t, tc.verified, h.VerifyCalls(), "password checks")
 			require.Equal(t, tc.dummies, h.VerifyDummyCalls(), "dummy password checks")
@@ -437,7 +437,7 @@ func TestLogin_HasherFailure(t *testing.T) {
 			f := newUC(t, withUsers(found(t, tc.user)), withGuard(loginGuard(t, "a@b.com", false)), withHasher(tc.hasher),
 				withMetrics(auth.NewMetrics(p.Meter("test"))))
 
-			out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+			out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 			require.ErrorIs(t, err, tc.want)
 			require.NotErrorIs(t, err, auth.ErrInvalidCredentials, "a hasher failure is not a wrong password")
 			require.Nil(t, out)
@@ -455,7 +455,7 @@ func TestLogin_PasswordOverHasherLimit(t *testing.T) {
 	p := metrictest.NewProvider()
 	f := newUC(t, withUsers(found(t, alice())), withGuard(loginGuard(t, "a@b.com", false)), withMetrics(auth.NewMetrics(p.Meter("test"))))
 
-	_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: strings.Repeat("я", authnkit.MaxPasswordLen)})
+	_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: strings.Repeat("я", authnkit.MaxPasswordLen)})
 	require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 	require.Equal(t, audited(auditkit.Entry{
 		Action: "login_failed", Resource: "user", ResourceID: "u1", Metadata: map[string]any{"reason": "invalid_credentials"},
@@ -470,7 +470,7 @@ func TestLogin_AccessNotIssued(t *testing.T) {
 	f := newUC(t, withUsers(found(t, alice())), withGuard(loginGuard(t, "a@b.com", true)), withTokens(tokens{err: errSign}),
 		withMetrics(auth.NewMetrics(p.Meter("test"))))
 
-	out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+	out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 	require.ErrorIs(t, err, errSign)
 	require.NotErrorIs(t, err, auth.ErrInvalidCredentials)
 	require.Nil(t, out)
@@ -507,7 +507,7 @@ func TestLogin_CredentialsChangedDuringLogin(t *testing.T) {
 			p := metrictest.NewProvider()
 			f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)), withMetrics(auth.NewMetrics(p.Meter("test"))))
 
-			out, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+			out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 			require.ErrorIs(t, err, auth.ErrInvalidCredentials)
 			require.Nil(t, out)
 			require.Zero(t, f.sessions.Active("u1"), "no session of the outdated credentials")
@@ -528,7 +528,7 @@ func TestLogin_LockFailure(t *testing.T) {
 	users.EXPECT().LockByID(mock.Anything, "u1").Return(nil, errors.New("db down")).Once()
 	f := newUC(t, withUsers(users), withGuard(loginGuard(t, "a@b.com", true)))
 
-	_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+	_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
 	require.ErrorContains(t, err, "db down")
 	require.NotErrorIs(t, err, auth.ErrInvalidCredentials)
 	require.Zero(t, f.sessions.Active("u1"))
@@ -922,7 +922,7 @@ func TestLogin_RecordsOutcome(t *testing.T) {
 			p := metrictest.NewProvider()
 			f := newUC(t, append(tc.opts, withMetrics(auth.NewMetrics(p.Meter("test"))))...)
 
-			_, err := f.uc.Login(identitytest.Anon(), &auth.LoginInput{Email: "a@b.com", Password: tc.password})
+			_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: tc.password})
 			require.Equal(t, tc.result == "ok", err == nil, "login error: %v", err)
 			requireOutcome(t, p, "biz_auth_login_attempts_total", tc.result)
 		})

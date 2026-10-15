@@ -68,7 +68,7 @@ func userRegistered(t *testing.T, uc *mocks.MockUsecase) []outboxtest.Event {
 		Log:    logkit.Nop(),
 		Clock:  clockkit.NewFixed(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)),
 	})
-	_, err := registration.Register(context.Background(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
+	_, err := registration.Register(context.Background(), user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
 	require.NoError(t, err)
 	uc.EXPECT().IssueEmailVerification(mock.Anything, "u1").Return(nil).Once()
 	return published.All()

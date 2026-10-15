@@ -140,7 +140,7 @@ func TestRegister(t *testing.T) {
 	}).Once()
 	f := newUC(t, withRepo(repo))
 
-	got, err := f.uc.Register(identitytest.Anon(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
+	got, err := f.uc.Register(identitytest.Anon(), user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
 	require.NoError(t, err)
 	require.Equal(t, "id-1", got.ID)
 	require.Equal(t, user.UserRegistered{ID: "id-1", At: fixedNow}, event[user.UserRegistered](t, f, subjectRegistered),
@@ -159,7 +159,7 @@ func TestRegister_AuditNotWritten(t *testing.T) {
 	}).Once()
 	f := newUC(t, withRepo(repo), withAudit(&audittest.Recorder{LogErr: errAudit}))
 
-	got, err := f.uc.Register(identitytest.Anon(), &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
+	got, err := f.uc.Register(identitytest.Anon(), user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "Alice"})
 	require.NoError(t, err)
 	require.Equal(t, "id-1", got.ID)
 	require.Equal(t, 1, f.bus.Count())
@@ -173,26 +173,26 @@ func TestRegister_Rejected(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
-		in     user.CreateInput
+		in     user.RegisterInput
 		hasher authnkit.Hasher // nil — исправный
 		insert error           // nil — до репозитория не доходит
 		want   error
 	}{
-		{name: "weak password", in: user.CreateInput{Email: "a@b.com", Password: "short", Name: "Alice"}, want: user.ErrWeakPassword},
+		{name: "weak password", in: user.RegisterInput{Email: "a@b.com", Password: "short", Name: "Alice"}, want: user.ErrWeakPassword},
 		{
 			// Предел хэшера — в байтах: 1024 символа не из ASCII схема пропускает, это ошибка ввода, а не сбой.
 			name: "password over the hasher limit",
-			in:   user.CreateInput{Email: "a@b.com", Password: strings.Repeat("я", authnkit.MaxPasswordLen), Name: "Alice"},
+			in:   user.RegisterInput{Email: "a@b.com", Password: strings.Repeat("я", authnkit.MaxPasswordLen), Name: "Alice"},
 			want: user.ErrPasswordTooLong,
 		},
 		{
-			name: "password not hashed", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
+			name: "password not hashed", in: user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
 			hasher: &authntest.DeterministicHasher{HashErr: errHashing}, want: errHashing,
 		},
-		{name: "invalid email", in: user.CreateInput{Email: "a.b.com", Password: "longenough", Name: "Alice"}, want: user.ErrInvalidEmail},
-		{name: "name with NUL", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "A\x00B"}, want: user.ErrInvalidName},
+		{name: "invalid email", in: user.RegisterInput{Email: "a.b.com", Password: "longenough", Name: "Alice"}, want: user.ErrInvalidEmail},
+		{name: "name with NUL", in: user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "A\x00B"}, want: user.ErrInvalidName},
 		{
-			name: "email taken", in: user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
+			name: "email taken", in: user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
 			insert: user.ErrAlreadyExists, want: user.ErrAlreadyExists,
 		},
 	}
@@ -209,7 +209,7 @@ func TestRegister_Rejected(t *testing.T) {
 			}
 			f := newUC(t, opts...)
 
-			_, err := f.uc.Register(identitytest.Anon(), &tc.in)
+			_, err := f.uc.Register(identitytest.Anon(), tc.in)
 			require.ErrorIs(t, err, tc.want)
 			require.Zero(t, f.bus.Count())
 			require.Empty(t, f.audit.Entries())
@@ -546,7 +546,7 @@ func TestDelete_SessionsNotClosed(t *testing.T) {
 }
 
 // seedInput — вход seed-admin с паролем по правилу продукта.
-var seedInput = user.CreateInput{Email: "admin@b.com", Password: "longenough", Name: "Admin"}
+var seedInput = user.EnsureAdminInput{Email: "admin@b.com", Password: "longenough", Name: "Admin"}
 
 // seededEntry — запись аудита seed-admin над учётной записью id: оператора в ней нет, его решение — доступ к БД.
 func seededEntry(id string) *auditkit.Entry {
@@ -598,19 +598,19 @@ func TestEnsureAdmin_Rejected(t *testing.T) {
 	}
 	tests := []struct {
 		name     string
-		in       user.CreateInput
+		in       user.EnsureAdminInput
 		hasher   authnkit.Hasher // nil — исправный
 		repo     func(*mocks.MockRepository)
 		revokeOn string // "" — до закрытия сессий не доходит
 		want     error
 	}{
-		{name: "weak password", in: user.CreateInput{Email: "admin@b.com", Password: "1", Name: "Admin"}, want: user.ErrWeakPassword},
-		{name: "password over the hasher limit", in: user.CreateInput{
+		{name: "weak password", in: user.EnsureAdminInput{Email: "admin@b.com", Password: "1", Name: "Admin"}, want: user.ErrWeakPassword},
+		{name: "password over the hasher limit", in: user.EnsureAdminInput{
 			Email: "admin@b.com", Password: strings.Repeat("я", authnkit.MaxPasswordLen), Name: "Admin",
 		}, want: user.ErrPasswordTooLong},
 		{name: "password not hashed", in: seedInput, hasher: &authntest.DeterministicHasher{HashErr: errHashing}, want: errHashing},
-		{name: "not an address", in: user.CreateInput{Email: "not an address", Password: "longenough", Name: "Admin"}, want: user.ErrInvalidEmail},
-		{name: "blank name", in: user.CreateInput{Email: "admin@b.com", Password: "longenough", Name: " "}, want: user.ErrInvalidName},
+		{name: "not an address", in: user.EnsureAdminInput{Email: "not an address", Password: "longenough", Name: "Admin"}, want: user.ErrInvalidEmail},
+		{name: "blank name", in: user.EnsureAdminInput{Email: "admin@b.com", Password: "longenough", Name: " "}, want: user.ErrInvalidName},
 		{name: "lookup fails", in: seedInput, repo: lookup(nil, errDB), want: errDB},
 		{name: "address taken concurrently", in: seedInput, repo: func(repo *mocks.MockRepository) {
 			lookup(nil, user.ErrNotFound)(repo)

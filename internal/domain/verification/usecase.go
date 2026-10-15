@@ -274,6 +274,7 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 	}); err != nil {
 		return err
 	}
+	uc.d.Log.Info(ctx, "email confirmed", "user_id", ev.UserID)
 	uc.audit(ctx, auditkit.Entry{ActorID: ev.UserID, Action: "email_confirmed", Resource: "user", ResourceID: ev.UserID})
 	return nil
 }

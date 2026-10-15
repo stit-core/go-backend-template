@@ -9,7 +9,6 @@ import (
 type Status string
 
 const (
-	StatusUnknown Status = ""
 	StatusActive  Status = "active"
 	StatusBlocked Status = "blocked"
 	StatusDeleted Status = "deleted"
@@ -34,9 +33,6 @@ func NewUser(email, passwordHash, name string, role identity.Role) (*User, error
 	}
 	if !validName(name) {
 		return nil, ErrInvalidName
-	}
-	if role == identity.RoleUnknown {
-		role = identity.RoleClient
 	}
 	if role != identity.RoleAdmin && role != identity.RoleClient {
 		return nil, ErrInvalidRole

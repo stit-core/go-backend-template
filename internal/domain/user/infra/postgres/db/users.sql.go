@@ -187,11 +187,11 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (InsertU
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
+SELECT id, email, name, status, role, version, email_verified, created_at, updated_at
 FROM users
 WHERE status != 'deleted'
   AND ($3::text IS NULL OR status = $3::text)
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $1
 OFFSET $2
 `
@@ -202,19 +202,30 @@ type ListUsersParams struct {
 	Status *string
 }
 
-func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
+type ListUsersRow struct {
+	ID            pgtype.UUID
+	Email         string
+	Name          string
+	Status        string
+	Role          string
+	Version       int32
+	EmailVerified bool
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error) {
 	rows, err := q.db.Query(ctx, listUsers, arg.Limit, arg.Offset, arg.Status)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []ListUsersRow
 	for rows.Next() {
-		var i User
+		var i ListUsersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Email,
-			&i.PasswordHash,
 			&i.Name,
 			&i.Status,
 			&i.Role,

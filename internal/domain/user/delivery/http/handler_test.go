@@ -87,7 +87,7 @@ func data[T any](t *testing.T, resp *httptest.ResponseRecorder) T {
 func TestRegister_Created(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Register(mock.Anything, &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: "Alice"}).
+	uc.EXPECT().Register(mock.Anything, user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "Alice"}).
 		Return(alice(), nil).Once()
 	api := setup(t, uc)
 
@@ -194,7 +194,7 @@ func TestRegister_PasswordTooLong(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("я", authnkit.MaxPasswordLen)
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Register(mock.Anything, &user.CreateInput{Email: "a@b.com", Password: long, Name: "A"}).Return(nil, user.ErrPasswordTooLong).Once()
+	uc.EXPECT().Register(mock.Anything, user.RegisterInput{Email: "a@b.com", Password: long, Name: "A"}).Return(nil, user.ErrPasswordTooLong).Once()
 	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/register", strings.NewReader(registerBody(long)))
@@ -212,7 +212,7 @@ func TestRegister_NameTooLong(t *testing.T) {
 	t.Parallel()
 	limit := strings.Repeat("я", 200)
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Register(mock.Anything, &user.CreateInput{Email: "a@b.com", Password: "longenough", Name: limit}).Return(alice(), nil).Once()
+	uc.EXPECT().Register(mock.Anything, user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: limit}).Return(alice(), nil).Once()
 	api := setup(t, uc)
 	body := func(name string) *strings.Reader {
 		return strings.NewReader(fmt.Sprintf(`{"email":"a@b.com","password":"longenough","name":%q}`, name))

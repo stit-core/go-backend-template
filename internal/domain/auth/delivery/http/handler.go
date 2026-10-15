@@ -13,8 +13,8 @@ import (
 )
 
 type Usecase interface {
-	Login(ctx context.Context, in *auth.LoginInput) (*auth.LoginOutput, error)
-	Refresh(ctx context.Context, refreshToken string) (*auth.LoginOutput, error)
+	Login(ctx context.Context, in auth.LoginInput) (*auth.Session, error)
+	Refresh(ctx context.Context, refreshToken string) (*auth.Session, error)
 	Logout(ctx context.Context, refreshToken string) error
 	ChangePassword(ctx context.Context, oldPassword, newPassword string) error
 }
@@ -71,7 +71,7 @@ func Register(api huma.API, h *Handler) {
 }
 
 func (h *Handler) login(ctx context.Context, in *AuthLoginInput) (*AuthLoginOutput, error) {
-	result, err := h.uc.Login(ctx, &auth.LoginInput{
+	result, err := h.uc.Login(ctx, auth.LoginInput{
 		Email:    in.Body.Email,
 		Password: in.Body.Password,
 	})

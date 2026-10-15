@@ -42,7 +42,7 @@ func main() {
 }
 
 func run(ctx context.Context, log logkit.Logger) int {
-	in := user.CreateInput{
+	in := user.EnsureAdminInput{
 		Email:    os.Getenv("SEED_ADMIN_EMAIL"),
 		Password: os.Getenv("SEED_ADMIN_PASSWORD"),
 		Name:     cmp.Or(os.Getenv("SEED_ADMIN_NAME"), "Admin"),
