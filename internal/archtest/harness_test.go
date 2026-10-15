@@ -378,7 +378,7 @@ func TestRulesAndSkillsLoad(t *testing.T) {
 	exempt := identityExempt(t, root)
 	for _, f := range files {
 		dir := path.Dir(f)
-		rule := dir == ".claude/rules" && path.Ext(f) == ".md"
+		rule := under(dir, ".claude/rules") && path.Ext(f) == ".md" // правила Claude Code ищет и в подкаталогах
 		skill := path.Dir(dir) == ".claude/skills" && path.Base(f) == "SKILL.md"
 		procedure := path.Ext(f) == ".md" && slices.ContainsFunc(readRulesFirst, func(p string) bool { return under(f, p) })
 		if !rule && !skill && !procedure {
