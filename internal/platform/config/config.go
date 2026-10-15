@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -20,6 +21,8 @@ type App struct {
 	Env           Env `envconfig:"APP_ENV" required:"true"`
 	Cookie        authgate.CookieConfig
 	AuthRateLimit AuthRateLimit
+	// PasswordResetMailPause — после ссылки сброса учётная запись столько новых писем сброса не получает; 0 — без паузы.
+	PasswordResetMailPause time.Duration `default:"5m" envconfig:"PASSWORD_RESET_MAIL_PAUSE"`
 }
 
 // AuthRateLimit — token-bucket на клиента (IP, как у лимитера httpkit) для /api/auth/*: вход, регистрация,
@@ -56,6 +59,9 @@ func Load() (*App, error) {
 	}
 	if cfg.AuthRateLimit.RPS < 0 || cfg.AuthRateLimit.Burst < 0 {
 		return nil, errors.New("app config: HTTP_AUTH_RATE_LIMIT_RPS and HTTP_AUTH_RATE_LIMIT_BURST must be >= 0")
+	}
+	if cfg.PasswordResetMailPause < 0 {
+		return nil, errors.New("app config: PASSWORD_RESET_MAIL_PAUSE must be >= 0")
 	}
 	return &cfg, nil
 }

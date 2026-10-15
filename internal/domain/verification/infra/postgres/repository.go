@@ -21,7 +21,7 @@ func NewRepository(database *pgkit.DB) verification.Repository {
 	return &Repository{q: db.New(database)}
 }
 
-func (r *Repository) UpsertPasswordReset(ctx context.Context, issue verification.PasswordResetIssue) (bool, error) {
+func (r *Repository) UpsertPasswordReset(ctx context.Context, issue verification.PasswordResetIssue, pause time.Duration) (bool, error) {
 	rid, err := pgkit.ParseUUID(issue.RequestID)
 	if err != nil {
 		return false, fmt.Errorf("verification repo: invalid password reset id: %w", err)
@@ -37,6 +37,7 @@ func (r *Repository) UpsertPasswordReset(ctx context.Context, issue verification
 		ExpiresAt:   pgtype.Timestamptz{Time: issue.ExpiresAt, Valid: true},
 		UserVersion: int32(issue.UserVersion),
 		RequestedAt: pgtype.Timestamptz{Time: issue.RequestedAt, Valid: true},
+		MailPause:   pgtype.Interval{Microseconds: pause.Microseconds(), Valid: true},
 	})
 	if pgkit.IsNoRows(err) {
 		return false, nil
@@ -156,4 +157,12 @@ func (r *Repository) MarkEmailVerificationUsed(ctx context.Context, id string) e
 		return verification.ErrTokenUsed // погашена раньше, в том числе параллельным запросом
 	}
 	return nil
+}
+
+func (r *Repository) DeleteExpiredLinks(ctx context.Context, before time.Time) (int64, error) {
+	n, err := r.q.DeleteExpiredLinks(ctx, pgtype.Timestamptz{Time: before, Valid: true})
+	if err != nil {
+		return 0, fmt.Errorf("verification repo: delete expired links: %w", err)
+	}
+	return n, nil
 }

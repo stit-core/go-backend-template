@@ -25,7 +25,6 @@ packages:
       EmailVerificationSetter:
       Repository:
       Mailer:
-      ResetLimiter:
   git.stit.tech/stit-core/go-backend-template/internal/domain/user/delivery/http:
     interfaces:
       Usecase:

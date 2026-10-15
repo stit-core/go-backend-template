@@ -4,6 +4,7 @@ import (
 	"os"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
@@ -84,6 +85,35 @@ func TestLoad_AuthRateLimit(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got.AuthRateLimit)
+		})
+	}
+}
+
+// Пауза писем сброса домена verification — 5 минут по умолчанию, 0 — без паузы, отрицательная — отказ старта.
+func TestLoad_PasswordResetMailPause(t *testing.T) {
+	cases := []struct {
+		name, pause string
+		want        time.Duration
+		wantErr     bool
+	}{
+		{name: "default", want: 5 * time.Minute},
+		{name: "from env", pause: "90s", want: 90 * time.Second},
+		{name: "off", pause: "0s"},
+		{name: "negative", pause: "-1s", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setenv(t, "APP_ENV", "dev")
+			setenv(t, "COOKIE_SECURE", "")
+			setenv(t, "PASSWORD_RESET_MAIL_PAUSE", tc.pause)
+
+			got, err := appconfig.Load()
+			if tc.wantErr {
+				require.ErrorContains(t, err, "PASSWORD_RESET_MAIL_PAUSE must be >= 0")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got.PasswordResetMailPause)
 		})
 	}
 }

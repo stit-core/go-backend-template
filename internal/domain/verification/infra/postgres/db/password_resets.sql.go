@@ -11,6 +11,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteExpiredLinks = `-- name: DeleteExpiredLinks :one
+WITH resets AS (
+    DELETE FROM password_resets
+    WHERE id IN (SELECT id FROM password_resets WHERE expires_at < $1::timestamptz LIMIT 5000)
+    RETURNING id
+), verifications AS (
+    DELETE FROM email_verifications
+    WHERE id IN (SELECT id FROM email_verifications WHERE expires_at < $1::timestamptz LIMIT 5000)
+    RETURNING id
+)
+SELECT ((SELECT count(*) FROM resets) + (SELECT count(*) FROM verifications))::bigint AS deleted
+`
+
+// Ссылки сброса и подтверждения адреса, истёкшие раньше before, — батчем: на разросшейся таблице безлимитный
+// DELETE не уложился бы в PG_STATEMENT_TIMEOUT.
+func (q *Queries) DeleteExpiredLinks(ctx context.Context, before pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, deleteExpiredLinks, before)
+	var deleted int64
+	err := row.Scan(&deleted)
+	return deleted, err
+}
+
 const getPasswordReset = `-- name: GetPasswordReset :one
 SELECT id, user_id, user_version, expires_at, used_at
 FROM password_resets
@@ -79,7 +101,9 @@ SELECT $1::uuid, $2::uuid, $3::text, $4::timestamptz,
        $5::int
 WHERE NOT EXISTS (
     SELECT 1 FROM password_resets
-    WHERE user_id = $2::uuid AND used_at > $6::timestamptz
+    WHERE user_id = $2::uuid
+      AND (used_at > $6::timestamptz
+           OR id <> $1::uuid AND created_at > NOW() - $7::interval)
 )
 ON CONFLICT (id) DO UPDATE
 SET token_hash = EXCLUDED.token_hash,
@@ -97,11 +121,12 @@ type UpsertPasswordResetParams struct {
 	ExpiresAt   pgtype.Timestamptz
 	UserVersion int32
 	RequestedAt pgtype.Timestamptz
+	MailPause   pgtype.Interval
 }
 
 // Ссылка сброса запроса id с версией пользователя на момент письма: новая или новый токен своей неотправленной.
-// Отправленную, погашенную и чужую не трогает; запрос, после которого пользователь погасил ссылку сброса, ссылки
-// не получает — подтверждение гасит и запросы в полёте. Не выпущено — RETURNING пуст.
+// Отправленную, погашенную и чужую не трогает; не выпускает ссылку запросу, после которого пользователь погасил
+// ссылку сброса, и пока у пользователя есть другая ссылка моложе паузы писем. Не выпущено — RETURNING пуст.
 func (q *Queries) UpsertPasswordReset(ctx context.Context, arg UpsertPasswordResetParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertPasswordReset,
 		arg.ID,
@@ -110,6 +135,7 @@ func (q *Queries) UpsertPasswordReset(ctx context.Context, arg UpsertPasswordRes
 		arg.ExpiresAt,
 		arg.UserVersion,
 		arg.RequestedAt,
+		arg.MailPause,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)

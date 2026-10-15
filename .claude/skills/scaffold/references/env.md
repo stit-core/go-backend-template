@@ -29,8 +29,10 @@
 вне графа (`migrate`, `seed-admin`), корень домена `os` не видит (archtest).
 
 Потребитель получает узкое значение, а не `App`: пакет платформы — провайдером `config.Module`
-(`func(a *App) Env { return a.Env }`); домен — своим типом `Config` в корне, его собирает из
-`*config.App` модуль домена (`module/module.go`): платформа доменов не знает.
+(`func(a *App) Env { return a.Env }`); домен — своим типом `Config` в `config.go` корня, его собирает из
+`*config.App` модуль домена (`module/module.go`): платформа доменов не знает. Образец —
+`verification.Config` (`PASSWORD_RESET_MAIL_PAUSE`): поле `App`, проверка диапазона в `Load`, провайдер в
+`verification/module/module.go`, `UsecaseDeps.Config`.
 
 ### 3. Гард
 

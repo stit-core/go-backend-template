@@ -20,7 +20,8 @@ paths:
   `Unwrap` в sentinel; `fmt.Errorf` корня — с `%w`; archtest `TestDomainErrorsInErrorsGo`) · `policy.go` (authorization
   + чистые правила, без I/O) · `usecase.go` (логика, зависимости через порты) · `trusted.go`
   (операции для других доменов без policy) · `events.go` (payload + unexported subject-const) ·
-  `metrics.go` (`biz_<domain>_*` под алерт, nil-safe) · `delivery/{http,nats}/` (вход — один пакет на
+  `metrics.go` (`biz_<domain>_*` под алерт, nil-safe) · `config.go` (`Config` домена из окружения — его
+  собирает `module/` из `*config.App`) · `delivery/{http,nats}/` (вход — один пакет на
   транспорт, подпакет — только `mocks`; archtest) · `infra/postgres/` ·
   `infra/<kit>/` (адаптер порта к киту, внешнему каналу или клиенту из `pkg/`) · `module/`. Файл существует
   только вместе со своим содержимым (таблица обязательности — architecture.md); мёртвые

@@ -8,7 +8,6 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/auditkit"
@@ -35,13 +34,15 @@ type EmailVerificationSetter interface {
 
 // Repository: Mark*Used и Redeem* гасят токен, только если он не погашен, иначе — ErrTokenUsed.
 type Repository interface {
-	// UpsertPasswordReset выпускает ссылку: новую или новый токен своей неотправленной (отправленную, погашенную, чужую
-	// и ссылку запроса, после которого пользователь погасил ссылку сброса, — нет: issued=false).
-	UpsertPasswordReset(ctx context.Context, r PasswordResetIssue) (issued bool, err error)
+	// UpsertPasswordReset выпускает ссылку: новую или новый токен своей неотправленной; отправленную, погашенную, чужую,
+	// после погашения ссылки и при другой ссылке пользователя моложе pause — нет (issued=false).
+	UpsertPasswordReset(ctx context.Context, r PasswordResetIssue, pause time.Duration) (issued bool, err error)
 	MarkPasswordResetSent(ctx context.Context, id string) error
 	GetPasswordReset(ctx context.Context, tokenHash string) (*PasswordResetToken, error)
 	// RedeemPasswordReset гасит ссылку id вместе со всеми непогашенными ссылками её пользователя userID.
 	RedeemPasswordReset(ctx context.Context, id, userID string) error
+	// DeleteExpiredLinks удаляет батч ссылок сброса и подтверждений адреса, истёкших раньше before, и отдаёт их число.
+	DeleteExpiredLinks(ctx context.Context, before time.Time) (int64, error)
 	// UpsertEmailVerification выпускает ожидающее подтверждение пользователя: неотправленное —
 	// с новым токеном и тем же id, отправленное не трогает (issued=false).
 	UpsertEmailVerification(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (id string, issued bool, err error)
@@ -55,12 +56,6 @@ type Mailer interface {
 	SendEmailVerification(ctx context.Context, email, token string) error
 }
 
-// ResetLimiter: Allow учитывает запрос сброса пароля на адрес email с IP ip; false — лимит запросов исчерпан,
-// запрос ничего не делает.
-type ResetLimiter interface {
-	Allow(ctx context.Context, email, ip string) (bool, error)
-}
-
 type UsecaseDeps struct {
 	fx.In
 
@@ -72,7 +67,7 @@ type UsecaseDeps struct {
 	Tx            pgkit.Transactor
 	Events        outboxkit.Publisher
 	Mailer        Mailer
-	Limiter       ResetLimiter
+	Config        Config
 	Audit         auditkit.Logger
 	Log           logkit.Logger
 	Clock         clockkit.Clock
@@ -135,9 +130,8 @@ func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) er
 	return nil
 }
 
-// RequestPasswordReset делает одну и ту же работу для любого адреса — поиск, лимит, событие запроса: ни ответ,
-// ни его время не выдают, есть ли учётная запись и пускают ли её. Письмо шлёт подписчик события
-// (IssuePasswordReset). Исход — в метрику.
+// RequestPasswordReset делает одну работу для любого адреса — поиск и событие запроса: ни ответ, ни его время не
+// выдают учётную запись. Письмо шлёт подписчик события (IssuePasswordReset), исход — в метрику.
 func (uc *Usecase) RequestPasswordReset(ctx context.Context, email string) error {
 	result, err := uc.requestPasswordReset(ctx, email)
 	uc.d.Metrics.RecordPasswordResetRequested(ctx, result)
@@ -156,15 +150,6 @@ func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outc
 	case !errors.Is(err, ErrUserNotFound):
 		return outcome.Error, fmt.Errorf("lookup user: %w", err)
 	}
-	// Лимит считает адрес, как guard входа, и для учётной записи: поиск (LOWER БД) и ключ guard'а (strings.ToLower)
-	// складывают регистр не ASCII по-разному, и ключ по учётной записи выдавал бы её работой запроса.
-	allowed, err := uc.d.Limiter.Allow(ctx, email, identity.IPFrom(ctx))
-	switch {
-	case err != nil:
-		return outcome.Error, fmt.Errorf("limiter: %w", err)
-	case !allowed:
-		return resultThrottled, nil
-	}
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
 		return uc.d.Events.Publish(txCtx, subjectPasswordResetRequested,
 			PasswordResetRequested{RequestID: idkit.NewV7(), UserID: userID, At: uc.d.Clock.Now()})
@@ -174,10 +159,8 @@ func (uc *Usecase) requestPasswordReset(ctx context.Context, email string) (outc
 	return result, nil
 }
 
-// IssuePasswordReset — идемпотентный обработчик доставки verification.events.password_reset_requested.v3: ключ —
-// запрос (RequestID — id ссылки сброса). Письмо получает учётная запись, которую пускают, пока ссылка запроса
-// не истекла и пользователь не погасил ссылку сброса после запроса; отправленную ссылку повтор пропускает,
-// неотправленную — отправляет заново с новым токеном.
+// IssuePasswordReset — идемпотентный обработчик verification.events.password_reset_requested.v3 (ключ — RequestID):
+// письмо — учётной записи, которую пускают, раз в паузу Config.ResetMailPause, с каких бы адресов ни шли запросы.
 func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID string, requestedAt time.Time) error {
 	now := uc.d.Clock.Now()
 	if requestedAt.After(now) {
@@ -203,12 +186,12 @@ func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID str
 	issued, err := uc.d.Repo.UpsertPasswordReset(ctx, PasswordResetIssue{
 		RequestID: requestID, UserID: userID, UserVersion: u.Version, TokenHash: authnkit.HashToken(token),
 		RequestedAt: requestedAt, ExpiresAt: expiresAt,
-	})
+	}, uc.d.Config.ResetMailPause)
 	switch {
 	case err != nil:
 		return err
 	case !issued:
-		uc.d.Log.Info(ctx, "password reset not issued: sent or redeemed, skip", "user_id", userID)
+		uc.d.Log.Info(ctx, "password reset not issued: sent, redeemed or paused, skip", "user_id", userID)
 		return nil
 	}
 	if err := uc.d.Mailer.SendPasswordReset(ctx, u.Email, token); err != nil {
@@ -287,6 +270,17 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 		return err
 	}
 	uc.audit(ctx, auditkit.Entry{ActorID: ev.UserID, Action: "email_confirmed", Resource: "user", ResourceID: ev.UserID})
+	return nil
+}
+
+// PurgeLinks — тело job'а verification.purge_links: ссылки, истёкшие раньше linkRetention, ничего не решают, а их
+// хэши и время запросов хранить незачем.
+func (uc *Usecase) PurgeLinks(ctx context.Context) error {
+	n, err := uc.d.Repo.DeleteExpiredLinks(ctx, uc.d.Clock.Now().Add(-linkRetention))
+	if err != nil {
+		return fmt.Errorf("purge expired links: %w", err)
+	}
+	uc.d.Log.Info(ctx, "expired links purged", "count", n)
 	return nil
 }
 

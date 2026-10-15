@@ -68,7 +68,8 @@ paths:
 
 - Периодика без события-триггера — `timerkit.Job`, регистрируется `timerkit.ProvideJob(ctor)`
   в модуле-владельце (fx-группа `timerkit.JobsGroup`); гоняет `timerkit.Module` в `cmd/api`,
-  отдельного worker-бинаря нет. Спан `timerkit.job <name>`, метрики `timer_job_*`.
+  отдельного worker-бинаря нет. Спан `timerkit.job <name>`, метрики `timer_job_*`. Тело — метод usecase
+  с тестом, имя — `<домен>.<что>`; образец — `verification.purge_links` (чистка отживших ссылок, батчем).
 - Обслуживание kit-таблиц пишут сами киты: cleanup `bruteforce_attempts` — `bruteforcepg.Module`,
   истёкших сессий — `sessionpg.Module`, drain/партиции/retention outbox — `outboxkit.Instance`. Свой
   job поверх kit-таблицы не заводить.

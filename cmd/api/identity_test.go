@@ -284,6 +284,54 @@ func forwardedChain(n, hops int) string {
 	return strings.Join(entries, ", ")
 }
 
+// Письма сброса в один ящик — не чаще паузы на учётную запись, с каких бы адресов ни шли запросы: лимит адреса
+// клиента её не заменяет.
+func TestIdentity_ResetMailPause(t *testing.T) {
+	serviceEnv(t)
+	noAuthRateLimit(t)
+	t.Setenv("HTTP_TRUST_PROXY_HOPS", "1")
+	logs, mail := &requestLog{}, &mailTap{}
+	var srv *httpkit.Server
+	app := fxtest.New(t, service, teeLog(logs),
+		fx.Decorate(func(m verification.Mailer) verification.Mailer { mail.Mailer = m; return mail }),
+		fx.Populate(&srv))
+	app.RequireStart()
+	defer app.RequireStop()
+	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: &http.Client{Timeout: 10 * time.Second}}
+	const victim = "victim@example.com"
+	api.register(victim)
+
+	for i := range 3 {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, api.base+"/api/auth/password-reset/request",
+			strings.NewReader(`{"email":"`+victim+`"}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d", i+1))
+		resp, err := api.client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	}
+	handled := func() int { resets, _ := mail.sent(); return len(resets) + logs.count("password reset not issued") }
+	require.Eventually(t, func() bool { return handled() == 3 }, 15*time.Second, 100*time.Millisecond,
+		"the subscriber mails or skips each of the three requests")
+	resets, _ := mail.sent()
+	require.Len(t, resets, 1, "one reset mail per pause into the mailbox, whatever the client addresses")
+}
+
+// count — записи лога, текст которых начинается с prefix.
+func (h *requestLog) count(prefix string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for _, line := range h.text {
+		if strings.HasPrefix(line, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
 // Стрим домена-публикатора — условие старта: без него строки его outbox копились бы, не получая PubAck.
 func TestIdentity_PublisherStreamRequired(t *testing.T) {
 	serviceEnv(t)

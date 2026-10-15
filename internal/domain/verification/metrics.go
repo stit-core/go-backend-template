@@ -14,11 +14,9 @@ import (
 var (
 	resultUserNotFound = outcome.New("user_not_found")
 	resultInactive     = outcome.New("inactive")
-	resultThrottled    = outcome.New("throttled")
 )
 
-// Metrics — сигналы для алертов по запросам сброса: перебор адресов и упёршиеся в лимит запросы; письмо
-// шлёт подписчик, его сбой повторяет брокер.
+// Metrics — сигнал для алерта по запросам сброса — перебор адресов; письмо шлёт подписчик, его сбой повторяет брокер.
 type Metrics struct {
 	resetRequests metric.Int64Counter
 }

@@ -26,6 +26,9 @@ var (
 	requestedAt = tokenExpiry.Add(-time.Hour)
 )
 
+// noPause — выпуск без паузы писем: тесты, которым она не важна, выпускают несколько ссылок пользователю подряд.
+const noPause = time.Duration(0)
+
 // setup seeds a user because both token tables reference users(id).
 func setup(t *testing.T) (verification.Repository, string) {
 	t.Helper()
@@ -39,7 +42,7 @@ func setup(t *testing.T) (verification.Repository, string) {
 func issueReset(t *testing.T, repo verification.Repository, userID, hash string) string {
 	t.Helper()
 	id := idkit.NewV7()
-	issued, err := repo.UpsertPasswordReset(context.Background(), resetIssue(id, userID, hash))
+	issued, err := repo.UpsertPasswordReset(context.Background(), resetIssue(id, userID, hash), noPause)
 	require.NoError(t, err)
 	require.True(t, issued)
 	return id
@@ -78,7 +81,7 @@ func TestUpsertPasswordReset_Redelivery(t *testing.T) {
 
 	again := resetIssue(id, userID, "hash:pr-2")
 	again.UserVersion = 2
-	issued, err := repo.UpsertPasswordReset(ctx, again)
+	issued, err := repo.UpsertPasswordReset(ctx, again, noPause)
 	require.NoError(t, err)
 	require.True(t, issued, "an unsent link is issued again")
 	_, err = repo.GetPasswordReset(ctx, "hash:pr-1")
@@ -89,7 +92,7 @@ func TestUpsertPasswordReset_Redelivery(t *testing.T) {
 	require.Equal(t, 2, got.UserVersion, "the reissued link keeps the version of the account at its own mail")
 
 	require.NoError(t, repo.MarkPasswordResetSent(ctx, id))
-	issued, err = repo.UpsertPasswordReset(ctx, resetIssue(id, userID, "hash:pr-3"))
+	issued, err = repo.UpsertPasswordReset(ctx, resetIssue(id, userID, "hash:pr-3"), noPause)
 	require.NoError(t, err)
 	require.False(t, issued, "a sent link is not issued again")
 	_, err = repo.GetPasswordReset(ctx, "hash:pr-3")
@@ -99,9 +102,64 @@ func TestUpsertPasswordReset_Redelivery(t *testing.T) {
 
 	unsent := issueReset(t, repo, userID, "hash:pr-4")
 	require.NoError(t, repo.RedeemPasswordReset(ctx, unsent, userID))
-	issued, err = repo.UpsertPasswordReset(ctx, resetIssue(unsent, userID, "hash:pr-5"))
+	issued, err = repo.UpsertPasswordReset(ctx, resetIssue(unsent, userID, "hash:pr-5"), noPause)
 	require.NoError(t, err)
 	require.False(t, issued, "a used link is not issued again")
+}
+
+// Пока у пользователя есть ссылка моложе паузы писем, новый запрос ссылки не получает — с каких бы адресов ни шли
+// запросы; повтор доставки своего запроса и соседа пауза не задевает, а после неё ссылка выпускается.
+func TestUpsertPasswordReset_MailPause(t *testing.T) {
+	t.Parallel()
+	pg := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
+	db := pg.DB(t)
+	users := userpg.NewRepository(db)
+	owner, neighbour := pgseed.InsertUser(t, users), pgseed.InsertUser(t, users)
+	repo := verifpg.NewRepository(db)
+	ctx := context.Background()
+	const pause = 5 * time.Minute
+	first := idkit.NewV7()
+	issue := func(id, userID, hash string) bool {
+		t.Helper()
+		issued, err := repo.UpsertPasswordReset(ctx, resetIssue(id, userID, hash), pause)
+		require.NoError(t, err)
+		return issued
+	}
+
+	require.True(t, issue(first, owner.ID, "hash:pr-1"))
+	require.False(t, issue(idkit.NewV7(), owner.ID, "hash:pr-2"), "a new request within the pause gets no link")
+	require.True(t, issue(first, owner.ID, "hash:pr-3"), "the redelivery of the issued request is not paused")
+	require.True(t, issue(idkit.NewV7(), neighbour.ID, "hash:pr-n"), "the pause is per account")
+
+	_, err := pg.Pool(t).Exec(ctx, `UPDATE password_resets SET created_at = created_at - interval '6 minutes' WHERE user_id = $1`, owner.ID)
+	require.NoError(t, err)
+	require.True(t, issue(idkit.NewV7(), owner.ID, "hash:pr-4"), "after the pause a request gets its link")
+}
+
+// Job удаляет ссылки сброса и подтверждения адреса, истёкшие раньше before; живые остаются.
+func TestDeleteExpiredLinks(t *testing.T) {
+	t.Parallel()
+	repo, userID := setup(t)
+	ctx := context.Background()
+	stale := issueReset(t, repo, userID, "hash:pr-stale")
+	fresh := resetIssue(idkit.NewV7(), userID, "hash:pr-fresh")
+	fresh.ExpiresAt = tokenExpiry.Add(time.Hour)
+	issued, err := repo.UpsertPasswordReset(ctx, fresh, noPause)
+	require.NoError(t, err)
+	require.True(t, issued)
+	_, _, err = repo.UpsertEmailVerification(ctx, userID, "hash:ev-stale", tokenExpiry)
+	require.NoError(t, err)
+
+	n, err := repo.DeleteExpiredLinks(ctx, tokenExpiry.Add(time.Second))
+	require.NoError(t, err)
+	require.Equal(t, int64(2), n)
+
+	_, err = repo.GetPasswordReset(ctx, "hash:pr-stale")
+	require.ErrorIs(t, err, verification.ErrInvalidResetToken, "the expired link %s is deleted", stale)
+	_, err = repo.GetEmailVerification(ctx, "hash:ev-stale")
+	require.ErrorIs(t, err, verification.ErrInvalidVerificationToken)
+	_, err = repo.GetPasswordReset(ctx, "hash:pr-fresh")
+	require.NoError(t, err, "the live link stays")
 }
 
 // Отметка «письмо ушло» — только своей ссылке: неотправленная ссылка другого запроса при повторе доставки
@@ -117,10 +175,10 @@ func TestMarkPasswordResetSent_OwnLinkOnly(t *testing.T) {
 
 	require.NoError(t, repo.MarkPasswordResetSent(ctx, sent))
 
-	issued, err := repo.UpsertPasswordReset(ctx, resetIssue(unsent, second.ID, "hash:pr-3"))
+	issued, err := repo.UpsertPasswordReset(ctx, resetIssue(unsent, second.ID, "hash:pr-3"), noPause)
 	require.NoError(t, err)
 	require.True(t, issued, "the link of another request stays unsent: its redelivery mails it")
-	issued, err = repo.UpsertPasswordReset(ctx, resetIssue(sent, first.ID, "hash:pr-4"))
+	issued, err = repo.UpsertPasswordReset(ctx, resetIssue(sent, first.ID, "hash:pr-4"), noPause)
 	require.NoError(t, err)
 	require.False(t, issued, "the marked link is sent")
 }
@@ -135,7 +193,7 @@ func TestUpsertPasswordReset_OtherUser(t *testing.T) {
 	ctx := context.Background()
 	id := issueReset(t, repo, owner.ID, "hash:pr-1")
 
-	issued, err := repo.UpsertPasswordReset(ctx, resetIssue(id, other.ID, "hash:pr-2"))
+	issued, err := repo.UpsertPasswordReset(ctx, resetIssue(id, other.ID, "hash:pr-2"), noPause)
 	require.NoError(t, err)
 	require.False(t, issued, "the link of another user is not issued")
 	got, err := repo.GetPasswordReset(ctx, "hash:pr-1")
@@ -169,7 +227,7 @@ func TestUpsertPasswordReset_AfterRedemption(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			issue := resetIssue(idkit.NewV7(), tc.userID, tc.hash)
 			issue.RequestedAt = tc.requestedAt
-			issued, err := repo.UpsertPasswordReset(ctx, issue)
+			issued, err := repo.UpsertPasswordReset(ctx, issue, noPause)
 			require.NoError(t, err)
 			require.Equal(t, tc.issued, issued)
 			_, err = repo.GetPasswordReset(ctx, tc.hash)
@@ -376,11 +434,11 @@ func TestRepository_Failures(t *testing.T) {
 		ctx := context.Background()
 		calls := map[string]func() error{
 			"UpsertPasswordReset bad user": func() error {
-				_, err := repo.UpsertPasswordReset(ctx, resetIssue(idkit.NewV7(), "not-a-uuid", "hash:bad-user"))
+				_, err := repo.UpsertPasswordReset(ctx, resetIssue(idkit.NewV7(), "not-a-uuid", "hash:bad-user"), noPause)
 				return err
 			},
 			"UpsertPasswordReset bad request": func() error {
-				_, err := repo.UpsertPasswordReset(ctx, resetIssue("not-a-uuid", userID, "hash:bad-request"))
+				_, err := repo.UpsertPasswordReset(ctx, resetIssue("not-a-uuid", userID, "hash:bad-request"), noPause)
 				return err
 			},
 			"MarkPasswordResetSent":        func() error { return repo.MarkPasswordResetSent(ctx, "not-a-uuid") },
@@ -408,12 +466,13 @@ func TestRepository_Failures(t *testing.T) {
 		const id = "00000000-0000-0000-0000-000000000001"
 		calls := map[string]func() error{
 			"UpsertPasswordReset": func() error {
-				_, err := repo.UpsertPasswordReset(ctx, resetIssue(id, userID, "hash:canceled"))
+				_, err := repo.UpsertPasswordReset(ctx, resetIssue(id, userID, "hash:canceled"), noPause)
 				return err
 			},
 			"MarkPasswordResetSent": func() error { return repo.MarkPasswordResetSent(ctx, id) },
 			"GetPasswordReset":      func() error { _, err := repo.GetPasswordReset(ctx, "hash:canceled"); return err },
 			"RedeemPasswordReset":   func() error { return repo.RedeemPasswordReset(ctx, id, userID) },
+			"DeleteExpiredLinks":    func() error { _, err := repo.DeleteExpiredLinks(ctx, tokenExpiry); return err },
 			"UpsertEmailVerification": func() error {
 				_, _, err := repo.UpsertEmailVerification(ctx, userID, "hash:canceled", tokenExpiry)
 				return err

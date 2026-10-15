@@ -98,9 +98,13 @@ blocked-by: —
     `TestRepository_Failures` (sentinel вместо ошибки), E4 — `40P01` (`N/s7c/exp/e4-base.log`); на ветке — PASS,
     E4 — `nil` и `ErrTokenUsed` (`e4-branch.log`); NTST-01: мутация `… OR TRUE` — FAIL
     `TestMarkPasswordResetSent_OwnLinkOnly`, без неё — PASS (`ntst01-*.log`); handoff-блок; `make check` → ✓
-- [ ] **S4** — NSEC-01 и RCOD-17: пауза писем сброса на учётную запись — своя настройка через `Config` домена
+- [x] **S4** — NSEC-01 и RCOD-17: пауза писем сброса на учётную запись — своя настройка через `Config` домена
   verification; лимитер на guard входа снят; job чистки отживших ссылок — образец job'а домена
   - Проверка: `TestNSec_ResetMailRate` на ветке; `make check` → ✓ · Закрывает: AC2, AC6 · Зависит от: S3
+  - Сделано: `PASSWORD_RESET_MAIL_PAUSE` (5m) → `verification.Config` → условие `UpsertPasswordReset` (другая ссылка
+    пользователя моложе паузы); `ResetLimiter` и `verification/infra/bruteforce` сняты; job `verification.purge_links`
+    (`Usecase.PurgeLinks`, батч по 5000). RED `TestIdentity_ResetMailPause`: три запроса с трёх адресов — на базе 3
+    письма, на ветке 1; handoff-блок; `make check` → ✓
 - [ ] **S5** — `seed-admin` через `user.Usecase.EnsureAdmin`: правило пароля, сущность, аудит, версия; логгер
   входов `cmd/` — из `LOG_*`
   - Проверка: M01, M02, E9; `make check` → ✓ · Закрывает: AC3, AC6 · Зависит от: S3
@@ -133,6 +137,12 @@ blocked-by: —
 - RCOD-18 (ссылка сброса переживает смену пароля): ссылка хранит версию учётной записи на момент письма
   (`password_resets.user_version`), подтверждение пишет пароль при ней — изменённая после письма учётная запись
   ссылку гасит; отзыв ссылок из `auth` потребовал бы порта `auth → verification` и транзакции через три домена.
+- NSEC-01: пауза писем — условием выпуска ссылки в подписчике (другая ссылка учётной записи моложе паузы, часы БД),
+  а не лимитом запроса: письма в ящик ограничены с любых адресов, настройка не делит блокировку входа, запрос
+  делает одну работу для любого адреса без ветки «лимит», и адреса анонимных запросов не копятся в
+  `bruteforce_attempts`. Лимит запроса на guard входа снят: поток запросов с адреса держит лимит `/api/auth/*`.
+- RCOD-17: образец конфига домена — `verification.Config` (пауза писем, `config.go` корня), образец job'а —
+  `verification.purge_links`: оба — с настоящей нуждой, а не ради образца.
 - RCOD-10: своя ссылка и соседние гасятся одним оператором с `RETURNING id`; канон одиночного погашения в rule
   `sqlc-and-migrations` (трек gate) — `MarkEmailVerificationUsed`, строкой там же — погашение с соседями: правка
   чужого файла, иначе правило называло бы снятый метод.
@@ -145,4 +155,4 @@ blocked-by: —
   к кому: владелец
 
 ## Где мы сейчас
-S1–S3 закрыты. Следующий шаг — S4 (пауза писем сброса, образцы конфига домена и job'а).
+S1–S4 закрыты. Следующий шаг — S5 (`seed-admin` через домен user).

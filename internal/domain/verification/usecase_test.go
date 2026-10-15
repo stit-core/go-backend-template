@@ -32,6 +32,9 @@ import (
 
 var fixedNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
+// mailPause — пауза писем сброса usecase тестов.
+const mailPause = 5 * time.Minute
+
 const (
 	subjectEmailVerificationRequested = "verification.events.email_verification_requested.v2"
 	subjectPasswordResetRequested     = "verification.events.password_reset_requested.v3"
@@ -52,7 +55,6 @@ type ucOpts struct {
 	pwSet    *mocks.MockPasswordSetter
 	emailSet *mocks.MockEmailVerificationSetter
 	mailer   *mocks.MockMailer
-	limiter  *mocks.MockResetLimiter
 	hasher   authnkit.Hasher
 	audit    auditkit.Logger
 	metrics  *verification.Metrics
@@ -70,8 +72,6 @@ func withEmailSet(e *mocks.MockEmailVerificationSetter) ucOption {
 }
 
 func withMailer(m *mocks.MockMailer) ucOption { return func(o *ucOpts) { o.mailer = m } }
-
-func withLimiter(l *mocks.MockResetLimiter) ucOption { return func(o *ucOpts) { o.limiter = l } }
 
 func withHasher(h authnkit.Hasher) ucOption { return func(o *ucOpts) { o.hasher = h } }
 
@@ -96,7 +96,6 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		pwSet:    mocks.NewMockPasswordSetter(t),
 		emailSet: mocks.NewMockEmailVerificationSetter(t),
 		mailer:   mocks.NewMockMailer(t),
-		limiter:  mocks.NewMockResetLimiter(t),
 		hasher:   &authntest.DeterministicHasher{},
 	}
 	for _, fn := range opts {
@@ -122,7 +121,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Tx:            tx,
 		Events:        o.events,
 		Mailer:        o.mailer,
-		Limiter:       o.limiter,
+		Config:        verification.Config{ResetMailPause: mailPause},
 		Audit:         o.audit,
 		Log:           log,
 		Clock:         clockkit.NewFixed(fixedNow),
@@ -173,14 +172,6 @@ func userByEmail(t *testing.T, u *verification.User, err error) *mocks.MockUserR
 func activeUser(t *testing.T) *mocks.MockUserReader {
 	t.Helper()
 	return userByEmail(t, &verification.User{ID: "u1", Email: "a@b.com", CanLogin: true}, nil)
-}
-
-// limiter ждёт ровно одну проверку лимита сброса субъекта subject с IP запроса и отвечает allowed.
-func limiter(t *testing.T, subject string, allowed bool, err error) *mocks.MockResetLimiter {
-	t.Helper()
-	l := mocks.NewMockResetLimiter(t)
-	l.EXPECT().Allow(mock.Anything, subject, identitytest.IP).Return(allowed, err).Once()
-	return l
 }
 
 func TestIssueEmailVerification_HappyPath(t *testing.T) {
@@ -321,9 +312,8 @@ func requested(t *testing.T, f ucFixture) requestedEvent {
 	return e
 }
 
-// Запрос сброса делает одну и ту же работу для любого адреса — поиск, лимит по адресу, событие в транзакции, — и
-// письма не шлёт: его шлёт подписчик события. Ни ответ, ни его время не выдают, есть ли учётная запись и пускают
-// ли её: ключ лимита — адрес и для учётной записи; исход — в метрику.
+// Запрос сброса делает одну и ту же работу для любого адреса — поиск и событие в транзакции — и письма не шлёт: его
+// шлёт подписчик события. Ни ответ, ни его время не выдают учётную запись; исход — в метрику.
 func TestRequestPasswordReset_SameWorkForAnyAddress(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -341,8 +331,7 @@ func TestRequestPasswordReset_SameWorkForAnyAddress(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			p := metrictest.NewProvider()
-			f := newUC(t, withUsers(userByEmail(t, tc.found, tc.lookErr)), withLimiter(limiter(t, "a@b.com", true, nil)),
-				withMetrics(verification.NewMetrics(p.Meter("test"))))
+			f := newUC(t, withUsers(userByEmail(t, tc.found, tc.lookErr)), withMetrics(verification.NewMetrics(p.Meter("test"))))
 
 			require.NoError(t, f.uc.RequestPasswordReset(identitytest.Anon(), "a@b.com"))
 			require.Equal(t, 1, f.tx.Calls())
@@ -355,33 +344,18 @@ func TestRequestPasswordReset_SameWorkForAnyAddress(t *testing.T) {
 	}
 }
 
-// Лимит исчерпан — запрос ничего не делает, ответ тот же; исход — в метрику (на «упёрлись в лимит» стоит алерт).
-func TestRequestPasswordReset_Throttled(t *testing.T) {
-	t.Parallel()
-	p := metrictest.NewProvider()
-	f := newUC(t, withUsers(activeUser(t)), withLimiter(limiter(t, "a@b.com", false, nil)), withMetrics(verification.NewMetrics(p.Meter("test"))))
-
-	require.NoError(t, f.uc.RequestPasswordReset(identitytest.Anon(), "a@b.com"))
-	require.Zero(t, f.bus.Count())
-	requireOutcome(t, p, "biz_verification_password_reset_requested_total", "throttled")
-}
-
-// Сбой поиска, лимитера или записи события уходит ответом: работа запроса одна для любого адреса, и сбой
-// учётную запись не выдаёт; сбой лимитера запроса не пропускает (fail-closed).
+// Сбой поиска или записи события уходит ответом: работа запроса одна для любого адреса, и сбой учётную запись не
+// выдаёт.
 func TestRequestPasswordReset_Failure(t *testing.T) {
 	t.Parallel()
-	errGuard := errors.New("guard store down")
 	cases := []struct {
 		name string
 		opts func(t *testing.T) []ucOption
 		want error
 	}{
 		{"lookup", func(t *testing.T) []ucOption { return []ucOption{withUsers(userByEmail(t, nil, errDown))} }, errDown},
-		{"limiter", func(t *testing.T) []ucOption {
-			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "a@b.com", false, errGuard))}
-		}, errGuard},
 		{"event not stored", func(t *testing.T) []ucOption {
-			return []ucOption{withUsers(activeUser(t)), withLimiter(limiter(t, "a@b.com", true, nil)), withEvents(failingEvents{})}
+			return []ucOption{withUsers(activeUser(t)), withEvents(failingEvents{})}
 		}, errDown},
 	}
 	for _, tc := range cases {
@@ -398,7 +372,7 @@ func TestRequestPasswordReset_Failure(t *testing.T) {
 }
 
 // resetIssued ждёт выпуск ссылки сброса запроса rid пользователя u1 версии 3, сделанного в requestedAt, сроком час
-// от него и копит хэши выпущенных токенов; issued — ответы по порядку вызовов.
+// от него, с паузой писем конфига, и копит хэши выпущенных токенов; issued — ответы по порядку вызовов.
 func resetIssued(t *testing.T, requestedAt time.Time, hashes *[]string, issued ...bool) *mocks.MockRepository {
 	t.Helper()
 	repo := mocks.NewMockRepository(t)
@@ -406,7 +380,7 @@ func resetIssued(t *testing.T, requestedAt time.Time, hashes *[]string, issued .
 		repo.EXPECT().UpsertPasswordReset(mock.Anything, mock.MatchedBy(func(r verification.PasswordResetIssue) bool {
 			return r.RequestID == "rid" && r.UserID == "u1" && r.UserVersion == 3 &&
 				r.RequestedAt.Equal(requestedAt) && r.ExpiresAt.Equal(requestedAt.Add(time.Hour))
-		})).RunAndReturn(func(_ context.Context, r verification.PasswordResetIssue) (bool, error) {
+		}), mailPause).RunAndReturn(func(_ context.Context, r verification.PasswordResetIssue, _ time.Duration) (bool, error) {
 			*hashes = append(*hashes, r.TokenHash)
 			return ok, nil
 		}).Once()
@@ -528,7 +502,7 @@ func TestIssuePasswordReset_Failure(t *testing.T) {
 		}},
 		{"link not stored", func(t *testing.T) []ucOption {
 			repo := mocks.NewMockRepository(t)
-			repo.EXPECT().UpsertPasswordReset(mock.Anything, mock.Anything).Return(false, errDown).Once()
+			repo.EXPECT().UpsertPasswordReset(mock.Anything, mock.Anything, mailPause).Return(false, errDown).Once()
 			return []ucOption{withUsers(userByID(t, 1)), withRepo(repo)}
 		}},
 		{"sent mark not stored", func(t *testing.T) []ucOption {
@@ -767,4 +741,19 @@ func TestConfirmEmail_Rejected(t *testing.T) {
 			require.Empty(t, f.audit.Entries())
 		})
 	}
+}
+
+// Job удаляет ссылки, истёкшие раньше суток назад; сбой удаления — ошибка прогона (её логирует timerkit).
+func TestPurgeLinks(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().DeleteExpiredLinks(mock.Anything, fixedNow.Add(-24*time.Hour)).Return(3, nil).Once()
+	repo.EXPECT().DeleteExpiredLinks(mock.Anything, fixedNow.Add(-24*time.Hour)).Return(0, errDown).Once()
+	f := newUC(t, withRepo(repo))
+
+	require.NoError(t, f.uc.PurgeLinks(context.Background()))
+	e, logged := f.log.Find(slog.LevelInfo, "expired links purged")
+	require.True(t, logged)
+	require.Equal(t, "3", e.Str("count"))
+	require.ErrorIs(t, f.uc.PurgeLinks(context.Background()), errDown)
 }

@@ -39,6 +39,72 @@ func (_m *MockRepository) EXPECT() *MockRepository_Expecter {
 	return &MockRepository_Expecter{mock: &_m.Mock}
 }
 
+// DeleteExpiredLinks provides a mock function for the type MockRepository
+func (_mock *MockRepository) DeleteExpiredLinks(ctx context.Context, before time.Time) (int64, error) {
+	ret := _mock.Called(ctx, before)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteExpiredLinks")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time) (int64, error)); ok {
+		return returnFunc(ctx, before)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time) int64); ok {
+		r0 = returnFunc(ctx, before)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time) error); ok {
+		r1 = returnFunc(ctx, before)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRepository_DeleteExpiredLinks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteExpiredLinks'
+type MockRepository_DeleteExpiredLinks_Call struct {
+	*mock.Call
+}
+
+// DeleteExpiredLinks is a helper method to define mock.On call
+//   - ctx context.Context
+//   - before time.Time
+func (_e *MockRepository_Expecter) DeleteExpiredLinks(ctx interface{}, before interface{}) *MockRepository_DeleteExpiredLinks_Call {
+	return &MockRepository_DeleteExpiredLinks_Call{Call: _e.mock.On("DeleteExpiredLinks", ctx, before)}
+}
+
+func (_c *MockRepository_DeleteExpiredLinks_Call) Run(run func(ctx context.Context, before time.Time)) *MockRepository_DeleteExpiredLinks_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 time.Time
+		if args[1] != nil {
+			arg1 = args[1].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRepository_DeleteExpiredLinks_Call) Return(n int64, err error) *MockRepository_DeleteExpiredLinks_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockRepository_DeleteExpiredLinks_Call) RunAndReturn(run func(ctx context.Context, before time.Time) (int64, error)) *MockRepository_DeleteExpiredLinks_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetEmailVerification provides a mock function for the type MockRepository
 func (_mock *MockRepository) GetEmailVerification(ctx context.Context, tokenHash string) (*verification.EmailVerificationToken, error) {
 	ret := _mock.Called(ctx, tokenHash)
@@ -494,8 +560,8 @@ func (_c *MockRepository_UpsertEmailVerification_Call) RunAndReturn(run func(ctx
 }
 
 // UpsertPasswordReset provides a mock function for the type MockRepository
-func (_mock *MockRepository) UpsertPasswordReset(ctx context.Context, r verification.PasswordResetIssue) (bool, error) {
-	ret := _mock.Called(ctx, r)
+func (_mock *MockRepository) UpsertPasswordReset(ctx context.Context, r verification.PasswordResetIssue, pause time.Duration) (bool, error) {
+	ret := _mock.Called(ctx, r, pause)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpsertPasswordReset")
@@ -503,16 +569,16 @@ func (_mock *MockRepository) UpsertPasswordReset(ctx context.Context, r verifica
 
 	var r0 bool
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, verification.PasswordResetIssue) (bool, error)); ok {
-		return returnFunc(ctx, r)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, verification.PasswordResetIssue, time.Duration) (bool, error)); ok {
+		return returnFunc(ctx, r, pause)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, verification.PasswordResetIssue) bool); ok {
-		r0 = returnFunc(ctx, r)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, verification.PasswordResetIssue, time.Duration) bool); ok {
+		r0 = returnFunc(ctx, r, pause)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, verification.PasswordResetIssue) error); ok {
-		r1 = returnFunc(ctx, r)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, verification.PasswordResetIssue, time.Duration) error); ok {
+		r1 = returnFunc(ctx, r, pause)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -527,11 +593,12 @@ type MockRepository_UpsertPasswordReset_Call struct {
 // UpsertPasswordReset is a helper method to define mock.On call
 //   - ctx context.Context
 //   - r verification.PasswordResetIssue
-func (_e *MockRepository_Expecter) UpsertPasswordReset(ctx interface{}, r interface{}) *MockRepository_UpsertPasswordReset_Call {
-	return &MockRepository_UpsertPasswordReset_Call{Call: _e.mock.On("UpsertPasswordReset", ctx, r)}
+//   - pause time.Duration
+func (_e *MockRepository_Expecter) UpsertPasswordReset(ctx interface{}, r interface{}, pause interface{}) *MockRepository_UpsertPasswordReset_Call {
+	return &MockRepository_UpsertPasswordReset_Call{Call: _e.mock.On("UpsertPasswordReset", ctx, r, pause)}
 }
 
-func (_c *MockRepository_UpsertPasswordReset_Call) Run(run func(ctx context.Context, r verification.PasswordResetIssue)) *MockRepository_UpsertPasswordReset_Call {
+func (_c *MockRepository_UpsertPasswordReset_Call) Run(run func(ctx context.Context, r verification.PasswordResetIssue, pause time.Duration)) *MockRepository_UpsertPasswordReset_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -541,9 +608,14 @@ func (_c *MockRepository_UpsertPasswordReset_Call) Run(run func(ctx context.Cont
 		if args[1] != nil {
 			arg1 = args[1].(verification.PasswordResetIssue)
 		}
+		var arg2 time.Duration
+		if args[2] != nil {
+			arg2 = args[2].(time.Duration)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -554,7 +626,7 @@ func (_c *MockRepository_UpsertPasswordReset_Call) Return(issued bool, err error
 	return _c
 }
 
-func (_c *MockRepository_UpsertPasswordReset_Call) RunAndReturn(run func(ctx context.Context, r verification.PasswordResetIssue) (bool, error)) *MockRepository_UpsertPasswordReset_Call {
+func (_c *MockRepository_UpsertPasswordReset_Call) RunAndReturn(run func(ctx context.Context, r verification.PasswordResetIssue, pause time.Duration) (bool, error)) *MockRepository_UpsertPasswordReset_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -31,6 +31,7 @@ Generic-примитив, нужный не только этому сервис
 ├── usecase.go       бизнес-логика; зависимости через интерфейсы (порты)
 ├── trusted.go       операции для других доменов без policy (Trusted)
 ├── metrics.go       метрики для алертов (biz_<domain>_*_total); nil-safe Record*
+├── config.go        Config домена из окружения (его собирает module/ из *config.App)
 ├── delivery/http/   huma/v2 + chi: handler.go, dto.go, view.go
 ├── delivery/nats/   NATS-subscriber (опц.): handler.go, dto.go
 ├── infra/postgres/  repository.go + queries/*.sql + db/ (sqlc, read-only)
@@ -60,7 +61,8 @@ Generic-примитив, нужный не только этому сервис
 | Файл | Когда обязателен |
 |---|---|
 | `entity.go`, `errors.go`, `usecase.go`, `module/module.go` | всегда |
-| `metrics.go` | у домена есть сигнал, на который ставят алерт (исходы входа, повтор refresh, запросы сброса, упёршиеся в лимит); счётчиков операций «на всякий случай» нет |
+| `metrics.go` | у домена есть сигнал, на который ставят алерт (исходы входа, повтор refresh, перебор адресов запросами сброса); счётчиков операций «на всякий случай» нет |
+| `config.go` | у домена есть настройка из окружения: тип `Config`, его собирает модуль домена из `*config.App` (образец — `verification.Config`) |
 | `dto.go` | есть хоть один Input/Output-тип (метод с 1–2 скалярами обходится без DTO) |
 | `policy.go` | есть authenticated actor (authorization) **или** чистые правила валидации домена (общее для доменов правило пароля — `pkg/policy`) |
 | `events.go` | домен публикует хотя бы одно outbox-событие; вместе с ним — `infra/outbox/outbox.go` |
@@ -338,7 +340,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   жизненным циклом повтор эффекта не открывает — канон `verification.IssueEmailVerification`. Poison у
   consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
 - **Jobs.** Периодические задачи без события-триггера — `timerkit.Job`, регистрируются
-  `timerkit.ProvideJob` в модуле-владельце и гоняются `timerkit.Module` той же fx.Lifecycle.
+  `timerkit.ProvideJob` в модуле-владельце и гоняются `timerkit.Module` той же fx.Lifecycle; тело job'а — метод
+  usecase с тестом. Образец — `verification.purge_links` (`verification/module/module.go`, `Usecase.PurgeLinks`).
   Обслуживание kit-таблиц приходит с модулями китов (`bruteforcepg.Module` и `sessionpg.Module` —
   cleanup, `outboxkit.Instance` — drain/партиции/retention); свой job поверх kit-таблицы не пишется.
 - **JetStream-стримы.** drain и subscriber'ы требуют включённого JetStream
