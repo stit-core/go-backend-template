@@ -17,7 +17,7 @@ type AuthLoginOutput struct {
 }
 
 type AuthRefreshInput struct {
-	RefreshCookie http.Cookie `cookie:"refresh_token"`
+	RefreshToken string `cookie:"refresh_token"`
 }
 
 type AuthRefreshOutput struct {
@@ -25,7 +25,7 @@ type AuthRefreshOutput struct {
 }
 
 type AuthLogoutInput struct {
-	RefreshCookie http.Cookie `cookie:"refresh_token"`
+	RefreshToken string `cookie:"refresh_token"`
 }
 
 type AuthLogoutOutput struct {
@@ -38,4 +38,8 @@ type AuthChangePasswordInput struct {
 		OldPassword string `json:"old_password" maxLength:"1024" required:"true"`
 		NewPassword string `json:"new_password" maxLength:"1024" minLength:"8"   required:"true"`
 	}
+}
+
+type AuthChangePasswordOutput struct {
+	SetCookie []http.Cookie `header:"Set-Cookie"`
 }

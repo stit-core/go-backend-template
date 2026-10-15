@@ -8,6 +8,7 @@ import (
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
@@ -48,14 +49,14 @@ func Register(api huma.API, h *Handler) {
 			"(AUTH_REFRESH_REUSED, вход заново), поэтому клиент обновляет сессию последовательно.",
 	})), h.refresh)
 
-	huma.Register(api, httpkit.Public(huma.Operation{
+	huma.Register(api, logoutErrors.Declare(httpkit.Public(huma.Operation{
 		OperationID:   "logoutUser",
 		Method:        http.MethodPost,
 		Path:          "/api/auth/logout",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Завершение сессии",
-	}), h.logout)
+	})), h.logout)
 
 	huma.Register(api, changePasswordErrors.Declare(authgate.Secured(huma.Operation{
 		OperationID:   "changePassword",
@@ -64,6 +65,8 @@ func Register(api huma.API, h *Handler) {
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Смена пароля",
+		Description: "Смена пароля закрывает все сессии пользователя, и текущую: ответ гасит cookie сессии, дальше — вход " +
+			"новым паролем.",
 	})), h.changePassword)
 }
 
@@ -83,10 +86,7 @@ func (h *Handler) login(ctx context.Context, in *AuthLoginInput) (*AuthLoginOutp
 }
 
 func (h *Handler) refresh(ctx context.Context, in *AuthRefreshInput) (*AuthRefreshOutput, error) {
-	if in.RefreshCookie.Value == "" {
-		return nil, authErrors.Map(auth.ErrRefreshExpired)
-	}
-	result, err := h.uc.Refresh(ctx, in.RefreshCookie.Value)
+	result, err := h.uc.Refresh(ctx, in.RefreshToken)
 	if err != nil {
 		return nil, authErrors.Map(err)
 	}
@@ -95,21 +95,19 @@ func (h *Handler) refresh(ctx context.Context, in *AuthRefreshInput) (*AuthRefre
 	}, nil
 }
 
-// Logout доменных ошибок не отдаёт: битый или погашенный refresh — тоже выход; ошибка — сбой хранилища.
+// Logout доменных ошибок не отдаёт: битый, погашенный и пустой refresh — тоже выход; ошибка — сбой хранилища.
 func (h *Handler) logout(ctx context.Context, in *AuthLogoutInput) (*AuthLogoutOutput, error) {
-	if in.RefreshCookie.Value != "" {
-		if err := h.uc.Logout(ctx, in.RefreshCookie.Value); err != nil {
-			return nil, authErrors.Map(err)
-		}
+	if err := h.uc.Logout(ctx, in.RefreshToken); err != nil {
+		return nil, authErrors.Map(err)
 	}
 	return &AuthLogoutOutput{SetCookie: authgate.BuildExpiredAuthCookies(h.cookieCfg)}, nil
 }
 
-func (h *Handler) changePassword(ctx context.Context, in *AuthChangePasswordInput) (*struct{}, error) {
+func (h *Handler) changePassword(ctx context.Context, in *AuthChangePasswordInput) (*AuthChangePasswordOutput, error) {
 	if err := h.uc.ChangePassword(ctx, in.Body.UserID, in.Body.OldPassword, in.Body.NewPassword); err != nil {
 		return nil, authErrors.Map(err)
 	}
-	return nil, nil
+	return &AuthChangePasswordOutput{SetCookie: authgate.BuildExpiredAuthCookies(h.cookieCfg)}, nil
 }
 
 // Правило каждой ошибки домена — одно. authErrors переводит в хендлерах их все (ни одна не уходит
@@ -118,9 +116,9 @@ func (h *Handler) changePassword(ctx context.Context, in *AuthChangePasswordInpu
 var (
 	invalidCredentialsRule = httpkit.ErrorRule{Err: auth.ErrInvalidCredentials, Status: http.StatusUnauthorized, Code: "AUTH_INVALID_CREDENTIALS", Detail: "invalid email or password"}
 	accountLockedRule      = httpkit.ErrorRule{Err: auth.ErrAccountLocked, Status: http.StatusTooManyRequests, Code: "AUTH_ACCOUNT_LOCKED", Detail: "account temporarily locked"}
-	refreshExpiredRule     = httpkit.ErrorRule{Err: auth.ErrRefreshExpired, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_EXPIRED", Detail: "refresh token expired or missing: log in again"}
+	refreshExpiredRule     = httpkit.ErrorRule{Err: auth.ErrRefreshExpired, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_EXPIRED", Detail: "refresh token expired: log in again"}
 	refreshReusedRule      = httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "refresh token reused: log in again"}
-	refreshInvalidRule     = httpkit.ErrorRule{Err: auth.ErrRefreshInvalid, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_INVALID", Detail: "refresh token invalid: log in again"}
+	refreshInvalidRule     = httpkit.ErrorRule{Err: auth.ErrRefreshInvalid, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_INVALID", Detail: "refresh token invalid or missing: log in again"}
 	weakPasswordRule       = httpkit.ErrorRule{Err: auth.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_WEAK_PASSWORD", Detail: "password too weak", Field: "body.new_password"}
 	passwordTooLongRule    = httpkit.ErrorRule{Err: auth.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "AUTH_PASSWORD_TOO_LONG", Detail: "password too long", Field: "body.new_password"}
 	wrongOldPasswordRule   = httpkit.ErrorRule{Err: auth.ErrWrongOldPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_INVALID_OLD_PASSWORD", Detail: "old password does not match", Field: "body.old_password"}
@@ -131,8 +129,9 @@ var (
 		refreshInvalidRule, weakPasswordRule, passwordTooLongRule, wrongOldPasswordRule, userNotFoundRule, concurrentUpdateRule,
 		authgate.ForbiddenRule)
 
-	loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule)
-	refreshErrors        = httpkit.NewErrorMap(refreshExpiredRule, refreshReusedRule, refreshInvalidRule)
+	loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, authlimit.Rule)
+	refreshErrors        = httpkit.NewErrorMap(refreshExpiredRule, refreshReusedRule, refreshInvalidRule, authlimit.Rule)
+	logoutErrors         = httpkit.NewErrorMap(authlimit.Rule)
 	changePasswordErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, wrongOldPasswordRule, accountLockedRule,
-		userNotFoundRule, concurrentUpdateRule, authgate.ForbiddenRule)
+		userNotFoundRule, concurrentUpdateRule, authgate.ForbiddenRule, authlimit.Rule)
 )

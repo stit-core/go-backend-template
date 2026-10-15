@@ -8,6 +8,7 @@ import (
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
 	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
@@ -175,7 +176,7 @@ var (
 	userErrors = httpkit.NewErrorMap(notFoundRule, alreadyExistsRule, invalidEmailRule, invalidNameRule, invalidRoleRule,
 		weakPasswordRule, passwordTooLongRule, concurrentUpdateRule, noUpdateFieldsRule, statusTransitionRule, authgate.ForbiddenRule)
 
-	registerErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidEmailRule, invalidNameRule, alreadyExistsRule)
+	registerErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidEmailRule, invalidNameRule, alreadyExistsRule, authlimit.Rule)
 	meErrors       = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
 	listErrors     = httpkit.NewErrorMap(authgate.ForbiddenRule)
 	getErrors      = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)

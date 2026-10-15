@@ -49,7 +49,8 @@ paths:
   того, есть ли ресурс (роль, свой id).
 - **Вход — проверка поля.** Предел длины строки — в символах (`utf8.RuneCountInString`, как
   `minLength`/`maxLength` huma), в байтах — только предел протокола (адрес — 254 байта, RFC 5321) и
-  кита: пароль — `authnkit.MaxPasswordLen` байт, `maxLength` поля — ранний отказ схемы, а
+  кита: пароль — `authnkit.MaxPasswordLen` байт, `maxLength` поля — ранний отказ схемы (форму, которую сущность не
+  пустит, схема отвергает тем же отказом валидации — `format`, `pattern` адреса регистрации), а
   `authnkit.ErrPasswordTooLong` хэшера usecase переводит в sentinel поля (422, `user.Register`), при
   проверке старого пароля — в «не совпал» (`user.Trusted.VerifyPassword`).
   NUL Postgres в TEXT не хранит: поле с ним отвергает сущность (sentinel поля → 422, `user.Rename`),

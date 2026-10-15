@@ -5,10 +5,10 @@ import (
 )
 
 type AuthUserView struct {
-	ID    string `json:"id"`
+	ID    string `json:"id"    format:"uuid"`
 	Email string `json:"email"`
 	Name  string `json:"name"`
-	Role  string `json:"role"`
+	Role  string `json:"role"  enum:"admin,client"`
 }
 
 func (v *AuthUserView) FromEntity(u *auth.User) {

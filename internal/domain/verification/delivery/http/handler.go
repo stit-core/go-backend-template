@@ -7,6 +7,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
@@ -23,14 +24,14 @@ type Handler struct {
 func NewHandler(uc Usecase) *Handler { return &Handler{uc: uc} }
 
 func Register(api huma.API, h *Handler) {
-	huma.Register(api, httpkit.Public(huma.Operation{
+	huma.Register(api, requestPasswordResetErrors.Declare(httpkit.Public(huma.Operation{
 		OperationID:   "requestPasswordReset",
 		Method:        http.MethodPost,
 		Path:          "/api/auth/password-reset/request",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Запрос сброса пароля",
-	}), h.requestPasswordReset)
+	})), h.requestPasswordReset)
 
 	huma.Register(api, confirmPasswordResetErrors.Declare(httpkit.Public(huma.Operation{
 		OperationID:   "confirmPasswordReset",
@@ -88,6 +89,7 @@ var (
 	verificationErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidResetRule, invalidVerifyRule, tokenUsedRule,
 		concurrentUpdateRule, userNotFoundRule)
 
-	confirmPasswordResetErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidResetRule, tokenUsedRule, concurrentUpdateRule)
-	confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule, tokenUsedRule)
+	requestPasswordResetErrors = httpkit.NewErrorMap(authlimit.Rule)
+	confirmPasswordResetErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidResetRule, tokenUsedRule, authlimit.Rule)
+	confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule, tokenUsedRule, authlimit.Rule)
 )

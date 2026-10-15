@@ -12,6 +12,7 @@ import (
 	authhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/delivery/http"
 	userhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/user/delivery/http"
 	verifhttp "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/delivery/http"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
 )
 
@@ -25,16 +26,13 @@ var httpModule = fx.Module(
 
 // middlewares — middleware сервиса внутри цепочки httpkit: no-store снаружи, чтобы его получил и отказ лимита.
 func middlewares(app *appconfig.App) httpkit.Middlewares {
-	return httpkit.Middlewares{noStore, authRateLimit(app.AuthRateLimit)}
+	return httpkit.Middlewares{noStore, authlimit.Middleware(app.AuthRateLimit)}
 }
 
-// Пути операций доменов и среди них — входа, регистрации, сессии и паролей: под ними — строгий лимит клиента.
-const (
-	apiPathPrefix  = "/api/"
-	authPathPrefix = "/api/auth/"
-)
+// apiPathPrefix — пути операций доменов: их ответы несут данные учётных записей.
+const apiPathPrefix = "/api/"
 
-// noStore — ответы операций доменов несут данные учётных записей: общий кэш и история браузера их не держат.
+// noStore — общий кэш и история браузера не держат ответы операций доменов.
 func noStore(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, apiPathPrefix) {
@@ -42,22 +40,6 @@ func noStore(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-// authRateLimit — лимит клиента на /api/auth/* поверх общего лимита httpkit (HTTP_AUTH_RATE_LIMIT_*): общая
-// очередь Argon2id процесса не ждёт поток одного клиента.
-func authRateLimit(cfg appconfig.AuthRateLimit) func(http.Handler) http.Handler {
-	limit := httpkit.RateLimit(httpkit.RateLimitConfig{RPS: cfg.RPS, Burst: cfg.Burst})
-	return func(next http.Handler) http.Handler {
-		limited := limit(next)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasPrefix(r.URL.Path, authPathPrefix) {
-				limited.ServeHTTP(w, r)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
 }
 
 type httpHandlers struct {

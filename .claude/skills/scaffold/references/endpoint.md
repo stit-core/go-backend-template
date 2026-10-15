@@ -75,8 +75,11 @@ type UserNewMethodOutput struct {
 }
 ```
 
-Используй huma-теги: `path`, `query`, `header`, валидаторы (`minLength`, `format:"email"` и т.д.).
-Список — встрой `paging.Page` (`pkg/paging`): query `page` и `size` с общими дефолтом и пределом.
+Используй huma-теги: `path`, `query`, `header`, валидаторы (`minLength`, `format:"email"` и т.д.); строка — с
+`maxLength`/`minLength` из правила сущности, форму, которую сущность не пустит, схема отвергает тем же отказом
+валидации (`format`, `pattern`): один отказ — один код. Cookie запроса — `string` с тегом `cookie`, не
+`http.Cookie` (иначе в контракт уходит её структура). Список — встрой `paging.Page` (`pkg/paging`): query `page`
+и `size` с общими дефолтом и пределом.
 
 ### 5. Handler-метод в `handler.go`
 
@@ -142,8 +145,9 @@ var (
   `Field: "body.<field>"`.
 - 429 — `Retry-After` из метода `RetryAfter() time.Duration` ошибки в цепочке (`auth.LockedError`).
 - Первое совпавшее правило выигрывает; правило, которое затеняет правило выше, — panic при сборке.
-- Операция без доменных ошибок таблицы операции не заводит; заведённая таблица без `Declare` в
-  `huma.Register` — archtest красный: её коды не попали бы в OpenAPI.
+- Операция без доменных ошибок таблицы операции не заводит, кроме операции под `authlimit.Prefix` (`/api/auth/*`):
+  её таблица объявляет `authlimit.Rule` (429 строгого лимита, иначе красный `TestHTTPOperations`). Заведённая
+  таблица без `Declare` в `huma.Register` — archtest красный: её коды не попали бы в OpenAPI.
 
 Контракт ошибок целиком — `docs/reference/architecture.md` § Контракт ошибок API.
 

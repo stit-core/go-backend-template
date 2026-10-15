@@ -47,24 +47,27 @@ var createdAt = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
 func alice() *user.User {
 	return &user.User{
-		ID: "u1", Email: "a@b.com", PasswordHash: "hash:secret", Name: "Alice", Status: user.StatusActive,
-		Version: 3, CreatedAt: createdAt, UpdatedAt: createdAt.Add(time.Hour),
+		ID: "u1", Email: "a@b.com", PasswordHash: "hash:secret", Name: "Alice", Status: user.StatusActive, Role: identity.RoleClient,
+		Version: 3, EmailVerified: true, CreatedAt: createdAt, UpdatedAt: createdAt.Add(time.Hour),
 	}
 }
 
 // view — пользователь в ответе глазами клиента: теги свои, а не из кода.
 type view struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	Status    string    `json:"status"`
-	Version   int       `json:"version"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	Email         string    `json:"email"`
+	EmailVerified bool      `json:"email_verified"`
+	Name          string    `json:"name"`
+	Role          string    `json:"role"`
+	Status        string    `json:"status"`
+	Version       int       `json:"version"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 var aliceView = view{
-	ID: "u1", Email: "a@b.com", Name: "Alice", Status: "active", Version: 3, CreatedAt: createdAt, UpdatedAt: createdAt.Add(time.Hour),
+	ID: "u1", Email: "a@b.com", EmailVerified: true, Name: "Alice", Role: "client", Status: "active", Version: 3,
+	CreatedAt: createdAt, UpdatedAt: createdAt.Add(time.Hour),
 }
 
 // data разбирает поле data ответа; поле вне T — провал: ответ не отдаёт лишнего (хэш пароля).
@@ -135,11 +138,28 @@ func TestRegister_NotAnAddress(t *testing.T) {
 	t.Parallel()
 	api := setup(t, mocks.NewMockUsecase(t))
 
-	resp := api.Post("/api/auth/register", strings.NewReader(`{"email":"not an address","password":"longenough","name":"A"}`))
+	resp := api.Post("/api/auth/register", strings.NewReader(`{"email":"not-an-address","password":"longenough","name":"A"}`))
 	handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 	errs := handlertest.DecodeAPIError(t, resp).Errors
 	require.Len(t, errs, 1)
 	require.Equal(t, "body.email", errs[0].Location)
+}
+
+// Адрес не в форме разбора — один отказ схемы до usecase, какие бы пробелы и имя ни несла форма: строгий мок без
+// ожиданий.
+func TestRegister_AddressNotCanonical(t *testing.T) {
+	t.Parallel()
+	api := setup(t, mocks.NewMockUsecase(t))
+
+	for _, email := range []string{" a@b.com", "a@b.com ", "\ta@b.com", "a@b.com\u00a0", "\u2003a@b.com", "Alice <a@b.com>"} {
+		body, err := json.Marshal(map[string]string{"email": email, "password": "longenough", "name": "A"})
+		require.NoError(t, err)
+		resp := api.Post("/api/auth/register", bytes.NewReader(body))
+		handlertest.AssertAPIError(t, resp, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+		for _, e := range handlertest.DecodeAPIError(t, resp).Errors {
+			require.Equal(t, "body.email", e.Location, email)
+		}
+	}
 }
 
 // Имя с NUL отвергает домен: та же форма ошибки поля, что у валидации схемы.

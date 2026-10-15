@@ -359,3 +359,19 @@ DECIDE срок хранения аудита в днях
 RISK   без AUDIT_RETENTION_DAYS сервис не стартует (auditkit.ErrConfig); первый прогон job'а на большой audit_log
        удаляет хвост за несколько часов батчами
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   контракт API (openapi.json): операции /api/auth/* объявляют 429 RATE_LIMITED строгого лимита, у logoutUser и
+       requestPasswordReset вместо default — 422/429/500; cookie refresh_token — строка (схемы Cookie нет); в UserView
+       — role и email_verified, у id/status/role — format и enum. Коды: адрес регистрации с пробелами или именем —
+       422 VALIDATION_FAILED (был USER_INVALID_EMAIL у пробелов ASCII); refresh без cookie — 401 AUTH_REFRESH_INVALID
+       (был AUTH_REFRESH_EXPIRED); успешная смена пароля гасит cookie сессии (Set-Cookie), как выход
+WHY    polish-code-security-adapters S7 — NCOD-01, RCOD-08, RCOD-09, RCOD-14: контракт не называл 429 лимита и
+       давал два кода одному отказу
+ACTION клиентам API (SPA, мобильные) — перегенерировать клиент по openapi.json; обработка 429 на /api/auth/*;
+       после смены пароля — экран входа
+WHO    потребители API
+DECIDE —
+RISK   клиент, который различал AUTH_REFRESH_EXPIRED и AUTH_REFRESH_INVALID или ждал USER_INVALID_EMAIL на адресе с
+       пробелом, получает другой код того же смысла («войти заново», «неверный адрес»)
+===

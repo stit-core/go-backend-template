@@ -18,6 +18,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/logkit"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
 )
 
 // buildAPI собирает HTTP API так же, как сервис — сервер httpkit с /health и /ready, схема
@@ -103,6 +104,13 @@ func TestHTTPOperations(t *testing.T) {
 	for _, op := range ops {
 		if !strings.HasPrefix(op.Path, "/api/") && !slices.Contains(httpkitPaths, op.Path) {
 			t.Errorf("operation %s at %s: domain operations live under /api/", op.OperationID, op.Path)
+		}
+		limited := op.Responses["429"] != nil && strings.Contains(op.Responses["429"].Description, authlimit.Rule.Code)
+		if strings.HasPrefix(op.Path, authlimit.Prefix) != limited {
+			t.Errorf("operation %s at %s: an operation under %s declares the refusal of the strict limit (authlimit.Rule in its table), no other does", op.OperationID, op.Path, authlimit.Prefix)
+		}
+		if strings.HasPrefix(op.Path, "/api/") && op.Responses["default"] != nil {
+			t.Errorf("operation %s answers default in OpenAPI: its table declares the codes", op.OperationID)
 		}
 		if len(op.Security) == 0 {
 			if !slices.Contains(httpkitPaths, op.Path) {

@@ -135,12 +135,15 @@ func TestRefresh_HappyPath(t *testing.T) {
 	requireSession(t, resp, "new-access", "new-refresh")
 }
 
+// Без cookie решает usecase, как о любом неизвестном токене.
 func TestRefresh_NoCookie(t *testing.T) {
 	t.Parallel()
-	api := setup(t, mocks.NewMockUsecase(t))
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().Refresh(mock.Anything, "").Return(nil, auth.ErrRefreshInvalid).Once()
+	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/refresh", strings.NewReader(""))
-	handlertest.AssertAPIError(t, resp, http.StatusUnauthorized, "AUTH_REFRESH_EXPIRED")
+	handlertest.AssertAPIError(t, resp, http.StatusUnauthorized, "AUTH_REFRESH_INVALID")
 }
 
 func TestRefresh_Expired(t *testing.T) {
@@ -201,7 +204,9 @@ func TestLogout_WithCookie(t *testing.T) {
 // Выход без cookie — тоже выход: usecase не зовётся (строгий мок), cookie стираются.
 func TestLogout_NoCookie(t *testing.T) {
 	t.Parallel()
-	api := setup(t, mocks.NewMockUsecase(t))
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().Logout(mock.Anything, "").Return(nil).Once()
+	api := setup(t, uc)
 
 	resp := api.Post("/api/auth/logout", strings.NewReader(""))
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
@@ -230,6 +235,7 @@ func TestChangePassword_HappyPath(t *testing.T) {
 	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password", strings.NewReader(changePasswordBody("new-password1")))
 	handlertest.AssertStatus(t, resp, http.StatusNoContent)
 	require.Empty(t, resp.Body.String())
+	requireLoggedOut(t, resp)
 }
 
 // Операция под Security: запрос без сессии отвечает 401 до usecase — строгий мок без ожиданий.

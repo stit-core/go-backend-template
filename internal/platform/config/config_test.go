@@ -10,6 +10,7 @@ import (
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
@@ -62,12 +63,12 @@ func TestLoad(t *testing.T) {
 func TestLoad_AuthRateLimit(t *testing.T) {
 	cases := []struct {
 		name, rps, burst string
-		want             appconfig.AuthRateLimit
+		want             authlimit.Config
 		wantErr          bool
 	}{
-		{name: "defaults", want: appconfig.AuthRateLimit{RPS: 5, Burst: 10}},
-		{name: "from env", rps: "2", burst: "4", want: appconfig.AuthRateLimit{RPS: 2, Burst: 4}},
-		{name: "off", rps: "0", want: appconfig.AuthRateLimit{RPS: 0, Burst: 10}},
+		{name: "defaults", want: authlimit.Config{RPS: 5, Burst: 10}},
+		{name: "from env", rps: "2", burst: "4", want: authlimit.Config{RPS: 2, Burst: 4}},
+		{name: "off", rps: "0", want: authlimit.Config{RPS: 0, Burst: 10}},
 		{name: "negative rate", rps: "-1", wantErr: true},
 		{name: "negative burst", burst: "-1", wantErr: true},
 	}

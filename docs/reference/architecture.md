@@ -9,7 +9,7 @@
 |---|---|---|
 | `internal/domain/<d>/` | бизнес-код домена: слои ниже | `internal/platform`, `pkg`, киты; чужой домен — только `module/` |
 | `internal/domain/<d>/infra/<kit>/` | адаптер порта домена к киту, внешнему каналу (почта, платёжный провайдер) или клиенту из `pkg/` | корень своего домена, кит, клиент |
-| `internal/platform/` | клей сервиса, общий доменам: конфиг и prod-гард (`config`), сессия (`authgate`), личность (`identity`), outbox доменов (`events`) | `pkg`, киты; доменов не знает |
+| `internal/platform/` | клей сервиса, общий доменам: конфиг и prod-гард (`config`), сессия (`authgate`), строгий лимит `/api/auth/*` (`authlimit`), личность (`identity`), outbox доменов (`events`) | `pkg`, киты; доменов не знает |
 | `pkg/` | правила и типы сервиса без I/O, общие доменам (`policy`, `paging`, `outcome`); сгенерированные клиенты (gRPC, OpenAPI) — вывод генератора `make gen`, их зовёт `infra/` домена: генератор и его каталог в archtest `TestGeneratedHeaderOnlyInGeneratorOutput` заводит правка гейта | `pkg`, киты |
 | `cmd/` | входы: `api`, `migrate`, `seed-admin` | всё |
 | `internal/testkit/`, `internal/archtest/` | тестовая обвязка и машинные правила раскладки | — |
@@ -268,7 +268,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 подписку на события заводит `natskit` в `delivery/nats` (archtest `TestInputsRegisterInDelivery`,
 `TestDeliveryPackages`); подписку методом шины мимо функций natskit archtest не видит — ревью.
 `Register` пакетов доменов зовёт одна функция — `registerHTTP` в `cmd/api/http.go`; там же middleware сервиса
-(`middlewares`): `Cache-Control: no-store` у ответов `/api/*` и строгий лимит клиента на `/api/auth/*`. Открытая
+(`middlewares`): `Cache-Control: no-store` у ответов `/api/*` и строгий лимит клиента на `/api/auth/*`
+(`authlimit.Middleware`). Открытая
 операция помечена `httpkit.Public(op)`: операция без `Security` и без пометки, дубль метода и пути
 (huma и chi молча перезаписали бы маршрут) — ошибка старта (httpkit, `Server.CheckRoutes`), дубль
 `OperationID` — паника huma. По `registerHTTP` же `cmd/api/api_test.go` собирает API без БД и брокера:
@@ -295,7 +296,10 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   usecase. Таблица операции из
   тех же правил объявляет при регистрации (`Declare`) коды, которые отдаёт её usecase (`openapi.json`). Оба
   правила держит archtest `TestDomainErrorTables`, сверку таблицы операции с usecase — ручной список теста;
-  операция без доменных ошибок таблицы операции не заводит.
+  операция без доменных ошибок таблицы операции не заводит, кроме операции под `authlimit.Prefix`.
+- Операция под `authlimit.Prefix` (`/api/auth/*`) объявляет отказ строгого лимита клиента — правило
+  `authlimit.Rule` (429 `RATE_LIMITED`) в своей таблице, без доменных ошибок — таблица из него одного: отказ
+  отдаёт middleware, и без правила контракт его бы не знал; у операций вне префикса его нет (`TestHTTPOperations`).
 - Код — `<DOMAIN>_<WHAT>`; разный смысл — разная ошибка домена: неверный пароль входа
   (`ErrInvalidCredentials`, 401) и старый пароль смены (`ErrWrongOldPassword`, 422 поля
   `body.old_password`: сессия цела).

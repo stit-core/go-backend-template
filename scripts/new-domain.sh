@@ -196,7 +196,7 @@ import (
 	"$MODULE_PATH/pkg/policy"
 )
 
-// maxNameLen — предел имени в символах.
+// maxNameLen — предел имени в символах; его же держит maxLength поля name в delivery/http.
 const maxNameLen = 200
 
 type Policy struct{}
@@ -518,7 +518,7 @@ package http
 
 type ${TITLE}CreateInput struct {
 	Body struct {
-		Name string \`json:"name" required:"true"\`
+		Name string \`json:"name" maxLength:"200" minLength:"1" required:"true"\`
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"go.uber.org/fx"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	kitconfig "git.stit.tech/stit-core/golibinfra/config"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
@@ -20,17 +21,9 @@ import (
 type App struct {
 	Env           Env `envconfig:"APP_ENV" required:"true"`
 	Cookie        authgate.CookieConfig
-	AuthRateLimit AuthRateLimit
+	AuthRateLimit authlimit.Config
 	// PasswordResetMailPause — после ссылки сброса учётная запись столько новых писем сброса не получает; 0 — без паузы.
 	PasswordResetMailPause time.Duration `default:"5m" envconfig:"PASSWORD_RESET_MAIL_PAUSE"`
-}
-
-// AuthRateLimit — token-bucket на клиента (IP, как у лимитера httpkit) для /api/auth/*: вход, регистрация,
-// смена и сброс пароля считают Argon2id в общей очереди процесса, и поток одного клиента в пределах общего
-// лимита занял бы её для всех. RPS = 0 выключает его: лимит держит край (прокси, WAF).
-type AuthRateLimit struct {
-	RPS   int `default:"5"  envconfig:"HTTP_AUTH_RATE_LIMIT_RPS"`
-	Burst int `default:"10" envconfig:"HTTP_AUTH_RATE_LIMIT_BURST"`
 }
 
 // Env — окружение сервиса (APP_ENV): вне Dev старт не пускает небезопасную конфигурацию (Guard).

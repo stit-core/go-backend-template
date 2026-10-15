@@ -118,9 +118,15 @@ blocked-by: —
     `.env.example` — 30); middleware `noStore` в `cmd/api/http.go`; `TestBoot` видит job'ы `auditkit.retention` и
     `verification.purge_links` и `no-store` у ответа `/api/users/me`, `TestMiddlewares_NoStore` — и у отказа лимита;
     handoff-блок; `make check` → ✓
-- [ ] **S7** — Контракт API: 429 строгого лимита, таблицы logout и запроса сброса, адрес регистрации, cookie
+- [x] **S7** — Контракт API: 429 строгого лимита, таблицы logout и запроса сброса, адрес регистрации, cookie
   строкой, `changePassword`, поля и форматы ответов, ветки пустого cookie
   - Проверка: сводка `openapi.json`; E2; `make check` → ✓ · Закрывает: AC5 · Зависит от: S6
+  - Сделано: пакет `internal/platform/authlimit` (`Prefix`, `Config`, `Middleware`, `Rule` — 429 `RATE_LIMITED` в таблицах
+    операций под префиксом); `TestHTTPOperations` держит 429 у `/api/auth/*` и отсутствие `default`; адрес
+    регистрации — `pattern` без пробелов и `maxLength` (все формы не разбора — `VALIDATION_FAILED`,
+    `TestRegister_AddressNotCanonical`); cookie — `string`; `changePassword` — описание и гашение cookie;
+    `UserView` — `role`, `email_verified`, `enum`/`format`; ветки пустого cookie сняты; скелет — `maxLength`
+    имени (правка `scripts/new-domain.sh`, срез `order` — тесты зелёные); handoff-блок; `make check` → ✓
 - [ ] **S8** — T11, NADP-04: ошибки `Trusted` — по методам; archtest читает методы `*Trusted` любого файла корня
   - Проверка: `ra04` → отказ; `make check` → ✓ · Закрывает: AC7 · Зависит от: —
 - [ ] **S9** — RCOD-07, RCOD-14: пароль хеширует `user.Trusted.HashPassword`, проверяет `auth`; смена пароля —
@@ -156,6 +162,14 @@ blocked-by: —
   монтирует только его `module/` (archkit), а подтверждённому admin письмо не нужно.
 - RSECT-05: `AUDIT_RETENTION_DAYS` — required без дефолта шаблона: срок хранения аудита — требование проекта, и кит
   нарочно не даёт его по умолчанию (`RetentionConfig.Validate`).
+- NCOD-01: 429 строгого лимита объявляет правило `authlimit.Rule` в таблице операции (канон `Declare`), а не хук
+  OpenAPI в `cmd/api`: ответы huma строит из `op.Errors` до хуков, и только таблица снимает `default` у операций
+  без доменных ошибок. Лимит, префикс и правило — в одном пакете платформы; совпадение префикса и объявлений
+  держит `TestHTTPOperations`. 429 общего лимитера кита (`HTTP_RATE_LIMIT_*`) контракт не объявляет — свойство
+  кита: его описание ошибок — в golibinfra (строкой отчёта для раздела других репозиториев).
+- NCOD-01, один отказ — один код: адрес регистрации не в форме разбора отвергает схема (`pattern` без пробелов к
+  `format:"email"`), сущность держит то же правило для `seed-admin`; запрос сброса принимает адрес мягко, как вход.
+- Правки чужих файлов: `scripts/new-domain.sh` (трек gate) — `maxLength` и комментарий предела имени скелета.
 - RCOD-10: своя ссылка и соседние гасятся одним оператором с `RETURNING id`; канон одиночного погашения в rule
   `sqlc-and-migrations` (трек gate) — `MarkEmailVerificationUsed`, строкой там же — погашение с соседями: правка
   чужого файла, иначе правило называло бы снятый метод.
@@ -168,4 +182,4 @@ blocked-by: —
   к кому: владелец
 
 ## Где мы сейчас
-S1–S6 закрыты. Следующий шаг — S7 (контракт API).
+S1–S7 закрыты. Следующий шаг — S8 (ошибки `Trusted` по методам).
