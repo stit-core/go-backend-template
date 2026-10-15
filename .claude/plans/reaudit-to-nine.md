@@ -154,6 +154,8 @@ blocked-by: —
 
 - S6: аудитор code+security стартовал от `5d88ad9` до слияния S5 — трек harness не трогает код и security-поверхность;
   дифф S5 аудитор сверяет в конце (решение дирижёра: волна 2 закончилась бы позже на время его аудита).
+- Строку `Review:` хук требует и у `chore(template)` (трек S7 harness+lifecycle, NHAR-04): перенос обвязки с `PATHS`
+  несёт код входа и сессий, а он по § Готово требует `/security-review` — расширение решения владельца по RHAR-01.
 - `timeout` у guard-хука засчитывается от 1 с: guard работает 15–20 мс, обезвреживает только более короткий таймаут.
 
 ## Handoff
@@ -180,5 +182,6 @@ blocked-by: —
   (`make template-update TO=… PATHS='<пути>'`) или поправить свою прозу.
 
 ## Где мы сейчас
-S1–S6 закрыты. S7 — три трека добора по владению файлами: harness+lifecycle (`nine/s7-harness`),
-code+security+adapters (`nine/s7-code`), gate+tests (`nine/s7-gate`), за каждым — валидатор. Следующее: S7, затем S8.
+S1–S6 закрыты. S7: трек harness+lifecycle слит (`ab445c2`, валидатор — PASS, `N/validation-s7-harness.md`), его
+неблокирующие — коммитами исполнителя поверх `main`; треки code+security+adapters (`nine/s7-code`) и gate+tests
+(`nine/s7-gate`) идут. Следующее: их валидация и слияние, затем S8.
