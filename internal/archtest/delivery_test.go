@@ -712,7 +712,7 @@ func (w policyWalk) asks(fn *ast.FuncDecl) bool {
 			switch {
 			case isSel && strings.HasPrefix(sel.Sel.Name, "Can") && w.port(sel.X, params, true),
 				isSel && w.port(sel.X, params, false) && slices.ContainsFunc(x.Args, sc.key),
-				w.asks(w.callee(fn, x)):
+				w.asks(sc.callee(x)):
 				asked = true
 			}
 		}
@@ -722,7 +722,8 @@ func (w policyWalk) asks(fn *ast.FuncDecl) bool {
 	return asked
 }
 
-// yields — функция отдаёт первым результатом ключ вызывающего: return caller.UserID, nil.
+// yields — каждый return функции отдаёт первым результатом ключ вызывающего (return caller.UserID, nil) или "" с
+// ошибкой (return "", err): функция, которая на одной из веток отдаёт ID входа, ключ не даёт.
 func (w policyWalk) yields(fn *ast.FuncDecl) bool {
 	if fn == nil || fn.Body == nil {
 		return false
@@ -731,16 +732,25 @@ func (w policyWalk) yields(fn *ast.FuncDecl) bool {
 		return done
 	}
 	w.yielded[fn] = false
-	sc := w.scope(fn)
-	found := false
+	sc, returns, yields := w.scope(fn), 0, true
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		if x, ok := n.(*ast.ReturnStmt); ok {
-			found = found || len(x.Results) > 0 && sc.key(x.Results[0])
+		switch x := n.(type) {
+		case *ast.FuncLit:
+			return false // return литерала — не return функции
+		case *ast.ReturnStmt:
+			returns++
+			yields = yields && len(x.Results) > 0 && (sc.key(x.Results[0]) || refused(x.Results))
 		}
-		return !found
+		return yields
 	})
-	w.yielded[fn] = found
-	return found
+	w.yielded[fn] = returns > 0 && yields
+	return w.yielded[fn]
+}
+
+// refused — return "", err: пустой ключ вместе с ошибкой.
+func refused(results []ast.Expr) bool {
+	lit, ok := results[0].(*ast.BasicLit)
+	return ok && lit.Value == `""` && len(results) > 1 && !isIdent(results[len(results)-1], "nil")
 }
 
 // callerScope — переменные функции fn: вызывающий — переменная, каждая запись которой — identity.From(ctx); ключ —
@@ -749,14 +759,14 @@ func (w policyWalk) yields(fn *ast.FuncDecl) bool {
 type callerScope struct {
 	w             policyWalk
 	fn            *ast.FuncDecl
+	vars          map[string][]ast.Expr // writes(fn)
 	callers, keys map[string]bool
 }
 
 // scope — callerScope функции fn: ключи — наибольшее множество, у каждой переменной которого все записи — ключ.
 func (w policyWalk) scope(fn *ast.FuncDecl) callerScope {
-	sc := callerScope{w: w, fn: fn, callers: map[string]bool{}, keys: map[string]bool{}}
-	vars := writes(fn)
-	for name, values := range vars {
+	sc := callerScope{w: w, fn: fn, vars: writes(fn), callers: map[string]bool{}, keys: map[string]bool{}}
+	for name, values := range sc.vars {
 		sc.callers[name] = !slices.ContainsFunc(values, func(v ast.Expr) bool {
 			call, ok := v.(*ast.CallExpr)
 			return !ok || !isSelector(call.Fun, w.byName[fn], identityPath, "From")
@@ -765,7 +775,7 @@ func (w policyWalk) scope(fn *ast.FuncDecl) callerScope {
 	}
 	for changed := true; changed; {
 		changed = false
-		for name, values := range vars {
+		for name, values := range sc.vars {
 			if sc.keys[name] && slices.ContainsFunc(values, func(v ast.Expr) bool { return v == nil || !sc.key(v) }) {
 				sc.keys[name], changed = false, true
 			}
@@ -784,7 +794,7 @@ func (sc callerScope) key(expr ast.Expr) bool {
 		id, ok := e.X.(*ast.Ident)
 		return ok && e.Sel.Name == "UserID" && sc.callers[id.Name]
 	case *ast.CallExpr:
-		return sc.w.yields(sc.w.callee(sc.fn, e))
+		return sc.w.yields(sc.callee(e))
 	}
 	return false
 }
@@ -854,14 +864,17 @@ func writes(fn ast.Node) map[string][]ast.Expr {
 	return out
 }
 
-// callee — свой метод (на получателе fn) или функция корня, которую зовёт вызов; nil — чужой вызов.
-func (w policyWalk) callee(fn *ast.FuncDecl, call *ast.CallExpr) *ast.FuncDecl {
+// callee — свой метод (на получателе fn) или функция корня, которую зовёт вызов; nil — чужой вызов или имя, которое
+// функция объявила сама: литерал функции под именем функции корня — не она.
+func (sc callerScope) callee(call *ast.CallExpr) *ast.FuncDecl {
 	switch fun := call.Fun.(type) {
 	case *ast.Ident:
-		return w.funcs[fun.Name]
+		if len(sc.vars[fun.Name]) == 0 {
+			return sc.w.funcs[fun.Name]
+		}
 	case *ast.SelectorExpr:
-		if fn.Recv != nil && len(fn.Recv.List[0].Names) > 0 && isIdent(fun.X, fn.Recv.List[0].Names[0].Name) {
-			return w.methods[fun.Sel.Name]
+		if recv := sc.fn.Recv; recv != nil && len(recv.List[0].Names) > 0 && isIdent(fun.X, recv.List[0].Names[0].Name) {
+			return sc.w.methods[fun.Sel.Name]
 		}
 	}
 	return nil
