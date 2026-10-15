@@ -139,9 +139,13 @@ blocked-by: —
     конце снят, paths: из одних «**» — правило грузится всегда; glob ложится на файл по правилам .gitignore
     (`git ls-files -c -i -x`, как пакет ignore у Claude Code); скилл без `name:` — по каталогу. P09–P15, F2,
     F5 — зелёные, M17–M19, V04–V06 — красные; `fix_cases.py` E01–E12 — как ждали; `make check` → `✓ check clean`
-- [ ] **S9** — B2: guard, обезвреженный полем обработчика, — отказ `TestGuardWired`
+- [x] **S9** — B2: guard, обезвреженный полем обработчика, — отказ `TestGuardWired`
   - Проверка: W01–W04 и поля `once`, `timeout` → красные; P01–P08 законные → зелёные; `make check` ✓ ·
     Закрывает: AC3 · Зависит от: —
+  - Сделано: обработчик guard засчитывается, только если в нём нет полей, кроме `type`, `command`, `shell`
+    (`bash`), `statusMessage`, `onFailure`; W01–W04 и E20–E27 (`if`, `async`, `asyncRewake`, `once`, `args`,
+    `shell: powershell`, `timeout`, неизвестное поле) — красные, P01–P08 и E28–E30 — зелёные, M30–M31c,
+    V07–V11 — красные; `make check` → `✓ check clean`
 - [ ] **S10** — N1: matcher хука — как у Claude Code
   - Проверка: P03, P03b, P04, P07 → зелёные; V09 (`Bas`) → красный; `make check` ✓ · Закрывает: AC3 · Зависит от: S9
 - [ ] **S11** — N2: при `identity: external` пропуск только того, что так написано в шаблоне
@@ -187,6 +191,9 @@ blocked-by: —
   только у её доменов (`events.go`, `delivery/nats`, outbox), пустуют до своих.
 - Чужой файл rule `infra-impact` (в волне 2 ничей): glob `.env.example.*` снят — файлов под ним нет, и
   проза таких вариантов не заводит; канон — один `.env.example` (`TestEnvExampleHasRequired`).
+- Поля обработчика guard — белый список (`type`, `command`, `shell: bash`, `statusMessage`, `onFailure`), а
+  не перечень опасных: в схеме Claude Code 2.1.300 гасят guard не только `if`, `async`, `args`, `shell`, но и
+  `asyncRewake`, `once` и короткий `timeout`, а новое поле клиента без правки archtest не засчитается.
 - deny проверяется списком всех запретов `.claude/settings.json`: снять любой — ослабить гейт (CLAUDE.md
   § Сначала спросить) правкой archtest, новый запрет теста не требует. Matcher хука — имя или регулярное
   выражение, пусто и `*` — любой инструмент, как у Claude Code.
@@ -210,5 +217,5 @@ blocked-by: —
   545–1012 строк, код — до 303.
 
 ## Где мы сейчас
-Круг фиксов валидатора: S8 (B1) закрыт — `paths:` и `name:` читаются, как у Claude Code. Следующий шаг — S9
-(B2). Кейсы круга — `N/harness/fix_cases.py`, раннеры валидатора — `N/val-harness/`.
+Круг фиксов валидатора: S8 (B1), S9 (B2) закрыты — `paths:` и `name:` читаются, как у Claude Code, guard с
+полем, которое его гасит, не засчитывается. Следующий шаг — S10 (N1). Кейсы круга — `N/harness/fix_cases.py`, раннеры валидатора — `N/val-harness/`.

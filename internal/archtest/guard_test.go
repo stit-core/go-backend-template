@@ -66,9 +66,34 @@ var barrierDeny = []string{
 	"Edit(go.sum)", "Edit(**/.claude/projects/**/memory/**)",
 }
 
+// guardFields — поля обработчика guard, которые барьер не гасят. Остальные гасят или обходят его (Claude Code,
+// hooks § Common fields и Command hook fields): if сужает вызовы, async и asyncRewake не ждут отказа, once
+// снимает хук после первого раза, args запускает command без оболочки, короткий timeout обрывает guard.
+var guardFields = map[string]bool{"type": true, "command": true, "shell": true, "statusMessage": true, "onFailure": true}
+
+// guardHandler — обработчик запускает guard как есть: команда оболочки bash без полей, которые его гасят.
+func guardHandler(handler map[string]json.RawMessage) bool {
+	var typ, command, shell string
+	for key, value := range handler {
+		var s *string
+		switch key {
+		case "type":
+			s = &typ
+		case "command":
+			s = &command
+		case "shell":
+			s = &shell
+		}
+		if !guardFields[key] || s != nil && json.Unmarshal(value, s) != nil {
+			return false
+		}
+	}
+	return typ == "command" && command == guardCommand && (shell == "" || shell == "bash")
+}
+
 // TestGuardWired: барьер от случайного обхода держат хук guard-bash и deny .claude/settings.json, пока они
-// подключены. Хук, отвязанный от Bash, подменённый или выключенный (disableAllHooks), и снятый запрет молчат:
-// TestGuardBash проверяет скрипт, а не его подключение.
+// подключены. Хук, отвязанный от Bash, подменённый, выключенный (disableAllHooks) или обезвреженный полем
+// обработчика, и снятый запрет молчат: TestGuardBash проверяет скрипт, а не его подключение.
 func TestGuardWired(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".claude", "settings.json"))
@@ -79,7 +104,7 @@ func TestGuardWired(t *testing.T) {
 		Hooks           struct {
 			PreToolUse []struct {
 				Matcher string
-				Hooks   []struct{ Type, Command string }
+				Hooks   []map[string]json.RawMessage
 			}
 		}
 	}
@@ -95,10 +120,10 @@ func TestGuardWired(t *testing.T) {
 			bash = re.MatchString("Bash")
 		}
 		for _, h := range entry.Hooks {
-			wired = wired || bash && h.Type == "command" && h.Command == guardCommand
+			wired = wired || bash && guardHandler(h)
 		}
 	}
-	require.True(t, wired, ".claude/settings.json: no PreToolUse hook of Bash runs %s — the guard is off", guardCommand)
+	require.True(t, wired, ".claude/settings.json: no PreToolUse hook of Bash runs %s as a plain bash command (fields if, async, once, args, timeout disarm it) — the guard is off", guardCommand)
 	for _, rule := range barrierDeny {
 		require.Contains(t, settings.Permissions.Deny, rule, ".claude/settings.json: deny lost %s — that weakens the gate (CLAUDE.md § Сначала спросить)", rule)
 	}
