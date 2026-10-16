@@ -63,10 +63,11 @@ DDD-артефакты доменов — в соседнем strategy-репо 
 Единый интерфейс `make <verb>` (`make help`; реализация — `scripts/tools/*`, напрямую не зови).
 Конциз-by-default: `FORMAT=detailed`/`VERBOSE=1` — полно, `PKG=./x/...` — подмножество; `make check`
 их не читает. `make check` = fmt-check + vet + lint + migrations-check + test-int (юнит +
-integration, нужен Docker) + build (`./...` без тегов, как образ) + gen-check + cover-check (покрытие
-профиля test-int 100% по `internal/` и `pkg/`, непокрываемое — список `cover.sh`; функций без тестов нет и
-в `cmd/`, кроме `main`). Версии gofumpt, golangci-lint, sqlc и mockery — закреплённые в
-`scripts/tools/versions.sh`: их ставит `make setup`, а шаг с инструментом другой версии отказывает.
+integration, нужны Docker и python3 — на нём раннер мутаций) + build (`./...` без тегов, как образ) +
+gen-check + cover-check (покрытие профиля test-int 100% по `internal/` и `pkg/`, непокрываемое — список
+`cover.sh`; функций без тестов нет и в `cmd/`, кроме `main`). Версии gofumpt, golangci-lint, sqlc и
+mockery — закреплённые в `scripts/tools/versions.sh`: их ставит `make setup`, а шаг с инструментом другой
+версии отказывает.
 `make gen` — sqlc, mockery и `openapi.json` (контракт API из регистраций huma, без запуска сервиса).
 `make mutate` — мутационный прогон вне гейта; новая логика — свои блоки в `scripts/tools/mutants.txt` тем же
 коммитом (rule `tests-pipeline`).

@@ -62,6 +62,8 @@ fi
 for tool in sqlc mockery gofumpt; do
     command -v "$tool" >/dev/null || { echo "ERROR: $tool не найден — make setup" >&2; exit 1; }
 done
+# python3 make setup не ставит, а без него срез откатился бы в конце, на сверке якорей своих мутаций.
+command -v python3 >/dev/null || { echo "ERROR: python3 не найден — им make new-domain, как make mutate, сверяет мутации: поставь его" >&2; exit 1; }
 
 # order_item → OrderItem (типы), orderItem (переменные), orderitem (алиасы импортов),
 # ORDER_ITEM (коды ошибок), order_items (таблица), order-items (путь API). Инициализм — по правилу

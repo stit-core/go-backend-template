@@ -144,7 +144,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     старой логикой снимка копия репо — «fatal: не удалось прочитать дерево», с новой копия (снимок оригинала не
     тронут), перенос и каталог без `.git` — проходят; через симлинк на репо снимок и кеш lint переиспользуются;
     `REBASE_HEAD` — в `TestCommitMsgHook` законченный rebase давал подсказку переноса, а прежняя таблица при идущем
-    rebase в репо разработчика — 39 строк FAIL; теперь — ok
+    rebase в репо разработчика — 39 строк FAIL; теперь — ok;
+    python3 — PATH без python3 (`N/s7g/nopy`): `TestMutate` было «"" does not contain "ST: …"», стало «… на python3:
+    поставь его»; `make new-domain` — отказ до первой правки, дерево чистое
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -206,6 +208,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   python3, как `make mutate` и `make e2e`.
 - Раннер: временные файлы go стадии — свой `GOTMPDIR` в `.cache/mutate/tmp`, снимается после стадии; `killpg` уже
   вышедшей группы — не ошибка; `TestMutate` гоняет раннер в гейте — гейту нужен python3.
+- python3 — требование гейта (`TestMutate`) и `make new-domain`: тест называет его, `new-domain.sh` отказывает до
+  первой правки, CLAUDE.md § Команды — рядом с Docker; `make doctor` (трек lifecycle) python3 не смотрит —
+  требование названо там, где без него падают.
 - Ветка перенесена на `main` с треком harness+lifecycle (`7c03612`) после S6: конфликт — ячейка «git-хуки»
   `docs/contributing.md`, сведён без потерь (правки `main` и pre-commit/pre-push трека).
 - Guard (RENF-10): путь сверяется нормализованным (`//`, `/./`), бинарь подкоманды (`git-commit`, и по пути) — та же
@@ -251,4 +256,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 
 ## Где мы сейчас
 S10 — круг по валидатору: блокирующие закрыты — B1 (`make gen` без моков), B2 (тест new-domain не занимает имён
-форка), B3 (снимок pre-commit чинит себя). Неблокирующие: `REBASE_HEAD` закрыт; дальше — python3, RADP-10, доки, handoff.
+форка), B3 (снимок pre-commit чинит себя). Неблокирующие: `REBASE_HEAD` и python3 закрыты; дальше — RADP-10, доки, handoff.

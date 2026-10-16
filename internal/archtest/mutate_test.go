@@ -15,6 +15,8 @@ import (
 // go, gofumpt и python3 — настоящие, integration-тестов в модуле нет.
 func TestMutate(t *testing.T) {
 	t.Parallel()
+	python, err := exec.LookPath("python3")
+	require.NoError(t, err, "make mutate, make new-domain и этот тест гейта — на python3: поставь его")
 	root := repoRoot(t)
 	repo := t.TempDir()
 	const sign = "package p\n\n// Sign — знак числа.\nfunc Sign(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\tif x < 0 {\n\t\treturn -1\n\t}\n\treturn 0\n}\n"
@@ -34,7 +36,7 @@ func TestMutate(t *testing.T) {
 	writeFiles(t, repo, map[string]string{"internal/p/p.go": sign + "\n// Правка разработчика вне коммита.\n"})
 	mutate := func(args ...string) (string, error) {
 		t.Helper()
-		cmd := exec.CommandContext(t.Context(), "python3", append([]string{"-I", "scripts/tools/mutate.py"}, args...)...)
+		cmd := exec.CommandContext(t.Context(), python, append([]string{"-I", "scripts/tools/mutate.py"}, args...)...)
 		cmd.Dir = repo
 		cmd.Env = callerEnv("PATH=" + os.Getenv("PATH"))
 		out, err := cmd.CombinedOutput()
