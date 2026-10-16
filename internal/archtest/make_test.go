@@ -199,9 +199,9 @@ func TestCheckCoversItsOwnRun(t *testing.T) {
 
 // TestPrePushGatesPushedCommit: pre-push гоняет make check верхнего коммита пушимого ref'а в свежем
 // worktree — по дереву и Makefile самого коммита, а переменные make и оболочки пушащего до гейта не
-// доходят: каждая из них меняет шаги или выключает его самозащиту. До гейта — сообщение каждого пушимого коммита
-// (кроме тех, что уже в ветках remote'ов или под тегами шаблона template/*) хуком commit-msg из дерева его
-// родителя: коммит cherry-pick, rebase или
+// доходят: каждая из них меняет шаги или выключает его самозащиту. До гейта — каждый пушимый коммит (кроме тех, что
+// уже в ветках remote'ов или под тегами шаблона template/*): секрет в его дереве — отказ, а сообщение судит хук
+// commit-msg из дерева его родителя: коммит cherry-pick, rebase или
 // клона без хуков его не проходил, а старый коммит правилом, которого тогда не было, не судится. Гейт здесь
 // игрушечный: Makefile коммита печатает вердикт (файл verdict) и то, что дошло до него из окружения, а окружение
 // оболочки снимает строкой unexport Makefile репо; правило commit-msg — сначала старое, только Conventional
@@ -328,6 +328,21 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err = push("refs/heads/main " + second + " refs/heads/main " + counted + "\nrefs/tags/v9 " + second + " refs/tags/v9 " + zero + "\n")
 	require.NoError(t, err, out)
 	require.Equal(t, 2, strings.Count(readFiles(t, tmp, "judged")["judged"], "\n"), "a commit of two pushed refs is judged twice:\n%s", out)
+
+	// Секрет промежуточного коммита ушёл бы в remote и тогда, когда следующий коммит его убрал: судится дерево каждого
+	// пушимого коммита, а шаблон окружения *.example — не секрет.
+	writeFiles(t, repo, map[string]string{"deploy/.env.production": "TOKEN=leaked\n", "deploy/.env.production.example": "TOKEN=\n"})
+	leaked := commitAs("chore: окружение выкатки", "green")
+	require.NoError(t, os.Remove(filepath.Join(repo, "deploy", ".env.production")))
+	cleaned := commitAs("chore: секрет выкатки — вне репо", "green")
+	out, err = push("refs/heads/main " + cleaned + " refs/heads/main " + second + "\n")
+	require.Error(t, err, "a secret of an intermediate commit must not be pushed:\n%s", out)
+	require.Contains(t, out, "pre-push: коммит "+strings.TrimSpace(git(t, repo, "rev-parse", "--short", leaked))+" несёт секрет")
+	require.Contains(t, out, "\n  deploy/.env.production\n")
+	require.NotContains(t, out, "toy gate", "the secret is checked before the gate")
+	out, err = push("refs/heads/main " + cleaned + " refs/heads/main " + leaked + "\n")
+	require.NoError(t, err, "a template of the environment is not a secret:\n%s", out)
+	require.Contains(t, out, "toy gate: green")
 }
 
 // TestGateStepsIgnoreShellEnvironment: шаги-скрипты гейта (bash) на красном дереве остаются красными при

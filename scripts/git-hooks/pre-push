@@ -2,12 +2,12 @@
 # pre-push: канонический gate перед отправкой в remote — `make check` верхнего коммита каждого пушимого
 # ref'а в свежем worktree (промежуточные коммиты push'а не гоняются). Вердикт — про то, что уходит в
 # remote: незакоммиченные правки и игнорируемые файлы рабочего дерева на него не влияют. Кеш lint у
-# свежего worktree холодный (lint.sh кладёт его в checkout). До гейта — сообщение каждого пушимого коммита
-# (его нет ни в ветках remote'ов, ни — при push'е в пустой remote — под тегами шаблона template/*: клон форка
-# переносит выпущенную историю шаблона, и с тегами; в непустой remote тег шаблона — выпуск) хуком commit-msg из дерева
-# его родителя: коммит cherry-pick, rebase (git rebase --continue хук не зовёт) или клона без хуков commit-msg не
-# проходил, а правило — то, что действовало, когда коммит делали: старые коммиты правилом, которого тогда не было, не
-# судятся.
+# свежего worktree холодный (lint.sh кладёт его в checkout). До гейта — каждый пушимый коммит (его нет ни в ветках
+# remote'ов, ни — при push'е в пустой remote — под тегами шаблона template/*: клон форка переносит выпущенную историю
+# шаблона, и с тегами; в непустой remote тег шаблона — выпуск): секрет в его дереве — отказ (remote получает и
+# промежуточный коммит, чей секрет убрал следующий), а сообщение судит хук commit-msg из дерева его родителя: коммит
+# cherry-pick, rebase (git rebase --continue хук не зовёт) или клона без хуков commit-msg не проходил, а правило — то,
+# что действовало, когда коммит делали: старые коммиты правилом, которого тогда не было, не судятся.
 #
 # Строка интерпретатора — `bash -p`: файл автозапуска (BASH_ENV), экспортированные функции и SHELLOPTS
 # из окружения пушащего хук не читает — иначе `exit 0` в них пропускал бы push без гейта.
@@ -42,10 +42,15 @@ trap 'cleanup; rm -f "$msg" "$rule"' EXIT
 # stdin: <local ref> <local sha> <remote ref> <remote sha> на каждый пушимый ref.
 refs=$(cat)
 
-# Корневой коммит и родитель без хука commit-msg не судятся: правила тогда не было. Коммит, общий нескольким
-# пушимым ref'ам, судится один раз. История под тегами шаблона template/* выпущена, когда push идёт в пустой remote
-# (ни его веток у нас, ни его ref'ов в push'е): так клон форка переносит её — и с тегами (--tags, push.followTags). В
-# непустой remote тег шаблона — выпуск (git tag -a, затем git push origin main template/vX.Y.Z): его коммиты судятся.
+# Секрет — файл окружения (.env, .env.local, .env.production) или ключа (*.pem, *.key), но не шаблон окружения
+# *.example. Перечень один на гейт: индекс судит по этой строке archtest TestNoSecretFiles.
+secret='(^|/)\.env(\.[^/]*)?$|\.(pem|key)$' example='\.example$'
+
+# Сообщение корневого коммита и коммита, у родителя которого нет хука commit-msg, не судится: правила тогда не было.
+# Коммит, общий нескольким пушимым ref'ам, судится один раз. История под тегами шаблона template/* выпущена, когда push
+# идёт в пустой remote (ни его веток у нас, ни его ref'ов в push'е): так клон форка переносит её — и с тегами (--tags,
+# push.followTags). В непустой remote тег шаблона — выпуск (git tag -a, затем git push origin main template/vX.Y.Z): его
+# коммиты судятся.
 released=()
 if [ -z "$(git -C "$root" for-each-ref --count=1 "refs/remotes/$1/")" ] &&
     awk '$4 !~ /^0+$/ {found = 1} END {exit found}' <<<"$refs"; then
@@ -61,6 +66,14 @@ while read -r _ local_sha _ remote_sha; do
     for c in $(git -C "$root" rev-list --reverse "$local_sha" --not "${known[@]}"); do
         [[ $judged == *" $c "* ]] && continue
         judged+="$c "
+        secrets=$(git -C "$root" ls-tree -r -z --name-only "$c" | grep -zE "$secret" | grep -zvE "$example" | tr '\0' '\n' || true)
+        if [ -n "$secrets" ]; then
+            echo "pre-push: коммит $(git -C "$root" rev-parse --short "$c") несёт секрет — файл окружения или ключа:"
+            sed 's/^/  /' <<<"$secrets"
+            echo "pre-push: убери файл из самого коммита (git rebase -i, edit, git rm --cached <файл>) и пушь снова: коммит,"
+            echo "  который его удаляет, секрета не прячет — remote получает историю целиком"
+            exit 1
+        fi
         git -C "$root" show "$c^:scripts/git-hooks/commit-msg" >"$rule" 2>/dev/null || continue
         git -C "$root" log -1 --format=%B "$c" >"$msg"
         if ! out=$(bash -p "$rule" "$msg" 2>&1); then

@@ -12,23 +12,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// secretName — файл окружения с секретами (.env, .env.local, .env.production) или ключа (*.pem, *.key).
-var secretName = regexp.MustCompile(`(^|/)\.env(\.[^/]*)?$|\.(pem|key)$`)
-
-// secretFile — файл, которому не место в репо: шаблон окружения (*.example) — не секрет.
-func secretFile(name string) bool {
-	return secretName.MatchString(name) && !strings.HasSuffix(name, ".example")
-}
+// secretList — строка перечня секретов в pre-push: secret — файл окружения (.env, .env.local, .env.production) или
+// ключа (*.pem, *.key), example — шаблон окружения, он не секрет.
+var secretList = regexp.MustCompile(`(?m)^secret='([^']+)' example='([^']+)'$`)
 
 // TestNoSecretFiles: секретам не место в репо (CLAUDE.md § Не делать никогда): файл окружения или ключа в индексе —
-// отказ, и под именем, которого .gitignore не знает, и добавленный мимо него (git add -f).
+// отказ, и под именем, которого .gitignore не знает, и добавленный мимо него (git add -f). Перечень один — строка
+// pre-push: ею хук судит дерево каждого пушимого коммита (секрет, убранный следующим коммитом, уходит в remote).
 func TestNoSecretFiles(t *testing.T) {
 	t.Parallel()
-	for name, secret := range map[string]bool{
+	list := secretList.FindStringSubmatch(readFiles(t, repoRoot(t), "scripts/git-hooks/pre-push")["scripts/git-hooks/pre-push"])
+	require.NotNil(t, list, "pre-push holds the list of secrets: secret='<ERE>' example='<ERE>'")
+	secret, example := regexp.MustCompile(list[1]), regexp.MustCompile(list[2])
+	secretFile := func(name string) bool { return secret.MatchString(name) && !example.MatchString(name) }
+	for name, want := range map[string]bool{
 		".env": true, "deploy/.env.production": true, "server.key": true, "tls/cert.pem": true,
 		".env.example": false, ".env.local.example": false, ".envrc": false, "internal/platform/env.go": false,
 	} {
-		require.Equal(t, secret, secretFile(name), name)
+		require.Equal(t, want, secretFile(name), name)
 	}
 	for _, f := range trackedFiles(t, repoRoot(t)) {
 		if secretFile(f) {
