@@ -180,7 +180,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     было FAIL `TestImagesPinned`, стало ok; формы `ARG` — в таблице теста; N8 — push `main` клоном без веток remote'а
     в пустой remote: судилось 483 коммита, отказ `ea1de93 clean` и `a0f3fa9`, теперь — 160 вне тегов `template/*`,
     отказов нет (`N/s7g/n8-history.log`); случай — в `TestPrePushGatesPushedCommit`; N9 — каталог, удалённый с диска
-    без `git rm`: было FAIL «lstat gone», стало OK (`TestFmtAppliesLintRules`)
+    без `git rm`: было FAIL «lstat gone», стало OK (`TestFmtAppliesLintRules`); N10 — заглушка чужой версии раньше в
+    `PATH`, чем `GOPATH/bin`: совет был «make setup» (он её не заслонит), стал — путь найденного и порядок `PATH`;
+    в `GOPATH/bin` — «make setup» (`TestToolVersions`)
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -188,6 +190,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - Версии инструментов — одним местом, `scripts/tools/versions.sh`: шаг гейта сверяет свой инструмент (fmt —
   gofumpt, lint — golangci-lint, gen и gen-check — sqlc и mockery), `install-tools.sh` берёт версии оттуда и ставит
   только инструмент не той версии (RLIF-13); версия из окружения (`GOFUMPT_VERSION=…`) снята — закреплённая одна.
+- Совет отказа версии (N10): `make setup` ставит в `GOPATH/bin` — инструмент, который `PATH` находит в другом каталоге
+  раньше, отказ называет путём (setup его не заслонит), а не найденный — каталогом, который должен быть в `PATH`.
 - `fmt.sh` отдаёт gofumpt каталоги верхнего уровня с Go-файлами репо (`git ls-files -co`), а не файлы: сгенерированное
   gofumpt пропускает только при обходе каталога, а явный файл переформатировал бы.
 - `fmt.sh` берёт только каталоги, которые есть на диске (N9): удалённый без `git rm` ещё в индексе, но кода в дереве
@@ -338,4 +342,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N9 закрыты; дальше — N10–N13, N15.
+S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N10 закрыты; дальше — N11–N13, N15.

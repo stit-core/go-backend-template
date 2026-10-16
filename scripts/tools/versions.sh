@@ -29,6 +29,20 @@ installed() {
     esac 2>/dev/null
 }
 
+# setup — совет отказа: make setup ставит закреплённую версию в GOPATH/bin, и она заработает, только если PATH
+# найдёт инструмент там, а не в другом каталоге раньше.
+setup() {
+    local found gopath
+    found=$(command -v "$1") gopath=$(go env GOPATH 2>/dev/null)
+    if [ -z "$gopath" ] || [ "${found%/*}" = "$gopath/bin" ]; then
+        echo "make setup"
+    elif [ -z "$found" ]; then
+        echo "make setup ставит его в $gopath/bin — он должен быть в PATH"
+    else
+        echo "make setup ставит её в $gopath/bin, а PATH находит $found — $gopath/bin должен идти в PATH раньше"
+    fi
+}
+
 if [ "${1:-}" = --pin ]; then
     pin=${pins[${2:-}]:-}
     [ -n "$pin" ] || { echo "FAIL: нет закреплённой версии '${2:-}'"; exit 1; }
@@ -45,11 +59,11 @@ for tool in "$@"; do
     if [ -z "$pin" ]; then
         echo "FAIL: нет закреплённой версии '$tool'"
     elif ! command -v "$tool" >/dev/null; then
-        echo "FAIL: $tool не найден — make setup"
+        echo "FAIL: $tool не найден — $(setup "$tool")"
     elif got=$(installed "$tool") && [ "$got" = "$pin" ]; then
         continue
     else
-        echo "FAIL: $tool ${got:-не назвал версию}, закреплена $pin — make setup"
+        echo "FAIL: $tool ${got:-не назвал версию}, закреплена $pin — $(setup "$tool")"
     fi
     fail=1
 done

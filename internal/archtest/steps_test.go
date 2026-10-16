@@ -315,7 +315,9 @@ func TestMigrationsCheck(t *testing.T) {
 
 // TestToolVersions: инструмент гейта — закреплённой версии (scripts/tools/versions.sh): шаг с инструментом другой
 // версии отказывает — у каждой машины был бы свой гейт, — а make setup ставит только инструмент не той версии,
-// и с закреплёнными сеть ему не нужна. Инструменты — заглушки, печатающие версию; go и curl записывают вызов.
+// и с закреплёнными сеть ему не нужна. make setup ставит в GOPATH/bin: отказ, чей инструмент PATH находит в другом
+// каталоге, называет его путь — setup его не заслонит. Инструменты — заглушки, печатающие версию; go и curl
+// записывают вызов.
 func TestToolVersions(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -329,9 +331,10 @@ func TestToolVersions(t *testing.T) {
 		"govulncheck": func(v string) string { return "echo 'Scanner: govulncheck@" + v + "'" },
 	}
 	const stale = "v0.0.1"
-	tools := func(t *testing.T, other string) string { // каталог для PATH: закреплённые версии, у other — stale
+	tools := func(t *testing.T, other string) string { // <GOPATH>/bin для PATH: закреплённые версии, у other — stale
 		t.Helper()
-		bin := t.TempDir()
+		bin := filepath.Join(t.TempDir(), "bin")
+		require.NoError(t, os.Mkdir(bin, 0o700))
 		for tool, program := range versionOf {
 			v := pin(t, tool)
 			if tool == other {
@@ -347,9 +350,15 @@ func TestToolVersions(t *testing.T) {
 			repo := t.TempDir()
 			writeFiles(t, repo, readFiles(t, root, "Makefile", "scripts/tools/fmt.sh", "scripts/tools/lint.sh", "scripts/tools/versions.sh"))
 			git(t, repo, "init", "-q", "-b", "main")
-			out, err := makeIn(t, repo, []string{"PATH=" + tools(t, tool) + string(os.PathListSeparator) + os.Getenv("PATH")}, target)
+			bin, gopath := tools(t, tool), t.TempDir()
+			out, err := makeIn(t, repo, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH"), "GOPATH=" + gopath}, target)
 			require.Error(t, err, "make %s with %s %s must refuse:\n%s", target, tool, stale, out)
-			require.Contains(t, out, "FAIL: "+tool+" "+stale+", закреплена "+pin(t, tool))
+			require.Contains(t, out, "FAIL: "+tool+" "+stale+", закреплена "+pin(t, tool)+" — make setup ставит её в "+gopath+"/bin, а PATH находит "+
+				filepath.Join(bin, tool))
+			// Тот же каталог — GOPATH/bin: инструмент там и заменит make setup.
+			out, err = makeIn(t, repo, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH"), "GOPATH=" + filepath.Dir(bin)}, target)
+			require.Error(t, err, out)
+			require.Contains(t, out, "FAIL: "+tool+" "+stale+", закреплена "+pin(t, tool)+" — make setup\n")
 		})
 	}
 	t.Run("setup", func(t *testing.T) {
