@@ -61,14 +61,17 @@ re_interp+="|${before}(${shell})${rest}[[:space:]]*<<"
 re_interp+="|${before}man${rest}[[:space:]](-[[:alpha:]]*[PH]|--(pager|html))|${start}(MAN)?PAGER="
 # Git исполняет и строку из значения — опции (git rebase -x и --exec=…, submodule foreach, bisect run, filter-branch,
 # difftool --extcmd), конфига (-c core.editor=…) или переменной (GIT_SEQUENCE_EDITOR=…): вложенный git в кавычках или
-# после «=» команды с git делает её кодом, как у интерпретатора; текст сообщения (-m, --message) — данные.
+# после «=» команды с git делает её кодом, как у интерпретатора. Текст сообщения и поиска по истории — данные: значения
+# -m, --message, --grep, -S, -G, --author, --committer, --format, --pretty, -e, --regexp и аргументы git grep без -O
+# (пейджер git grep исполняет).
 re_git='(^|[^[:alnum:]_.-])git([[:space:]]|$)'
 re_nested='(^|[[:space:];&|(=])([^[:space:]=]*/)?git(-[[:alnum:]-]+)?([[:space:];&|)\\]|$)'
 quoted='"([^"\\]|\\.)*"|'\''[^'\'']*'\'''
-message='(^|[[:space:]])(-[[:alnum:]]*m|--message)([[:space:]]+|=)('"$quoted"'|[^[:space:]"'\'']+)'
+data='(^|[[:space:]])(-[[:alnum:]]*m|--(message|grep|author|committer|format|pretty|regexp)|-[GSe])([[:space:]]*|=)'
+data+='('"$quoted"'|[^-[:space:]"'\''][^[:space:]"'\'']*)'
 git_runs() {
     local body
-    body=$(printf '%s' "$1" | sed -E "s/$message/\\1/g")
+    body=$(printf '%s' "$1" | sed -E -e "s/$data/\\1/g" -e '/-O|--open-files-in-pager/!s/(git[[:space:]]+grep)[^;&|]*/\1/g')
     [[ $(printf '%s' "$body" | sed -E "s/$quoted//g") =~ $re_git ]] &&
         printf '%s' "$body" | grep -oE "$quoted|=[^[:space:]\"']+" | tr -d "\"'" | grep -qE "$re_nested"
 }
