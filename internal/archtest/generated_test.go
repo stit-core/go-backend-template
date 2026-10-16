@@ -101,8 +101,9 @@ func TestGeneratedHeaderOnlyInGeneratorOutput(t *testing.T) {
 }
 
 // TestMainOnlyEnters: main бинаря cmd/ — вход: присваивания, вызовы и выход по ошибке или подкоманде (if без else,
-// чьё тело кончается os.Exit или return). Цикл, switch, select, go, else и вложенный if — логика: её место — функции
-// пакета, их судит cover-check, а main он не видит (main исполняют перезапущенный тестовый бинарь и образ).
+// чьё тело кончается os.Exit или return). Цикл, switch, select, go, else, вложенный if и литерал функции (вызванный на
+// месте, отложенный или переданный — его тело cover-check считает телом main) — логика: её место — функции пакета, их
+// судит cover-check, а main он не видит (main исполняют перезапущенный тестовый бинарь и образ).
 func TestMainOnlyEnters(t *testing.T) {
 	t.Parallel()
 	for body, logic := range map[string]bool{
@@ -111,12 +112,14 @@ func TestMainOnlyEnters(t *testing.T) {
 		"for _, a := range os.Args {\n\tuse(a)\n}":                                                  true,
 		"if ok {\n\tos.Exit(0)\n} else {\n\tos.Exit(1)\n}":                                          true,
 		"if ok {\n\tuse(1)\n}": true,
-		"if ok {\n\tif more {\n\t\tos.Exit(2)\n\t}\n\tos.Exit(1)\n}": true,
-		"switch mode {\ncase 1:\n\tuse(1)\n}":                        true,
+		"if ok {\n\tif more {\n\t\tos.Exit(2)\n\t}\n\tos.Exit(1)\n}":    true,
+		"switch mode {\ncase 1:\n\tuse(1)\n}":                           true,
+		"func() {\n\tfor _, a := range os.Args {\n\t\tuse(a)\n\t}\n}()": true,
+		"os.Exit(run(func() int {\n\treturn 1\n}))":                     true,
 	} {
 		file, err := parser.ParseFile(token.NewFileSet(), "", "package main\n\nfunc main() {\n"+body+"\n}\n", 0)
 		require.NoError(t, err)
-		require.Equal(t, logic, len(mainLogic(file.Decls[0].(*ast.FuncDecl).Body.List, true)) > 0, body)
+		require.Equal(t, logic, len(mainLogic(file.Decls[0].(*ast.FuncDecl).Body)) > 0, body)
 	}
 	for _, f := range goFiles(t) {
 		if f.test || !strings.HasPrefix(f.pkg, "cmd/") {
@@ -124,7 +127,7 @@ func TestMainOnlyEnters(t *testing.T) {
 		}
 		for _, decl := range parseGo(t, f.path).Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "main" && fn.Body != nil {
-				for _, logic := range mainLogic(fn.Body.List, true) {
+				for _, logic := range mainLogic(fn.Body) {
 					t.Errorf("%s: main has logic (%s): it goes to a function of the package — main is out of cover-check", f.path, logic)
 				}
 			}
@@ -132,9 +135,22 @@ func TestMainOnlyEnters(t *testing.T) {
 	}
 }
 
-// mainLogic — инструкции логики в теле main (top — его верхний уровень): всё, кроме присваивания, объявления, вызова,
-// return и defer, и if, который только выходит.
-func mainLogic(stmts []ast.Stmt, top bool) []string {
+// mainLogic — логика в теле main: инструкции логики и литералы функций.
+func mainLogic(body *ast.BlockStmt) []string {
+	logic := stmtLogic(body.List, true)
+	ast.Inspect(body, func(n ast.Node) bool {
+		_, lit := n.(*ast.FuncLit)
+		if lit {
+			logic = append(logic, "function literal")
+		}
+		return !lit
+	})
+	return logic
+}
+
+// stmtLogic — инструкции логики (top — верхний уровень main): всё, кроме присваивания, объявления, вызова, return и
+// defer, и if, который только выходит.
+func stmtLogic(stmts []ast.Stmt, top bool) []string {
 	var logic []string
 	for _, stmt := range stmts {
 		switch s := stmt.(type) {
@@ -144,7 +160,7 @@ func mainLogic(stmts []ast.Stmt, top bool) []string {
 				logic = append(logic, "if that does not only exit")
 				continue
 			}
-			logic = append(logic, mainLogic(s.Body.List, false)...)
+			logic = append(logic, stmtLogic(s.Body.List, false)...)
 		default:
 			logic = append(logic, fmt.Sprintf("%T", stmt))
 		}
