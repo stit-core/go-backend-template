@@ -107,8 +107,8 @@ func serviceEnv(t *testing.T) *testkit.PostgresFixture {
 	return pg
 }
 
-// call шлёт запрос и отдаёт статус ответа.
-func call(t *testing.T, c *http.Client, method, url, body string) int {
+// send — код и заголовки ответа на запрос.
+func send(t *testing.T, c *http.Client, method, url, body string) (int, http.Header) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), method, url, strings.NewReader(body))
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func call(t *testing.T, c *http.Client, method, url, body string) int {
 	resp, err := c.Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	return resp.StatusCode
+	return resp.StatusCode, resp.Header
 }
 
 // TestBoot поднимает сервис набором опций main поверх Postgres и NATS в контейнерах: конструкторы, Invoke и
@@ -143,8 +143,7 @@ func TestBoot(t *testing.T) {
 			}
 		}, fx.ParamTags(`group:"`+timerkit.JobsGroup+`"`))))
 	app.RequireStart()
-	require.Subset(t, jobs, []string{"auditkit.retention", "verification.purge_links"},
-		"the service keeps audit_log and the links of the mails for a term, not forever")
+	require.Contains(t, jobs, "auditkit.retention", "the service keeps audit_log for a term, not forever")
 	require.Equal(t, stopTimeout, app.StopTimeout(), "the stop hooks get the budget checkStopBudget checks the env against, not the fx default")
 	require.Same(t, telemetryMP, otel.GetMeterProvider(),
 		"telemetry.Module sets its meter provider as the global one: without it every metric of the kits is a no-op")
@@ -200,24 +199,20 @@ func TestBoot(t *testing.T) {
 		} `json:"paths"`
 	}
 	require.NoError(t, json.Unmarshal(spec, &contract))
-	// Операция под Security без cookie — 401: аутентификация стоит на каждой, а не на одной.
+	// Операция под Security без cookie — 401: аутентификация стоит на каждой, а не на одной; ответ операции
+	// домена, и отказ тоже, — вне кэшей.
 	secured := 0
 	for path, ops := range contract.Paths {
 		for method, op := range ops {
 			if len(op.Security) > 0 {
 				secured++
-				require.Equal(t, http.StatusUnauthorized, call(t, anon, strings.ToUpper(method), base+pathParam.ReplaceAllString(path, "00000000-0000-0000-0000-000000000001"), "{}"),
-					"%s %s without a cookie", method, path)
+				status, header := send(t, anon, strings.ToUpper(method), base+pathParam.ReplaceAllString(path, "00000000-0000-0000-0000-000000000001"), "{}")
+				require.Equal(t, http.StatusUnauthorized, status, "%s %s without a cookie", method, path)
+				require.Equal(t, "no-store", header.Get("Cache-Control"), "%s %s: a response of a domain operation stays out of caches", method, path)
 			}
 		}
 	}
 	require.NotZero(t, secured, "the contract has operations under Security")
-	req, err = http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/api/users/me", nil)
-	require.NoError(t, err)
-	resp, err = anon.Do(req)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"), "a response of a domain operation stays out of caches")
 	// Сырой маршрут chi (Router().Get, Mount) и Hidden-операция huma обходят проверку Security и
 	// openapi.json: каждый маршрут роутера — операция контракта или маршрут спецификации huma.
 	for _, route := range srv.Router().Routes() {
@@ -261,7 +256,7 @@ func TestBoot_AuthRateLimit(t *testing.T) {
 	app.RequireStart()
 	defer app.RequireStop()
 	client := &http.Client{Timeout: 10 * time.Second}
-	send := func(method, path, ip string) (int, string) {
+	from := func(method, path, ip string) (int, string, string) {
 		req, err := http.NewRequestWithContext(t.Context(), method, "http://"+srv.Addr().String()+path, http.NoBody)
 		require.NoError(t, err)
 		req.Header.Set("X-Forwarded-For", ip)
@@ -272,19 +267,20 @@ func TestBoot_AuthRateLimit(t *testing.T) {
 		}
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.NoError(t, resp.Body.Close())
-		return resp.StatusCode, body.Code
+		return resp.StatusCode, body.Code, resp.Header.Get("Cache-Control")
 	}
 
 	for range 2 {
-		status, code := send(http.MethodPost, "/api/auth/refresh", "198.51.100.1")
+		status, code, _ := from(http.MethodPost, "/api/auth/refresh", "198.51.100.1")
 		require.NotEqual(t, http.StatusTooManyRequests, status, "within the burst: %s", code)
 	}
-	status, code := send(http.MethodPost, "/api/auth/refresh", "198.51.100.1")
+	status, code, cache := from(http.MethodPost, "/api/auth/refresh", "198.51.100.1")
 	require.Equal(t, http.StatusTooManyRequests, status)
 	require.Equal(t, "RATE_LIMITED", code)
-	status, code = send(http.MethodPost, "/api/auth/refresh", "198.51.100.2")
+	require.Equal(t, "no-store", cache, "the refusal of the limit stays out of caches too")
+	status, code, _ = from(http.MethodPost, "/api/auth/refresh", "198.51.100.2")
 	require.NotEqual(t, http.StatusTooManyRequests, status, "another client has its own bucket: %s", code)
-	status, code = send(http.MethodGet, "/health", "198.51.100.1")
+	status, code, _ = from(http.MethodGet, "/health", "198.51.100.1")
 	require.Equal(t, http.StatusOK, status, "a path outside /api/auth/ is not limited: %s", code)
 }
 

@@ -196,11 +196,22 @@ blocked-by: —
     `internal/platform/authgate/authn.go:9` (зона «сначала спросить», не тронута; `N/s7c/exp/s13-comments-*.txt`);
     `make check` → ✓
 - [ ] **S14** — Приёмка: эксперименты на базе и ветке, гейт, handoff
-  - Проверка: `N/s7c/exp/{base,branch}.tsv`; `make check` → `✓ check clean` · Зависит от: S13
+  - Проверка: `N/s7c/exp/{base,branch}.tsv`; `make check` → `✓ check clean` · Зависит от: S16
   - Закрывает: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC11
-- [ ] **S15** — N4: `git rebase main` (трек harness+lifecycle), `0007` в `.template/identity`, шаги 2, 3, 6
+- [x] **S15** — N4: `git rebase main` (трек harness+lifecycle), `0007` в `.template/identity`, шаги 2, 3, 6
   `init-service/references/prune.md` под код трека; prune по тексту на итоге
-  - Проверка: опыт AC2 трека harness → `✓ check clean`; `make check` → ✓ · Закрывает: AC12 · Зависит от: S14
+  - Проверка: опыт AC2 трека harness → `✓ check clean`; `make check` → ✓ · Закрывает: AC12 · Зависит от: S13
+  - Сделано: ветка перенесена на `main` (конфликт — строка «Чек» rule `comments`); в `.template/identity` —
+    `0007_password_resets_user_version` и `internal/platform/authlimit` (только ради `/api/auth/*`), без
+    `cmd/api/http_test.go` (тест `noStore` — не про идентичность); `TestBoot` без знания доменов: `no-store` — у
+    каждой операции под Security, job `verification.purge_links` — в `TestIdentity`, 429 лимита с `no-store` — в
+    `TestBoot_AuthRateLimit`, `call` — рядом с её пользователями; `prune.md` шаги 2, 3, 6 — `authlimit`, поля
+    `App.AuthRateLimit` и `App.PasswordResetMailPause`, retention аудита, `PASSWORD_RESET_MAIL_PAUSE` и
+    `AUDIT_RETENTION_DAYS`. Опыт AC2 трека harness (`N/s7c/prune/`: форк, онбординг external, `make new-domain
+    NAME=product`, prune по тексту `prune.md` — `prune.py` по образцу трека): `shop0` (ветка до правки) — `0007`
+    остаётся, шаг 2 называет `authRateLimit`; `shop1` — lint `call is unused` (исправлено); `shop2` — prune прошёл,
+    красный только `TestRuleExamples`: примеры правил написаны с module path шаблона, а de-template его меняет —
+    исправление следующим коммитом; `make check` → ✓
 - [ ] **S16** — RHAR-10 (остаток): блоки «Верификация» четырёх references — коротко, без пересказа гейта и правил
   - Проверка: ручная сверка; `make check` → ✓ · Закрывает: AC13 · Зависит от: S15
 
@@ -281,6 +292,10 @@ blocked-by: —
 - RCOD-15: предел — две строки, и rule `comments` говорит то же («одна строка, редко две»): образец и правило
   сходятся; машиной длину не держу — это стиль, его держат правило и ревью. Комментарий `authgate/authn.go`
   (три строки) не тронут: зона «сначала спросить». Правка чужого файла: rule `comments` — строка «Чек».
+- N4: тесты сервиса (`TestBoot`) — без знания доменов, как обещает их комментарий: проверки доменов идентичности —
+  в их файлах, которые prune снимает целиком; бандл `.template/identity` — только то, что живёт ради них
+  (`internal/platform/authlimit` — да, `cmd/api/http_test.go` с тестом `noStore` — нет). Правки файлов трека harness:
+  `.template/identity`, `init-service/references/prune.md` (шаги 2, 3, 6).
 - `scripts/tools/mutants.txt` (трек gate+tests) не правлю: якоря кода, который меняет трек, переписываются после
   слияния треков — список устаревших (`make mutate A=--check`) — в отчёте трека.
 
@@ -290,5 +305,6 @@ blocked-by: —
   к кому: владелец
 
 ## Где мы сейчас
-S1–S13 закрыты. Следующий шаг — S14 (приёмка: эксперименты на базе и ветке, гейт, отчёт). Дополнение дирижёра:
+S1–S13, S15 закрыты; ветка — на `main` с треком harness+lifecycle. Следующий шаг — S16 (блоки «Верификация»), затем
+S14 (приёмка). Дополнение дирижёра:
 после S14 — S15 (N4, prune под код трека после rebase на `main`) и S16 (RHAR-10, блоки «Верификация»).

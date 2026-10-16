@@ -15,21 +15,23 @@
    `.template/identity` остаётся: по нему и решению `identity: external` самопроверка прозы знает, что
    образцы в этих путях — вне дерева проекта («Что остаётся»).
 2. **Подключение** — строки удалённых пакетов и китов, которые были нужны только им (сессии входа,
-   антибрутфорс, строгий лимит `/api/auth/*` перед очередью хэша паролей):
+   антибрутфорс, строгий лимит `/api/auth/*` перед очередью хэша паролей — `internal/platform/authlimit`):
    - `cmd/api/main.go` — `usermod`, `authmod`, `verifmod` (импорты, `domainModules`), `session.NewConfig`,
      `bruteforcekit.NewConfig` (`kitConfigs`), `sessionpg.Module`, `bruteforcepg.Module`;
    - `cmd/api/http.go` — `userhttp`, `authhttp`, `verifhttp` (импорты, поля `httpHandlers`, вызовы в
-     `registerHTTP`), `authRateLimit` и `authPathPrefix` (и `fx.Provide` в `httpModule`), их тест в
+     `registerHTTP`), `authlimit.Middleware` в `middlewares` (и её параметр `app`), тест лимита в
      `cmd/api/boot_test.go` — `TestBoot_AuthRateLimit`;
-   - `internal/platform/config/config.go` — `App.AuthRateLimit` (тип, поле, проверка в `Load`), его кейсы — в
-     `config_test.go`;
+   - `internal/platform/config/config.go` — поля `App.AuthRateLimit` и `App.PasswordResetMailPause` (и их проверки
+     в `Load`), их тесты в `internal/platform/config/config_test.go` — `TestLoad_AuthRateLimit`,
+     `TestLoad_PasswordResetMailPause`;
    - `cmd/migrate/sources/sources.go` — `useroutbox`, `verifoutbox`, `sessionpg`, `bruteforcepg`;
-   - `cmd/api/api_test.go` — их открытые операции из `publicOperations`.
+   - `cmd/api/api_test.go` — их открытые операции из `publicOperations`, проверка 429 лимита (`authlimit`) в
+     `TestHTTPOperations`.
 3. **Подключение по стеку** — то, что de-template оставил ради доменов идентичности (wiring §2 скилла
    `de-template`):
-   - кит, которого нет в `docs/stack/dependencies.md § golibinfra kits` (аудит — `auditpg.Module` в
-     `cmd/api/main.go` и `auditpg.Migrations` в `cmd/migrate/sources/sources.go`), — вон из графа и из
-     источников миграций;
+   - кит, которого нет в `docs/stack/dependencies.md § golibinfra kits` (аудит — `auditpg.Module`,
+     `auditpg.RetentionModule` и `auditpg.NewRetentionConfig` в `cmd/api/main.go`, его job `auditkit.retention` в
+     `TestBoot`, `auditpg.Migrations` в `cmd/migrate/sources/sources.go`), — вон из графа и из источников миграций;
    - своих паролей у проекта нет — хэшер (`authnkit.NewArgon2idConfig` в `kitConfigs`, Argon2id в
      `internal/platform/authgate/authn.go`, его тест `TestModule_Hasher`) и правило пароля `PasswordStrong` в
      `pkg/policy/policy.go` (тест `TestPasswordStrong`) — вон;
@@ -48,9 +50,9 @@
    из `0001_users` уходят с ней: своя миграция, которой они нужны, заводит их сама.
 6. **Окружение** — `.env.example`: в `NATS_JS_STREAM_NAMES` — стримы своих доменов-публикаторов (без
    `user` и `verification`; публикаторов нет — `NATS_JS_STREAM_NAMES=`), комментарий над ним — про них;
-   у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*`,
-   `BRUTEFORCE_SUBJECT_*` и `HTTP_AUTH_RATE_LIMIT_*` с их комментариями удали, у e2e-стека
-   `test/stack/compose.yml` — `HTTP_AUTH_RATE_LIMIT_RPS`.
+   у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*`, `BRUTEFORCE_SUBJECT_*`,
+   `HTTP_AUTH_RATE_LIMIT_*` и `PASSWORD_RESET_MAIL_PAUSE` (и `AUDIT_RETENTION_DAYS`, если аудит ушёл шагом 3) с их
+   комментариями удали, у e2e-стека `test/stack/compose.yml` — `HTTP_AUTH_RATE_LIMIT_RPS`.
 7. **Раскладка** — `internal/archtest/layout_settings_test.go`: запись
    `archkit.WithUncheckedPackages("internal/platform/identity")` убери, если корень ни одного своего
    домена не берёт `internal/platform/identity` (сам или через `pkg/`): лишняя запись — `TestLayout`

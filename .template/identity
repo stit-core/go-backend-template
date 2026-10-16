@@ -6,9 +6,9 @@
 internal/domain/auth
 internal/domain/user
 internal/domain/verification
+internal/platform/authlimit
 internal/testkit/pgseed
 cmd/seed-admin
-cmd/api/http_test.go
 cmd/api/identity_test.go
 migrations/0001_users.up.sql
 migrations/0001_users.down.sql
@@ -22,6 +22,8 @@ migrations/0005_drop_refresh_sessions.up.sql
 migrations/0005_drop_refresh_sessions.down.sql
 migrations/0006_password_resets_sent_at.up.sql
 migrations/0006_password_resets_sent_at.down.sql
+migrations/0007_password_resets_user_version.up.sql
+migrations/0007_password_resets_user_version.down.sql
 test/e2e
 test/scenarios
 test/smoke/test_auth.py

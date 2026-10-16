@@ -32,6 +32,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/natskit"
 	"git.stit.tech/stit-core/golibinfra/telemetry"
 	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
+	"git.stit.tech/stit-core/golibinfra/timerkit"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
@@ -131,9 +132,17 @@ func TestIdentity(t *testing.T) {
 	noAuthRateLimit(t)
 
 	logs, mail, metrics := &requestLog{}, &mailTap{}, metrictest.NewProvider()
-	var srv *httpkit.Server
+	var (
+		srv  *httpkit.Server
+		jobs []string
+	)
 	app := fxtest.New(t, service,
 		teeLog(logs),
+		fx.Invoke(fx.Annotate(func(js []timerkit.Job) {
+			for _, j := range js {
+				jobs = append(jobs, j.Name)
+			}
+		}, fx.ParamTags(`group:"`+timerkit.JobsGroup+`"`))),
 		fx.Decorate(func(m verification.Mailer) verification.Mailer { mail.Mailer = m; return mail }),
 		// Провайдер метрик telemetry — провайдер теста: метрики доменов доходят до metrics, только если
 		// домены пишут в провайдер, который экспортирует сигналы.
@@ -145,6 +154,7 @@ func TestIdentity(t *testing.T) {
 		fx.Populate(&srv))
 	app.RequireStart()
 	defer app.RequireStop()
+	require.Contains(t, jobs, "verification.purge_links", "the links of the mails are kept for a term, not forever")
 
 	base := "http://" + srv.Addr().String()
 	jar, err := cookiejar.New(nil)
@@ -264,6 +274,13 @@ func TestIdentity(t *testing.T) {
 		"the auth domain writes its metrics to the meter provider of telemetry")
 	require.InDelta(t, 1, snap.Get(t, "biz_verification_password_reset_requested_total", "result", "ok").Value, 0,
 		"the verification domain writes its metrics to the meter provider of telemetry")
+}
+
+// call шлёт запрос и отдаёт статус ответа.
+func call(t *testing.T, c *http.Client, method, url, body string) int {
+	t.Helper()
+	status, _ := send(t, c, method, url, body)
+	return status
 }
 
 // noAuthRateLimit выключает лимит клиента на /api/auth/*: потоки идентичности шлют запросы с одного адреса
