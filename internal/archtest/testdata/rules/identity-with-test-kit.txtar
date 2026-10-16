@@ -7,7 +7,7 @@ package identitytest
 import (
 	"context"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"{module}/internal/platform/identity"
 )
 
 func Client(id string) context.Context {

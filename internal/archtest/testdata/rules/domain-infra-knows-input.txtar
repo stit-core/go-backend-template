@@ -1,10 +1,10 @@
 # Репозиторий отдаёт HTTP-view: infra знает вход.
 rule: TestDomainPackages
 base: canon
-want: internal/domain/shop/infra/postgres/views.go imports git.stit.tech/stit-core/go-backend-template/internal/domain/shop/delivery/http: infra serves the usecase's ports
+want: internal/domain/shop/infra/postgres/views.go imports {module}/internal/domain/shop/delivery/http: infra serves the usecase's ports
 -- internal/domain/shop/infra/postgres/views.go --
 package postgres
 
-import shophttp "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/delivery/http"
+import shophttp "{module}/internal/domain/shop/delivery/http"
 
 func views() []shophttp.ShopItemView { return nil }

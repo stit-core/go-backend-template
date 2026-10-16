@@ -8,12 +8,12 @@ package module
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
-	billnats "git.stit.tech/stit-core/go-backend-template/internal/domain/bill/delivery/nats"
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	"{module}/internal/domain/bill"
+	billnats "{module}/internal/domain/bill/delivery/nats"
+	"{module}/internal/domain/shop"
 )
 
-var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/bill/module",
+var Module = fx.Module("{module}/internal/domain/bill/module",
 	fx.Provide(
 		newItems,
 		bill.NewUsecase,

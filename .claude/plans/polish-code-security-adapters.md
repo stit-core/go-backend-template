@@ -211,7 +211,8 @@ blocked-by: —
     NAME=product`, prune по тексту `prune.md` — `prune.py` по образцу трека): `shop0` (ветка до правки) — `0007`
     остаётся, шаг 2 называет `authRateLimit`; `shop1` — lint `call is unused` (исправлено); `shop2` — prune прошёл,
     красный только `TestRuleExamples`: примеры правил написаны с module path шаблона, а de-template его меняет —
-    исправление следующим коммитом; `make check` → ✓
+    в архивах `{module}`, его подставляет загрузка примера (`fix(archtest)` следом); `shop3` — `✓ check clean`;
+    `make check` → ✓
 - [ ] **S16** — RHAR-10 (остаток): блоки «Верификация» четырёх references — коротко, без пересказа гейта и правил
   - Проверка: ручная сверка; `make check` → ✓ · Закрывает: AC13 · Зависит от: S15
 
@@ -296,6 +297,8 @@ blocked-by: —
   в их файлах, которые prune снимает целиком; бандл `.template/identity` — только то, что живёт ради них
   (`internal/platform/authlimit` — да, `cmd/api/http_test.go` с тестом `noStore` — нет). Правки файлов трека harness:
   `.template/identity`, `init-service/references/prune.md` (шаги 2, 3, 6).
+- Примеры правил — с `{module}` вместо module path шаблона: правила сверяют импорты с константой `module`, которую
+  de-template меняет у форка, а архивы txtar — не Go, и его замена их не трогает.
 - `scripts/tools/mutants.txt` (трек gate+tests) не правлю: якоря кода, который меняет трек, переписываются после
   слияния треков — список устаревших (`make mutate A=--check`) — в отчёте трека.
 

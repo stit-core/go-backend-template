@@ -11,7 +11,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"{module}/internal/platform/authgate"
 )
 
 func RegisterStock(api huma.API, h *Handler) {

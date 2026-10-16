@@ -7,7 +7,7 @@ package http
 import (
 	"context"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	"{module}/internal/domain/shop"
 )
 
 type Reader interface {

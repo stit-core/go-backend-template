@@ -28,7 +28,7 @@ type Card struct {
 -- internal/domain/shop/delivery/http/badges.go --
 package http
 
-import "git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+import "{module}/internal/domain/shop"
 
 func badgeNames(c shop.Card) []string {
 	var out []string

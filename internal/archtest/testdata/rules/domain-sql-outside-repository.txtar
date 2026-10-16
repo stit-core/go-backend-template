@@ -12,7 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+	"{module}/internal/domain/bill"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 

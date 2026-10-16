@@ -12,12 +12,12 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
-	shophttp "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/delivery/http"
-	shoppg "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/infra/postgres"
+	"{module}/internal/domain/shop"
+	shophttp "{module}/internal/domain/shop/delivery/http"
+	shoppg "{module}/internal/domain/shop/infra/postgres"
 )
 
-var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/shop/module",
+var Module = fx.Module("{module}/internal/domain/shop/module",
 	fx.Provide(
 		shoppg.NewRepository,
 		func(r *shoppg.Repository) shop.Repository { return r },

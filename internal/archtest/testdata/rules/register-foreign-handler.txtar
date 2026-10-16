@@ -10,8 +10,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	shoppg "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/infra/postgres"
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	shoppg "{module}/internal/domain/shop/infra/postgres"
+	"{module}/internal/platform/authgate"
 )
 
 func RegisterCount(api huma.API) {

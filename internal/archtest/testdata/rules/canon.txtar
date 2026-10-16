@@ -39,8 +39,8 @@ package shop
 import (
 	"context"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"{module}/internal/platform/identity"
+	"{module}/pkg/policy"
 )
 
 type Policy struct{}
@@ -70,8 +70,8 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"{module}/internal/platform/identity"
+	"{module}/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/outboxkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
@@ -180,7 +180,7 @@ package postgres
 import (
 	"context"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	"{module}/internal/domain/shop"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 )
 
@@ -241,8 +241,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"{module}/internal/domain/shop"
+	"{module}/internal/platform/authgate"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
@@ -328,12 +328,12 @@ package module
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
-	shophttp "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/delivery/http"
-	shoppg "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/infra/postgres"
+	"{module}/internal/domain/shop"
+	shophttp "{module}/internal/domain/shop/delivery/http"
+	shoppg "{module}/internal/domain/shop/infra/postgres"
 )
 
-var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/shop/module",
+var Module = fx.Module("{module}/internal/domain/shop/module",
 	fx.Provide(
 		shoppg.NewRepository,
 		func(r *shoppg.Repository) shop.Repository { return r },
@@ -398,8 +398,8 @@ import (
 	"context"
 	"errors"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	"{module}/internal/domain/bill"
+	"{module}/internal/domain/shop"
 )
 
 // shopAdapter — порт bill.Items к домену shop.
@@ -425,11 +425,11 @@ package module
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
-	billnats "git.stit.tech/stit-core/go-backend-template/internal/domain/bill/delivery/nats"
+	"{module}/internal/domain/bill"
+	billnats "{module}/internal/domain/bill/delivery/nats"
 )
 
-var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/bill/module",
+var Module = fx.Module("{module}/internal/domain/bill/module",
 	fx.Provide(
 		newShopAdapter,
 		func(a *shopAdapter) bill.Items { return a },
@@ -491,8 +491,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx/fxtest"
 
-	billnats "git.stit.tech/stit-core/go-backend-template/internal/domain/bill/delivery/nats"
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	billnats "{module}/internal/domain/bill/delivery/nats"
+	"{module}/internal/domain/shop"
 	"git.stit.tech/stit-core/golibinfra/natskit"
 	"git.stit.tech/stit-core/golibinfra/testkit/natstest"
 	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"

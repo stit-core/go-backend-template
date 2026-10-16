@@ -5,6 +5,6 @@ want: internal/domain/shop/store: a domain is its root, delivery/<transport>, in
 -- internal/domain/shop/store/store.go --
 package store
 
-import "git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+import "{module}/internal/domain/shop"
 
 func Find(id string) *shop.Item { return &shop.Item{ID: id} }

@@ -7,7 +7,7 @@ package shop
 import (
 	"regexp"
 
-	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
+	"{module}/pkg/outcome"
 )
 
 var (

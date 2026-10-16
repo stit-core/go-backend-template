@@ -8,8 +8,8 @@ package main
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	"{module}/internal/domain/bill"
+	"{module}/internal/domain/shop"
 )
 
 var wiring = fx.Provide(func(t *shop.Trusted) bill.Items { return t })

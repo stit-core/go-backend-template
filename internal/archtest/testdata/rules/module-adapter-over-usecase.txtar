@@ -8,8 +8,8 @@ package module
 import (
 	"context"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	"{module}/internal/domain/bill"
+	"{module}/internal/domain/shop"
 )
 
 type shopAdapter struct {

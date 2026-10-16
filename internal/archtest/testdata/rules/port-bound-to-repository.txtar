@@ -8,11 +8,11 @@ package module
 import (
 	"go.uber.org/fx"
 
-	shophttp "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/delivery/http"
-	shoppg "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/infra/postgres"
+	shophttp "{module}/internal/domain/shop/delivery/http"
+	shoppg "{module}/internal/domain/shop/infra/postgres"
 )
 
-var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/shop/module",
+var Module = fx.Module("{module}/internal/domain/shop/module",
 	fx.Provide(
 		shoppg.NewRepository,
 		func(r *shoppg.Repository) shophttp.Usecase { return r },

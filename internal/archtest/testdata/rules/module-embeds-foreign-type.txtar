@@ -5,7 +5,7 @@ want: internal/domain/bill/module/adapters.go embeds shop.Trusted
 -- internal/domain/bill/module/adapters.go --
 package module
 
-import "git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+import "{module}/internal/domain/shop"
 
 type shopAdapter struct {
 	*shop.Trusted

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx/fxtest"
 
-	billnats "git.stit.tech/stit-core/go-backend-template/internal/domain/bill/delivery/nats"
+	billnats "{module}/internal/domain/bill/delivery/nats"
 	"git.stit.tech/stit-core/golibinfra/testkit/natstest"
 	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
 )

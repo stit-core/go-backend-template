@@ -8,10 +8,10 @@ package module
 import (
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+	"{module}/internal/domain/bill"
 )
 
-var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/bill/module",
+var Module = fx.Module("{module}/internal/domain/bill/module",
 	fx.Provide(
 		fx.Annotate(newShopAdapter, fx.As(new(bill.Items))),
 		bill.NewUsecase,

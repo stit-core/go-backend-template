@@ -10,8 +10,8 @@ import (
 
 	"go.uber.org/fx"
 
-	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
-	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"{module}/internal/platform/identity"
+	"{module}/pkg/policy"
 )
 
 type Repository interface {

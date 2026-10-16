@@ -324,7 +324,8 @@ func TestRuleExamples(t *testing.T) {
 
 // example — пример из testdata/rules/<name>.txtar. Комментарий архива: rule — правила через пробел (* — все), want —
 // подстрока ожидаемого отказа (без want — законная форма), base — пример, чьё дерево берётся за основу, drop — файл
-// основы, которого в дереве нет; строки с # — пояснения. Файлы архива дописывают и заменяют файлы основы.
+// основы, которого в дереве нет; строки с # — пояснения. Файлы архива дописывают и заменяют файлы основы; {module} в
+// файлах и want — module path сервиса: de-template меняет его в коде, а примеры остаются верны.
 type example struct {
 	rules, want []string
 	files       map[string]string
@@ -345,7 +346,7 @@ func loadExample(t *testing.T, name string, withBase bool) example {
 		case "rule":
 			ex.rules = append(ex.rules, strings.Fields(value)...)
 		case "want":
-			ex.want = append(ex.want, value)
+			ex.want = append(ex.want, strings.ReplaceAll(value, "{module}", module))
 		case "base":
 			require.True(t, withBase, "%s: the base %s has a base itself", name, value)
 			maps.Copy(ex.files, loadExample(t, value, false).files)
@@ -355,7 +356,9 @@ func loadExample(t *testing.T, name string, withBase bool) example {
 			require.True(t, line == "" || strings.HasPrefix(line, "#"), "%s: unknown line %q", name, line)
 		}
 	}
-	maps.Copy(ex.files, files)
+	for name, content := range files {
+		ex.files[name] = strings.ReplaceAll(content, "{module}", module)
+	}
 	for _, f := range drop {
 		require.Contains(t, ex.files, f, "%s drops a file the tree does not have", name)
 		delete(ex.files, f)

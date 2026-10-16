@@ -5,7 +5,7 @@ want: internal/domain/shop/delivery/http/direct.go uses shop.Repository: deliver
 -- internal/domain/shop/delivery/http/direct.go --
 package http
 
-import "git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+import "{module}/internal/domain/shop"
 
 type direct struct {
 	repo shop.Repository
@@ -15,7 +15,7 @@ type direct struct {
 
 package mocks
 
-import "git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+import "{module}/internal/domain/shop"
 
 // MockDirect повторяет порт входа: правило читает порт, а не его мок.
 type MockDirect struct {
