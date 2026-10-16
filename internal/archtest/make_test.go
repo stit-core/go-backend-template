@@ -199,10 +199,12 @@ func TestCheckCoversItsOwnRun(t *testing.T) {
 
 // TestPrePushGatesPushedCommit: pre-push гоняет make check верхнего коммита пушимого ref'а в свежем
 // worktree — по дереву и Makefile самого коммита, а переменные make и оболочки пушащего до гейта не
-// доходят: каждая из них меняет шаги или выключает его самозащиту. До гейта — subject каждого пушимого коммита
-// (кроме тех, что уже в ветках remote'ов) хуком commit-msg: коммит cherry-pick или клона без хуков его не проходил.
-// Гейт здесь игрушечный: Makefile коммита печатает вердикт (файл verdict) и то, что дошло до него из окружения, а
-// окружение оболочки снимает строкой unexport Makefile репо.
+// доходят: каждая из них меняет шаги или выключает его самозащиту. До гейта — сообщение каждого пушимого коммита
+// (кроме тех, что уже в ветках remote'ов) хуком commit-msg из дерева его родителя: коммит cherry-pick, rebase или
+// клона без хуков его не проходил, а старый коммит правилом, которого тогда не было, не судится. Гейт здесь
+// игрушечный: Makefile коммита печатает вердикт (файл verdict) и то, что дошло до него из окружения, а окружение
+// оболочки снимает строкой unexport Makefile репо; правило commit-msg — сначала старое, только Conventional
+// Commits, затем хук репо.
 func TestPrePushGatesPushedCommit(t *testing.T) {
 	t.Parallel()
 	hook := filepath.Join(repoRoot(t), "scripts", "git-hooks", "pre-push")
@@ -211,12 +213,14 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	require.NotEmpty(t, shellEnv, "Makefile unexports the shell environment of the caller from its recipes")
 	repo, tmp := t.TempDir(), t.TempDir()
 	git(t, repo, "init", "-q", "-b", "main")
+	rule := "#!/bin/bash\n[[ $(head -n 1 \"$1\") =~ ^(feat|fix|chore)(\\([a-z]+\\))?:\\ .+ ]] || { echo \"ERROR: not a Conventional Commit\"; exit 1; }\n"
 	commitAs := func(subject, verdict string) string {
 		t.Helper()
 		writeFiles(t, repo, map[string]string{
-			"Makefile": shellEnv + "\ncheck:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)] shell=[$${BASH_ENV-}$${SHELLOPTS-}$${BASHOPTS-}]\"; test \"$$(cat verdict)\" = green\n",
-			"verdict":  verdict + "\n",
-			"subject":  subject + "\n",
+			"Makefile":                     shellEnv + "\ncheck:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)] shell=[$${BASH_ENV-}$${SHELLOPTS-}$${BASHOPTS-}]\"; test \"$$(cat verdict)\" = green\n",
+			"verdict":                      verdict + "\n",
+			"subject":                      subject + "\n",
+			"scripts/git-hooks/commit-msg": rule,
 		})
 		git(t, repo, "add", "-A")
 		git(t, repo, "commit", "-qm", subject)
@@ -265,14 +269,27 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	stuff := commitAs("update stuff", "green")
 	out, err = push("refs/heads/main " + stuff + " refs/heads/main " + green + "\n")
 	require.Error(t, err, "a commit that is not a Conventional Commit must not be pushed:\n%s", out)
-	require.Contains(t, out, "subject не по форме")
-	require.NotContains(t, out, "toy gate", "the subject is checked before the gate")
+	require.Contains(t, out, "сообщение не по правилу commit-msg его родителя")
+	require.NotContains(t, out, "toy gate", "the message is checked before the gate")
 
-	// Коммит, который уже в ветке remote'а, — не пушимый: его subject больше не судится.
+	// Коммит, который уже в ветке remote'а, — не пушимый: его сообщение больше не судится.
 	git(t, repo, "update-ref", "refs/remotes/origin/main", stuff)
-	next := commit("green")
-	out, err = push("refs/heads/main " + next + " refs/heads/main " + stuff + "\n")
-	require.NoError(t, err, "a commit of the remote is judged again:\n%s", out)
+	oldFeat := commitAs("feat: до правила Review", "green")
+	out, err = push("refs/heads/main " + oldFeat + " refs/heads/main " + stuff + "\n")
+	require.NoError(t, err, "a commit of the remote or a commit before the rule of Review is judged by it:\n%s", out)
+	require.Contains(t, out, "toy gate: green")
+
+	// Хук репо вводит правило Review: коммит после него без строки Review: — отказ, а цепочка до него проходит.
+	rule = readFiles(t, repoRoot(t), "scripts/git-hooks/commit-msg")["scripts/git-hooks/commit-msg"]
+	ruled := commitAs("chore: правило Review", "green")
+	newFeat := commitAs("feat: после правила", "green")
+	out, err = push("refs/heads/main " + newFeat + " refs/heads/main " + stuff + "\n")
+	require.Error(t, err, "a feat after the rule of Review without the line must not be pushed:\n%s", out)
+	require.Contains(t, out, "сообщение не по правилу commit-msg его родителя")
+	require.Contains(t, out, "нет строки Review:")
+	require.NotContains(t, out, "toy gate")
+	out, err = push("refs/heads/main " + ruled + " refs/heads/main " + stuff + "\n")
+	require.NoError(t, err, "the chain before the rule of Review is pushed:\n%s", out)
 	require.Contains(t, out, "toy gate: green")
 
 	out, err = push("refs/heads/old " + zero + " refs/heads/old " + red + "\n")

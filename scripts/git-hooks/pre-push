@@ -2,9 +2,10 @@
 # pre-push: канонический gate перед отправкой в remote — `make check` верхнего коммита каждого пушимого
 # ref'а в свежем worktree (промежуточные коммиты push'а не гоняются). Вердикт — про то, что уходит в
 # remote: незакоммиченные правки и игнорируемые файлы рабочего дерева на него не влияют. Кеш lint у
-# свежего worktree холодный (lint.sh кладёт его в checkout). До гейта — subject каждого пушимого коммита
-# (его нет ни в одной ветке remote'ов) хуком commit-msg: коммит cherry-pick, rebase или клона без хуков
-# commit-msg не проходил.
+# свежего worktree холодный (lint.sh кладёт его в checkout). До гейта — сообщение каждого пушимого коммита
+# (его нет ни в одной ветке remote'ов) хуком commit-msg из дерева его родителя: коммит cherry-pick, rebase
+# (git rebase --continue хук не зовёт) или клона без хуков commit-msg не проходил, а правило — то, что
+# действовало, когда коммит делали: старые коммиты правилом, которого тогда не было, не судятся.
 #
 # Строка интерпретатора — `bash -p`: файл автозапуска (BASH_ENV), экспортированные функции и SHELLOPTS
 # из окружения пушащего хук не читает — иначе `exit 0` в них пропускал бы push без гейта.
@@ -25,34 +26,34 @@ if [ "${SKIP_PREPUSH:-}" = "1" ]; then
 fi
 
 root=$(git rev-parse --show-toplevel)
-hooks=$(dirname "${BASH_SOURCE[0]}")
 # Хук git экспортирует GIT_DIR и соседей: в другом worktree они указали бы не туда.
 # shellcheck disable=SC2046 # имена переменных — отдельными словами
 unset $(git rev-parse --local-env-vars)
 
-tmp="" msg=$(mktemp "${TMPDIR:-/tmp}/pre-push-msg.XXXXXX")
+tmp="" msg=$(mktemp "${TMPDIR:-/tmp}/pre-push-msg.XXXXXX") rule=$(mktemp "${TMPDIR:-/tmp}/pre-push-hook.XXXXXX")
 cleanup() {
     [ -z "$tmp" ] || git -C "$root" worktree remove --force "$tmp" 2>/dev/null || rmdir "$tmp" 2>/dev/null || true
     tmp=""
 }
-trap 'cleanup; rm -f "$msg"' EXIT
+trap 'cleanup; rm -f "$msg" "$rule"' EXIT
 
 # stdin: <local ref> <local sha> <remote ref> <remote sha> на каждый пушимый ref.
 refs=$(cat)
 
-# Тело сообщения — строка Review: о самой проверке: pre-push судит subject, а след ревью — commit-msg при коммите.
+# Корневой коммит и родитель без хука commit-msg не судятся: правила тогда не было.
 while read -r _ local_sha _ remote_sha; do
     [[ -n $local_sha && ! $local_sha =~ ^0+$ ]] || continue
     known=(--remotes)
     if [[ ! $remote_sha =~ ^0+$ ]] && git -C "$root" cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
         known+=("$remote_sha")
     fi
-    for c in $(git -C "$root" rev-list "$local_sha" --not "${known[@]}"); do
-        { git -C "$root" log -1 --format=%B "$c" | sed -n 1p; printf '\nReview: pre-push — только subject\n'; } >"$msg"
-        if ! out=$("$hooks/commit-msg" "$msg"); then
-            echo "pre-push: коммит $(git -C "$root" rev-parse --short "$c") — subject не по форме:"
+    for c in $(git -C "$root" rev-list --reverse "$local_sha" --not "${known[@]}"); do
+        git -C "$root" show "$c^:scripts/git-hooks/commit-msg" >"$rule" 2>/dev/null || continue
+        git -C "$root" log -1 --format=%B "$c" >"$msg"
+        if ! out=$(bash -p "$rule" "$msg" 2>&1); then
+            echo "pre-push: коммит $(git -C "$root" rev-parse --short "$c") — сообщение не по правилу commit-msg его родителя:"
             sed 's/^/  /' <<<"$out"
-            echo "pre-push: перепиши сообщение (git rebase -i, reword) и пушь снова"
+            echo "pre-push: допиши сообщение (git rebase -i, reword) и пушь снова"
             exit 1
         fi
     done

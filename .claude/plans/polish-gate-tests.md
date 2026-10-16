@@ -124,8 +124,16 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     → 9 passed, `make e2e` → 16 passed (`N/s7g/e2e-s8.log`), ruff и mypy — отказ до стека, у базы их нет
     (`N/s7g/e2e-lint-probe.log`); пик памяти `cmd/api.test` под `-race` — 2207 → 418 МиБ (`N/s7g/api-rss.log`);
     `tests-pipeline.md` — 12,6 → 11,5 тыс. символов; `make check` → `✓ check clean`
-- [ ] **S9** — Приёмка: полный `make mutate` кусками под замком, повтор опытов AC1–AC7
-  - Проверка: `make mutate` → код 0; `make check` → `✓ check clean` · Закрывает: AC8 · Зависит от: S8
+- [x] **S9** — pre-push: сообщение пушимого коммита — хуком `commit-msg` из дерева его родителя (дополнение
+  дирижёра к RENF-11: `git rebase --continue` хук не зовёт)
+  - Проверка: `TestPrePushGatesPushedCommit`; история `origin/main..nine/s7-gate`; `make check` → `✓ check clean`
+    · Закрывает: AC3 · Зависит от: S4
+  - Сделано: на пробном репо `TestPrePushGatesPushedCommit` — `feat` без `Review:` после правила — отказ до гейта,
+    цепочка до правила и коммит, уже бывший в ветке remote'а, — проходят; 156 незапушенных коммитов
+    `origin/main..nine/s7-gate` правилу родителя отвечают все, вся история `main` — кроме `ea1de93 clean` и
+    `a0f3fa9` (оба давно в `origin/main`) (`N/s7g/bin/msg-check.sh`); `make check` → `✓ check clean`
+- [ ] **S10** — Приёмка: полный `make mutate` кусками под замком, повтор опытов AC1–AC7
+  - Проверка: `make mutate` → код 0; `make check` → `✓ check clean` · Закрывает: AC8 · Зависит от: S9
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -204,9 +212,14 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   harness (уже в `main`).
 - RHAR-10 (дополнение дирижёра): строки `tests-pipeline` о `TestBoot`, `TestRun` и `TestIdentity` — по инварианту
   слоя, перечень проверок — в комментариях самих тестов.
+- pre-push судит всё сообщение пушимого коммита хуком `commit-msg` из дерева его родителя (дополнение дирижёра,
+  вместо subject текущим хуком): `git rebase --continue` и cherry-pick без конфликта commit-msg не зовут, и `feat`
+  без `Review:` иначе уходил бы молча, а правило родителя не судит старые коммиты правилом, которого тогда не было.
+  Корневой коммит и родитель без хука не судятся. Push из клона без веток remote'а в пустой remote судит и историю
+  шаблона: `ea1de93 clean` и `a0f3fa9` (subject длиннее 72) — отказ; такой push — руками человека.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S8 закрыт: имена `new-domain` без лишних отказов, e2e с линтерами харнеса, тесты `cmd/api` легче. Дальше — S9: полный `make mutate` кусками и приёмка.
+S9 закрыт: pre-push судит сообщения пушимых коммитов правилом их родителя. Дальше — S10: полный `make mutate` кусками и приёмка.
