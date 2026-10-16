@@ -1,4 +1,5 @@
-# Законно: исход метрики outcome.New, шаблон regexp.MustCompile, TrustedErrors и проверка var _ — не состояние.
+# Законно: исход метрики outcome.New, шаблон regexp.MustCompile, значение структуры T{…}, TrustedErrors и проверка
+# var _ — не состояние, пока функции корня их не пишут.
 rule: TestDomainDeterminism
 base: canon
 -- internal/domain/shop/metrics.go --
@@ -7,12 +8,18 @@ package shop
 import (
 	"regexp"
 
+	"{module}/pkg/money"
 	"{module}/pkg/outcome"
 )
 
 var (
 	resultSoldOut = outcome.New("sold_out")
 	skuPattern    = regexp.MustCompile(`^[A-Z]{3}-[0-9]+$`)
+	signupBonus   = money.Money{Amount: 10000, Currency: "RUB"}
 )
 
 var _ Authorizer = (*Policy)(nil)
+
+func validSKU(sku string) bool { return skuPattern.MatchString(sku) }
+
+func bonus() money.Money { return signupBonus }

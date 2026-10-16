@@ -233,17 +233,31 @@ func isIdent(expr ast.Expr, name string) bool {
 // fxHooks — хуки жизненного цикла fx: логика старта в module/ ушла бы из-под тестов usecase.
 var fxHooks = []string{"Lifecycle", "Hook", "StartHook", "StopHook", "StartStopHook"}
 
-// TestModulesOnlyWire: module/ домена связывает граф и переводит типы, а не решает. module.go объявляет только
-// Module, тип и конструктор адаптера — в adapters.go, и он знает лишь stdlib и корни доменов: кит, драйвер и клиент —
-// в infra/<адаптер>; хуков fx (Lifecycle, Hook) нет — подписку ставит natskit.SubscribeOnStart во входе, job —
-// timerkit; литерал функции — один return. Другой домен адаптер зовёт через его Trusted: методы Usecase спрашивают
-// policy вызывающего.
+// TestModulesOnlyWire: module/ домена связывает граф и переводит типы, а не решает. Его файлы — module.go (Module и
+// привязки) и adapters.go (адаптеры): тип и конструктор адаптера — в adapters.go, и он знает лишь stdlib и корни
+// доменов — кит, драйвер и клиент живут в infra/<адаптер>; функция module.go и литерал в нём — один return
+// (привязка порта, сборка значения, job); хуков fx (Lifecycle, Hook) нет — подписку ставит natskit.SubscribeOnStart
+// во входе, job — timerkit. Другой домен адаптер зовёт через его Trusted: методы Usecase спрашивают policy вызывающего.
 func TestModulesOnlyWire(t *testing.T) {
 	t.Parallel()
 	runRule(t)
 }
 
 func modulesOnlyWire(c *check) {
+	adapters := map[string]map[string]bool{} // пакет module/ → типы, которые он объявляет
+	for _, f := range c.files {
+		if _, sub, ok := splitDomain(f.pkg); ok && sub == "module" && !f.test {
+			if adapters[f.pkg] == nil {
+				adapters[f.pkg] = map[string]bool{}
+			}
+			ast.Inspect(c.parse(f.path), func(n ast.Node) bool {
+				if ts, ok := n.(*ast.TypeSpec); ok {
+					adapters[f.pkg][ts.Name.Name] = true
+				}
+				return true
+			})
+		}
+	}
 	for _, f := range c.files {
 		domain, sub, ok := splitDomain(f.pkg)
 		if !ok || sub != "module" || f.test {
@@ -253,12 +267,7 @@ func modulesOnlyWire(c *check) {
 		byName := importsByName(file)
 		switch path.Base(f.path) {
 		case "module.go":
-			for _, decl := range file.Decls {
-				if gd, ok := decl.(*ast.GenDecl); ok && (gd.Tok == token.IMPORT || gd.Tok == token.VAR && declaresOnly(gd, "Module")) {
-					continue
-				}
-				c.Errorf("%s declares more than Module: an adapter's type and constructor live in adapters.go", f.path)
-			}
+			moduleGo(c, f.path, file, adapters[f.pkg])
 		case "adapters.go":
 			for _, imp := range f.imports {
 				if _, sub, ok := splitDomain(strings.TrimPrefix(imp, module+"/")); strings.Contains(strings.Split(imp, "/")[0], ".") && (!ok || sub != "") {
@@ -266,39 +275,55 @@ func modulesOnlyWire(c *check) {
 				}
 			}
 		default:
-			c.Errorf("%s: module/ is module.go (Module) and adapters.go (adapters)", f.path)
+			c.Errorf("%s: module/ is module.go (Module and bindings) and adapters.go (adapters)", f.path)
 		}
 		ast.Inspect(file, func(n ast.Node) bool {
-			switch x := n.(type) {
-			case *ast.SelectorExpr:
-				id, ok := x.X.(*ast.Ident)
-				if !ok {
-					return true
-				}
-				if byName[id.Name] == "go.uber.org/fx" && slices.Contains(fxHooks, x.Sel.Name) {
-					c.Errorf("%s uses fx.%s: module/ wires, it does not act on start or stop — logic lives in a tested usecase", f.path, x.Sel.Name)
-				}
-				if provider, provSub, ok := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/")); ok && provSub == "" && provider != domain && x.Sel.Name == "Usecase" {
-					c.Errorf("%s uses %s.Usecase: an adapter calls another domain through its Trusted — Usecase methods ask the caller's policy", f.path, id.Name)
-				}
-			case *ast.FuncLit:
-				if len(x.Body.List) != 1 || !isReturn(x.Body.List[0]) {
-					c.Errorf("%s: a function literal of module/ is one return (a port binding or a value): logic lives in a tested usecase or adapter", f.path)
-				}
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			id, ok := sel.X.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			if byName[id.Name] == "go.uber.org/fx" && slices.Contains(fxHooks, sel.Sel.Name) {
+				c.Errorf("%s uses fx.%s: module/ wires, it does not act on start or stop — logic lives in a tested usecase", f.path, sel.Sel.Name)
+			}
+			if provider, provSub, ok := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/")); ok && provSub == "" && provider != domain && sel.Sel.Name == "Usecase" {
+				c.Errorf("%s uses %s.Usecase: an adapter calls another domain through its Trusted — Usecase methods ask the caller's policy", f.path, id.Name)
 			}
 			return true
 		})
 	}
 }
 
+// moduleGo: module.go не объявляет типов и конструкторов адаптера (результат с типом module/ — adapters), а каждая
+// его функция и литерал — один return.
+func moduleGo(c *check, rel string, file *ast.File, adapters map[string]bool) {
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.GenDecl:
+			if d.Tok == token.TYPE {
+				c.Errorf("%s declares a type: an adapter's type and constructor live in adapters.go", rel)
+			}
+		case *ast.FuncDecl:
+			if d.Type.Results != nil && mentions(d.Type.Results, adapters) {
+				c.Errorf("%s declares %s, a constructor of an adapter: an adapter's type and constructor live in adapters.go", rel, d.Name.Name)
+			}
+		}
+	}
+	ast.Inspect(file, func(n ast.Node) bool {
+		_, body := funcParts(n)
+		if body != nil && (len(body.List) != 1 || !isReturn(body.List[0])) {
+			c.Errorf("%s: a function of module.go is one return (a port binding or a value): logic lives in a tested usecase or adapter", rel)
+		}
+		return true
+	})
+}
+
 func isReturn(stmt ast.Stmt) bool {
 	_, ok := stmt.(*ast.ReturnStmt)
 	return ok
-}
-
-// declaresOnly — блок var объявляет одно имя name.
-func declaresOnly(gd *ast.GenDecl, name string) bool {
-	return len(gd.Specs) == 1 && len(gd.Specs[0].(*ast.ValueSpec).Names) == 1 && gd.Specs[0].(*ast.ValueSpec).Names[0].Name == name
 }
 
 // TestDomainDependencies: порт домена (интерфейс его корня) — результат функции только в самом домене: в cmd/,

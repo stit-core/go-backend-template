@@ -1,7 +1,7 @@
-# Конструктор адаптера в module.go: тип и конструктор — в adapters.go.
+# Конструктор адаптера в module.go: тип и конструктор адаптера — в adapters.go.
 rule: TestModulesOnlyWire
 base: canon
-want: internal/domain/bill/module/module.go declares more than Module
+want: internal/domain/bill/module/module.go declares newShopAdapter, a constructor of an adapter
 -- internal/domain/bill/module/module.go --
 package module
 
@@ -15,7 +15,8 @@ import (
 
 var Module = fx.Module("{module}/internal/domain/bill/module",
 	fx.Provide(
-		newItems,
+		newShopAdapter,
+		func(a *shopAdapter) bill.Items { return a },
 		bill.NewUsecase,
 		func(uc *bill.Usecase) billnats.Usecase { return uc },
 		billnats.NewHandler,
@@ -23,4 +24,29 @@ var Module = fx.Module("{module}/internal/domain/bill/module",
 	fx.Invoke(billnats.Register),
 )
 
-func newItems(t *shop.Trusted) bill.Items { return newShopAdapter(t) }
+func newShopAdapter(items *shop.Trusted) *shopAdapter { return &shopAdapter{items: items} }
+-- internal/domain/bill/module/adapters.go --
+package module
+
+import (
+	"context"
+	"errors"
+
+	"{module}/internal/domain/bill"
+	"{module}/internal/domain/shop"
+)
+
+type shopAdapter struct {
+	items *shop.Trusted
+}
+
+func (a *shopAdapter) Lookup(ctx context.Context, id string) (*bill.Item, error) {
+	it, err := a.items.Lookup(ctx, id)
+	if errors.Is(err, shop.ErrNotFound) {
+		return nil, bill.ErrItemNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &bill.Item{ID: it.ID, Name: it.Name}, nil
+}

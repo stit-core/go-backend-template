@@ -958,15 +958,22 @@ var determinismKits = map[string]string{
 
 // TestDomainDeterminism: ID, случайность и время домен берёт у китов и из зависимостей — тест подменяет их, а
 // clockkit.Real{} и crypto/rand мимо инжекции — нет. Состояния между запросами в переменных корня нет: переменная
-// корня — sentinel Err… (errors.go), TrustedErrors, исход outcome.New, шаблон regexp.MustCompile или проверка var _.
+// корня — sentinel Err… (errors.go), TrustedErrors, исход outcome.New, шаблон regexp.MustCompile, значение
+// структуры T{…} или проверка var _, и ни одна функция корня её не пишет.
 func TestDomainDeterminism(t *testing.T) {
 	t.Parallel()
 	runRule(t)
 }
 
 func domainDeterminism(c *check) {
+	vars := map[string]map[string]bool{} // домен → переменные корня
+	type rootFunc struct {
+		domain, path string
+		fn           *ast.FuncDecl
+	}
+	var funcs []rootFunc
 	for _, f := range c.files {
-		_, sub, ok := splitDomain(f.pkg)
+		domain, sub, ok := splitDomain(f.pkg)
 		if !ok || f.test {
 			continue
 		}
@@ -983,36 +990,102 @@ func domainDeterminism(c *check) {
 			}
 			return true
 		})
-		if sub != "" || path.Base(f.path) == "errors.go" {
+		if sub != "" {
 			continue
 		}
+		if vars[domain] == nil {
+			vars[domain] = map[string]bool{}
+		}
 		for _, decl := range file.Decls {
-			gd, ok := decl.(*ast.GenDecl)
-			if !ok || gd.Tok != token.VAR {
-				continue
-			}
-			for _, spec := range gd.Specs {
-				vs := spec.(*ast.ValueSpec)
-				for i, name := range vs.Names {
-					if name.Name == "_" || name.Name == "TrustedErrors" || i < len(vs.Values) && immutableValue(vs.Values[i], byName) {
-						continue
-					}
-					c.Errorf("%s declares package var %s: state between requests lives in the database or a kit; a fixed value is a const or a function", f.path, name.Name)
+			switch d := decl.(type) {
+			case *ast.FuncDecl:
+				funcs = append(funcs, rootFunc{domain, f.path, d})
+			case *ast.GenDecl:
+				if d.Tok != token.VAR {
+					continue
 				}
+				for _, spec := range d.Specs {
+					vs := spec.(*ast.ValueSpec)
+					for i, name := range vs.Names {
+						if name.Name == "_" {
+							continue
+						}
+						vars[domain][name.Name] = true
+						fixed := i < len(vs.Values) && fixedValue(vs.Values[i], byName)
+						if !fixed && name.Name != "TrustedErrors" && path.Base(f.path) != "errors.go" {
+							c.Errorf("%s declares package var %s: state between requests lives in the database or a kit; a fixed value is a const or a function", f.path, name.Name)
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, rf := range funcs {
+		for _, name := range packageWrites(rf.fn) {
+			if vars[rf.domain][name] {
+				c.Errorf("%s: %s writes package var %s: state between requests lives in the database or a kit", rf.path, rf.fn.Name.Name, name)
 			}
 		}
 	}
 }
 
-// immutableValue — значение переменной корня, которое не состояние: исход outcome.New("…") или шаблон
-// regexp.MustCompile("…").
-func immutableValue(expr ast.Expr, byName map[string]string) bool {
-	call, ok := expr.(*ast.CallExpr)
-	if !ok {
-		return false
+// fixedValue — значение переменной корня, которое не состояние: исход outcome.New("…"), шаблон regexp.MustCompile("…"),
+// значение структуры T{…} (не указатель, не map и не slice).
+func fixedValue(expr ast.Expr, byName map[string]string) bool {
+	switch x := expr.(type) {
+	case *ast.CallExpr:
+		pkg, name := kitCall(x, byName)
+		return pkg == module+"/pkg/outcome" && name == "New" || pkg == "regexp" && name == "MustCompile"
+	case *ast.CompositeLit:
+		switch x.Type.(type) {
+		case *ast.Ident, *ast.SelectorExpr:
+			return true
+		}
 	}
-	pkg, name := kitCall(call, byName)
-	return pkg == module+"/pkg/outcome" && name == "New" || pkg == "regexp" && name == "MustCompile"
+	return false
+}
+
+// packageWrites — имена, которые функция пишет (=, op=, ++, --, &x, поле или элемент x) и не объявляет сама: запись в
+// переменную пакета.
+func packageWrites(fn *ast.FuncDecl) []string {
+	local := map[string]bool{}
+	ast.Inspect(fn, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.Field:
+			for _, name := range x.Names {
+				local[name.Name] = true
+			}
+		case *ast.ValueSpec:
+			for _, name := range x.Names {
+				local[name.Name] = true
+			}
+		case *ast.AssignStmt:
+			if x.Tok == token.DEFINE {
+				for _, lhs := range x.Lhs {
+					if id, ok := lhs.(*ast.Ident); ok {
+						local[id.Name] = true
+					}
+				}
+			}
+		case *ast.RangeStmt:
+			if x.Tok == token.DEFINE {
+				for _, e := range []ast.Expr{x.Key, x.Value} {
+					if id, ok := e.(*ast.Ident); ok {
+						local[id.Name] = true
+					}
+				}
+			}
+		}
+		return true
+	})
+	var out []string
+	for name := range writes(fn) {
+		if !local[name] {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // piiField — имя поля payload, которому место в данных поставщика, а не в событии: адрес, телефон, имя, IP, пароль,

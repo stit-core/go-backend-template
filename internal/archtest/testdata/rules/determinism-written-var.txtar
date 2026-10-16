@@ -1,0 +1,14 @@
+# Значение структуры в переменной корня, которую пишет функция: счётчик между запросами мимо БД и кита.
+rule: TestDomainDeterminism
+base: canon
+want: internal/domain/shop/stats.go: record writes package var stats
+-- internal/domain/shop/stats.go --
+package shop
+
+type Stats struct {
+	Created int
+}
+
+var stats = Stats{}
+
+func record() { stats.Created++ }

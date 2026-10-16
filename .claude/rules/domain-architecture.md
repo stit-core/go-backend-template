@@ -85,8 +85,8 @@ paths:
   результата провайдера, тип с несколькими портами — identity-closure над своим типом; `fx.As`
   нет (archtest `TestNoFxAs`), `fx.Annotate` — только теги `name:`/`group:`. Outbox `Providers` —
   внутри модуля домена (`fx.Private`). `context.Context` из графа не берут. `module/` только связывает:
-  `module.go` — одна переменная `Module`, адаптеры — `adapters.go`, хуков fx (`Lifecycle`, `Hook`) нет, литерал
-  функции — один `return` (archtest `TestModulesOnlyWire`).
+  `module.go` — `Module` и привязки, его функция и литерал — один `return`; тип и конструктор адаптера —
+  `adapters.go`; хуков fx (`Lifecycle`, `Hook`) нет (archtest `TestModulesOnlyWire`).
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
   Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)` и
@@ -118,8 +118,8 @@ paths:
   сессии пользователя (`RevokeAll` хранилища authnkit/session; тест — `mock.MatchedBy(pgkit.InTx)`):
   вход открывает сессию под `FOR SHARE` этой строки и сверяет пароль, роль и статус с проверенными.
   Состояния между запросами в `*Usecase` и переменных пакета нет — оно в БД или ките: переменная корня — только
-  sentinel `Err…`, `TrustedErrors`, исход `outcome.New`, шаблон `regexp.MustCompile` (archtest
-  `TestDomainDeterminism`).
+  sentinel `Err…`, `TrustedErrors`, исход `outcome.New`, шаблон `regexp.MustCompile`, значение структуры `T{…}`, и
+  функции корня её не пишут (archtest `TestDomainDeterminism`).
 - **Логи — `logkit.Logger`.** Не `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` и не запись в
   `os.Stdout`/`os.Stderr` напрямую (forbidigo). Ключ ошибки в записи — `error`, как у китов: один
   запрос находит отказы сервиса и китов. В лог и payload события — ID и факты: токенов,

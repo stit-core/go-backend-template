@@ -1,0 +1,33 @@
+# Законно: конструктор job'а в module.go — один return, тело job'а — метод usecase.
+rule: TestModulesOnlyWire
+base: canon
+-- internal/domain/shop/module/module.go --
+package module
+
+import (
+	"time"
+
+	"go.uber.org/fx"
+
+	"{module}/internal/domain/shop"
+	shophttp "{module}/internal/domain/shop/delivery/http"
+	shoppg "{module}/internal/domain/shop/infra/postgres"
+	"git.stit.tech/stit-core/golibinfra/timerkit"
+)
+
+var Module = fx.Module("{module}/internal/domain/shop/module",
+	fx.Provide(
+		shoppg.NewRepository,
+		func(r *shoppg.Repository) shop.Repository { return r },
+		shop.NewPolicy,
+		shop.NewUsecase,
+		shop.NewTrusted,
+		func(uc *shop.Usecase) shophttp.Usecase { return uc },
+		shophttp.NewHandler,
+	),
+	timerkit.ProvideJob(newRestockJob),
+)
+
+func newRestockJob(uc *shop.Usecase) timerkit.Job {
+	return timerkit.Job{Name: "shop.restock", Interval: time.Hour, Run: uc.Restock}
+}

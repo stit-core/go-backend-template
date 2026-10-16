@@ -3,7 +3,7 @@ rule: TestModulesOnlyWire
 base: canon
 want: internal/domain/shop/module/module.go uses fx.Lifecycle
 want: internal/domain/shop/module/module.go uses fx.Hook
-want: internal/domain/shop/module/module.go: a function literal of module/ is one return
+want: internal/domain/shop/module/module.go: a function of module.go is one return
 -- internal/domain/shop/module/module.go --
 package module
 
