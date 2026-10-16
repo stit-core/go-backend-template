@@ -182,6 +182,6 @@ blocked-by: —
   (`make template-update TO=… PATHS='<пути>'`) или поправить свою прозу.
 
 ## Где мы сейчас
-S1–S6 закрыты. S7: трек harness+lifecycle слит (`ab445c2`, валидатор — PASS, `N/validation-s7-harness.md`), его
-неблокирующие — коммитами исполнителя поверх `main`; треки code+security+adapters (`nine/s7-code`) и gate+tests
-(`nine/s7-gate`) идут. Следующее: их валидация и слияние, затем S8.
+S1–S6 закрыты. S7: трек harness+lifecycle слит с добором неблокирующих (`192779f`; валидатор — PASS, история без
+коммитов с красным гейтом); треки code+security+adapters (`nine/s7-code`) и gate+tests (`nine/s7-gate`) идут.
+Следующее: их валидация и слияние, затем S8.
