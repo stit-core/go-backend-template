@@ -1105,9 +1105,12 @@ func packageWrites(fn *ast.FuncDecl) []string {
 	return out
 }
 
-// piiWords — последнее слово имени поля payload, которому место в данных поставщика, а не в событии. Слово — целиком:
-// EmailVerified и TokenID — факт и ID, Zip — не IP; Number и Hash отсылают к слову перед ними (PhoneNumber).
-var piiWords = []string{"Email", "Phone", "Password", "Token", "Secret", "Name", "Address", "Addr", "IP"}
+// piiWords — слово имени поля payload (любое, целиком: Zip — не IP), которому место в данных поставщика, а не в
+// событии; piiFused — слитные формы. Факт (bool, число, время) и ID последним словом — не данные (EmailVerified, TokenID).
+var (
+	piiWords = []string{"Email", "Phone", "Password", "Token", "Secret", "Name", "Address", "Addr", "IP"}
+	piiFused = []string{"username", "surname", "nickname", "fullname", "firstname", "lastname", "email"}
+)
 
 // fxTagKeys — теги полей зависимостей fx (структура с fx.In или fx.Out); tagKey — ключ тега поля.
 var (
@@ -1181,7 +1184,7 @@ func rootTypes(c *check) {
 					c.Errorf("%s: %s has a field tag %s: the wire form lives in DTOs of delivery, an event payload has none", rf.path, ts.Name.Name, field.Tag.Value)
 				}
 				for _, name := range field.Names {
-					if payloads[rf.domain][ts.Name.Name] && personalData(name.Name) {
+					if payloads[rf.domain][ts.Name.Name] && personalData(name.Name, field.Type) {
 						c.Errorf("%s: event %s carries %s: a payload holds IDs and facts — the consumer reads personal data and secrets by ID through a port", rf.path, ts.Name.Name, name.Name)
 					}
 				}
@@ -1230,16 +1233,43 @@ func fxTag(lit string) bool {
 	return len(keys) > 0
 }
 
-// personalData — последнее слово имени (перед Number и Hash — предпоследнее) — из piiWords, и во множественном числе.
-func personalData(name string) bool {
-	words := camelWords(name)
-	last := words[len(words)-1]
-	if len(words) > 1 && (last == "Number" || last == "Hash") {
-		last = words[len(words)-2]
+// personalData — слово имени (CamelCase и _) из piiWords, и во множественном числе, или слитная форма (EMail,
+// Username); факт по типу поля и ID последним словом — нет.
+func personalData(name string, typ ast.Expr) bool {
+	var words []string
+	for _, part := range strings.Split(name, "_") {
+		if part != "" {
+			words = append(words, camelWords(part)...)
+		}
 	}
-	return slices.ContainsFunc(piiWords, func(w string) bool {
-		return strings.EqualFold(last, w) || strings.EqualFold(last, w+"s") || strings.EqualFold(last, w+"es")
-	})
+	if last := words[len(words)-1]; strings.EqualFold(last, "ID") || strings.EqualFold(last, "IDs") || factType(typ) {
+		return false
+	}
+	for i, w := range words {
+		if slices.Contains(piiFused, strings.ToLower(w)) || i > 0 && strings.EqualFold(words[i-1]+w, "email") ||
+			slices.ContainsFunc(piiWords, func(p string) bool {
+				return strings.EqualFold(w, p) || strings.EqualFold(w, p+"s") || strings.EqualFold(w, p+"es")
+			}) {
+			return true
+		}
+	}
+	return false
+}
+
+// factType — тип факта, а не данных: bool, числа, время (и указатель на них).
+func factType(t ast.Expr) bool {
+	switch t := t.(type) {
+	case *ast.StarExpr:
+		return factType(t.X)
+	case *ast.Ident:
+		return slices.Contains([]string{
+			"bool", "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16",
+			"uint32", "uint64", "float32", "float64",
+		}, t.Name)
+	case *ast.SelectorExpr:
+		return isIdent(t.X, "time") && (t.Sel.Name == "Time" || t.Sel.Name == "Duration")
+	}
+	return false
 }
 
 // camelWords — слова имени CamelCase: ClientIP → Client IP, IPAddress → IP Address, UserIPs → User IPs.

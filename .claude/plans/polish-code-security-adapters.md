@@ -415,9 +415,12 @@ blocked-by: —
 - SD6 (выжившая мутация): `cmd/seed-admin` проверяет `SEED_ADMIN_EMAIL` и `SEED_ADMIN_PASSWORD` до подключения к БД —
   не второй способ правила (адрес и пароль судит `EnsureAdmin`), а сообщение оператору, какой переменной нет: тест
   держит его текст.
-- B1 (валидация, `TestRootTypes`): персональные данные — последнее слово имени поля целиком (перед `Number` и `Hash` —
-  предпоследнее), а не подстрока: `EmailVerified`, `TokenCount`, `Membership` — факты, `ClientIP`, `PhoneNumber` —
-  отказ. Payload — тип литерала в `….Publish` корня и типы `events*.go`, а не файл `events.go`; теги fx (`name`,
+- B1 и B3 (валидация, `TestRootTypes`): персональные данные — слово PII в любом месте имени (CamelCase и `_`, целиком:
+  `Membership`, `Zip` — не PII) и слитные формы списком (`Username`, `Surname`, `EMail`); факт — по типу поля (`bool`,
+  числа, `time.Time`, `time.Duration`: `EmailVerified bool`, `TokenCount int`), `…ID` последним словом — ID. Только
+  последнее слово (B1) пропускало `SecretKey`, `TokenValue`, `PasswordPlain`, `Username` — гейт проверял меньше; пример
+  `root-event-secrets` держит секретную половину правила. Строковый «факт» со словом PII (`EmailVerified string`) —
+  отказ: факт в каноне типизирован. Payload — тип литерала в `….Publish` корня и типы `events*.go`; теги fx (`name`,
   `group`, `optional`) у структуры с `fx.In` — способ fx. `ProductName` — отказ по замыслу: имя берут по ID.
 - B2 (валидация, `TestModulesOnlyWire`): `adapters.go` видит то же, что корень домена, — stdlib без I/O, `rootLibs`,
   корни доменов, пакеты `pkg/` и `internal/platform/` без I/O в импортах: порт несёт `paging.Page`, а клиент с I/O в
@@ -451,6 +454,6 @@ blocked-by: —
     INFRA-HANDOFF этих пунктов — блоки S1, S3, S4, S6, S7, S9 в `.claude/plans/handoff.md`.
 
 ## Где мы сейчас
-Шаги S1–S17 и критерии AC1–AC13 закрыты; ветка — на `main` `566a3ce` с треками harness+lifecycle и gate+tests,
-гейт ✓, prune по тексту на итоге — ✓. Ждут: ревью дирижёра (строки `Review: … — ожидает`) и ответы владельца
-Q1–Q3; после них план закрывается.
+Шаги S1–S17 и критерии AC1–AC13 закрыты; ветка — на `main` `566a3ce`, гейт ✓, prune по тексту на итоге — ✓.
+Перепроверка валидатора: B3 закрыт; дальше N1′, N2′, N3′, B1′, N14′ по коммиту. Ждут: ревью дирижёра (строки
+`Review: … — ожидает`) и ответы владельца Q1–Q3.
