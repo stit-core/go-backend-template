@@ -260,6 +260,8 @@ blocked-by: —
   — компромиссом в `SECURITY.md`. Миграция не выпущена — правка комментария до релиза.
 - N9 (валидация, текст плана): «Сделано» S6 называет тесты по именам кода (`TestNoStore`, `TestBoot_AuthRateLimit`,
   job чистки ссылок — в `TestIdentity` после S15); «Сделано» прочих шагов — история шага, его не переписываю.
+- N10 (валидация, Breaking для форков): перечень — разделом «Handoff» плана, его строки дирижёр переносит в
+  аннотацию `template/v1.2.0`; INFRA-HANDOFF окружения и миграции — прежние блоки накопителя, не копии.
 - RCOD-17: образец конфига домена — `verification.Config` (пауза писем, `config.go` корня), образец job'а —
   `verification.purge_links`: оба — с настоящей нуждой, а не ради образца.
 - RCOD-12, RSECT-08: `seed-admin` — метод `user.Usecase.EnsureAdmin` без policy (вход оператора: решает доступ к
@@ -371,12 +373,21 @@ blocked-by: —
 
 ## Handoff
 - Аннотация `template/v1.2.0` (дирижёр), Breaking для форков:
-  - `internal/archtest/layout_settings_test.go` форка — новые настройки `rootLibs`, `uncheckedPackages` и
-    `releasedSubjects`: без них archtest не собирается; свести по образцу шаблона (skill `upgrade`);
+  - код доменов идентичности, который зовут домены форка: `user.TrustedErrors` — карта «метод → ошибки» (тест
+    адаптера берёт `TrustedErrors[метод]`, порт только для чтения не переводит ошибок записи); `Trusted.VerifyPassword`
+    → `HashPassword`, порт `auth.PasswordVerifier` и policy `auth` сняты; `user.CreateInput` → `RegisterInput`,
+    `auth.LoginOutput` → `Session`, входы `Register`/`Login` — значением; `ChangePassword(ctx, old, new)`;
+  - API: тело смены пароля без `user_id` (лишнее поле — 422), в `UserView` — `role` и `email_verified`;
+  - гейт: новые правила archtest (S11, S12, валидация S17) судят и домены форка; `internal/archtest/
+    layout_settings_test.go` форка — новые настройки `rootLibs`, `uncheckedPackages` и `releasedSubjects`: без них
+    archtest не собирается, свести по образцу шаблона (skill `upgrade`);
   - `TestSubjectVersions`: subject `.v1` своего домена — отказ; уже выпущенный — строкой `releasedSubjects`, новый —
-    без суффикса (`event.md` § Versioning).
+    без суффикса (`event.md` § Versioning);
+  - окружение: `AUDIT_RETENTION_DAYS` — required (без неё сервис не стартует), новые `PASSWORD_RESET_MAIL_PAUSE` и
+    `HTTP_AUTH_RATE_LIMIT_*` со значениями по умолчанию; миграция `0007` — ссылки сброса до неё пароль не меняют.
+    INFRA-HANDOFF этих пунктов — блоки S1, S3, S4, S6, S7, S9 в `.claude/plans/handoff.md`.
 
 ## Где мы сейчас
 S1–S13, S15, S16 закрыты; ветка — на `main` с треком gate+tests, RA-блоки и блоки скелета `-02`, `-09` — под код
-трека. Идёт S17 (валидация трека): B1, B2, N1–N9 закрыты, дальше N10–N14 по коммиту; затем strict-прогоны мутаций
+трека. Идёт S17 (валидация трека): B1, B2, N1–N10 закрыты, дальше N11–N14 по коммиту; затем strict-прогоны мутаций
 (RA, скелет, новые блоки) и S14 (приёмка: «Сделано», критерии, гейт).
