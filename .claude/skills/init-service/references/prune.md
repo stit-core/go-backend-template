@@ -40,7 +40,8 @@
    - импорты — `go mod tidy`.
 4. **Генерация и мутации** — блоки удалённых доменов в `sqlc.yaml` и `.mockery.yml`. В спецификации мутаций
    `scripts/tools/mutants.txt` блоки удалённых файлов снимает первый фильтр, блоки строк, которые сняли шаги 2–3
-   (их якорь `make mutate A=--check` называет устаревшим), — второй:
+   (их якорь `make mutate A=--check` называет устаревшим), — второй. Он снял бы и устаревший блок своего домена,
+   поэтому до шага 1 — `make mutate A=--check` → OK (устаревший блок своего домена — переписать):
    ```bash
    awk -v RS= -v ORS='\n\n' '{ n = split($0, l, "\n"); for (i = 2; i <= n; i++) if (l[i] !~ /^[-+=#]/ && system("test -e \"" l[i] "\"")) next; print }' \
        scripts/tools/mutants.txt >mutants.tmp && mv mutants.tmp scripts/tools/mutants.txt
