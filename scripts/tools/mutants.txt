@@ -901,7 +901,7 @@ internal/domain/auth/usecase.go
 ## A23 usecase/auth — ChangePassword: попытки идут не в счётчик входа учётной записи
 internal/domain/auth/usecase.go
 - uc.d.Guard.Attempt(ctx, current.Email, ip)
-+ uc.d.Guard.Attempt(ctx, userID, ip)
++ uc.d.Guard.Attempt(ctx, caller.UserID, ip)
 
 ## A24 usecase/auth — ChangePassword: неверный старый пароль принимается
 internal/domain/auth/usecase.go
@@ -2144,7 +2144,6 @@ migrations/0001_users.up.sql
 + ON users (LOWER(email));
 
 ## MI4 migrations — 0001: индекс хэша токена сброса не уникален
-= уникальность 256-битного хэша функционально не используется
 migrations/0001_users.up.sql
 - CREATE UNIQUE INDEX password_resets_token_hash_idx ON password_resets (token_hash);
 + CREATE INDEX password_resets_token_hash_idx ON password_resets (token_hash);
@@ -2165,7 +2164,6 @@ migrations/0003_email_verifications_idempotency.down.sql
 + DROP INDEX IF EXISTS email_verifications_pending_user_idx_gone;
 
 ## MI8 migrations — 0001: нет CHECK роли
-= значения роли пишут сущность и SQL-литералы: CHECK — вторая линия защиты
 migrations/0001_users.up.sql
 - 'deleted')),
 -     CONSTRAINT users_role_check   CHECK (role   IN ('admin',  'client'))
@@ -2184,13 +2182,11 @@ migrations/0001_users.up.sql
 + email_verified BOOLEAN     NOT NULL DEFAULT true,
 
 ## MI11 migrations — 0001: индекс хэша токена подтверждения не уникален
-= уникальность 256-битного хэша функционально не используется
 migrations/0001_users.up.sql
 - CREATE UNIQUE INDEX email_verifications_token_hash_idx ON email_verifications (token_hash);
 + CREATE INDEX email_verifications_token_hash_idx ON email_verifications (token_hash);
 
 ## MI12 migrations — 0001: нет CHECK статуса
-= значения статуса пишут сущность и SQL-литералы: CHECK — вторая линия защиты
 migrations/0001_users.up.sql
 -     CONSTRAINT users_status_check CHECK (status IN ('active', 'blocked', 'deleted')),
 

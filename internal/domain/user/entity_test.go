@@ -110,6 +110,7 @@ func TestUserCanLogin(t *testing.T) {
 		{"active", user.StatusActive, true},
 		{"blocked", user.StatusBlocked, false},
 		{"deleted", user.StatusDeleted, false},
+		{"unknown status stays closed", user.Status("suspended"), false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
