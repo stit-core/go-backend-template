@@ -1,0 +1,41 @@
+# Payload — и литерал в переменной, которую корень публикует, и тип корня в поле payload: адрес в нём — тот же отказ.
+rule: TestRootTypes
+base: canon
+want: internal/domain/shop/event.go: event ItemShared carries OwnerEmail
+want: internal/domain/shop/contact.go: event Contact carries Email
+-- internal/domain/shop/event.go --
+package shop
+
+const subjectItemShared = "shop.events.item_shared"
+
+type ItemShared struct {
+	ID         string
+	OwnerEmail string
+}
+-- internal/domain/shop/share.go --
+package shop
+
+import "context"
+
+func (uc *Usecase) Share(ctx context.Context, it *Item) error {
+	ev := ItemShared{ID: it.ID}
+	return uc.d.Events.Publish(ctx, subjectItemShared, ev)
+}
+-- internal/domain/shop/contact.go --
+package shop
+
+type Contact struct {
+	Email string
+}
+-- internal/domain/shop/events.go --
+package shop
+
+import "time"
+
+const subjectItemCreated = "shop.events.item_created"
+
+type ItemCreated struct {
+	ID    string
+	Owner []Contact
+	At    time.Time
+}

@@ -1119,8 +1119,9 @@ var (
 )
 
 // TestRootTypes: типы корня — без тегов транспорта: форму провода задают DTO delivery, у payload событий тегов нет
-// (провод — Go-имена); теги fx у зависимостей — способ fx. Payload — тип, который корень публикует (….Publish(…,
-// T{…})), и типы events*.go: ID и факты, а адрес, имя, телефон, IP и секреты потребитель берёт по ID портом.
+// (провод — Go-имена); теги fx у зависимостей — способ fx. Payload — тип, который корень публикует (литерал в
+// ….Publish или в переменной для него), типы events*.go и типы корня в их полях: ID и факты, а адрес, имя, телефон, IP
+// и секреты потребитель берёт по ID портом.
 func TestRootTypes(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -1132,7 +1133,8 @@ func rootTypes(c *check) {
 		file         *ast.File
 	}
 	var root []rootFile
-	payloads := map[string]map[string]bool{} // домен → типы payload
+	payloads := map[string]map[string]bool{}           // домен → типы payload
+	structs := map[string]map[string]*ast.StructType{} // домен → структуры корня
 	for _, f := range c.files {
 		domain, sub, ok := splitDomain(f.pkg)
 		if !ok || sub != "" || f.test {
@@ -1141,26 +1143,37 @@ func rootTypes(c *check) {
 		file := c.parse(f.path)
 		root = append(root, rootFile{f.path, domain, file})
 		if payloads[domain] == nil {
-			payloads[domain] = map[string]bool{}
+			payloads[domain], structs[domain] = map[string]bool{}, map[string]*ast.StructType{}
 		}
 		events := strings.HasPrefix(path.Base(f.path), "events")
 		ast.Inspect(file, func(n ast.Node) bool {
 			switch n := n.(type) {
 			case *ast.TypeSpec:
-				if _, ok := n.Type.(*ast.StructType); ok && events {
-					payloads[domain][n.Name.Name] = true
-				}
-			case *ast.CallExpr:
-				if sel, ok := n.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Publish" {
-					for _, arg := range n.Args {
-						if name := literalType(arg); name != "" {
-							payloads[domain][name] = true
-						}
+				if st, ok := n.Type.(*ast.StructType); ok {
+					structs[domain][n.Name.Name] = st
+					if events {
+						payloads[domain][n.Name.Name] = true
 					}
+				}
+			case *ast.FuncDecl:
+				for _, name := range published(n) {
+					payloads[domain][name] = true
 				}
 			}
 			return true
 		})
+	}
+	for domain, types := range payloads { // тип корня в поле payload — тоже payload
+		for grown := true; grown; {
+			grown = false
+			for name := range types {
+				for _, field := range structFields(structs[domain][name]) {
+					if inner := baseIdent(field.Type); structs[domain][inner] != nil && !types[inner] {
+						types[inner], grown = true, true
+					}
+				}
+			}
+		}
 	}
 	for _, rf := range root {
 		fxName := ""
@@ -1192,6 +1205,66 @@ func rootTypes(c *check) {
 			return true
 		})
 	}
+}
+
+// published — типы, которые функция передаёт в ….Publish: литералом в вызове или переменной, которой функция
+// присвоила литерал (ev := T{…}; Publish(…, ev)).
+func published(fn *ast.FuncDecl) []string {
+	lits := map[string]string{}
+	var out []string
+	ast.Inspect(fn, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.AssignStmt:
+			for i, lhs := range n.Lhs {
+				if id, ok := lhs.(*ast.Ident); ok && i < len(n.Rhs) && literalType(n.Rhs[i]) != "" {
+					lits[id.Name] = literalType(n.Rhs[i])
+				}
+			}
+		case *ast.ValueSpec:
+			for i, id := range n.Names {
+				if i < len(n.Values) && literalType(n.Values[i]) != "" {
+					lits[id.Name] = literalType(n.Values[i])
+				}
+			}
+		case *ast.CallExpr:
+			if sel, ok := n.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Publish" {
+				for _, arg := range n.Args {
+					name := literalType(arg)
+					if id, ok := arg.(*ast.Ident); ok {
+						name = lits[id.Name]
+					}
+					if name != "" {
+						out = append(out, name)
+					}
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// structFields — поля структуры; nil — не структура корня.
+func structFields(st *ast.StructType) []*ast.Field {
+	if st == nil {
+		return nil
+	}
+	return st.Fields.List
+}
+
+// baseIdent — имя типа пакета под указателем, срезом, массивом и значением map; "" — не тип пакета.
+func baseIdent(t ast.Expr) string {
+	switch t := t.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.StarExpr:
+		return baseIdent(t.X)
+	case *ast.ArrayType:
+		return baseIdent(t.Elt)
+	case *ast.MapType:
+		return baseIdent(t.Value)
+	}
+	return ""
 }
 
 // literalType — имя типа литерала T{…} или &T{…}; "" — не литерал типа пакета.
