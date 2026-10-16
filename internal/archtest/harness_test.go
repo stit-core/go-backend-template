@@ -336,7 +336,12 @@ func sectionAnchors(t *testing.T, root string, files []string, foreign func(doc,
 				continue // файла нет — его ищет проверка путей, имя не одно — не видно
 			}
 			full := strings.Join(strings.Fields(m[3]), " ")
-			anchor := strings.TrimSpace(full[:anchorEnd.FindStringIndex(full)[0]])
+			// Номер раздела («§ 2. Поднять контекст») — часть имени: точка после него имя не кончает.
+			number, name := "", full
+			if n := sectionNumber.FindStringIndex(full); n != nil {
+				number, name = full[:n[1]], full[n[1]:]
+			}
+			anchor := strings.TrimSpace(number + name[:anchorEnd.FindStringIndex(name)[0]])
 			found := slices.ContainsFunc(files, func(f string) bool {
 				return slices.ContainsFunc(labelsOf(f), func(l string) bool {
 					return anchor != "" && strings.HasPrefix(l, anchor) || l != "" && strings.HasPrefix(full, l)
@@ -398,7 +403,7 @@ func TestSectionAnchors(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{
-		"b.md": "# B\n\n## Раздел — один\n\n## Что внутри\n\n### 2. Поднять контекст — сразу\n",
+		"b.md": "# B\n\n## Раздел — один\n\n## Что внутри\n\n### 2. Поднять контекст — сразу\n\n### 3. Чейнить — не описывай\n",
 	})
 	for _, tc := range []struct {
 		text string
@@ -413,6 +418,8 @@ func TestSectionAnchors(t *testing.T) {
 		{text: "`b.md` § Поднять контекст"},
 		{text: "`b.md` § 2. Поднять контекст"},
 		{text: "`b.md` § 3. Поднять контекст", dead: true},
+		{text: "`b.md` § 3. Чейнить"},
+		{text: "`b.md` § 2. Несуществующий", dead: true},
 	} {
 		t.Run(tc.text, func(t *testing.T) {
 			t.Parallel()
