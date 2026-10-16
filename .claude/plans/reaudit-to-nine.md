@@ -180,8 +180,15 @@ blocked-by: —
   в прозе, glob'ы `paths:` правил (и в подкаталогах), `name:` скиллов, «Шаг 0», подключение guard-bash и deny — форк,
   который переименовал названный прозой тест или не перенёс пункт обвязки, получит красный гейт: перенести код
   (`make template-update TO=… PATHS='<пути>'`) или поправить свою прозу.
+- Из трека S7 gate+tests — в аннотацию `template/v1.2.0`, раздел «Гейт» (Breaking): полный перечень — раздел «Handoff»
+  плана трека в истории (`git show cba4abf:.claude/plans/polish-gate-tests.md`): `gochecknoinits`, заголовок
+  «Code generated» только у вывода генераторов, функции `cmd/` и записи `cover.sh` под тестами, утверждения в тестах и
+  fuzz-целях, секреты и образы (`TestNoSecretFiles`, `TestImagesPinned`), migrations-check по содержимому, закреплённые
+  версии инструментов и python3, `main` бинаря — только вход, allow без пишущих форм и без `ask`; хуки — снимок индекса
+  и pre-push по правилу `commit-msg` родителя; `make mutate A=--strict` и блоки среза от `make new-domain`.
 
 ## Где мы сейчас
-S1–S6 закрыты. S7: трек harness+lifecycle слит с добором неблокирующих (`192779f`; валидатор — PASS, история без
-коммитов с красным гейтом); треки code+security+adapters (`nine/s7-code`) и gate+tests (`nine/s7-gate`) идут.
-Следующее: их валидация и слияние, затем S8.
+S1–S6 закрыты. S7: harness+lifecycle (`192779f`) и gate+tests (`cba4abf`, валидатор — PASS, `N/validation-s7-gate.md`)
+в `main`; code+security+adapters (`nine/s7-code`) — круг фиксов валидатора, затем перенос на `main` (правило `main`
+бинаря, якоря мутаций, скелет). Следующее: его перепроверка и слияние, затем S8 (полный `make mutate A=--strict` на
+итоговом `main`).
