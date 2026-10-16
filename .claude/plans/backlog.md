@@ -18,8 +18,6 @@ https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE). Medium-пункты и minor
   инструментов; 16 мелочи; остаток gate: лишние отказы `new-domain`, списки снимаемых переменных в `Makefile` и
   хуках, `GOPACKAGESDRIVER`, `INSERT … VALUES` и `.gitkeep` в migrations-check, исключение выпущенных миграций
   по имени (форк со своей `0001_users` его наследует). Триггер: с гейтом.
-- **gate-push-tags** — первый push форка с `--tags` или `push.followTags` получает отказ на истории шаблона (теги
-  `template/*` уходят этим же push); `… | grep "git commit -n"` — ложный отказ guard. Триггер: с гейтом.
 - **sql-quality** — качество SQL держат правило и ревью: `sqlc vet` с правилами (имена запросов, без `SELECT *`
   и `CASE`), репозиторий — только через sqlc, `CREATE TRIGGER`/`FUNCTION` по списку; полный индекс под FK (у
   `email_verifications.user_id` — частичный), `EXPLAIN (GENERIC_PLAN)` запросов sqlc без seq scan, канон пачки
