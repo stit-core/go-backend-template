@@ -97,10 +97,10 @@ mockery — закреплённые в `scripts/tools/versions.sh`: их ста
   и объяснением (nolintlint и archtest).
 - **Раскладка.** Бизнес-код — только `internal/domain/<d>/` (слои — rule `domain-architecture`);
   клей платформы — `internal/platform/`; `pkg/` — правила и типы этого сервиса (`policy`, `paging`,
-  `outcome`) и сгенерированные клиенты (gRPC, OpenAPI: зовёт `infra/` домена, не корень); входы —
-  `cmd/`; тестовая обвязка — `internal/testkit/` и `internal/archtest/`. Других каталогов в
-  `internal/` нет; generic-примитив — golibinfra (ниже). Хартия — `docs/reference/architecture.md`
-  § Каталоги.
+  `outcome`) и сгенерированные клиенты (gRPC, OpenAPI: генератор — правка гейта; зовёт `infra/` домена,
+  не корень); входы — `cmd/`; тестовая обвязка — `internal/testkit/` и `internal/archtest/`. Других
+  каталогов в `internal/` нет; generic-примитив — golibinfra (ниже). Хартия —
+  `docs/reference/architecture.md` § Каталоги.
 - **archtest** (`internal/archtest`, шаг тестов; `//nolint` на него не действует) — раскладка и
   границы любого домена: чужой домен — только через порт и адаптер в `<domain>/module/adapters.go`,
   моки — только из тестов, `platform` и `pkg` доменов не знают. Раскладку держит `archkit` golibinfra

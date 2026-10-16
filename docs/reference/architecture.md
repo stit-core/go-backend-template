@@ -10,7 +10,7 @@
 | `internal/domain/<d>/` | бизнес-код домена: слои ниже | `internal/platform`, `pkg`, киты; чужой домен — только `module/` |
 | `internal/domain/<d>/infra/<kit>/` | адаптер порта домена к киту, внешнему каналу (почта, платёжный провайдер) или клиенту из `pkg/` | корень своего домена, кит, клиент |
 | `internal/platform/` | клей сервиса, общий доменам: конфиг и prod-гард (`config`), сессия (`authgate`), личность (`identity`), outbox доменов (`events`) | `pkg`, киты; доменов не знает |
-| `pkg/` | правила и типы сервиса без I/O, общие доменам (`policy`, `paging`, `outcome`); сгенерированные клиенты (gRPC, OpenAPI) — пакет целиком из вывода генератора (archtest), их зовёт `infra/` домена | `pkg`, киты |
+| `pkg/` | правила и типы сервиса без I/O, общие доменам (`policy`, `paging`, `outcome`); сгенерированные клиенты (gRPC, OpenAPI) — вывод генератора `make gen`, их зовёт `infra/` домена: генератор и его каталог в archtest `TestGeneratedHeaderOnlyInGeneratorOutput` заводит правка гейта | `pkg`, киты |
 | `cmd/` | входы: `api`, `migrate`, `seed-admin` | всё |
 | `internal/testkit/`, `internal/archtest/` | тестовая обвязка и машинные правила раскладки | — |
 

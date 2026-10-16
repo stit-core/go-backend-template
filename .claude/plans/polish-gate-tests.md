@@ -149,7 +149,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     python3 — PATH без python3 (`N/s7g/nopy`): `TestMutate` было «"" does not contain "ST: …"», стало «… на python3:
     поставь его»; `make new-domain` — отказ до первой правки, дерево чистое;
     RADP-10 — `t.Skip` в `TestLayout`: было `SKIP` и ok, стало отказ `TestMain` с местом;
-    `TestCoverCheck` — с записью форка в списке `cover.sh` было FAIL «anchor of the uncoverable list», стало ok
+    `TestCoverCheck` — с записью форка в списке `cover.sh` было FAIL «anchor of the uncoverable list», стало ok;
+    доки — `architecture.md`, CLAUDE.md § Стиль, `release/SKILL.md`, `tests-pipeline` (Argon2 boot-теста)
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -187,6 +188,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   не запустить честно; окружение оболочки — `bash -p` у хуков и `unexport` `Makefile` у рецептов (все проверки
   хуков идут через make); `mutate.py` снимает только `API_TEST_MAIN_ARGS`, остальное снял `make mutate`.
 - `docs/contributing.md` (трек harness+lifecycle) — ячейки «git-хуки» и «Самозащита гейта»: поведение хуков сменилось.
+- Доки по смене конвенции (N3): `docs/reference/architecture.md` (строка `pkg/`) и CLAUDE.md § Стиль — сгенерированный
+  клиент `pkg/` заводит правка гейта; `.claude/skills/release/SKILL.md` — все условия `--strict`; файлы других
+  треков — по строке.
 - Покрытие `cmd/`: в профиле (`-coverpkg`) и в правиле «функция без тестов», но не в доле — ветки сбоев запуска
   `run` бинарей тесты не берут, а тесты `cmd/**` — трек code+security+adapters; `main` вне правила: его исполняют
   перезапущенный тестовый бинарь и образ, профиль родителя этого не видит.
@@ -267,4 +271,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 ## Где мы сейчас
 S10 — круг по валидатору: блокирующие закрыты — B1 (`make gen` без моков), B2 (тест new-domain не занимает имён
 форка), B3 (снимок pre-commit чинит себя); неблокирующие `REBASE_HEAD`, python3, RADP-10 и попутное — список
-`TestCoverCheck` — тоже. Дальше — доки, handoff.
+`TestCoverCheck`, доки — тоже. Дальше — handoff.
