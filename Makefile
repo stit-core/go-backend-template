@@ -118,11 +118,12 @@ check:: ## Канонический gate (pre-push) по всему дереву
 unexport $(filter MOCKERY_%,$(.VARIABLES)) GOPACKAGESDRIVER
 
 # mockery грузит пакеты интерфейсов .mockery.yml и, пока код не собирается, моков не пишет: сборка — до него,
-# с причиной.
+# с причиной. Пакеты mocks — вне сборки: мок, устаревший после правки интерфейса или типа, mockery и перепишет.
 gen: ## Регенерация сгенерированного: sqlc, mockery, openapi.json (без запуска сервиса)
 	@bash scripts/tools/versions.sh sqlc mockery
 	sqlc generate
-	@out=$$(go build ./... 2>&1) || { echo "$$out" | head -30; \
+	@out=$$(go list -e -f '{{if .GoFiles}}{{.ImportPath}}{{end}}' ./... | grep -v '/mocks$$' | xargs -r go build 2>&1) || \
+		{ echo "$$out" | head -30; \
 		echo "FAIL: код не собирается (вывод выше) — моки mockery пишет по собранным пакетам: почини сборку, затем make gen"; exit 1; }
 	mockery --config .mockery.yml
 	go test ./cmd/api -run '^TestOpenAPISpec$$' -count=1 -args -update

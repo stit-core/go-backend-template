@@ -363,20 +363,41 @@ func TestToolVersions(t *testing.T) {
 }
 
 // TestGenBuildsFirst: mockery грузит пакеты интерфейсов и над кодом, который не собирается, падает шумом загрузки
-// пакетов — make gen собирает код до него и называет причину. sqlc и mockery — заглушки, go — настоящий.
+// пакетов — make gen собирает код до него и называет причину. Мок, устаревший после переименования типа из
+// сигнатуры интерфейса, — не причина: его mockery и перепишет. sqlc и mockery — заглушки, go — настоящий.
 func TestGenBuildsFirst(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	bin, repo := t.TempDir(), t.TempDir()
-	writeExecutable(t, filepath.Join(bin, "sqlc"), "#!/bin/sh\n[ \"$*\" = version ] && echo "+pin(t, "sqlc")+"\nexit 0\n")
-	writeExecutable(t, filepath.Join(bin, "mockery"), "#!/bin/sh\n[ \"$*\" = version ] && { echo "+pin(t, "mockery")+"; exit 0; }\ntouch \"$0.called\"\n")
-	writeFiles(t, repo, union(readFiles(t, root, "Makefile", "scripts/tools/versions.sh"), map[string]string{
-		"go.mod": "module example.com/gen\n\ngo 1.26\n",
-		"p/p.go": "package p\n\n// Port — интерфейс из .mockery.yml.\ntype Port interface{ Get() int }\n\nvar _ = renamedByTheEdit\n",
-	}))
-	out, err := makeIn(t, repo, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, "gen")
-	require.Error(t, err, out)
-	require.Contains(t, out, "undefined: renamedByTheEdit", "make gen must name the build error")
-	require.Contains(t, out, "FAIL: код не собирается")
-	require.NoFileExists(t, filepath.Join(bin, "mockery.called"), "make gen runs mockery over code that does not build")
+	const port = "package p\n\n// Port — интерфейс из .mockery.yml.\ntype Port interface{ Get() Item }\n\n// Item — тип из сигнатуры Port.\ntype Item struct{}\n"
+	for _, tc := range []struct {
+		name  string
+		files map[string]string
+		fail  string // ошибка сборки в отказе; пусто — make gen проходит
+	}{
+		{name: "code that does not build", files: map[string]string{"p/p.go": port + "\nvar _ = renamedByTheEdit\n"}, fail: "undefined: renamedByTheEdit"},
+		{name: "a stale mock", files: map[string]string{"p/p.go": port, "p/mocks/port.go": "package mocks\n\nimport \"example.com/gen/p\"\n\nvar _ p.Element\n"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			bin, repo := t.TempDir(), t.TempDir()
+			writeExecutable(t, filepath.Join(bin, "sqlc"), "#!/bin/sh\n[ \"$*\" = version ] && echo "+pin(t, "sqlc")+"\nexit 0\n")
+			writeExecutable(t, filepath.Join(bin, "mockery"), "#!/bin/sh\n[ \"$*\" = version ] && { echo "+pin(t, "mockery")+"; exit 0; }\ntouch \"$0.called\"\n")
+			writeFiles(t, repo, union(readFiles(t, root, "Makefile", "scripts/tools/versions.sh"), tc.files, map[string]string{
+				"go.mod":          "module example.com/gen\n\ngo 1.26\n",
+				"cmd/api/main.go": "package main\n\nfunc main() {}\n",
+				"cmd/api/api_test.go": "package main\n\nimport (\n\t\"flag\"\n\t\"testing\"\n)\n\nvar _ = flag.Bool(\"update\", false, \"\")\n\n" +
+					"func TestOpenAPISpec(*testing.T) {}\n",
+			}))
+			out, err := makeIn(t, repo, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, "gen")
+			if tc.fail == "" {
+				require.NoError(t, err, "make gen refuses over a mock that mockery regenerates:\n%s", out)
+				require.FileExists(t, filepath.Join(bin, "mockery.called"))
+				return
+			}
+			require.Error(t, err, out)
+			require.Contains(t, out, tc.fail, "make gen must name the build error")
+			require.Contains(t, out, "FAIL: код не собирается")
+			require.NoFileExists(t, filepath.Join(bin, "mockery.called"), "make gen runs mockery over code that does not build")
+		})
+	}
 }
