@@ -26,15 +26,6 @@ internal/domain/user/policy.go
 - const maxEmailLen = 254
 + const maxEmailLen = 253
 
-## E02 entity — NewUser: роль по умолчанию — admin
-internal/domain/user/entity.go
-- 	if role == identity.RoleUnknown {
-- 		role = identity.RoleClient
-- 	}
-+ 	if role == identity.RoleUnknown {
-+ 		role = identity.RoleAdmin
-+ 	}
-
 ## E03 entity — NewUser: новый пользователь заблокирован
 internal/domain/user/entity.go
 - 		Status:       StatusActive,
@@ -109,19 +100,6 @@ internal/domain/user/policy.go
 - 	}
 + func selfOrAdmin(caller identity.Identity, targetID string) policy.Decision {
 
-## P06 policy — auth.CanChangePassword: админ чужой пароль не меняет
-internal/domain/auth/policy.go
-- 	if caller.Role == identity.RoleAdmin {
-- 		return policy.Allow()
-- 	}
-- 	if caller.UserID == targetID {
-+ 	if caller.UserID == targetID {
-
-## P07 policy — auth.CanChangePassword: любой с личностью меняет чужой пароль (IDOR)
-internal/domain/auth/policy.go
-- if caller.UserID == targetID {
-+ if caller.UserID != "" {
-
 ## M04+M05 pkg — PasswordStrong: >= → > (8 символов отвергнуты)
 pkg/policy/policy.go
 - utf8.RuneCountInString(plain) >= MinPasswordLen
@@ -158,10 +136,10 @@ pkg/outcome/outcome.go
 - Invalid = New("invalid")
 + Invalid = New("expired")
 
-## M05s usecase/user — Register не применяет правило пароля
+## M05s usecase/user — hashPassword не применяет правило пароля (регистрация, seed-admin, смена и сброс)
 internal/domain/user/usecase.go
-- if !policy.PasswordStrong(in.Password) {
-+ if !policy.PasswordStrong(in.Password) && in.Password == "" {
+- if !policy.PasswordStrong(plain) {
++ if !policy.PasswordStrong(plain) && plain == "" {
 
 ## M06 usecase/user — Register: событие registered не пишется
 internal/domain/user/usecase.go
@@ -235,13 +213,13 @@ internal/domain/user/usecase.go
 - UserRegistered{ID: u.ID, At: uc.d.Clock.Now()}
 + UserRegistered{ID: u.Email, At: uc.d.Clock.Now()}
 
-## U05 usecase/user — Register: пароль длиннее предела хэшера — 500, а не 422
+## U05 usecase/user — hashPassword: пароль длиннее предела хэшера — 500, а не 422
 internal/domain/user/usecase.go
 - 	case errors.Is(err, authnkit.ErrPasswordTooLong):
-- 		return nil, ErrPasswordTooLong
+- 		return "", ErrPasswordTooLong
 - 	case err != nil:
 + 	case errors.Is(err, authnkit.ErrPasswordTooLong):
-+ 		return nil, fmt.Errorf("hash password: %w", err)
++ 		return "", fmt.Errorf("hash password: %w", err)
 + 	case err != nil:
 
 ## U06 usecase/user — GetByID: policy спрашивают о вызывающем (IDOR)
@@ -351,14 +329,10 @@ internal/domain/user/usecase.go
 + return uc.d.Repo.GetByID(ctx, id)
 + }
 
-## T01 trusted — VerifyPassword: пароль длиннее предела — «совпал»
-internal/domain/user/trusted.go
-- 	if errors.Is(err, authnkit.ErrPasswordTooLong) {
-- 		return false, nil
-- 	}
-+ 	if errors.Is(err, authnkit.ErrPasswordTooLong) {
-+ 		return true, nil
-+ 	}
+## T01 usecase/auth — passwordMatches: пароль длиннее предела хэшера — «совпал»
+internal/domain/auth/usecase.go
+- return ok && err == nil, nil
++ return ok || errors.Is(err, authnkit.ErrPasswordTooLong), nil
 
 ## T02 trusted — UpdatePassword: сессии старого пароля не закрываются
 internal/domain/user/trusted.go
@@ -418,8 +392,10 @@ internal/domain/user/infra/postgres/repository.go
 
 ## R03 repo — GetByEmail: адрес с NUL — ошибка драйвера (500)
 internal/domain/user/infra/postgres/repository.go
-- if strings.ContainsRune(email, 0) {
-+ if strings.ContainsRune(email, 1) {
+- // NUL Postgres в TEXT не хранит: такого адреса нет, запрос упал бы ошибкой драйвера.
+- 	if strings.ContainsRune(email, 0) {
++ // NUL Postgres в TEXT не хранит: такого адреса нет, запрос упал бы ошибкой драйвера.
++ 	if strings.ContainsRune(email, 1) {
 
 ## R04 repo — Update: статус не пишется (блокировка не сохраняется)
 internal/domain/user/infra/postgres/repository.go
@@ -501,8 +477,29 @@ internal/domain/user/infra/postgres/repository.go
 
 ## R14 repo — rowToEntity: email_verified не читается
 internal/domain/user/infra/postgres/repository.go
+- 		PasswordHash:  row.PasswordHash,
+- 		Name:          row.Name,
+- 		Status:        user.Status(row.Status),
+- 		Role:          identityRole(row.Role),
+- 		Version:       int(row.Version),
 - 		EmailVerified: row.EmailVerified,
++ 		PasswordHash:  row.PasswordHash,
++ 		Name:          row.Name,
++ 		Status:        user.Status(row.Status),
++ 		Role:          identityRole(row.Role),
++ 		Version:       int(row.Version),
 + 		EmailVerified: false,
+
+## R14b repo — List: email_verified строки списка не читается
+internal/domain/user/infra/postgres/repository.go
+- 			EmailVerified: row.EmailVerified,
+- 			CreatedAt:     row.CreatedAt.Time,
+- 			UpdatedAt:     row.UpdatedAt.Time,
+- 		})
++ 			EmailVerified: false,
++ 			CreatedAt:     row.CreatedAt.Time,
++ 			UpdatedAt:     row.UpdatedAt.Time,
++ 		})
 
 ## VI6 repo — репозиторий: повторное погашение — успех (ссылка многоразовая)
 internal/domain/verification/infra/postgres/repository.go
@@ -520,26 +517,16 @@ internal/domain/verification/infra/postgres/repository.go
 ## VI8 repo — GetPasswordReset: used_at не читается
 internal/domain/verification/infra/postgres/repository.go
 - 		UsedAt:    pgkit.NullableTime(row.UsedAt),
-- 	}, nil
-- }
--
-- func (r *Repository) MarkPasswordResetUsed
-+ 		UsedAt:    nil,
-+ 	}, nil
-+ }
-+
-+ func (r *Repository) MarkPasswordResetUsed
-
-## VI9 repo — MarkPasswordResetUsed: битый id — успех
-internal/domain/verification/infra/postgres/repository.go
-- 	if err != nil {
-- 		return verification.ErrInvalidResetToken
 - 	}
-- 	return used(r.q.MarkPasswordResetUsed(ctx, uid))
-+ 	if err != nil {
-+ 		return nil
+- 	if row.UserVersion != nil {
++ 		UsedAt:    nil,
 + 	}
-+ 	return used(r.q.MarkPasswordResetUsed(ctx, uid))
++ 	if row.UserVersion != nil {
+
+## VI9 repo — RedeemPasswordReset: своя ссылка, погашенная раньше, — успех, если погашена соседняя
+internal/domain/verification/infra/postgres/repository.go
+- if !slices.Contains(redeemed, rid) {
++ if len(redeemed) == 0 {
 
 ## VI10 repo — GetEmailVerification: вместо пользователя — ID токена
 internal/domain/verification/infra/postgres/repository.go
@@ -567,7 +554,13 @@ internal/domain/user/infra/postgres/queries/users.sql
 
 ## M24 sql — GetUserByEmail: без LOWER()
 internal/domain/user/infra/postgres/queries/users.sql
+- -- name: GetUserByEmail :one
+- SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
+- FROM users
 - WHERE LOWER(email) = LOWER($1)
++ -- name: GetUserByEmail :one
++ SELECT id, email, password_hash, name, status, role, version, email_verified, created_at, updated_at
++ FROM users
 + WHERE email = $1
 
 ## M25 sql — GetUserByID: возвращает удалённых
@@ -642,18 +635,26 @@ internal/domain/user/infra/postgres/queries/users.sql
 
 ## S08 sql — UpdateUserPassword: устаревшая версия проходит
 internal/domain/user/infra/postgres/queries/users.sql
+- SET password_hash = $1,
+-     version = version + 1
 - WHERE id = $2
 -   AND version = $3
++ SET password_hash = $1,
++     version = version + 1
 + WHERE id = $2
 +   AND version >= $3
 
 ## S09 sql — UpdateUserPassword: пишет удалённому
 internal/domain/user/infra/postgres/queries/users.sql
+- SET password_hash = $1,
+-     version = version + 1
+- WHERE id = $2
 -   AND version = $3
 -   AND status != 'deleted'
-- RETURNING
++ SET password_hash = $1,
++     version = version + 1
++ WHERE id = $2
 +   AND version = $3
-+ RETURNING
 
 ## S10 sql — SetUserEmailVerified: отмечает удалённого
 internal/domain/user/infra/postgres/queries/users.sql
@@ -699,21 +700,15 @@ internal/domain/verification/infra/postgres/queries/email_verifications.sql
 - UPDATE email_verifications SET used_at = NOW() WHERE id = $1 AND used_at IS NULL;
 + UPDATE email_verifications SET used_at = NOW() WHERE id = $1;
 
-## VS3 sql — MarkPasswordResetUsed: без условия «не погашен» (гонка двух confirm меняет пароль дважды)
+## VS3 sql — RedeemPasswordResets: без условия «не погашен» (гонка двух confirm меняет пароль дважды)
 internal/domain/verification/infra/postgres/queries/password_resets.sql
-- UPDATE password_resets SET used_at = NOW() WHERE id = $1 AND used_at IS NULL;
-+ UPDATE password_resets SET used_at = NOW() WHERE id = $1;
+- UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL RETURNING id;
++ UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 RETURNING id;
 
-## VS4 sql — RevokePasswordResets: гасит ссылки всех остальных
+## VS4 sql — RedeemPasswordResets: гасит ссылки всех остальных
 internal/domain/verification/infra/postgres/queries/password_resets.sql
-- WHERE user_id = $1 AND used_at IS NULL;
-+ WHERE user_id != $1 AND used_at IS NULL;
-
-## VS5 sql — RevokePasswordResets: переписывает used_at уже погашенных
-= код читает только used_at IS NULL
-internal/domain/verification/infra/postgres/queries/password_resets.sql
-- WHERE user_id = $1 AND used_at IS NULL;
-+ WHERE user_id = $1;
+- UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL RETURNING id;
++ UPDATE password_resets SET used_at = NOW() WHERE user_id != $1 AND used_at IS NULL RETURNING id;
 
 ## VS6 sql — MarkEmailVerificationSent: условие по user_id (по id подтверждения ничего не отмечает)
 internal/domain/verification/infra/postgres/queries/email_verifications.sql
@@ -895,19 +890,13 @@ internal/domain/auth/usecase.go
 - RefreshToken: next.Value, User: u}, outcome.OK, nil
 + RefreshToken: refreshToken, User: u}, outcome.OK, nil
 
-## A21 usecase/auth — ChangePassword: policy спрашивают о вызывающем (IDOR)
+## A22 usecase/auth — ChangePassword: отказ правила пароля не останавливает смену
 internal/domain/auth/usecase.go
-- uc.d.Policy.CanChangePassword(ctx, caller, userID)
-+ uc.d.Policy.CanChangePassword(ctx, caller, caller.UserID)
-
-## A22 usecase/auth — ChangePassword: правило пароля не применяется
-internal/domain/auth/usecase.go
-- 	if !policy.PasswordStrong(newPassword) {
-- 		return ErrWeakPassword
+- 	hash, err := uc.d.PasswordSet.HashPassword(ctx, newPassword)
+- 	if err != nil {
+- 		return err
 - 	}
--
-- 	current, err := uc.d.Users.GetByID(ctx, userID)
-+ 	current, err := uc.d.Users.GetByID(ctx, userID)
++ 	hash, _ := uc.d.PasswordSet.HashPassword(ctx, newPassword)
 
 ## A23 usecase/auth — ChangePassword: попытки идут не в счётчик входа учётной записи
 internal/domain/auth/usecase.go
@@ -916,13 +905,13 @@ internal/domain/auth/usecase.go
 
 ## A24 usecase/auth — ChangePassword: неверный старый пароль принимается
 internal/domain/auth/usecase.go
-- 	if !verified {
-+ 	if !verified && oldPassword == "" {
+- 	case !matches:
++ 	case !matches && oldPassword == "":
 
-## A25 usecase/auth — ChangePassword: пароль пишется вызывающему, а не цели
+## A25 usecase/auth — ChangePassword: пароль пишется при чужой версии учётной записи
 internal/domain/auth/usecase.go
-- uc.d.PasswordSet.UpdatePassword(ctx, userID, hash, current.Version)
-+ uc.d.PasswordSet.UpdatePassword(ctx, caller.UserID, hash, current.Version)
+- uc.d.PasswordSet.UpdatePassword(ctx, current.ID, hash, current.Version)
++ uc.d.PasswordSet.UpdatePassword(ctx, current.ID, hash, current.Version+1)
 
 ## A26 usecase/auth — ChangePassword: блокировка guard'а не останавливает подбор старого пароля
 internal/domain/auth/usecase.go
@@ -931,15 +920,10 @@ internal/domain/auth/usecase.go
 + 	case lock != nil && lock.RetryAfter < 0:
 + 		return &LockedError{Wait: lock.RetryAfter}
 
-## A27 usecase/auth — ChangePassword: автор в аудите — цель
+## A27 usecase/auth — ChangePassword: автор в аудите не назван
 internal/domain/auth/usecase.go
-- ActorID: caller.UserID, Action: "change_password"
-+ ActorID: userID, Action: "change_password"
-
-## A28 usecase/auth — ChangePassword: сверяется пароль вызывающего, а не цели
-internal/domain/auth/usecase.go
-- uc.d.PasswordVerify.VerifyPassword(ctx, userID, oldPassword)
-+ uc.d.PasswordVerify.VerifyPassword(ctx, caller.UserID, oldPassword)
+- ActorID: current.ID, Action: "change_password"
++ ActorID: "", Action: "change_password"
 
 ## A29 usecase/auth — ChangePassword: успех не сбрасывает счётчик
 internal/domain/auth/usecase.go
@@ -947,8 +931,8 @@ internal/domain/auth/usecase.go
 - 		uc.d.Log.Error(ctx, "guard record success", "error", err)
 - 	}
 -
-- 	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
-+ 	hash, err := uc.d.Hasher.Hash(ctx, newPassword)
+- 	hash, err := uc.d.PasswordSet.HashPassword(ctx, newPassword)
++ 	hash, err := uc.d.PasswordSet.HashPassword(ctx, newPassword)
 
 ## A30 usecase/auth — LockedError.Unwrap: блокировка — как неверный пароль (401 вместо 429)
 internal/domain/auth/errors.go
@@ -1029,21 +1013,24 @@ internal/domain/auth/infra/bruteforce/guard.go
 - return &auth.LockState{RetryAfter: lock.RetryAfter}, nil
 + return &auth.LockState{}, nil
 
-## VI1 infra — лимитер сброса инвертирован
-internal/domain/verification/infra/bruteforce/limiter.go
-- return lock == nil, nil
-+ return lock != nil, nil
+## VI1 sql — UpsertPasswordReset: пауза писем сброса не действует
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+-       AND (used_at > sqlc.arg('requested_at')::timestamptz
+-            OR id <> sqlc.arg('id')::uuid AND created_at > NOW() - sqlc.arg('mail_pause')::interval)
++       AND used_at > sqlc.arg('requested_at')::timestamptz
 
-## VI2 infra — лимитер сброса: без префикса счётчика
-internal/domain/verification/infra/bruteforce/limiter.go
-- l.guard.Attempt(ctx, subjectPrefix+
-+ l.guard.Attempt(ctx,
+## VI2 usecase/verification — IssuePasswordReset: пауза писем из конфига не доходит до выпуска ссылки
+internal/domain/verification/usecase.go
+- }, uc.d.Config.ResetMailPause)
++ }, 0)
 
-## VI3 infra — лимитер сброса: IP не учитывается
-internal/domain/verification/infra/bruteforce/limiter.go
-- lock, err := l.guard.Attempt(ctx,
-+ ip = ""
-+ 	lock, err := l.guard.Attempt(ctx,
+## VI3 usecase/verification — IssuePasswordReset: выпуски ссылок пользователя не по очереди
+internal/domain/verification/usecase.go
+- 		if err := uc.d.Repo.LockPasswordResets(txCtx, userID); err != nil {
+- 			return err
+- 		}
+- 		var err error
++ 		var err error
 
 ## VI4 infra — лог-mailer поднимается вне dev (письма молча не уходят в проде)
 internal/domain/verification/infra/logmail/logmail.go
@@ -1080,10 +1067,10 @@ internal/domain/auth/module/adapters.go
 - CanLogin:     u.CanLogin(),
 + CanLogin:     true,
 
-## AD1 adapter — auth-адаптер VerifyPassword: любой старый пароль «верен»
+## AD1 adapter — auth-адаптер: ErrWeakPassword поставщика не переводится
 internal/domain/auth/module/adapters.go
-- 	return ok, mapUserErr(err)
-+ 	return ok || err == nil, mapUserErr(err)
+- 	case errors.Is(err, user.ErrWeakPassword):
+- 		return auth.ErrWeakPassword
 
 ## AD2 adapter — auth-адаптер: хэш пароля не переносится
 internal/domain/auth/module/adapters.go
@@ -1165,8 +1152,10 @@ internal/domain/auth/delivery/http/handler.go
 
 ## M21 handler — user update: Status не передаётся в usecase
 internal/domain/user/delivery/http/handler.go
-- Status:  in.Body.Status,
-+ Status:  nil,
+- 	if in.Body.Status != nil {
+- 		s := user.Status(*in.Body.Status)
+- 		upd.Status = &s
+- 	}
 
 ## M22 handler — listUsers: Security убран (ни Secured, ни Public)
 internal/domain/user/delivery/http/handler.go
@@ -1186,16 +1175,10 @@ internal/domain/auth/delivery/http/handler.go
 - 		Password: in.Body.Password,
 + 		Password: in.Body.Email,
 
-## AH2 handler — refresh: пустой cookie уходит в usecase
+## AH3 handler — logout: сессия cookie не закрывается
 internal/domain/auth/delivery/http/handler.go
-- 	if in.RefreshCookie.Value == "" {
-- 		return nil, authErrors.Map(auth.ErrRefreshExpired)
-- 	}
-
-## AH3 handler — logout: с cookie сессия не закрывается
-internal/domain/auth/delivery/http/handler.go
-- 	if in.RefreshCookie.Value != "" {
-+ 	if in.RefreshCookie.Value == "" {
+- h.uc.Logout(ctx, in.RefreshToken)
++ h.uc.Logout(ctx, "")
 
 ## AH4 handler — logout: cookie не гасятся
 internal/domain/auth/delivery/http/handler.go
@@ -1204,14 +1187,14 @@ internal/domain/auth/delivery/http/handler.go
 
 ## AH5 handler — changePassword: перепутаны старый и новый пароль
 internal/domain/auth/delivery/http/handler.go
-- h.uc.ChangePassword(ctx, in.Body.UserID, in.Body.OldPassword, in.Body.NewPassword)
-+ h.uc.ChangePassword(ctx, in.Body.UserID, in.Body.NewPassword, in.Body.OldPassword)
+- h.uc.ChangePassword(ctx, in.Body.OldPassword, in.Body.NewPassword)
++ h.uc.ChangePassword(ctx, in.Body.NewPassword, in.Body.OldPassword)
 
 ## AH6 handler — logout под Security (с истёкшим access не выйти)
 internal/domain/auth/delivery/http/handler.go
-- huma.Register(api, httpkit.Public(huma.Operation{
+- huma.Register(api, logoutErrors.Declare(httpkit.Public(huma.Operation{
 - 		OperationID:   "logoutUser",
-+ huma.Register(api, authgate.Secured(huma.Operation{
++ huma.Register(api, logoutErrors.Declare(authgate.Secured(huma.Operation{
 + 		OperationID:   "logoutUser",
 
 ## AH7 handler — блокировка входа: 423 вместо 429
@@ -1229,10 +1212,10 @@ internal/domain/auth/delivery/http/handler.go
 - Code: "AUTH_REFRESH_REUSED",
 + Code: "AUTH_REFRESH_EXPIRED",
 
-## AH10 handler — login: 429 не объявлен в OpenAPI
+## AH10 handler — login: 429 блокировки не объявлен в OpenAPI
 internal/domain/auth/delivery/http/handler.go
-- loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule)
-+ loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule)
+- loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, authlimit.Rule)
++ loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, authlimit.Rule)
 
 ## AH11 handler — change-password: схема пускает новый пароль короче 8
 internal/domain/auth/delivery/http/dto.go
@@ -1242,9 +1225,9 @@ internal/domain/auth/delivery/http/dto.go
 ## AH12 handler — refresh читает не тот cookie
 internal/domain/auth/delivery/http/dto.go
 - type AuthRefreshInput struct {
-- 	RefreshCookie http.Cookie `cookie:"refresh_token"`
+- 	RefreshToken string `cookie:"refresh_token"`
 + type AuthRefreshInput struct {
-+ 	RefreshCookie http.Cookie `cookie:"access_token"`
++ 	RefreshToken string `cookie:"access_token"`
 
 ## AH13 handler — ответ входа: в email — хэш пароля
 internal/domain/auth/delivery/http/view.go
@@ -1271,18 +1254,18 @@ internal/domain/auth/delivery/http/handler.go
 
 ## AH17 handler — refresh: клиенту возвращается прежний refresh-cookie
 internal/domain/auth/delivery/http/handler.go
-- 	result, err := h.uc.Refresh(ctx, in.RefreshCookie.Value)
+- 	result, err := h.uc.Refresh(ctx, in.RefreshToken)
 - 	if err != nil {
 - 		return nil, authErrors.Map(err)
 - 	}
 - 	return &AuthRefreshOutput{
 - 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, result.RefreshToken, h.cookieCfg),
-+ 	result, err := h.uc.Refresh(ctx, in.RefreshCookie.Value)
++ 	result, err := h.uc.Refresh(ctx, in.RefreshToken)
 + 	if err != nil {
 + 		return nil, authErrors.Map(err)
 + 	}
 + 	return &AuthRefreshOutput{
-+ 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, in.RefreshCookie.Value, h.cookieCfg),
++ 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, in.RefreshToken, h.cookieCfg),
 
 ## UH1 handler — list: в page — размер страницы
 internal/domain/user/delivery/http/handler.go
@@ -1296,8 +1279,8 @@ internal/domain/user/delivery/http/handler.go
 
 ## UH3 handler — update: версия клиента не доходит до usecase
 internal/domain/user/delivery/http/handler.go
-- 		Version: in.Body.Version,
-+ 		Version: 0,
+- upd := user.UpdateInput{Name: in.Body.Name, Version: in.Body.Version}
++ upd := user.UpdateInput{Name: in.Body.Name, Version: 0}
 
 ## UH4 handler — register: 200 вместо 201
 internal/domain/user/delivery/http/handler.go
@@ -1316,8 +1299,8 @@ internal/domain/user/delivery/http/handler.go
 
 ## UH7 handler — register: схема не проверяет формат email
 internal/domain/user/delivery/http/dto.go
-- json:"email"    format:"email"   required:"true"
-+ json:"email"    required:"true"
+- json:"email"    format:"email"   maxLength:"254"
++ json:"email"    maxLength:"254"
 
 ## UH8 handler — list: схема пускает status=deleted
 internal/domain/user/delivery/http/dto.go
@@ -1341,10 +1324,8 @@ internal/domain/user/delivery/http/view.go
 
 ## UH12 handler — update: имя не доходит до usecase
 internal/domain/user/delivery/http/handler.go
-- 		Name:    in.Body.Name,
-- 		Status:  in.Body.Status,
-+ 		Name:    nil,
-+ 		Status:  in.Body.Status,
+- upd := user.UpdateInput{Name: in.Body.Name, Version: in.Body.Version}
++ upd := user.UpdateInput{Name: nil, Version: in.Body.Version}
 
 ## UH13 handler — list: total — размер страницы
 internal/domain/user/delivery/http/handler.go
@@ -1418,8 +1399,8 @@ internal/domain/verification/delivery/http/dto.go
 
 ## VH6 handler — email-verify: 409 не объявлен в OpenAPI
 internal/domain/verification/delivery/http/handler.go
-- confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule, tokenUsedRule)
-+ confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule)
+- confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule, tokenUsedRule, authlimit.Rule)
++ confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule, authlimit.Rule)
 
 ## VH7 handler — email-verify: путь операции изменён
 internal/domain/verification/delivery/http/handler.go
@@ -1438,25 +1419,24 @@ internal/domain/verification/delivery/http/handler.go
 + h.uc.ConfirmEmail(ctx, in.Body.Token); err != nil && ctx.Err() != nil {
 + 		return nil, verificationErrors.Map(err)
 
-## M04s usecase/verification — confirm сброса не применяет правило пароля
+## M04s usecase/verification — confirm сброса: отказ правила пароля не останавливает сброс
 internal/domain/verification/usecase.go
-- if !policy.PasswordStrong(newPassword) {
-+ if !policy.PasswordStrong(newPassword) && newPassword == "" {
+- hash, err := uc.d.PasswordSet.HashPassword(ctx, newPassword)
+- 	if err != nil {
+- 		return err
+- 	}
++ hash, _ := uc.d.PasswordSet.HashPassword(ctx, newPassword)
 
-## M12 usecase/verification — ConfirmPasswordReset: ссылка не гасится условным UPDATE
+## M12 usecase/verification — ConfirmPasswordReset: ссылка не гасится
 internal/domain/verification/usecase.go
-- 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
+- 		if err := uc.d.Repo.RedeemPasswordReset(txCtx, pr.ID, pr.UserID); err != nil {
 - 			return err
 - 		}
 
-## M12b usecase/verification — ConfirmPasswordReset: ни погашения, ни отзыва — ссылка многоразовая
+## M12b usecase/verification — ConfirmPasswordReset: погашение вне транзакции записи пароля
 internal/domain/verification/usecase.go
-- 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
-- 			return err
-- 		}
-- 		if err := uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID); err != nil {
-- 			return err
-- 		}
+- uc.d.Repo.RedeemPasswordReset(txCtx, pr.ID, pr.UserID)
++ uc.d.Repo.RedeemPasswordReset(ctx, pr.ID, pr.UserID)
 
 ## M13 usecase/verification — ConfirmPasswordReset: нет проверки UsedAt
 internal/domain/verification/usecase.go
@@ -1567,16 +1547,6 @@ internal/domain/verification/usecase.go
 - case !u.CanLogin:
 + case !u.CanLogin && false:
 
-## V13 usecase/verification — RequestPasswordReset: лимит запросов не действует
-internal/domain/verification/usecase.go
-- 	case !allowed:
-+ 	case !allowed && u.ID == "":
-
-## V14 usecase/verification — RequestPasswordReset: лимит считает учётную запись (у неизвестного адреса — общий счётчик), а не адрес
-internal/domain/verification/usecase.go
-- uc.d.Limiter.Allow(ctx, email, identity.IPFrom(ctx))
-+ uc.d.Limiter.Allow(ctx, userID, identity.IPFrom(ctx))
-
 ## V15 usecase/verification — сброс: в письме хэш вместо токена
 internal/domain/verification/usecase.go
 - uc.d.Mailer.SendPasswordReset(ctx, u.Email, token)
@@ -1601,36 +1571,24 @@ internal/domain/verification/usecase.go
 
 ## V20 usecase/verification — ConfirmPasswordReset: удалённый пользователь — 404 USER_NOT_FOUND вместо негодной ссылки
 internal/domain/verification/usecase.go
-- 		return ErrInvalidResetToken // токен удалённого пользователя
-+ 		return err // токен удалённого пользователя
-
-## V21 usecase/verification — ConfirmPasswordReset: прочие ссылки сброса остаются годными
-internal/domain/verification/usecase.go
-- 		if err := uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID); err != nil {
-- 			return err
-- 		}
+- if errors.Is(err, ErrConcurrentUpdate) || errors.Is(err, ErrUserNotFound) {
++ if errors.Is(err, ErrConcurrentUpdate) {
 
 ## V22 usecase/verification — ConfirmPasswordReset: пароль пишется вне транзакции погашения
 internal/domain/verification/usecase.go
-- uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version)
-+ uc.d.PasswordSet.UpdatePassword(ctx, pr.UserID, hash, current.Version)
+- uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, pr.UserVersion)
++ uc.d.PasswordSet.UpdatePassword(ctx, pr.UserID, hash, pr.UserVersion)
 
 ## V23 usecase/verification — ConfirmPasswordReset: порядок — пароль пишется до погашения ссылки
 internal/domain/verification/usecase.go
-- 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
+- 		if err := uc.d.Repo.RedeemPasswordReset(txCtx, pr.ID, pr.UserID); err != nil {
 - 			return err
 - 		}
-- 		if err := uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID); err != nil {
-- 			return err
-- 		}
-- 		return uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version)
-+ 		if err := uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, current.Version); err != nil {
+- 		err := uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, pr.UserVersion)
++ 		if err := uc.d.PasswordSet.UpdatePassword(txCtx, pr.UserID, hash, pr.UserVersion); err != nil {
 + 			return err
 + 		}
-+ 		if err := uc.d.Repo.MarkPasswordResetUsed(txCtx, pr.ID); err != nil {
-+ 			return err
-+ 		}
-+ 		return uc.d.Repo.RevokePasswordResets(txCtx, pr.UserID)
++ 		err := uc.d.Repo.RedeemPasswordReset(txCtx, pr.ID, pr.UserID)
 
 ## V24 usecase/verification — ConfirmPasswordReset: поиск по сырому токену
 internal/domain/verification/usecase.go
@@ -2096,46 +2054,47 @@ cmd/migrate/sources/sources.go
 cmd/migrate/sources/sources.go
 - 	auditpg.Migrations,
 
-## SD1 cmd/seed — seed-admin: повышает удалённую учётную запись
-cmd/seed-admin/main.go
-- WHERE LOWER(email) = LOWER($1) AND status <> 'deleted' FOR UPDATE
-+ WHERE LOWER(email) = LOWER($1) FOR UPDATE
+## SD1 sql — GetUserByEmailForUpdate: seed-admin повышает удалённую учётную запись
+internal/domain/user/infra/postgres/queries/users.sql
+-   AND status != 'deleted'
+- FOR UPDATE;
++ FOR UPDATE;
 
-## SD2 cmd/seed — seed-admin: поиск без FOR UPDATE
-cmd/seed-admin/main.go
-- AND status <> 'deleted' FOR UPDATE"
-+ AND status <> 'deleted'"
+## SD2 sql — GetUserByEmailForUpdate: seed-admin ищет без FOR UPDATE
+internal/domain/user/infra/postgres/queries/users.sql
+-   AND status != 'deleted'
+- FOR UPDATE;
++   AND status != 'deleted';
 
-## SD3 cmd/seed — seed-admin: закрытие сессий вне транзакции повышения
-= строку пользователя держит FOR UPDATE транзакции повышения: вход ждёт её коммита и перечитывает роль и хэш, сбой закрытия откатывает повышение и с мутацией
-cmd/seed-admin/main.go
-- return sessions.RevokeAll(txCtx, id)
-+ return sessions.RevokeAll(ctx, id)
+## SD3 usecase/user — EnsureAdmin: закрытие сессий вне транзакции повышения
+internal/domain/user/usecase.go
+- return uc.d.Sessions.RevokeAll(txCtx, admin.ID)
++ return uc.d.Sessions.RevokeAll(ctx, admin.ID)
 
-## SD4 cmd/seed — seed-admin: существующая учётная запись не повышается
-cmd/seed-admin/main.go
-- UPDATE users SET role = 'admin', password_hash = $1 WHERE id = $2
-+ UPDATE users SET role = 'client', password_hash = $1 WHERE id = $2
+## SD4 sql — PromoteUser: существующая учётная запись не повышается
+internal/domain/user/infra/postgres/queries/users.sql
+- SET role = 'admin',
++ SET role = 'client',
 
-## SD5 cmd/seed — seed-admin: новая учётная запись — клиент
-cmd/seed-admin/main.go
-- VALUES ($1, $2, $3, 'active', 'admin', true) RETURNING id
-+ VALUES ($1, $2, $3, 'active', 'client', true) RETURNING id
+## SD5 usecase/user — EnsureAdmin: новая учётная запись — клиент
+internal/domain/user/usecase.go
+- NewUser(in.Email, hash, in.Name, identity.RoleAdmin)
++ NewUser(in.Email, hash, in.Name, identity.RoleClient)
 
 ## SD6 cmd/seed — seed-admin: пустой пароль проходит
 cmd/seed-admin/main.go
-- if email == "" || password == "" {
-+ if email == "" && password == "" {
+- if in.Email == "" || in.Password == "" {
++ if in.Email == "" && in.Password == "" {
 
-## SD7 cmd/seed — seed-admin: email админа не подтверждён
-cmd/seed-admin/main.go
-- VALUES ($1, $2, $3, 'active', 'admin', true) RETURNING id
-+ VALUES ($1, $2, $3, 'active', 'admin', false) RETURNING id
+## SD7 usecase/user — EnsureAdmin: адрес нового admin не подтверждён
+internal/domain/user/usecase.go
+- admin.EmailVerified = true
++ admin.EmailVerified = false
 
-## SD8 cmd/seed — seed-admin: повышение вне транзакции закрытия сессий
-cmd/seed-admin/main.go
-- 		if id, err = upsertAdmin(txCtx, db, email, hash, name); err != nil {
-+ 		if id, err = upsertAdmin(ctx, db, email, hash, name); err != nil {
+## SD8 usecase/user — EnsureAdmin: повышение вне транзакции закрытия сессий
+internal/domain/user/usecase.go
+- uc.d.Repo.Promote(txCtx, existing.ID, hash, existing.Version)
++ uc.d.Repo.Promote(ctx, existing.ID, hash, existing.Version)
 
 ## MI1 migrations — 0001: нет триггера updated_at (updated_at не меняется)
 migrations/0001_users.up.sql

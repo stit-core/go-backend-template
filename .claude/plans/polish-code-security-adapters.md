@@ -27,6 +27,9 @@ blocked-by: —
   `TestTestsAssert` и правила тегов сборки), rules `domain-architecture`, `events-and-messaging`,
   `scaffold/references/{port,endpoint,event,field,env,migration}.md`, `docs/reference/{architecture,domain-mapping}.md`.
   Параллельно идут треки S7 harness+lifecycle и gate+tests.
+- Дополнение дирижёра (16.10): после `git rebase main` с треком gate+tests спецификация мутаций под код трека —
+  устаревшие якоря, `RA25`, блоки скелета `-02`, `-09`; `make mutate A=--strict` на них — код 0
+  (`N/validation-s7-gate.md` § 6).
 - Дополнение дирижёра (15.10), после S14: N4 валидации трека harness (`N/validation-s7-harness.md` § 3) — prune под
   код трека, `.template/identity` и `init-service/references/prune.md` (файлы трека harness — правка минимальная);
   остаток RHAR-10 (`R/template-harness.md`) — блоки «Верификация» четырёх references.
@@ -310,8 +313,10 @@ blocked-by: —
   и `fp11` (конструктор job'а в `module.go`) — законные формы прежнего списка. Переменная корня — и значение структуры,
   если функции корня её не пишут; `module.go` не объявляет типов и конструкторов адаптера, а его функции — один
   `return`: правило держит n33, n31, n40, а не любую функцию.
-- `scripts/tools/mutants.txt` (трек gate+tests) не правлю: якоря кода, который меняет трек, переписываются после
-  слияния треков — список устаревших (`make mutate A=--check`) — в отчёте трека.
+- `scripts/tools/mutants.txt` (файл трека gate+tests; по поручению дирижёра — трек gate сливается раньше): блоки,
+  чьи якоря сдвинул код трека (56 из 356), переписаны под код или сняты, если цели нет (policy `auth`, лимитер
+  сброса, ветки пустого cookie, роль по умолчанию, отзыв ссылок отдельно от погашения); RA-блоки трека gate, `RA25`
+  и блоки скелета `-02`, `-09` — после его слияния. Правка минимальная: формат и прочие блоки не тронуты.
 
 ## Открытые вопросы
 - [ ] **Q1** — Пускать ли вход с неподтверждённым адресом (RCOD-08): решение продукта — блокирует: — — к кому: владелец
