@@ -372,6 +372,54 @@ func TestTemplateUpdatePaths(t *testing.T) {
 	}
 }
 
+// TestTemplateUpdateAdvice: превью советует перенос той командой, которая донесёт PATHS до движка. make
+// template-update форка на template/v1.1.0 и раньше (и форка без Makefile шаблона) PATHS молча отбрасывает, а после
+// переноса код интервала движку уже не взять, — такому форку превью даёт движок последнего тега (skill /upgrade,
+// «Первый перенос движком тега»).
+func TestTemplateUpdateAdvice(t *testing.T) {
+	t.Parallel()
+	script := templateScript(t)
+	tmpl := t.TempDir()
+	v1 := map[string]string{".template/paths": ".template\n", ".template/version": "template/v1.0.0\n", "go.mod": "module example.com/tmpl\n"}
+	git(t, tmpl, "init", "-q")
+	writeFiles(t, tmpl, v1)
+	commitAll(t, tmpl)
+	git(t, tmpl, "tag", "-a", "template/v1.0.0", "-m", "template/v1.0.0")
+	writeFiles(t, tmpl, map[string]string{".template/version": "template/v1.1.0\n"})
+	commitAll(t, tmpl)
+	git(t, tmpl, "tag", "-a", "template/v1.1.0", "-m", "template/v1.1.0\n\nБезопасность:\n- c/auth: фикс входа → PATHS='c/auth'")
+
+	const (
+		own    = "перенос: make template-update TO=<тег> PATHS='<пути>'"
+		tagged = "перенос: bash <(git show template/v1.1.0:scripts/tools/template-update.sh) template/v1.1.0 \"\" '<пути>'"
+	)
+	for _, tc := range []struct {
+		name      string
+		makefile  map[string]string // Makefile форка; nil — его нет
+		want, not string
+	}{
+		{name: "the recipe of the repo passes PATHS", makefile: readFiles(t, repoRoot(t), "Makefile"), want: own, not: tagged},
+		{name: "the recipe of template/v1.1.0 drops PATHS", makefile: map[string]string{
+			"Makefile": "template-update: ## Обвязка шаблона в форк\n\t@bash scripts/tools/template-update.sh \"$(TO)\" \"$(FROM)\"\n",
+		}, want: tagged, not: own},
+		{name: "no Makefile", want: tagged, not: own},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fork := t.TempDir()
+			writeFiles(t, fork, v1)
+			git(t, fork, "init", "-q")
+			commitAll(t, fork)
+			writeFiles(t, fork, union(map[string]string{"go.mod": "module example.com/fork\n"}, tc.makefile))
+			commitAll(t, fork)
+			git(t, fork, "remote", "add", "--no-tags", "template", tmpl)
+			preview := bash(t, fork, script)
+			require.Contains(t, preview, tc.want)
+			require.NotContains(t, preview, tc.not)
+		})
+	}
+}
+
 // TestTemplateUpdateRemote: о новом теге шаблона форк узнаёт из make doctor — теги remote template
 // (git ls-remote, без fetch): тег новее версии форка — WARN с ним и /upgrade, новее нет — OK; remote не
 // заведён — WARN, не ответил — не ошибка; канонический репо шаблона remote не спрашивает.

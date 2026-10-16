@@ -33,9 +33,9 @@
 //     TestNolintNamesEnabledLinters и TestNolintNames (//nolint — только включённых линтеров), TestStatusInfraTouch
 //     (сигнал infra-touch make status);
 //   - template_test.go — TestTemplatePaths, TestTemplateUpdate, TestTemplateUpdateFirstBase,
-//     TestTemplateUpdateBeforeVersionTag, TestTemplateUpdatePaths, TestTemplateUpdateRemote (пути и версия
-//     обвязки .template, её перенос в форк make template-update), TestTemplateAnnotation (разделы аннотации тега
-//     выпуска — в формате переноса), TestNoConflictMarkers и TestConflictMarkers;
+//     TestTemplateUpdateBeforeVersionTag, TestTemplateUpdatePaths, TestTemplateUpdateAdvice, TestTemplateUpdateRemote
+//     (пути и версия обвязки .template, её перенос в форк make template-update и совет превью), TestTemplateAnnotation
+//     (разделы аннотации тега выпуска — в формате переноса), TestNoConflictMarkers и TestConflictMarkers;
 //   - onboarding_test.go — TestIdentityPaths, TestIdentityDependents, TestPruneNamesIdentityDependents (пути
 //     доменов идентичности и процедура их prune), TestCanonicalTemplate (канонический репо шаблона),
 //     TestStackValidator (валидатор stack-артефактов);

@@ -30,6 +30,8 @@ latest() { git tag -l 'template/v*' --sort=-v:refname | head -1; }
 # newer A B — тег B новее тега A.
 newer() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$2" ]; }
 module() { awk '$1 == "module" { print $2; exit }'; }
+# recipe — make template-update форка передаёт PATHS движку: рецепт template/v1.1.0 и раньше их молча отбрасывает.
+recipe() { awk '/^template-update:/ { on = 1; next } on && /^\t/ { if (index($0, "$(PATHS)")) found = 1; next } { on = 0 } END { exit !found }' Makefile 2>/dev/null; }
 golibinfra() { awk '{ for (i = 1; i < NF; i++) if ($i ~ /\/golibinfra$/ && $(i + 1) ~ /^v/) { print $(i + 1); exit } }'; }
 # canon V — это репо шаблона: тег его версии V в истории и module path шаблона.
 canon() {
@@ -171,7 +173,12 @@ if [ -z "$TO" ]; then
     done
     [ -n "$last" ] || { echo "новее тегов шаблона нет"; exit 0; }
     echo "golibinfra: форк $(golibinfra <go.mod), шаблон на $last — $(git show "$last:go.mod" | golibinfra)"
-    echo "перенос: make template-update TO=<тег> PATHS='<пути>' (или PATHS=- — без кода форка) — процедура в skill /upgrade"
+    if recipe; then
+        echo "перенос: make template-update TO=<тег> PATHS='<пути>' (или PATHS=- — без кода форка) — процедура в skill /upgrade"
+    else
+        echo "перенос: bash <(git show $last:scripts/tools/template-update.sh) $last \"\" '<пути>' (или '-' — без кода форка):" \
+            "make template-update форка PATHS не передаёт — процедура в skill /upgrade, «Первый перенос движком тега»"
+    fi
     exit 0
 fi
 
