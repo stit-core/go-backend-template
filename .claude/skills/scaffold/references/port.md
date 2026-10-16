@@ -168,16 +168,9 @@ make test PKG=./internal/archtest/...
 - `usecase_test.go` потребителя: используй `Mock<Provider>Reader` (свежесгенерированный). Тестируй именно поведение consumer'а.
 - `module/adapters_test.go` (white-box, обязателен): адаптер поверх настоящего `<provider>.Trusted` с моком его репозитория — маппинг полей, ctx вызывающего до `Trusted` (запись и чтение под блокировкой — в его транзакции, `mock.MatchedBy(pgkit.InTx)`) и каждая ошибка метода `Trusted`, который зовёт метод адаптера (`<provider>.TrustedErrors[<метод>]`), → sentinel потребителя (чужой sentinel не протекает, новая ошибка без перевода роняет тест; порт только для чтения ошибок записи не переводит). Перечень `calls` — карта «метод адаптера → метод `Trusted` и вызов», её ключи тест сверяет с методами адаптера (`reflect.TypeFor[*<provider>Adapter]().Methods()`): новый метод без строки роняет тест. Канон — `internal/domain/auth/module/adapters_test.go`; новый метод `Trusted` — строкой в `calls` его теста (`internal/domain/user/trusted_test.go`, с исходами его порта) и в `TrustedErrors`, тест сверяет так же.
 
-### 9. Верификация
+### 9. Готово
 
-```bash
-make lint
-make test
-make build
-make gen-check
-```
-
-Готово и коммит — по CLAUDE.md § Готово.
+`make gen` (мок порта из `.mockery.yml`), затем `make check` → `✓ check clean` (CLAUDE.md § Готово).
 
 ### 10. Коммит
 

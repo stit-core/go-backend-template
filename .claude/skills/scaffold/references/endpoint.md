@@ -166,16 +166,9 @@ var (
 
 Используй `MockUsecase` (уже регенерирован после шага 3).
 
-### 9. Верификация
+### 9. Готово
 
-```bash
-make gen          # openapi.json — контракт API — подхватывает новую операцию
-make test PKG=./internal/domain/<name>/...
-make lint PKG=./internal/domain/<name>/...
-make build
-```
-
-Готово и коммит — по CLAUDE.md § Готово.
+`make gen` (операция — в `openapi.json`), затем `make check` → `✓ check clean` (CLAUDE.md § Готово).
 
 ### 10. Коммит
 

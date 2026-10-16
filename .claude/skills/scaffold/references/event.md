@@ -211,15 +211,9 @@ JetStream доставляет at-least-once, поэтому идемпотен�
   идентичности и их событий нет.
 - Integration: если есть end-to-end — отдельный тест под `//go:build integration` с реальным NATS через testcontainers.
 
-### 8. Верификация
+### 8. Готово
 
-```bash
-make test
-make lint
-make gen-check  # если добавил интерфейс из .mockery.yml
-```
-
-Готово и коммит — по CLAUDE.md § Готово.
+`make gen` (мок порта `delivery/nats`), затем `make check` → `✓ check clean` (CLAUDE.md § Готово).
 
 ### 9. Коммит
 

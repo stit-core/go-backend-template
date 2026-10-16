@@ -128,31 +128,14 @@ make gen
 
 Файлы в `internal/domain/<name>/infra/postgres/db/` обновятся автоматически.
 
-### 7. Проверка компиляции
+### 7. Тесты
 
-```bash
-make build
-```
+Миграция, которая меняет поведение, — с тестом: integration-тест поднимает Postgres через
+`golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))`, и свежая миграция в нём уже
+есть (kit-таблица нужна тесту → ещё `testkit.WithMigrations(<kit>pg.Migrations)`; `testkit/pgseed` — только
+seed-хелперы строк поверх). Готово — `make check` → `✓ check clean` (CLAUDE.md § Готово).
 
-Если падает — обычно потому что `repository.go` использует старую сигнатуру sqlc-метода. Поправь.
-
-### 8. Тесты
-
-Если миграция семантически меняет поведение — добавь тест.
-
-```bash
-make test-int   # юнит + integration + лесенка up → down → up по всем миграциям (Docker)
-```
-
-Integration-тесты поднимают Postgres через `golibinfra/testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))`, который накатывает миграции приложения — твоя свежая попадёт автоматически (kit-таблица нужна тесту → ещё `testkit.WithMigrations(<kit>pg.Migrations)`; `testkit/pgseed` — только seed-хелперы строк поверх).
-
-### 9. gen-check
-
-`make gen-check` (шаг `make check`) проверяет что sqlc-код совпадает с тем что `make gen` производит. Если падает — `make gen` локально и закоммить дельту.
-
-Готово и коммит — по CLAUDE.md § Готово.
-
-### 10. Коммит
+### 8. Коммит
 
 ```
 feat(<domain>): add NNNN_name migration
