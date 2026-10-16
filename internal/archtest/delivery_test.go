@@ -678,11 +678,11 @@ func ctxKeyOutsideWith(c *check, rel string, file *ast.File) {
 		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && (fn.Name.Name == "With" || fn.Name.Name == "From") {
 			continue
 		}
-		if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == token.TYPE {
-			continue
-		}
 		used := false
 		ast.Inspect(decl, func(n ast.Node) bool {
+			if ts, ok := n.(*ast.TypeSpec); ok && ts.Name.Name == "ctxKey" {
+				return false // объявление самого ключа; алиас и тип над ним — использование
+			}
 			id, ok := n.(*ast.Ident)
 			used = used || ok && id.Name == "ctxKey"
 			return !used
