@@ -11,7 +11,8 @@ import (
 
 // TestMutate: раннер make mutate (scripts/tools/mutate.py) на игрушечном модуле — убитая, выжившая, известная
 // эквивалентная и устаревшая мутации и файл кода без мутаций в отчёте и коде выхода; с --strict отказ и за
-// спецификацию, разошедшуюся с кодом; правка дерева разработчика остаётся, временные файлы go прогона — нет.
+// спецификацию, разошедшуюся с кодом; правка дерева разработчика остаётся, временные файлы go прогона — нет, и
+// прогона, оборванного SIGKILL, — тоже.
 // go, gofumpt и python3 — настоящие, integration-тестов в модуле нет.
 func TestMutate(t *testing.T) {
 	t.Parallel()
@@ -47,6 +48,7 @@ func TestMutate(t *testing.T) {
 	require.Error(t, err, "a stale anchor fails the check:\n%s", out)
 	require.Contains(t, out, "ST: «было» в internal/p/p.go: вхождений 0")
 
+	writeFiles(t, repo, map[string]string{".cache/mutate/tmp/killed/go-build": "a stage of a run killed by SIGKILL\n"})
 	out, err = mutate()
 	require.Error(t, err, "a new survivor fails the run:\n%s", out)
 	for _, want := range []string{

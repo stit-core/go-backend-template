@@ -168,7 +168,7 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     `TestCoverCheck` — с записью форка в списке `cover.sh` было FAIL «anchor of the uncoverable list», стало ok;
     доки — `architecture.md`, CLAUDE.md § Стиль, `release/SKILL.md`, `tests-pipeline` (Argon2 boot-теста); handoff —
     строки аннотации `template/v1.2.0` о гейте; на финальной голове проба B1 повторена (`N/s7g/v-gen-b1-final.log`)
-- [ ] **S11** — Добор неблокирующих валидатора N5–N13 и N15 (владелец закрывает и minor) — коммитом на пункт
+- [x] **S11** — Добор неблокирующих валидатора N5–N13 и N15 (владелец закрывает и minor) — коммитом на пункт
   - Проверка: проба каждого пункта — верный вердикт или отказ с причиной в «Решениях»; `make check` →
     `✓ check clean` · Зависит от: S10
   - Сделано: N5 — `TestNewDomainRefusesOrRollsBack`: блок скелета с чужим «было» был не виден гейту, теперь — отказ с
@@ -188,7 +188,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     циклом в `main`: у валидатора `OK: coverage 100.00%`, теперь отказ `TestMainOnlyEnters`; входы `cmd/` шаблона —
     проходят; N13 — `find . -name …` и `git branch --contains`/`--list` шли с вопросом, теперь без него, а
     `find … -delete`, `-exec…`, `-ok…`, `-fprint…`, `-fls` — с вопросом (`ask`), `git branch -D` и `tidy` — тоже
-    (`TestAllowReadsOnly`)
+    (`TestAllowReadsOnly`); N15 — каталог убитого прогона в `.cache/mutate/tmp` оставался, теперь его снимает
+    следующий прогон (`TestMutate`); `vet` — целью make в `make check` и pre-commit (`TestPreCommitChecksIndex`);
+    общий коммит двух пушимых ref'ов судился дважды (4 вызова правила на 2 коммита), теперь один раз
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -273,6 +275,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   (сигнатура `CanGet`): их переписывает под код тот, кто сливает.
 - Раннер: временные файлы go стадии — свой `GOTMPDIR` в `.cache/mutate/tmp`, снимается после стадии; `killpg` уже
   вышедшей группы — не ошибка; `TestMutate` гоняет раннер в гейте — гейту нужен python3.
+- Мелочи N15: раннер мутаций снимает `.cache/mutate/tmp` в начале прогона — под замком дерева каталоги оборванного
+  SIGKILL прогона ничьи; `go vet -tags=integration` — цель `make vet`, ей пользуются и `make check`, и pre-commit
+  (проверки хуков идут через make); pre-push судит сообщение коммита, общего нескольким пушимым ref'ам, один раз.
 - python3 — требование гейта (`TestMutate`) и `make new-domain`: тест называет его, `new-domain.sh` отказывает до
   первой правки, CLAUDE.md § Команды — рядом с Docker; `make doctor` (трек lifecycle) python3 не смотрит —
   требование названо там, где без него падают.
@@ -345,7 +350,11 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   - migrations-check: `INSERT` в таблицу не из своего файла — миграция с эффектом; своя или правленая `0001_users`
     форка проверяется целиком (выпущенные шаблона узнаются по содержимому);
   - gofumpt, golangci-lint, sqlc или mockery не закреплённой версии — шаг отказывает: `make setup`; нет python3 —
-    отказывают `TestMutate` и `make new-domain`: поставить python3.
+    отказывают `TestMutate` и `make new-domain`: поставить python3;
+  - в `main` бинаря `cmd/` — логика (цикл, `switch`, `else`, вложенный `if`) — `TestMainOnlyEnters`: логику — в
+    функцию пакета (`run`), её судит cover-check;
+  - allow `.claude/settings.json` форка пускает без вопроса пишущую форму (`go mod tidy`, `find` без `ask` на
+    `-delete`/`-exec`) — `TestAllowReadsOnly`: такую форму — в `ask` или из allow.
 - Хуки: pre-commit судит снимок индекса в worktree `.cache/index-snapshot/wt` (`.cache/` — в `.gitignore`); pre-push
   судит сообщение каждого пушимого коммита правилом `commit-msg` его родителя — `feat`/`fix` без `Review:` (и
   перенесённые `git rebase --continue` или cherry-pick без конфликта) отвергаются до гейта: дописать
@@ -355,4 +364,7 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N13 закрыты; дальше — N15.
+S1–S11 закрыты, AC1–AC8 подтверждены: круг по валидатору (S10) и добор его неблокирующих N5–N13, N15 (S11) —
+коммитом на пункт, у каждого `✓ check clean`; handoff — строки аннотации `template/v1.2.0` о гейте. Дальше —
+повторная валидация и слияние (дирижёр); полный `make mutate` — S8 программы; после слияния трека
+code+security+adapters переписать блоки скелета `<домен>-02` и `-09` (`TestNewDomainRefusesOrRollsBack` их назовёт).

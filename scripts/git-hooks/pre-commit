@@ -44,8 +44,8 @@ gate() { make -f Makefile --no-print-directory PKG= VERBOSE= FORMAT= A= "$@"; }
 echo "pre-commit: make fmt-check"
 gate fmt-check
 
-echo "pre-commit: go vet -tags=integration ./..."
-go vet -tags=integration ./...
+echo "pre-commit: make vet"
+gate vet
 
 echo "pre-commit: make lint"
 gate lint

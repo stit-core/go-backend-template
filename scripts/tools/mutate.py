@@ -10,7 +10,7 @@
 (дрейф сгенерированного мутацию не убивает) → go build ./... → юнит-тесты (go test ./...) → юнит + integration
 (go test -tags=integration ./..., нужен Docker) → worktree — снова HEAD. Без -race: мутации — про логику, гонки
 держит гейт. Временные файлы go каждой стадии — в .cache/mutate/tmp: стадию, снятую по таймауту или обрывом, они не
-переживают.
+переживают, а оставленные убитым раннером снимает следующий прогон.
 
 Спецификация растёт с кодом: файл кода (Go-файл internal/, cmd/ и pkg/ с функцией — кроме тестов, сгенерированного
 и internal/testkit/ — и запросы sqlc) без единой мутации в отчёте назван — новой логике нужны свои блоки.
@@ -230,6 +230,8 @@ def main(args):
         fail("make mutate уже идёт в этом дереве")
     if subprocess.run(["go", "env", "GOFLAGS"], capture_output=True, text=True, env=ENV).stdout.strip():
         fail("make mutate не запускается с GOFLAGS — тесты шли бы не так, как в гейте")
+    # Временные файлы стадий прогона, оборванного SIGKILL раннера: под замком этого дерева они ничьи.
+    shutil.rmtree(TMP, ignore_errors=True)
     # SIGTERM и SIGHUP (kill, закрытый терминал) — как Ctrl-C: прогон выходит через откат worktree.
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda signum, _: sys.exit(128 + signum))

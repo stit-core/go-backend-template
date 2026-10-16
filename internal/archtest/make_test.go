@@ -304,6 +304,18 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err = push("refs/heads/old " + zero + " refs/heads/old " + red + "\n")
 	require.NoError(t, err, "a deleted ref has nothing to check:\n%s", out)
 	require.NotContains(t, out, "toy gate")
+
+	// Ветка и тег с общими коммитами: сообщение каждого судится один раз. Правило считает вызовы.
+	judged := filepath.Join(tmp, "judged")
+	rule = "#!/bin/bash\necho \"$1\" >>" + judged + "\n"
+	counted := commitAs("chore: правило со счётчиком", "green")
+	git(t, repo, "update-ref", "refs/remotes/origin/main", counted)
+	commitAs("chore: первый", "green")
+	second := commitAs("chore: второй", "green")
+	git(t, repo, "tag", "v9", second)
+	out, err = push("refs/heads/main " + second + " refs/heads/main " + counted + "\nrefs/tags/v9 " + second + " refs/tags/v9 " + zero + "\n")
+	require.NoError(t, err, out)
+	require.Equal(t, 2, strings.Count(readFiles(t, tmp, "judged")["judged"], "\n"), "a commit of two pushed refs is judged twice:\n%s", out)
 }
 
 // TestGateStepsIgnoreShellEnvironment: шаги-скрипты гейта (bash) на красном дереве остаются красными при
@@ -366,7 +378,7 @@ func TestHooksIgnoreCallerEnvironment(t *testing.T) {
 		out, err = run(preCommit)
 		require.Error(t, err, "%s: pre-commit passes a red tree:\n%s", name, out)
 		require.Contains(t, out, "FAIL: gofumpt", "%s: pre-commit must run its first step", name)
-		require.NotContains(t, out, "pre-commit: go vet", "%s: pre-commit went past the failed step", name)
+		require.NotContains(t, out, "pre-commit: make vet", "%s: pre-commit went past the failed step", name)
 	}
 }
 
@@ -424,6 +436,7 @@ func TestPreCommitChecksIndex(t *testing.T) {
 			out, err := run(t, repo)
 			if tc.ok {
 				require.NoError(t, err, "pre-commit judges the tree instead of the index:\n%s", out)
+				require.Contains(t, out, "pre-commit: make vet", "the checks of the hook go through make")
 				require.Contains(t, out, "pre-commit: all checks passed.")
 				return
 			}

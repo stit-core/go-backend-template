@@ -41,7 +41,9 @@ trap 'cleanup; rm -f "$msg" "$rule"' EXIT
 # stdin: <local ref> <local sha> <remote ref> <remote sha> на каждый пушимый ref.
 refs=$(cat)
 
-# Корневой коммит и родитель без хука commit-msg не судятся: правила тогда не было.
+# Корневой коммит и родитель без хука commit-msg не судятся: правила тогда не было. Коммит, общий нескольким
+# пушимым ref'ам, судится один раз.
+judged=" "
 while read -r _ local_sha _ remote_sha; do
     [[ -n $local_sha && ! $local_sha =~ ^0+$ ]] || continue
     known=(--remotes '--tags=template/*')
@@ -49,6 +51,8 @@ while read -r _ local_sha _ remote_sha; do
         known+=("$remote_sha")
     fi
     for c in $(git -C "$root" rev-list --reverse "$local_sha" --not "${known[@]}"); do
+        [[ $judged == *" $c "* ]] && continue
+        judged+="$c "
         git -C "$root" show "$c^:scripts/git-hooks/commit-msg" >"$rule" 2>/dev/null || continue
         git -C "$root" log -1 --format=%B "$c" >"$msg"
         if ! out=$(bash -p "$rule" "$msg" 2>&1); then

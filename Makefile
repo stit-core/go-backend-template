@@ -1,4 +1,4 @@
-.PHONY: help test lint build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench cover-check mutate tidy
+.PHONY: help test lint vet build fmt fmt-check check gen gen-check migrate-up migrate-down e2e e2e-smoke new-domain status map search release setup doctor template-update plan-check validate-stack-docs local-deps-up local-deps-down test-int test-fuzz test-bench cover-check mutate tidy
 
 # Release-вычисления (image-path host/org, lockstep tag) self-contained в
 # scripts/release.sh — выводятся там из `git remote get-url origin`, чтобы
@@ -34,6 +34,9 @@ test-int: ## Юнит + integration (testcontainers, нужен Docker) — ша
 
 lint: ## golangci-lint concise (PKG=./x/... FORMAT=detailed)
 	@bash scripts/tools/lint.sh $(DETAIL) $(PKG)
+
+vet: ## go vet с тегом integration по всему дереву — шаг make check и pre-commit
+	@go vet -tags=integration ./...
 
 # Шаг build собирает всё дерево без тегов — как образ собирает cmd/*: остальные шаги гейта видят код с
 # тегом integration.
@@ -94,8 +97,8 @@ check:: ## Канонический gate (pre-push) по всему дереву
 	@rm -f coverage.out
 	@echo "→ make fmt-check"
 	@$(GATE) fmt-check
-	@echo "→ go vet -tags=integration ./..."
-	@go vet -tags=integration ./...
+	@echo "→ make vet"
+	@$(GATE) vet
 	@echo "→ make lint"
 	@$(GATE) lint
 	@echo "→ migrations-check"
