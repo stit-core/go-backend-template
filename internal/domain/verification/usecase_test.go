@@ -782,17 +782,28 @@ func TestConfirmEmail_Rejected(t *testing.T) {
 	}
 }
 
-// Job удаляет ссылки, истёкшие раньше суток назад; сбой удаления — ошибка прогона (её логирует timerkit).
+// Job удаляет ссылки, истёкшие раньше суток назад, батчами до пустого: хвост выше батча за прогон не копится; сбой
+// удаления — ошибка прогона (её логирует timerkit).
 func TestPurgeLinks(t *testing.T) {
 	t.Parallel()
+	before := fixedNow.Add(-24 * time.Hour)
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().DeleteExpiredLinks(mock.Anything, fixedNow.Add(-24*time.Hour)).Return(3, nil).Once()
-	repo.EXPECT().DeleteExpiredLinks(mock.Anything, fixedNow.Add(-24*time.Hour)).Return(0, errDown).Once()
+	full := repo.EXPECT().DeleteExpiredLinks(mock.Anything, before).Return(10000, nil).Once()
+	tail := repo.EXPECT().DeleteExpiredLinks(mock.Anything, before).Return(3, nil).Once().NotBefore(full)
+	repo.EXPECT().DeleteExpiredLinks(mock.Anything, before).Return(0, nil).Once().NotBefore(tail)
 	f := newUC(t, withRepo(repo))
 
 	require.NoError(t, f.uc.PurgeLinks(context.Background()))
 	e, logged := f.log.Find(slog.LevelInfo, "expired links purged")
 	require.True(t, logged)
-	require.Equal(t, "3", e.Str("count"))
+	require.Equal(t, "10003", e.Str("count"))
+}
+
+func TestPurgeLinks_Failure(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().DeleteExpiredLinks(mock.Anything, fixedNow.Add(-24*time.Hour)).Return(0, errDown).Once()
+	f := newUC(t, withRepo(repo))
+
 	require.ErrorIs(t, f.uc.PurgeLinks(context.Background()), errDown)
 }

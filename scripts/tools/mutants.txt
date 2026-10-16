@@ -1043,6 +1043,25 @@ internal/domain/verification/infra/postgres/queries/password_resets.sql
 - hashtext(sqlc.arg('user_id')::text));
 + hashtext(sqlc.arg('user_id')::text) * 0);
 
+## VP1 usecase/verification — PurgeLinks: один батч за прогон (хвост выше батча копится)
+internal/domain/verification/usecase.go
+- 		if n == 0 {
+- 			break
+- 		}
++ 		if n >= 0 {
++ 			break
++ 		}
+
+## VP2 usecase/verification — PurgeLinks: срок хранения прибавлен, а не вычтен (удаляются и живые ссылки)
+internal/domain/verification/usecase.go
+- before := uc.d.Clock.Now().Add(-linkRetention)
++ before := uc.d.Clock.Now().Add(linkRetention)
+
+## VS9 sql — DeleteExpiredLinks: удаляет и живые ссылки сброса
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- WHERE id IN (SELECT id FROM password_resets WHERE expires_at < sqlc.arg('before')::timestamptz LIMIT 5000)
++ WHERE id IN (SELECT id FROM password_resets WHERE expires_at > sqlc.arg('before')::timestamptz OR TRUE LIMIT 5000)
+
 ## VI4 infra — лог-mailer поднимается вне dev (письма молча не уходят в проде)
 internal/domain/verification/infra/logmail/logmail.go
 - 	if env != appconfig.Dev {

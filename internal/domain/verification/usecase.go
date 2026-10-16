@@ -281,13 +281,21 @@ func (uc *Usecase) ConfirmEmail(ctx context.Context, token string) error {
 }
 
 // PurgeLinks — тело job'а verification.purge_links: ссылки, истёкшие раньше linkRetention, ничего не решают, а их
-// хэши и время запросов хранить незачем.
+// хэши и время запросов хранить незачем. Батчами до пустого в пределах Timeout job'а: хвост выше батча не копится.
 func (uc *Usecase) PurgeLinks(ctx context.Context) error {
-	n, err := uc.d.Repo.DeleteExpiredLinks(ctx, uc.d.Clock.Now().Add(-linkRetention))
-	if err != nil {
-		return fmt.Errorf("purge expired links: %w", err)
+	before := uc.d.Clock.Now().Add(-linkRetention)
+	var total int64
+	for {
+		n, err := uc.d.Repo.DeleteExpiredLinks(ctx, before)
+		if err != nil {
+			return fmt.Errorf("purge expired links (%d purged): %w", total, err)
+		}
+		if n == 0 {
+			break
+		}
+		total += n
 	}
-	uc.d.Log.Info(ctx, "expired links purged", "count", n)
+	uc.d.Log.Info(ctx, "expired links purged", "count", total)
 	return nil
 }
 
