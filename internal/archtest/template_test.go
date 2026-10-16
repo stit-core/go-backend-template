@@ -438,27 +438,48 @@ func TestTemplateUpdateRemote(t *testing.T) {
 	require.Equal(t, "template/v1.1.0 — канон шаблона\n", out)
 }
 
-// TestTemplateAnnotation: раздел аннотации тега шаблона перенос узнаёт по строке ровно в своём формате — заголовок с
-// опечаткой он пропустил бы вместе с пунктами. Строку, похожую на заголовок раздела, но не в формате, --annotation
-// (pre-push тега выпуска) называет с образцом; вступление, пункты, их продолжение и шаги — не заголовки.
+// TestTemplateAnnotation: раздел аннотации тега шаблона перенос узнаёт по строке ровно «<раздел>:» и читает до пустой
+// строки — заголовок с опечаткой, отступом или маркером он пропустил бы вместе с пунктами, как и абзац пунктов без
+// заголовка (его оставляет и git tag без --cleanup=verbatim, сняв заголовок на #). --annotation (pre-push тега выпуска)
+// сверяет вид аннотации: после строки тега — вступление прозой, дальше каждый абзац начинается строкой раздела, в
+// разделе — пункты, шаги и продолжения с отступом, во вступлении нет строки, похожей на заголовок; отказ называет
+// строку и даёт образец. Подпись тега — не аннотация. Тег — с --cleanup=verbatim, как в docs/contributing.md.
 func TestTemplateAnnotation(t *testing.T) {
 	t.Parallel()
 	script := templateScript(t)
 	repo := t.TempDir()
 	git(t, repo, "init", "-q", "-b", "main")
 	git(t, repo, "commit", "-q", "--allow-empty", "-m", "commit")
-	const intro = "Обвязка под golibinfra v1.5.0. Что нового — по углам:\n- гейт: секрет промежуточного коммита — отказ;\n\n"
+	const (
+		intro = "Обвязка под golibinfra v1.5.0. Что нового — по углам:\n- гейт: секрет промежуточного коммита — отказ;\n" +
+			"Порядок — раздел «Как обновиться».\n\n"
+		item      = "- auth: фикс → PATHS='internal/domain/auth'\n"
+		signature = "-----BEGIN SSH SIGNATURE-----\nU1NIU0lH\n\nAAAA\n-----END SSH SIGNATURE-----\n"
+	)
 	for annotation, bad := range map[string]string{
-		intro + "Безопасность:\n- auth: фикс → PATHS='internal/domain/auth'\n  продолжение пункта:\n\nКак обновиться:\n1. make check\n": "",
-		"Безопасноть:\n- фикс → PATHS='cmd/api'\n":   "Безопасноть:",
-		"Безопасность :\n- фикс → PATHS='cmd/api'\n": "Безопасность :",
-		"безопасность:\n- фикс → PATHS='cmd/api'\n":  "безопасность:",
-		"**Платформа:**\n- правка → PATHS='cmd'\n":   "**Платформа:**",
-		"Платформа\n- правка → PATHS='cmd'\n":        "Платформа",
-		"Платформа: правка → PATHS='cmd'\n":          "Платформа: правка",
-		"Security:\n- fix → PATHS='cmd'\n":           "Security:",
+		intro + "Гейт:\n- строже\n\nБезопасность:\n" + item + "  продолжение пункта:\nПлатформа:\n- cmd: правка → PATHS='cmd'\n\n" +
+			"Как обновиться:\n1. make check\n   и дальше:\n" + signature: "",
+		"Безопасноть:\n" + item:                           "3: Безопасноть:",
+		"Безопасность :\n" + item:                         "3: Безопасность :",
+		"безопасность:\n" + item:                          "3: безопасность:",
+		"**Платформа:**\n" + item:                         "3: **Платформа:**",
+		"Платформа\n" + item:                              "3: Платформа",
+		"Платформа: правка → PATHS='cmd'\n":               "3: Платформа: правка",
+		"Security:\n" + item:                              "3: Security:",
+		"Вступление.\n\n Безопасность:\n" + item:          "5:  Безопасность:",
+		"Вступление.\n\n\tБезопасность:\n" + item:         "5: \tБезопасность:",
+		"Вступление.\n\n- Безопасность:\n" + item:         "5: - Безопасность:",
+		"Вступление.\n\nБезопасность;\n" + item:           "5: Безопасность;",
+		"Вступление.\n\nБезопасность.\n" + item:           "5: Безопасность.",
+		"Вступление.\n\nБезопасность：\n" + item:           "5: Безопасность：",
+		"Вступление.\n\n## Безопасность\n" + item:         "5: ## Безопасность",
+		"  Вступление.\n\n  Безопасность:\n  " + item:     "3:   Вступление.",
+		"Гейт:\n- строже\n\n" + item:                      "6: - auth",
+		"Безопасность:\n\n" + item:                        "5: - auth",
+		item:                                              "3: - auth",
+		"Безопасность:\n" + item + "Платформа :\n" + item: "5: Платформа :",
 	} {
-		git(t, repo, "tag", "-f", "-a", "template/v1.0.0", "-m", "template/v1.0.0\n\n"+annotation)
+		git(t, repo, "tag", "-f", "-a", "--cleanup=verbatim", "template/v1.0.0", "-m", "template/v1.0.0\n\n"+annotation)
 		out, err := runIn(t, repo, "bash", script, "--annotation", "template/v1.0.0")
 		if bad == "" {
 			require.NoError(t, err, "%s\n%s", annotation, out)
@@ -466,7 +487,7 @@ func TestTemplateAnnotation(t *testing.T) {
 			continue
 		}
 		require.Error(t, err, "%s\n%s", annotation, out)
-		require.Contains(t, out, "\n  3: "+bad, "the refusal names the line:\n%s", out)
+		require.Contains(t, out, "\n  "+bad, "the refusal names the line:\n%s", out)
 		require.Contains(t, out, "\n  Безопасность:\n  - ", "the refusal shows a sample:\n%s", out)
 	}
 }
