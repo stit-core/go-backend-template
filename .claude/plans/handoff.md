@@ -419,3 +419,14 @@ DECIDE —
 RISK   клиент, который на 503 входа не повторяет или пишет «неверный пароль», теряет вход под нагрузкой; клиент, который
        хранит не последний токен параллельных обновлений, закрывает сессию следующим обновлением
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   команды migrate и seed-admin — логгер logkit.NewFromEnv: читают LOG_REDACT_* (как api; негодное значение — отказ
+       команды до старта) и при LOG_SILENT=true пишут записи ERROR в stderr
+WHY    g-upgrade (reaudit-to-nine S9) — logkit v1.6.0: логгер команды вне fx — тот же, что у графа api
+ACTION LOG_REDACT_* у migrate и seed-admin — те же значения, что у api; при LOG_SILENT=true причину отказа команды
+       искать в stderr контейнера
+WHO    проект (compose env)
+DECIDE —
+RISK   негодный LOG_REDACT_* в окружении migrate роняет миграции до старта
+===

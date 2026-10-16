@@ -233,14 +233,3 @@ func TestRun_WaitsForLockedAccount(t *testing.T) {
 	).Scan(&admins))
 	require.Equal(t, 1, admins, "a new admin is created")
 }
-
-// Логгер бинаря — из LOG_*: негодный уровень — отказ до старта, а не молчаливый уровень по умолчанию.
-func TestNewLog(t *testing.T) {
-	log, err := newLog()
-	require.NoError(t, err)
-	require.NotNil(t, log)
-
-	t.Setenv("LOG_LEVEL", "loud")
-	_, err = newLog()
-	require.ErrorIs(t, err, logkit.ErrConfig)
-}

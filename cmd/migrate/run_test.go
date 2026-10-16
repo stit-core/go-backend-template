@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/logtest"
@@ -145,15 +144,4 @@ func TestRun_Usage(t *testing.T) {
 			require.True(t, log.Has(slog.LevelError, tc.want), "log: %v", log.Entries())
 		})
 	}
-}
-
-// Логгер бинаря — из LOG_*: негодный уровень — отказ до старта, а не молчаливый уровень по умолчанию.
-func TestNewLog(t *testing.T) {
-	log, err := newLog()
-	require.NoError(t, err)
-	require.NotNil(t, log)
-
-	t.Setenv("LOG_LEVEL", "loud")
-	_, err = newLog()
-	require.ErrorIs(t, err, logkit.ErrConfig)
 }

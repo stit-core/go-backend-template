@@ -109,18 +109,18 @@ func TestMainOnlyEnters(t *testing.T) {
 	t.Parallel()
 	inMain := func(body string) string { return "func main() {\n" + body + "\n}\n" }
 	for src, logic := range map[string]bool{
-		inMain("log, err := newLog()\nif err != nil {\n\tprintln(err)\n\tos.Exit(1)\n}\nos.Exit(run(log))"): false,
-		inMain("if len(os.Args) > 1 {\n\treturn\n}\nfx.New().Run()"):                                        false,
-		inMain("for _, a := range os.Args {\n\tuse(a)\n}"):                                                  true,
-		inMain("if ok {\n\tos.Exit(0)\n} else {\n\tos.Exit(1)\n}"):                                          true,
-		inMain("if ok {\n\tuse(1)\n}"):                                                                      true,
-		inMain("if ok {\n\tif more {\n\t\tos.Exit(2)\n\t}\n\tos.Exit(1)\n}"):                                true,
-		inMain("switch mode {\ncase 1:\n\tuse(1)\n}"):                                                       true,
-		inMain("func() {\n\tfor _, a := range os.Args {\n\t\tuse(a)\n\t}\n}()"):                             true,
-		inMain("os.Exit(run(func() int {\n\treturn 1\n}))"):                                                 true,
-		"var service = fx.Options(fx.Provide(newMeter))\n\n" + inMain("fx.New(service).Run()"):              false,
-		"var run = func() int {\n\treturn 1\n}\n\n" + inMain("os.Exit(run())"):                              true,
-		"var service = fx.Options(fx.Invoke(func() {}))\n\n" + inMain("fx.New(service).Run()"):              true,
+		inMain("log, err := logkit.NewFromEnv()\nif err != nil {\n\tprintln(err)\n\tos.Exit(1)\n}\nos.Exit(run(log))"): false,
+		inMain("if len(os.Args) > 1 {\n\treturn\n}\nfx.New().Run()"):                                                   false,
+		inMain("for _, a := range os.Args {\n\tuse(a)\n}"):                                                             true,
+		inMain("if ok {\n\tos.Exit(0)\n} else {\n\tos.Exit(1)\n}"):                                                     true,
+		inMain("if ok {\n\tuse(1)\n}"):                                                                                 true,
+		inMain("if ok {\n\tif more {\n\t\tos.Exit(2)\n\t}\n\tos.Exit(1)\n}"):                                           true,
+		inMain("switch mode {\ncase 1:\n\tuse(1)\n}"):                                                                  true,
+		inMain("func() {\n\tfor _, a := range os.Args {\n\t\tuse(a)\n\t}\n}()"):                                        true,
+		inMain("os.Exit(run(func() int {\n\treturn 1\n}))"):                                                            true,
+		"var service = fx.Options(fx.Provide(newMeter))\n\n" + inMain("fx.New(service).Run()"):                         false,
+		"var run = func() int {\n\treturn 1\n}\n\n" + inMain("os.Exit(run())"):                                         true,
+		"var service = fx.Options(fx.Invoke(func() {}))\n\n" + inMain("fx.New(service).Run()"):                         true,
 	} {
 		file, err := parser.ParseFile(token.NewFileSet(), "", "package main\n\n"+src, 0)
 		require.NoError(t, err)
