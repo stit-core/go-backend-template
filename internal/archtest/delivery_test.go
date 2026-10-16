@@ -671,6 +671,29 @@ func securedOperationsAskPolicy(c *check) {
 	}
 }
 
+// ctxKeyOutsideWith: ключ личности в ctx пакета identity — только в With и From: помощник с context.WithValue и тем
+// же ключом положил бы личность мимо With.
+func ctxKeyOutsideWith(c *check, rel string, file *ast.File) {
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && (fn.Name.Name == "With" || fn.Name.Name == "From") {
+			continue
+		}
+		if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == token.TYPE {
+			continue
+		}
+		used := false
+		ast.Inspect(decl, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			used = used || ok && id.Name == "ctxKey"
+			return !used
+		})
+		if used {
+			c.Errorf("%s uses ctxKey outside With and From: only authgate puts the caller into ctx, after it checks the token; "+
+				"service work is a usecase method without policy (PurgeLinks) or Trusted", rel)
+		}
+	}
+}
+
 // operation — литерал huma.Operation операции и открыта ли она (httpkit.Public). Литерал — прямо в вызове
 // регистрации или в значении переменной пакета (registerOp = httpkit.Public(huma.Operation{…})), под вызовами с одним
 // аргументом (<таблица>.Declare, httpkit.Public, authgate.Secured); nil — операции правило не видит: переменная
@@ -1109,8 +1132,9 @@ func (w policyWalk) params(fn *ast.FuncDecl) map[string]string {
 }
 
 // TestIdentityWithOnlyInAuthgate: личность вызывающего кладёт в ctx только authgate после проверки токена; identity.With
-// в коде домена, входа или cmd/ — и помощник над ним в самом пакете identity, и вызов под dot-импортом — подставил бы
-// чужую личность мимо cookie, и policy решала бы за неё. Тесты и internal/testkit (identitytest) — можно.
+// в коде домена, входа или cmd/ — и помощник над ним или над ключом ctxKey в самом пакете identity, и вызов под
+// dot-импортом — подставил бы чужую личность мимо cookie, и policy решала бы за неё. Тесты и internal/testkit
+// (identitytest) — можно.
 func TestIdentityWithOnlyInAuthgate(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -1125,6 +1149,9 @@ func identityWithOnlyInAuthgate(c *check) {
 		}
 		file := c.parse(f.path)
 		byName := importsByName(file)
+		if own {
+			ctxKeyOutsideWith(c, f.path, file)
+		}
 		bare := own || byName["."] == identityPath // With без селектора — identity.With
 		named := map[*ast.Ident]bool{}             // имена объявлений, полей и селекторов: не вызов identity.With
 		ast.Inspect(file, func(n ast.Node) bool {

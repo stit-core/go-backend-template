@@ -1,0 +1,37 @@
+# Помощник в пакете identity кладёт личность ключом пакета мимо With: ключ ctxKey — только в With и From.
+rule: TestIdentityWithOnlyInAuthgate
+base: canon
+want: internal/platform/identity/system.go uses ctxKey outside With and From
+-- internal/platform/identity/identity.go --
+package identity
+
+import "context"
+
+type Role string
+
+const RoleAdmin Role = "admin"
+
+type Identity struct {
+	UserID string
+	Role   Role
+}
+
+type ctxKey struct{}
+
+func With(ctx context.Context, id Identity) context.Context {
+	return context.WithValue(ctx, ctxKey{}, id)
+}
+
+func From(ctx context.Context) (Identity, bool) {
+	id, ok := ctx.Value(ctxKey{}).(Identity)
+	return id, ok
+}
+-- internal/platform/identity/system.go --
+package identity
+
+import "context"
+
+// System — личность служебной работы.
+func System(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKey{}, Identity{UserID: "system", Role: RoleAdmin})
+}
