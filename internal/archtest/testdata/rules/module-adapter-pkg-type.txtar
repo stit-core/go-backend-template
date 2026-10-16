@@ -1,0 +1,78 @@
+# Законно: порт несёт тип pkg/ сервиса (paging.Page) — адаптер видит то же, что корень домена.
+rule: TestModulesOnlyWire
+base: canon
+-- pkg/paging/paging.go --
+package paging
+
+// Page — номер и размер страницы списка.
+type Page struct {
+	Number int
+	Size   int
+}
+-- internal/domain/bill/usecase.go --
+package bill
+
+import (
+	"context"
+	"fmt"
+
+	"go.uber.org/fx"
+
+	"{module}/pkg/paging"
+)
+
+type Items interface {
+	Lookup(ctx context.Context, id string) (*Item, error)
+	Page(n int) paging.Page
+}
+
+type UsecaseDeps struct {
+	fx.In
+
+	Items Items
+}
+
+type Usecase struct {
+	d UsecaseDeps
+}
+
+func NewUsecase(d UsecaseDeps) *Usecase { return &Usecase{d: d} }
+
+// OnItemCreated — реакция на событие shop: вход событий policy не спрашивает.
+func (uc *Usecase) OnItemCreated(ctx context.Context, itemID string) error {
+	if _, err := uc.d.Items.Lookup(ctx, itemID); err != nil {
+		return fmt.Errorf("lookup item: %w", err)
+	}
+	return nil
+}
+-- internal/domain/bill/module/adapters.go --
+package module
+
+import (
+	"context"
+	"errors"
+
+	"{module}/internal/domain/bill"
+	"{module}/internal/domain/shop"
+	"{module}/pkg/paging"
+)
+
+// shopAdapter — порт bill.Items к домену shop.
+type shopAdapter struct {
+	items *shop.Trusted
+}
+
+func newShopAdapter(items *shop.Trusted) *shopAdapter { return &shopAdapter{items: items} }
+
+func (a *shopAdapter) Lookup(ctx context.Context, id string) (*bill.Item, error) {
+	it, err := a.items.Lookup(ctx, id)
+	if errors.Is(err, shop.ErrNotFound) {
+		return nil, bill.ErrItemNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &bill.Item{ID: it.ID, Name: it.Name}, nil
+}
+
+func (a *shopAdapter) Page(n int) paging.Page { return paging.Page{Number: n} }

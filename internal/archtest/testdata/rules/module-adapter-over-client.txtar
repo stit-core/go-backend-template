@@ -1,0 +1,56 @@
+# Клиент с I/O в pkg/ — не тип, который видит корень: адаптер к нему — infra/<адаптер> домена.
+rule: TestModulesOnlyWire
+base: canon
+want: internal/domain/bill/module/adapters.go imports {module}/pkg/shopclient: an adapter translates types and errors between domains
+-- pkg/shopclient/client.go --
+package shopclient
+
+import (
+	"context"
+	"net/http"
+)
+
+// Client — HTTP-клиент shop.
+type Client struct{ hc *http.Client }
+
+func (c *Client) Ping(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://shop/ping", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return err
+	}
+	return resp.Body.Close()
+}
+-- internal/domain/bill/module/adapters.go --
+package module
+
+import (
+	"context"
+	"errors"
+
+	"{module}/internal/domain/bill"
+	"{module}/internal/domain/shop"
+	"{module}/pkg/shopclient"
+)
+
+// shopAdapter — порт bill.Items к домену shop.
+type shopAdapter struct {
+	items  *shop.Trusted
+	client *shopclient.Client
+}
+
+func newShopAdapter(items *shop.Trusted) *shopAdapter { return &shopAdapter{items: items} }
+
+func (a *shopAdapter) Lookup(ctx context.Context, id string) (*bill.Item, error) {
+	it, err := a.items.Lookup(ctx, id)
+	if errors.Is(err, shop.ErrNotFound) {
+		return nil, bill.ErrItemNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &bill.Item{ID: it.ID, Name: it.Name}, nil
+}

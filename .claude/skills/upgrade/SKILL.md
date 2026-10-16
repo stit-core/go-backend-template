@@ -77,9 +77,9 @@ git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-templat
    - **нет в форке — не тронуты**: файл, который форк удалил, а шаблон правил; правка нужна — верни
      файл (`git show template/vX.Y.Z:<путь>`, в Go-файле — module path форка);
    - **шаблон удалил, форк менял**: `git rm` или оставь как файл форка;
-   - **`internal/archtest/layout_settings_test.go`** — настройки archtest форка (`layout` — `archkit`,
-     `deliveryKits` — киты входа), перенос его не трогает: без него или без новой настройки пакет
-     `internal/archtest` не собирается — возьми образец
+   - **`internal/archtest/layout_settings_test.go`** — настройки archtest форка (`layout` — `archkit`, `rootLibs` и
+     `uncheckedPackages` — что видят корень домена и адаптер `module/`, `deliveryKits` — киты входа), перенос его не
+     трогает: без него или без новой настройки пакет `internal/archtest` не собирается — возьми образец
      (`git show template/vX.Y.Z:internal/archtest/layout_settings_test.go`) и сведи со своей раскладкой.
      Нарушения, которые `TestLayout` нашёл в коде форка, — правкой кода или записью
      `archkit.WithKnownViolations` с ID находки (перечень проверок — README `archkit`);

@@ -234,8 +234,8 @@ func isIdent(expr ast.Expr, name string) bool {
 var fxHooks = []string{"Lifecycle", "Hook", "StartHook", "StopHook", "StartStopHook"}
 
 // TestModulesOnlyWire: module/ домена связывает граф и переводит типы, а не решает. Его файлы — module.go (Module и
-// привязки) и adapters.go (адаптеры): тип и конструктор адаптера — в adapters.go, и он знает лишь stdlib и корни
-// доменов — кит, драйвер и клиент живут в infra/<адаптер>; функция module.go и литерал в нём — один return
+// привязки) и adapters.go (адаптеры): тип и конструктор адаптера — в adapters.go, и он видит то же, что корень
+// домена, — кит, драйвер и клиент живут в infra/<адаптер>; функция module.go и литерал в нём — один return
 // (привязка порта, сборка значения, job); хуков fx (Lifecycle, Hook) нет — подписку ставит natskit.SubscribeOnStart
 // во входе, job — timerkit. Другой домен адаптер зовёт через его Trusted: методы Usecase спрашивают policy вызывающего.
 func TestModulesOnlyWire(t *testing.T) {
@@ -258,6 +258,7 @@ func modulesOnlyWire(c *check) {
 			})
 		}
 	}
+	visible := rootVisible(c)
 	for _, f := range c.files {
 		domain, sub, ok := splitDomain(f.pkg)
 		if !ok || sub != "module" || f.test {
@@ -270,8 +271,8 @@ func modulesOnlyWire(c *check) {
 			moduleGo(c, f.path, file, adapters[f.pkg])
 		case "adapters.go":
 			for _, imp := range f.imports {
-				if _, sub, ok := splitDomain(strings.TrimPrefix(imp, module+"/")); strings.Contains(strings.Split(imp, "/")[0], ".") && (!ok || sub != "") {
-					c.Errorf("%s imports %s: an adapter translates types and errors between domains — a kit, a driver or a client lives in infra/<adapter> of the domain", f.path, imp)
+				if !visible(imp) {
+					c.Errorf("%s imports %s: an adapter translates types and errors between domains and sees what a domain root sees — a kit, a driver or a client lives in infra/<adapter> of the domain", f.path, imp)
 				}
 			}
 		default:
@@ -295,6 +296,46 @@ func modulesOnlyWire(c *check) {
 			return true
 		})
 	}
+}
+
+// rootVisible — импорты, которые видит корень домена (archkit TestLayout): stdlib без I/O, rootLibs, корни доменов,
+// пакеты pkg/ и internal/platform/, чьи файлы импортируют только видимое (или из uncheckedPackages).
+func rootVisible(c *check) func(imp string) bool {
+	imports := map[string][]string{} // пакет модуля → импорты его не-тестовых файлов
+	for _, f := range c.files {
+		if !f.test {
+			imports[f.pkg] = append(imports[f.pkg], f.imports...)
+		}
+	}
+	memo := map[string]bool{}
+	var visible func(imp string) bool
+	visible = func(imp string) bool {
+		rel, inModule := strings.CutPrefix(imp, module+"/")
+		switch {
+		case !inModule:
+			return slices.Contains(rootLibs, imp) || !strings.Contains(strings.Split(imp, "/")[0], ".") && !ioStdlib(imp)
+		case !under(rel, "pkg") && !under(rel, "internal/platform"):
+			_, sub, ok := splitDomain(rel)
+			return ok && sub == ""
+		case slices.Contains(uncheckedPackages, rel):
+			return true
+		}
+		if v, done := memo[rel]; done {
+			return v
+		}
+		memo[rel] = true // цикл импортов не компилируется: запись до обхода — от бесконечной рекурсии
+		memo[rel] = !slices.ContainsFunc(imports[rel], func(i string) bool { return !visible(i) })
+		return memo[rel]
+	}
+	return visible
+}
+
+// ioStdlib — stdlib, которая ходит в ОС, сеть или БД (как у archkit); парсеры из net — не I/O.
+func ioStdlib(imp string) bool {
+	if slices.Contains([]string{"net/mail", "net/netip", "net/url"}, imp) {
+		return false
+	}
+	return slices.ContainsFunc([]string{"database/sql", "net", "os", "syscall"}, func(p string) bool { return under(imp, p) })
 }
 
 // moduleGo: module.go не объявляет типов и конструкторов адаптера (результат с типом module/ — adapters), а каждая

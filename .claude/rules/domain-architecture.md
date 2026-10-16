@@ -74,7 +74,7 @@ paths:
   методе, перечень методов теста сверен с типом через `reflect`) и вычисленные свойства — методы сущности
   поставщика (`CanLogin()`): в адаптере нет условий по полям поставщика. Identity-closure (`return uc`) — только
   внутри домена (delivery-порты своего usecase); порт между доменами — типовой адаптер поверх `Trusted`, не
-  `Usecase` (тип и конструктор — в `adapters.go`, он знает лишь stdlib и корни доменов: кит — в `infra/<адаптер>`),
+  `Usecase` (тип и конструктор — в `adapters.go`, он видит то же, что корень домена: кит — в `infra/<адаптер>`),
   а не closure и не структура со встроенным типом чужого домена
   (archtest `TestLayout`, `TestModulesEmbedNoForeignTypes`, `TestModulesOnlyWire`). Порт домена привязывает только сам
   домен, граф доменов по адаптерам `module/` ацикличен (archtest `TestDomainDependencies`). Время во всём домене —
