@@ -188,7 +188,7 @@ blocked-by: —
   и pre-push по правилу `commit-msg` родителя; `make mutate A=--strict` и блоки среза от `make new-domain`.
 
 ## Где мы сейчас
-S1–S6 закрыты. S7: harness+lifecycle (`192779f`) и gate+tests (`cba4abf`, валидатор — PASS, `N/validation-s7-gate.md`)
-в `main`; code+security+adapters (`nine/s7-code`) — круг фиксов валидатора, затем перенос на `main` (правило `main`
-бинаря, якоря мутаций, скелет). Следующее: его перепроверка и слияние, затем S8 (полный `make mutate A=--strict` на
-итоговом `main`).
+S1–S6 закрыты. S7: harness+lifecycle (`192779f`) и gate+tests с хвостом (`6e46ce3`) в `main`;
+code+security+adapters (`nine/s7-code`) — круг фиксов валидатора и перенос на `main` (правило `main` бинаря, якоря
+мутаций, скелет). Следующее: его перепроверка и слияние, затем S8 (полный `make mutate A=--strict` на итоговом
+`main`).
