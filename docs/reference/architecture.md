@@ -133,7 +133,9 @@ Generic-примитив, нужный не только этому сервис
 - Named returns не используются (линтер `nonamedreturns`).
 - Метод за операцией под Security (без `httpkit.Public`) спрашивает policy до чтения и записи — сам или своим методом
   (`uc.d.Policy.Can…`); без policy — только чтение самого вызывающего: его `UserID` из `identity.From` — аргумент
-  вызова порта зависимостей (`Me`, `auth.ChangePassword`). Форму и порядок держит archtest
+  вызова порта зависимостей (`Me`, `auth.ChangePassword`). Чтение своего по такому ключу policy может и опередить:
+  квоту по своим записям (`ListOwn(ctx, caller.UserID)`, затем `CanCreateMore(ctx, caller, len(own))`) решает policy
+  после него, а чужого оно не выдаёт. Форму и порядок держит archtest
   `TestSecuredOperationsAskPolicy` (как он узнаёт операцию, policy и ключ вызывающего — комментарий теста), решение —
   тест usecase и ревью: archtest не видит ответа policy, который метод спросил и не проверил, и того, что ещё читает
   метод без policy помимо вызова с ключом.

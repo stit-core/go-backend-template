@@ -550,7 +550,7 @@ func usecaseClosure(fn *ast.FuncType, body *ast.BlockStmt, byName map[string]str
 
 // TestSecuredOperationsAskPolicy: метод usecase за операцией под Security (не httpkit.Public) спрашивает policy
 // (…Policy.Can…) — сам или своим методом и раньше вызова порта зависимостей: чтение до решения выдаёт, есть ли
-// ресурс. Без policy — только чтение самого вызывающего: его UserID из identity.From — аргумент вызова порта
+// ресурс; чтение своего (ключ вызывающего — аргумент) — нет. Без policy — только чтение самого вызывающего: его UserID из identity.From — аргумент вызова порта
 // зависимостей (uc.d.Repo.GetByID — Me), а не лога, кита или функции пакета. Иначе операция отдала бы ресурс любому
 // вошедшему. Операцию правило читает литералом в вызове регистрации или переменной пакета (operation); другую форму —
 // отказ: открытость операции была бы не видна.
@@ -899,7 +899,8 @@ func (w policyWalk) asksCan(fn *ast.FuncDecl, seen map[*ast.FuncDecl]bool) bool 
 }
 
 // readBeforePolicy — вызов порта зависимостей, который метод делает раньше первого вопроса policy (самого или своим
-// методом, функцией корня); "" — такого нет или метод policy не спрашивает (читает своё, как Me).
+// методом, функцией корня); "" — такого нет или метод policy не спрашивает (читает своё, как Me). Вызов с ключом
+// вызывающего в аргументах — чтение своего: квоте по своим записям policy отвечает после него.
 func (w policyWalk) readBeforePolicy(fn *ast.FuncDecl) string {
 	if fn == nil || fn.Body == nil {
 		return ""
@@ -913,7 +914,7 @@ func (w policyWalk) readBeforePolicy(fn *ast.FuncDecl) string {
 			case isSel && strings.HasPrefix(sel.Sel.Name, "Can") && w.port(sel.X, params, true),
 				w.asksCan(sc.callee(call), map[*ast.FuncDecl]bool{}):
 				asked = true
-			case isSel && w.port(sel.X, params, false) && !w.port(sel.X, params, true):
+			case isSel && w.port(sel.X, params, false) && !w.port(sel.X, params, true) && !slices.ContainsFunc(call.Args, sc.key):
 				read = types.ExprString(call.Fun)
 			}
 		}

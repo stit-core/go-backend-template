@@ -1,0 +1,124 @@
+# Законно: чтение своих записей (ключ — вызывающий) до policy ничего не выдаёт — квота по своим товарам решает
+# policy после него.
+rule: TestSecuredOperationsAskPolicy
+base: canon
+-- internal/domain/shop/usecase.go --
+package shop
+
+import (
+	"context"
+	"fmt"
+
+	"go.uber.org/fx"
+
+	"{module}/internal/platform/identity"
+	"{module}/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/outboxkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
+)
+
+type Repository interface {
+	Insert(ctx context.Context, it *Item) error
+	Get(ctx context.Context, id, ownerID string) (*Item, error)
+	ListOwn(ctx context.Context, ownerID string) ([]*Item, error)
+}
+
+type Authorizer interface {
+	CanCreate(ctx context.Context, caller identity.Identity) policy.Decision
+	CanSeeAll(ctx context.Context, caller identity.Identity) policy.Decision
+	CanCreateMore(ctx context.Context, caller identity.Identity, owned int) policy.Decision
+}
+
+type UsecaseDeps struct {
+	fx.In
+
+	Repo   Repository
+	Policy Authorizer
+	Tx     pgkit.Transactor
+	Events outboxkit.Publisher
+	Clock  clockkit.Clock
+}
+
+type Usecase struct {
+	d UsecaseDeps
+}
+
+func NewUsecase(d UsecaseDeps) *Usecase { return &Usecase{d: d} }
+
+// Create — квота: сколько у вызывающего своих товаров, решает policy.
+func (uc *Usecase) Create(ctx context.Context, in CreateInput) (*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	own, err := uc.d.Repo.ListOwn(ctx, caller.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("list own: %w", err)
+	}
+	if d := uc.d.Policy.CanCreateMore(ctx, caller, len(own)); !d.IsAllowed {
+		return nil, &policy.ForbiddenError{Reason: d.Reason}
+	}
+	it := &Item{OwnerID: caller.UserID, Name: in.Name}
+	err = uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		if err := uc.d.Repo.Insert(txCtx, it); err != nil {
+			return fmt.Errorf("insert item: %w", err)
+		}
+		return uc.d.Events.Publish(txCtx, subjectItemCreated, ItemCreated{ID: it.ID, At: uc.d.Clock.Now()})
+	})
+	return it, err
+}
+
+func (uc *Usecase) Get(ctx context.Context, id string) (*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	owner := caller.UserID
+	if uc.d.Policy.CanSeeAll(ctx, caller).IsAllowed {
+		owner = ""
+	}
+	return uc.d.Repo.Get(ctx, id, owner)
+}
+
+func (uc *Usecase) Mine(ctx context.Context) ([]*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	return uc.d.Repo.ListOwn(ctx, caller.UserID)
+}
+-- internal/domain/shop/policy.go --
+package shop
+
+import (
+	"context"
+
+	"{module}/internal/platform/identity"
+	"{module}/pkg/policy"
+)
+
+type Policy struct{}
+
+func NewPolicy() Authorizer { return &Policy{} }
+
+func (p *Policy) CanCreate(_ context.Context, caller identity.Identity) policy.Decision {
+	if caller.UserID == "" {
+		return policy.Deny("no user")
+	}
+	return policy.Allow()
+}
+
+func (p *Policy) CanSeeAll(_ context.Context, caller identity.Identity) policy.Decision {
+	if caller.Role != identity.RoleAdmin {
+		return policy.Deny("admin only")
+	}
+	return policy.Allow()
+}
+
+func (p *Policy) CanCreateMore(_ context.Context, caller identity.Identity, owned int) policy.Decision {
+	if owned >= 100 && caller.Role != identity.RoleAdmin {
+		return policy.Deny("quota")
+	}
+	return policy.Allow()
+}
