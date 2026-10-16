@@ -227,7 +227,9 @@ blocked-by: —
   required `AUDIT_RETENTION_DAYS`, `PASSWORD_RESET_MAIL_PAUSE`, миграция `0007`.
 
 ## Где мы сейчас
-S1–S7 закрыты: все треки в `main` (`b8f95a1`). S8: полный `make mutate A=--strict` и `make e2e` на итоговом `main`,
-аннотация `template/v1.2.0` (черновик — `N/annotation-template-v1.2.0.md`), хвост `nine/s8-tail`, бэклог, handoff,
-ответы на Q1–Q3 (вход с неподтверждённым адресом, экспорт `authgate.SecurityScheme`, пароль из пробелов). S9: трек
-g-auth в golibinfra, g-arch и g-kits — по мере свободных мест. Тег и push шаблона — после S9, с OK владельца.
+S1–S7 закрыты: все треки в `main` (`b8f95a1`). S8: хвост слит (`e44768d`, валидатор — PASS,
+`N/validation-s8-tail.md`; находки полного `make mutate A=--strict` закрыты); дальше — аннотация `template/v1.2.0`
+(черновик — `N/annotation-template-v1.2.0.md`; переносы на копиях форков и `make e2e` — повторить на итоговом теге),
+бэклог, handoff, ответы на Q1–Q3 (вход с неподтверждённым адресом, экспорт `authgate.SecurityScheme`, пароль из
+пробелов). S9: треки g-auth, g-arch, g-kits в golibinfra — фиксы по находкам валидаторов. Тег и push шаблона — после S9,
+с OK владельца.
