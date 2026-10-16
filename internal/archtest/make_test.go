@@ -233,10 +233,10 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	}
 	remote := filepath.Join(t.TempDir(), "backend.git")
 	git(t, repo, "init", "-q", "--bare", remote)
-	// pushTo — хук так, как его зовёт git push в remote с этим именем (push по URL — имя и есть URL).
-	pushTo := func(name, stdin string, env ...string) (string, error) {
+	// pushTo — хук так, как его зовёт git push в remote с этим именем и URL (push по URL — имя и есть URL).
+	pushTo := func(name, url, stdin string, env ...string) (string, error) {
 		t.Helper()
-		cmd := exec.CommandContext(t.Context(), hook, name, remote)
+		cmd := exec.CommandContext(t.Context(), hook, name, url)
 		cmd.Dir = repo
 		cmd.Stdin = strings.NewReader(stdin)
 		cmd.Env = callerEnv(append([]string{"PATH=" + os.Getenv("PATH"), "TMPDIR=" + tmp}, env...)...)
@@ -245,7 +245,7 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	}
 	push := func(stdin string, env ...string) (string, error) {
 		t.Helper()
-		return pushTo("origin", stdin, env...)
+		return pushTo("origin", remote, stdin, env...)
 	}
 	zero := strings.Repeat("0", 40)
 	red := commit("red")
@@ -317,9 +317,14 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	require.Contains(t, out, "нет строки Review:")
 	// Выпуск по URL в новую ветку: веток remote-tracking у URL нет, sha remote'а в push'е — нули, а remote не пуст.
 	git(t, repo, "push", "-q", remote, stuff+":refs/heads/main")
-	out, err = pushTo(remote, "refs/heads/release "+newFeat+" refs/heads/release "+zero+"\nrefs/tags/template/v9.9.9 "+newFeat+
-		" refs/tags/template/v9.9.9 "+zero+"\n")
+	newBranch := "refs/heads/release " + newFeat + " refs/heads/release " + zero + "\nrefs/tags/template/v9.9.9 " + newFeat +
+		" refs/tags/template/v9.9.9 " + zero + "\n"
+	out, err = pushTo(remote, remote, newBranch)
 	require.Error(t, err, "a release by URL into a new branch hides the commits under its tag:\n%s", out)
+	require.Contains(t, out, "нет строки Review:")
+	// Сбой git ls-remote пустоты не доказывает: remote считается непустым, и судится всё.
+	out, err = pushTo("backup", filepath.Join(tmp, "missing.git"), newBranch)
+	require.Error(t, err, "a failed git ls-remote passes the remote for empty:\n%s", out)
 	require.Contains(t, out, "нет строки Review:")
 	git(t, repo, "tag", "-d", "template/v9.9.9")
 	out, err = push("refs/heads/main " + ruled + " refs/heads/main " + stuff + "\n")
