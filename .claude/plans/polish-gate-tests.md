@@ -134,7 +134,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     `origin/main..nine/s7-gate` правилу родителя отвечают все, вся история `main` — кроме `ea1de93 clean` и
     `a0f3fa9` (оба давно в `origin/main`) (`N/s7g/bin/msg-check.sh`); `make check` → `✓ check clean`
 - [ ] **S10** — Круг по валидатору (`N/validation-s7-gate.md`, FAIL на `329a459`): ложные отказы B1–B3,
-  герметичный `TestCommitMsgHook`, python3, RADP-10, доки, handoff — коммитом на пункт
+  герметичный `TestCommitMsgHook`, python3, RADP-10, список непокрываемого в `TestCoverCheck` (попутное), доки,
+  handoff — коммитом на пункт
   - Проверка: пробы валидатора B1–B3 → верный вердикт; `make check` → `✓ check clean` · Закрывает: AC8 · Зависит от: S9
   - Сделано: B1 — `N/s7g/bin/v-gen-b1.sh` → `N/s7g/v-gen-b1-branch.log`: `user.ListFilter` → `user.ListQuery` мимо
     моков — `make gen` OK, моки переписаны, `go vet` OK; порт `GetByID` сменил сигнатуру (T7) — отказ сборкой;
@@ -147,7 +148,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     rebase в репо разработчика — 39 строк FAIL; теперь — ok;
     python3 — PATH без python3 (`N/s7g/nopy`): `TestMutate` было «"" does not contain "ST: …"», стало «… на python3:
     поставь его»; `make new-domain` — отказ до первой правки, дерево чистое;
-    RADP-10 — `t.Skip` в `TestLayout`: было `SKIP` и ok, стало отказ `TestMain` с местом
+    RADP-10 — `t.Skip` в `TestLayout`: было `SKIP` и ok, стало отказ `TestMain` с местом;
+    `TestCoverCheck` — с записью форка в списке `cover.sh` было FAIL «anchor of the uncoverable list», стало ok
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -190,6 +192,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   перезапущенный тестовый бинарь и образ, профиль родителя этого не видит.
 - Запись непокрываемого снимает блок с доли, а функции считаются по счётчикам тестов (NTST-04): запись,
   накрывшая тело целиком, функцию без тестов не прячет.
+- `TestCoverCheck` заменяет список непокрываемого `cover.sh` своим, что бы в нём ни было: законная запись сервиса
+  его не роняет (попутное замечание валидатора — тот же класс, что B2).
 - Заголовок сгенерированного — только у вывода sqlc (имена его файлов по `queries/`) и mockery; в каталоге вывода
   sqlc чужих файлов нет. Пакет `pkg/` целиком под заголовком больше не пропускается: генератора у него гейт не
   знает — сгенерированный клиент заводят генератором в `make gen` и каталогом в тесте (правка гейта).
@@ -262,4 +266,5 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 
 ## Где мы сейчас
 S10 — круг по валидатору: блокирующие закрыты — B1 (`make gen` без моков), B2 (тест new-domain не занимает имён
-форка), B3 (снимок pre-commit чинит себя). Неблокирующие: `REBASE_HEAD`, python3 и RADP-10 закрыты; дальше — доки, handoff.
+форка), B3 (снимок pre-commit чинит себя); неблокирующие `REBASE_HEAD`, python3, RADP-10 и попутное — список
+`TestCoverCheck` — тоже. Дальше — доки, handoff.

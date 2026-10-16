@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -48,12 +49,13 @@ func pin(t *testing.T, tool string) string {
 // исполненным только по записи списка непокрываемого cover.sh — ровно одной своей: запись без текста, без
 // такого блока или подходящая к двум блокам — отказ, а функцию без тестов запись не прячет. Функция без
 // тестов — отказ и в cmd/, кроме main: доля cmd/ в порог не идёт. Модуль игрушечный: ветка G с паникой тестами
-// не исполняется (с h.go — и такая же ветка H), профиль — настоящий go test с -coverpkg, как у test-int.
+// не исполняется (с h.go — и такая же ветка H), профиль — настоящий go test с -coverpkg, как у test-int. Список
+// cover.sh тест заменяет своим: записи сервиса его не роняют.
 func TestCoverCheck(t *testing.T) {
 	t.Parallel()
 	script := readFiles(t, repoRoot(t), "scripts/tools/cover.sh")["scripts/tools/cover.sh"]
-	const list = "    cat <<'LIST'\nLIST\n"
-	require.Equal(t, 1, strings.Count(script, list), "anchor of the uncoverable list in cover.sh")
+	list := regexp.MustCompile(`(?ms)^    cat <<'LIST'\n.*?^LIST\n`)
+	require.Len(t, list.FindAllString(script, -1), 1, "anchor of the uncoverable list in cover.sh")
 	// h.go — H и H2 с одинаковой веткой паники: запись по её тексту подошла бы к обеим.
 	h := map[string]string{
 		"internal/p/h.go": "package p\n\n// H — как G.\nfunc H(err error) string {\n\tif err != nil {\n\t\tpanic(\"unreachable: H never gets an error\")\n\t}\n\treturn \"ok\"\n}\n\n" +
@@ -91,7 +93,7 @@ func TestCoverCheck(t *testing.T) {
 				"pkg/doc.txt":            "\n",
 				"internal/p/p.go":        "package p\n\n// F — покрытая.\nfunc F(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n\n// G — ошибки тесты не дают.\nfunc G(err error) string {\n\tif err != nil {\n\t\tpanic(\"unreachable: G never gets an error\")\n\t}\n\treturn \"ok\"\n}\n",
 				"internal/p/p_test.go":   "package p\n\nimport \"testing\"\n\nfunc TestP(t *testing.T) {\n\tif F(1) != 1 || F(0) != 0 || G(nil) != \"ok\" {\n\t\tt.Fatal(\"p\")\n\t}\n}\n",
-				"scripts/tools/cover.sh": strings.Replace(script, list, "    cat <<'LIST'\n"+tc.entry+"\nLIST\n", 1),
+				"scripts/tools/cover.sh": list.ReplaceAllLiteralString(script, "    cat <<'LIST'\n"+tc.entry+"\nLIST\n"),
 			}, tc.files))
 			git(t, repo, "init", "-q", "-b", "main")
 			out, err := runIn(t, repo, "go", "test", "-coverpkg=./internal/...,./pkg/...,./cmd/...", "-coverprofile=coverage.out", "./...")
