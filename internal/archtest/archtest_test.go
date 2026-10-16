@@ -16,9 +16,9 @@
 //     (контракт-тест подписки), TestDeliveryReachesUsecaseOnly (из корня — данные, киты — deliveryKits),
 //     TestDeliveryPortsBoundToUsecase (порт входа — над *Usecase), TestSecuredOperationsAskPolicy (операция под
 //     Security — с policy);
-//   - generated_test.go — TestGeneratedHeaderOnlyInGeneratorOutput (заголовок сгенерированного — только у вывода
-//     генераторов), TestBuildConstraints (ограничение сборки — только integration у тестов),
-//     TestLinterDirectives (директив линтеров мимо //nolint нет);
+//   - generated_test.go — TestMain (тест archtest не пропускается), TestGeneratedHeaderOnlyInGeneratorOutput
+//     (заголовок сгенерированного — только у вывода генераторов), TestBuildConstraints (ограничение сборки — только
+//     integration у тестов), TestLinterDirectives (директив линтеров мимо //nolint нет);
 //   - harness_test.go — TestDomainsAreWired (домены подключены в cmd/api), TestProseReferencesExist (ссылки прозы
 //     на make-цели, пути, тесты, разделы и ссылки, факты гейта) и TestSectionAnchors (якоря разделов и ссылок по
 //     правилу Gitea), TestRulesAndSkillsLoad (доставка правил и скиллов: шапка, paths:, name:, шаг 0),

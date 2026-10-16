@@ -3,6 +3,8 @@ package archtest
 import (
 	"bufio"
 	"bytes"
+	"fmt"
+	"go/ast"
 	"go/build"
 	"go/build/constraint"
 	"go/parser"
@@ -17,6 +19,43 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+// TestMain: тест archtest не пропускается — t.Skip сделал бы его проверку зелёной без следа в выводе гейта; снять
+// проверку — правка гейта (CLAUDE.md § Границы). Пропуски ищутся до тестов, а не тестом: тест с t.Skip первой
+// строкой пропустил бы и себя.
+func TestMain(m *testing.M) {
+	if skips := skipCalls(); len(skips) > 0 {
+		fmt.Fprintln(os.Stderr, "archtest: тест гейта не пропускается — Skip, SkipNow и Skipf в пакете:")
+		for _, at := range skips {
+			fmt.Fprintln(os.Stderr, "  "+at)
+		}
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
+
+// skipCalls — Skip, SkipNow и Skipf (и вызов, и значение метода) в файлах пакета: «файл:строка:колонка».
+func skipCalls() []string {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		return []string{err.Error()}
+	}
+	fset := token.NewFileSet()
+	var found []string
+	for _, f := range files {
+		file, err := parser.ParseFile(fset, f, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return []string{err.Error()}
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			if sel, ok := n.(*ast.SelectorExpr); ok && slices.Contains([]string{"Skip", "SkipNow", "Skipf"}, sel.Sel.Name) {
+				found = append(found, fset.Position(sel.Sel.Pos()).String())
+			}
+			return true
+		})
+	}
+	return found
+}
 
 // generatedHeader — заголовок сгенерированного файла: по нему файл выпадает из покрытия
 // (scripts/tools/cover.sh) и из lint.
