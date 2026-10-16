@@ -154,13 +154,18 @@ func TestRun_CreatesAdminOnce(t *testing.T) {
 	require.Equal(t, []account{{role: "admin", verified: true}}, accounts(), "the second run creates nothing")
 }
 
-// Без адреса или пароля seed не стартует и ничего не пишет: admin без пароля не заводится.
+// Без адреса или пароля seed не стартует и ничего не пишет: оператор видит, каких переменных не хватает, а не
+// отказ правила домена после подключения к БД.
 func TestRun_RequiresAddressAndPassword(t *testing.T) {
 	pg := seedEnv(t, "admin@example.com")
 	for _, unset := range []string{"SEED_ADMIN_EMAIL", "SEED_ADMIN_PASSWORD"} {
 		t.Run(unset, func(t *testing.T) {
 			t.Setenv(unset, "")
-			require.Equal(t, 1, run(t.Context(), logkit.Nop()))
+			var out strings.Builder
+			log, err := logkit.New(logkit.Config{Level: "info"}, logkit.WithWriter(&out))
+			require.NoError(t, err)
+			require.Equal(t, 1, run(t.Context(), log))
+			require.Contains(t, out.String(), "SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD are required")
 		})
 	}
 	var users int

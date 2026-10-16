@@ -526,7 +526,7 @@ internal/domain/verification/infra/postgres/repository.go
 ## VI9 repo — RedeemPasswordReset: своя ссылка, погашенная раньше, — успех, если погашена соседняя
 internal/domain/verification/infra/postgres/repository.go
 - if !slices.Contains(redeemed, rid) {
-+ if len(redeemed) == 0 {
++ if !slices.Contains(redeemed, rid) && len(redeemed) == 0 {
 
 ## VI10 repo — GetEmailVerification: вместо пользователя — ID токена
 internal/domain/verification/infra/postgres/repository.go
@@ -1015,9 +1015,8 @@ internal/domain/auth/infra/bruteforce/guard.go
 
 ## VI1 sql — UpsertPasswordReset: пауза писем сброса не действует
 internal/domain/verification/infra/postgres/queries/password_resets.sql
--       AND (used_at > sqlc.arg('requested_at')::timestamptz
--            OR id <> sqlc.arg('id')::uuid AND created_at > NOW() - sqlc.arg('mail_pause')::interval)
-+       AND used_at > sqlc.arg('requested_at')::timestamptz
+- OR id <> sqlc.arg('id')::uuid AND created_at > NOW() - sqlc.arg('mail_pause')::interval)
++ OR id <> sqlc.arg('id')::uuid AND created_at > NOW() + sqlc.arg('mail_pause')::interval)
 
 ## VI2 usecase/verification — IssuePasswordReset: пауза писем из конфига не доходит до выпуска ссылки
 internal/domain/verification/usecase.go

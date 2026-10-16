@@ -193,8 +193,10 @@ func TestList(t *testing.T) {
 		u.PasswordHash = ""
 		return &u
 	}
+	// Подтверждённый адрес — у одной строки: список, не читающий email_verified, иначе от верного не отличить.
+	verified := func(u *user.User) { u.EmailVerified = true }
 	client := listed(pgseed.WithRole(identity.RoleClient))
-	admin := listed(pgseed.WithRole(identity.RoleAdmin))
+	admin := listed(pgseed.WithRole(identity.RoleAdmin), verified)
 	blocked := listed(pgseed.WithStatus(user.StatusBlocked))
 	require.NoError(t, repo.Delete(ctx, pgseed.InsertUser(t, repo).ID))
 
