@@ -42,52 +42,83 @@ blocked-by: —
   `authgate.SecurityScheme` ради теста (RCOD-14), `pkg/policy`, `go.mod` — вопросом в «Открытые вопросы».
 
 ## Критерии приёмки
-- [ ] **AC1** — NSEC-02: вне dev сервис не стартует с `JWT_SECRET` или `JWT_PREVIOUS_SECRET` из примеров окружения
+- [x] **AC1** — NSEC-02: вне dev сервис не стартует с `JWT_SECRET` или `JWT_PREVIOUS_SECRET` из примеров окружения
   (`.env.example`, `test/stack`). Проверка: база — `config.Guard` с `APP_ENV=prod` и секретом из `.env.example` → nil
   (проба D05/D12); ветка — `ErrUnsafe`; `go test ./internal/platform/config/` → PASS
-- [ ] **AC2** — Ссылки сброса: письма в один ящик с многих адресов — не чаще паузы своей настройки (NSEC-01); срок
+  - Подтверждено: проба AC1 (`N/s7c/exp/ac1-{base,branch}.log`): база — nil у обоих ключей обоих файлов,
+    ветка — `ErrUnsafe`; D05 — старт с ключом примера: база стартует, ветка — отказ; D12 — токен на ключе примера → 401
+- [x] **AC2** — Ссылки сброса: письма в один ящик с многих адресов — не чаще паузы своей настройки (NSEC-01); срок
   ссылки — не дольше часа от обработки, событие из будущего его не продлевает (NSEC-03); два параллельных
   подтверждения двух ссылок одного пользователя — 204 и отказ, без `40P01` (RCOD-10); ссылка, выданная до смены
   пароля, после неё не меняет пароль (RCOD-18, E10); отметка «отправлено» не задевает чужие ссылки (NTST-01).
   Проверка: на базе дефект, на ветке нет — `TestNSec_ResetMailRate`, `TestNSec_ForgedResetEvent`
   (`N/reaudit/tpl-security`), E4 и E10 (`N/reaudit/tpl-code`), мутация `… WHERE id = $1 OR TRUE` → тест репозитория FAIL
-- [ ] **AC3** — `seed-admin` — операцией домена user: слабый пароль и не-адрес — код 1 без admin, повышение
+  - Подтверждено: NS1 — 60 писем в ящик за 2 мин 30 с (≈1440 в час) → одно; NS2 — срок ссылки от события из будущего
+    721 ч → 1 ч; E4 — `40P01` → 204 и `ErrTokenUsed`; E10 — ссылка до смены пароля 204 → 400; мутация `OR TRUE` → FAIL
+    `TestMarkPasswordResetSent_OwnLinkOnly`; занятые соседом выпуски — пауза без ожидания
+    (`TestIdentity_ResetIssueBusyIsPause`)
+- [x] **AC3** — `seed-admin` — операцией домена user: слабый пароль и не-адрес — код 1 без admin, повышение
   поднимает версию строки, пишет аудит и гасит выданные до него ссылки сброса (RSECT-08, RCOD-12). Проверка: пробы
   M01, M02, E9 на базе — дефект, на ветке — нет; `go test -tags=integration ./cmd/seed-admin/` → PASS
-- [ ] **AC4** — `audit_log` со сроком хранения (`AUDIT_RETENTION_DAYS`, job кита), ответы `/api/*` — с
+  - Подтверждено: M01 — пароль «1»: код 0 → 1, не-адрес — код 1 без admin; M02 — повышение заблокированной учётной
+    записи поднимает версию (1 → 2); E9 — отказ без строки admin и аудита; `TestRun_*` `cmd/seed-admin` → PASS
+- [x] **AC4** — `audit_log` со сроком хранения (`AUDIT_RETENTION_DAYS`, job кита), ответы `/api/*` — с
   `Cache-Control: no-store` (RSECT-05, 06). Проверка: проба D14 на ветке → `no-store`; `TestBoot` видит job retention
-- [ ] **AC5** — Контракт: у каждой операции `/api/*` под строгим лимитом в `openapi.json` — 429 `RATE_LIMITED`, у
+  - Подтверждено: D14 — `GET /api/users/me` и 401 `/api/users` → `Cache-Control: no-store`; `TestBoot` — job
+    `auditkit.retention`
+- [x] **AC5** — Контракт: у каждой операции `/api/*` под строгим лимитом в `openapi.json` — 429 `RATE_LIMITED`, у
   операций доменов нет `default`, схемы `Cookie` нет, один отказ — один код у адреса регистрации, `maxLength` у
   скелета, у `changePassword` — описание и гашение cookie, в `UserView` — роль и `email_verified`, `enum`/`format` у
   статуса, роли и id (NCOD-01, RCOD-08 частично, RCOD-09). Проверка: сводка `openapi.json` по операциям; E2 —
   пробельные формы адреса → один код
-- [ ] **AC6** — Один способ на правило: пароль проверяет `auth` по хэшу порта, хеширует только `user`
+  - Подтверждено: сводка `openapi.json` (`N/s7c/exp/ac5-{base,branch}.txt`): 429 у всех `/api/auth/*`, `default` и схемы
+    `Cookie` нет, `UserView` — `role` (`enum`), `email_verified`, `id` (`uuid`), тело `changePassword` без `user_id`,
+    адрес регистрации — `pattern`, `maxLength`; E2 — пробельные и обрамлённые формы адреса → 422 `VALIDATION_FAILED`
+- [x] **AC6** — Один способ на правило: пароль проверяет `auth` по хэшу порта, хеширует только `user`
   (RCOD-07); смена пароля — у вызывающего, без `user_id` и ветки admin (RCOD-14); мёртвое снято, мелочи
   единообразия сведены (RCOD-14, 18); образцы конфига домена и job'а — в коде (RCOD-17); комментариев длиннее
   двух строк в коде нет (RCOD-15). Проверка: AST-скрипт `N/reaudit/tpl-code/ast` на ветке → пусто; `rg` по
   символам; `make check` → ✓
-- [ ] **AC7** — Правила archtest без ложных отказов и с закрытыми обходами: законные `rafp01`, `rafp01d`, `rafp05`,
+  - Подтверждено: AST-скрипт — одна группа длиннее двух строк, `authgate/authn.go:9` (Q2); снятые символы по коду и прозе
+    — только в плане; `make check` → ✓
+- [x] **AC7** — Правила archtest без ложных отказов и с закрытыми обходами: законные `rafp01`, `rafp01d`, `rafp05`,
   `rafp04`, `fp10b` — зелёные (NADP-01, RADP-11); `ra01`, `ra04` — отказ (NADP-02, 04); порт только для чтения не
   переводит ошибку записи поставщика (T11); `n09f`, `n39`, `n56`, `n03f`, `n30`, `o-j+test`, `n33`, `n31`, `n27`,
   `n25`, `n26`, `n23`, `n19q`, `n21`, `n40`, `n41`, `v09g`, чтение до policy, subject `.v1` — отказ (RADP-05…08,
   T3, T6). Проверка: `python3 N/reaudit/tpl-adp/run.py <wt> --no-full <кейс>` на базе и ветке
   (`N/s7c/exp/{base,branch}.tsv`); законные формы прежнего списка — `✓ check clean`
-- [ ] **AC8** — RADP-13: у каждого правила файлов трека — свои примеры (нарушение — отказ с текстом, законная
+  - Подтверждено: `N/s7c/exp/branch.tsv`: кейсы списка — отказ правилом (n19q, ra04 — вариантами `-br` под новый API), на
+    базе зелёные (v09g, ra05 ловил лишь тест usecase); законные rafp01, rafp01d, rafp05, rafp04, fp10b — тишина (на базе
+    rafp01, 01d, 05 и fp10b — ложный отказ); примеры валидатора (`N/val-s7c/rules-examples`) — 17 из 21 как задумано,
+    4 — отказ по замыслу (`ProductName`, фейк порта в testkit, таблица переходов, subject конкатенацией)
+- [x] **AC8** — RADP-13: у каждого правила файлов трека — свои примеры (нарушение — отказ с текстом, законная
   форма — тишина) в `internal/archtest/testdata/rules`; правило, которое замолчало, роняет тест примеров.
   Проверка: `go test ./internal/archtest/ -run TestRuleExamples` → PASS; ручная поломка правила → FAIL
-- [ ] **AC9** — T4: `TestIdentity` не зависит от скорости подписчиков: с задержкой подписчика сброса на базе — FAIL,
+  - Подтверждено: `TestRuleExamples` → PASS; каждое из 22 правил, онемев, роняет его
+    (`N/s7c/exp/ac8-mute-rules-phaseB.tsv`)
+- [x] **AC9** — T4: `TestIdentity` не зависит от скорости подписчиков: с задержкой подписчика сброса на базе — FAIL,
   на ветке — PASS. Проверка: инъекция задержки в `N/wt-s7c-t4` → база FAIL, ветка PASS
-- [ ] **AC10** — T6: образец ресурса с владельцем (видимость — параметр запроса, чужое — 404) в
+  - Подтверждено: подписчик сброса на 3 с медленнее (`N/s7c/exp/t4-README.txt`): база — FAIL «Condition never satisfied»,
+    ветка — PASS
+- [x] **AC10** — T6: образец ресурса с владельцем (видимость — параметр запроса, чужое — 404) в
   `docs/reference/architecture.md` и `scaffold/references/endpoint.md`; `CanGet` скелета без id. Проверка:
   ручная сверка; `make new-domain NAME=order` во временном worktree → `✓ check clean`
-- [ ] **AC11** — Гейт и handoff: `make check` → `✓ check clean`; блоки INFRA-HANDOFF — в `.claude/plans/handoff.md`.
+  - Подтверждено: образец — `architecture.md` и `endpoint.md`; `make new-domain NAME=order` во временном worktree на итоге
+    ветки → `✓ check clean` (929/929), мутации скелета `order-01…24` убиты (`N/s7c/mutate-sk.log`)
+- [x] **AC11** — Гейт и handoff: `make check` → `✓ check clean`; блоки INFRA-HANDOFF — в `.claude/plans/handoff.md`.
   Проверка: `flock N/gate.lock make check`; чтение накопителя
+  - Подтверждено: `flock N/gate.lock make check` → `✓ check clean` на итоге ветки (`main` с треками harness+lifecycle и
+    gate+tests); блоки S1, S3, S4, S6, S7, S9 — в `.claude/plans/handoff.md`
 - [ ] **AC12** — N4 (валидация трека harness): prune доменов идентичности по тексту `prune.md` на итоге ветки после
   `main` с треком harness+lifecycle — `✓ check clean`: `0007` в `.template/identity`, шаги 2, 3, 6 называют
   `authlimit`, retention аудита и `PASSWORD_RESET_MAIL_PAUSE`. Проверка: опыт AC2 трека harness (`N/s7h/`)
   на итоге ветки
-- [ ] **AC13** — RHAR-10 (остаток): блоки «Верификация» `scaffold/references/{endpoint,migration,port,event}.md` — без
+  - Итог: до слияния gate+tests — `shop3` ✓; на итоге ветки (`shop5`) prune по тексту чист, якоря мутаций
+    82 — OK, а гейт форка красен только `TestMigrationsCheck` трека gate+tests: он читает миграцию идентичности
+    `0003`, которую prune снимает (с её содержимым в тесте форка — `✓ check clean`, 140/140) — дирижёру
+- [x] **AC13** — RHAR-10 (остаток): блоки «Верификация» `scaffold/references/{endpoint,migration,port,event}.md` — без
   пересказа того, что держат гейт и правила. Проверка: ручная сверка; `make check` → ✓
+  - Подтверждено: ручная сверка четырёх references — шаг «Готово» без пересказа гейта; `make check` → ✓
 
 ## Шаги
 - [x] **S1** — NSEC-02: `config.Guard` отвергает ключи подписи из примеров окружения; тест сверяет их с файлами
@@ -199,9 +230,14 @@ blocked-by: —
     редко две». AST-скрипт `N/reaudit/tpl-code/ast/comments`: было 11 групп ≥ 3 строк, стало одна —
     `internal/platform/authgate/authn.go:9` (зона «сначала спросить», не тронута; `N/s7c/exp/s13-comments-*.txt`);
     `make check` → ✓
-- [ ] **S14** — Приёмка: эксперименты на базе и ветке, гейт, handoff
+- [x] **S14** — Приёмка: эксперименты на базе и ветке, гейт, handoff
   - Проверка: `N/s7c/exp/{base,branch}.tsv`; `make check` → `✓ check clean` · Зависит от: S16, S17
   - Закрывает: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC11
+  - Сделано: пробы аудиторов на базе `a4020ee` и ветке (`N/s7c/exp/`: `base.tsv`, `branch.tsv`,
+    `compare-base-branch.tsv`; пробы под новый API — `sec-branch-adapted.log`) — дефекты AC1–AC5 на базе есть, на
+    ветке нет; кейсы приёмки нашли n32, fp05, fp11, валидация — B1, B2, N1–N14 (S17), все закрыты. Мутации
+    (`make mutate A=--strict`, `N/s7c/mutate-*.log`): 47 переписанных блоков, 16 RA, новые блоки трека и скелет
+    `order-01…24` — убиты; ветка — на `main` с треками harness+lifecycle и gate+tests; `make check` → ✓
 - [x] **S15** — N4: `git rebase main` (трек harness+lifecycle), `0007` в `.template/identity`, шаги 2, 3, 6
   `init-service/references/prune.md` под код трека; prune по тексту на итоге
   - Проверка: опыт AC2 трека harness → `✓ check clean`; `make check` → ✓ · Закрывает: AC12 · Зависит от: S13
@@ -222,10 +258,15 @@ blocked-by: —
   - Сделано: `endpoint.md`, `port.md`, `event.md` — шаг «Готово» одной строкой: `make gen` (что он подхватит), затем
     `make check` (CLAUDE.md § Готово); `migration.md` — шаги «Проверка компиляции» и «gen-check» сняты (их держит
     гейт), «Тесты» — когда нужен тест и как integration-тест берёт миграцию, без команд; `make check` → ✓
-- [ ] **S17** — Валидация трека (`N/validation-s7-code.md`): ложные отказы и обходы новых правил archtest (B1, B2) и
+- [x] **S17** — Валидация трека (`N/validation-s7-code.md`): ложные отказы и обходы новых правил archtest (B1, B2) и
   неблокирующие N1–N14 — по коммиту на пункт
   - Проверка: примеры правил в `testdata/rules` и пробы валидатора (`N/val-s7c/`) — RED → GREEN; `make check` → ✓ ·
     Закрывает: AC7, AC8 · Зависит от: S16
+  - Сделано: B1 `TestRootTypes` (слово имени поля, payload по `Publish`, теги fx), B2 `adapters.go` видит то же, что
+    корень, N1 `releasedSubjects`, N2 выпуск ссылки без ожидания блокировки, N3–N6 обходы и ложные отказы правил, N7
+    оговорка rule `comments`, N8 комментарий `0007` и `SECURITY.md`, N9 текст плана, N10 Breaking в «Handoff», N11
+    чистка ссылок батчами, N14 шаги 4, 5, 7 prune; N12, N13 — решением (Q3). RED → GREEN — примером или тестом
+    (`N/s7c/exp/*-red.log`); примеры валидатора — 17 из 21 как задумано, 4 — отказ по замыслу; `make check` → ✓
 
 ## Решения
 - RCOD-18 (ссылка сброса переживает смену пароля): ссылка хранит версию учётной записи на момент письма
@@ -406,6 +447,7 @@ blocked-by: —
     INFRA-HANDOFF этих пунктов — блоки S1, S3, S4, S6, S7, S9 в `.claude/plans/handoff.md`.
 
 ## Где мы сейчас
-S1–S13, S15, S16 закрыты; ветка — на `main` с треком gate+tests, RA-блоки и блоки скелета `-02`, `-09` — под код
-трека. Идёт S17 (валидация трека): B1, B2, N1–N14 закрыты (N12, N13 — решением); затем strict-прогоны мутаций
-(RA, скелет, новые блоки) и S14 (приёмка: «Сделано», критерии, гейт).
+Шаги S1–S17 закрыты, критерии — кроме AC12; ветка — на `main` `566a3ce` с треками harness+lifecycle и gate+tests,
+гейт ✓. AC12: prune на итоге ветки чист, гейт форка красен только `TestMigrationsCheck` трека gate+tests (читает
+миграцию идентичности `0003`) — дирижёру. Ждут: ревью дирижёра (строки `Review: … — ожидает`), ответы владельца
+Q1–Q3; после них план закрывается.
