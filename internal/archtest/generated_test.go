@@ -100,6 +100,81 @@ func TestGeneratedHeaderOnlyInGeneratorOutput(t *testing.T) {
 	}
 }
 
+// TestMainOnlyEnters: main бинаря cmd/ — вход: присваивания, вызовы и выход по ошибке или подкоманде (if без else,
+// чьё тело кончается os.Exit или return). Цикл, switch, select, go, else и вложенный if — логика: её место — функции
+// пакета, их судит cover-check, а main он не видит (main исполняют перезапущенный тестовый бинарь и образ).
+func TestMainOnlyEnters(t *testing.T) {
+	t.Parallel()
+	for body, logic := range map[string]bool{
+		"log, err := newLog()\nif err != nil {\n\tprintln(err)\n\tos.Exit(1)\n}\nos.Exit(run(log))": false,
+		"if len(os.Args) > 1 {\n\treturn\n}\nfx.New().Run()":                                        false,
+		"for _, a := range os.Args {\n\tuse(a)\n}":                                                  true,
+		"if ok {\n\tos.Exit(0)\n} else {\n\tos.Exit(1)\n}":                                          true,
+		"if ok {\n\tuse(1)\n}": true,
+		"if ok {\n\tif more {\n\t\tos.Exit(2)\n\t}\n\tos.Exit(1)\n}": true,
+		"switch mode {\ncase 1:\n\tuse(1)\n}":                        true,
+	} {
+		file, err := parser.ParseFile(token.NewFileSet(), "", "package main\n\nfunc main() {\n"+body+"\n}\n", 0)
+		require.NoError(t, err)
+		require.Equal(t, logic, len(mainLogic(file.Decls[0].(*ast.FuncDecl).Body.List, true)) > 0, body)
+	}
+	for _, f := range goFiles(t) {
+		if f.test || !strings.HasPrefix(f.pkg, "cmd/") {
+			continue
+		}
+		for _, decl := range parseGo(t, f.path).Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "main" && fn.Body != nil {
+				for _, logic := range mainLogic(fn.Body.List, true) {
+					t.Errorf("%s: main has logic (%s): it goes to a function of the package — main is out of cover-check", f.path, logic)
+				}
+			}
+		}
+	}
+}
+
+// mainLogic — инструкции логики в теле main (top — его верхний уровень): всё, кроме присваивания, объявления, вызова,
+// return и defer, и if, который только выходит.
+func mainLogic(stmts []ast.Stmt, top bool) []string {
+	var logic []string
+	for _, stmt := range stmts {
+		switch s := stmt.(type) {
+		case *ast.AssignStmt, *ast.DeclStmt, *ast.ExprStmt, *ast.ReturnStmt, *ast.DeferStmt:
+		case *ast.IfStmt:
+			if !top || s.Else != nil || !exits(s.Body) {
+				logic = append(logic, "if that does not only exit")
+				continue
+			}
+			logic = append(logic, mainLogic(s.Body.List, false)...)
+		default:
+			logic = append(logic, fmt.Sprintf("%T", stmt))
+		}
+	}
+	return logic
+}
+
+// exits — тело кончается выходом: return или os.Exit(…).
+func exits(body *ast.BlockStmt) bool {
+	if len(body.List) == 0 {
+		return false
+	}
+	switch last := body.List[len(body.List)-1].(type) {
+	case *ast.ReturnStmt:
+		return true
+	case *ast.ExprStmt:
+		call, ok := last.X.(*ast.CallExpr)
+		if !ok {
+			return false
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return false
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		return ok && pkg.Name == "os" && sel.Sel.Name == "Exit"
+	}
+	return false
+}
+
 // TestBuildConstraints: гейт проверяет код в сборке с тегом integration, образ собирает без тегов. Файл,
 // который ограничение сборки исключает из сборки гейта, выпал бы из vet, lint, тестов и покрытия, а в
 // бинарь попал бы; ограничение у не-теста разводит то, что проверено, и то, что собрано. Поэтому

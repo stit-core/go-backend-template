@@ -184,7 +184,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     `PATH`, чем `GOPATH/bin`: совет был «make setup» (он её не заслонит), стал — путь найденного и порядок `PATH`;
     в `GOPATH/bin` — «make setup» (`TestToolVersions`); N11 — `call := m.EXPECT().Get(id)` и `call…Times(2)`: было
     отказ `TestTestsAssert`, стало ok (самопроверка `softExpectations` — таблицей в тесте); `init()` в `_test.go` — был
-    отказ `gochecknoinits`, стал пропуск, в коде — отказ (`TestLintUsesItsConfig`)
+    отказ `gochecknoinits`, стал пропуск, в коде — отказ (`TestLintUsesItsConfig`); N12 — `cmd/tool/main.go` с
+    циклом в `main`: у валидатора `OK: coverage 100.00%`, теперь отказ `TestMainOnlyEnters`; входы `cmd/` шаблона —
+    проходят
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -232,6 +234,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - Покрытие `cmd/`: в профиле (`-coverpkg`) и в правиле «функция без тестов», но не в доле — ветки сбоев запуска
   `run` бинарей тесты не берут, а тесты `cmd/**` — трек code+security+adapters; `main` вне правила: его исполняют
   перезапущенный тестовый бинарь и образ, профиль родителя этого не видит.
+- `main` бинаря — только вход (N12, archtest `TestMainOnlyEnters`): присваивания, вызовы и `if`, который только
+  выходит (`os.Exit`, `return`); цикл, `switch`, `select`, `go`, `else` и вложенный `if` — логика, её место —
+  функции пакета: их судит cover-check, а `main` он не видит.
 - Запись непокрываемого снимает блок с доли, а функции считаются по счётчикам тестов (NTST-04): запись,
   накрывшая тело целиком, функцию без тестов не прячет.
 - `TestCoverCheck` заменяет список непокрываемого `cover.sh` своим, что бы в нём ни было: законная запись сервиса
@@ -346,4 +351,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N11 закрыты; дальше — N12, N13, N15.
+S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N12 закрыты; дальше — N13, N15.
