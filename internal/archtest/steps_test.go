@@ -195,7 +195,7 @@ func TestGenCheckComparesMocksWithTree(t *testing.T) {
 // TestFmtAppliesLintRules: lint требует правила gofumpt с extra-rules (.golangci.yml), поэтому fmt-check
 // ловит их нарушение, а make fmt его чинит — иначе отказ lint не снять ни make fmt, ни ничем, кроме //nolint.
 // Код репо — его файлы, отслеживаемые и новые: worktree раннера в игнорируемом .cache/ (после обрыва — с
-// правкой мутации) fmt-check не судит, а make fmt не трогает.
+// правкой мутации) fmt-check не судит, а make fmt не трогает; каталога, удалённого с диска без git rm, в дереве нет.
 func TestFmtAppliesLintRules(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -218,6 +218,12 @@ func TestFmtAppliesLintRules(t *testing.T) {
 	require.Equal(t, unformatted, readFiles(t, repo, ".cache/mutate/wt/p/p.go")[".cache/mutate/wt/p/p.go"], "make fmt rewrites the worktree of the mutation runner")
 	out, err = makeIn(t, repo, nil, "fmt-check")
 	require.NoError(t, err, out)
+
+	writeFiles(t, repo, map[string]string{"gone/g.go": "package gone\n"})
+	git(t, repo, "add", "gone/g.go")
+	require.NoError(t, os.RemoveAll(filepath.Join(repo, "gone")))
+	out, err = makeIn(t, repo, nil, "fmt-check")
+	require.NoError(t, err, "fmt-check judges a directory deleted without git rm:\n%s", out)
 }
 
 // TestMigrationsCheck: migrations-check пропускает только каталог по конвенции (и .gitkeep каталога без

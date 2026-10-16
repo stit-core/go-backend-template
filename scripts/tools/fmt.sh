@@ -24,8 +24,10 @@ esac
 cd "$(git rev-parse --show-toplevel)" || exit 1
 bash scripts/tools/versions.sh gofumpt || exit 1
 
-# Каталог верхнего уровня с Go-файлом репо или сам файл в корне.
-mapfile -t paths < <(git ls-files -co --exclude-standard -- '*.go' | sed 's|/.*||' | sort -u)
+# Каталог верхнего уровня с Go-файлом репо или сам файл в корне — из тех, что есть на диске: удалённого без git rm
+# в дереве нет.
+mapfile -t paths < <(git ls-files -co --exclude-standard -- '*.go' | sed 's|/.*||' | sort -u |
+    while IFS= read -r p; do [ -e "$p" ] && printf '%s\n' "$p"; done)
 [ ${#paths[@]} -gt 0 ] || exit 0
 
 if [ -z "$check" ]; then

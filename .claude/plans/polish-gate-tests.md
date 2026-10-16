@@ -179,7 +179,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     только задуманные (`N/s7g/guard-n6-probes.txt`); N7 — `Dockerfile` с `ARG BASE=<образ>@sha256:…` и `FROM ${BASE}`:
     было FAIL `TestImagesPinned`, стало ok; формы `ARG` — в таблице теста; N8 — push `main` клоном без веток remote'а
     в пустой remote: судилось 483 коммита, отказ `ea1de93 clean` и `a0f3fa9`, теперь — 160 вне тегов `template/*`,
-    отказов нет (`N/s7g/n8-history.log`); случай — в `TestPrePushGatesPushedCommit`
+    отказов нет (`N/s7g/n8-history.log`); случай — в `TestPrePushGatesPushedCommit`; N9 — каталог, удалённый с диска
+    без `git rm`: было FAIL «lstat gone», стало OK (`TestFmtAppliesLintRules`)
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -189,6 +190,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   только инструмент не той версии (RLIF-13); версия из окружения (`GOFUMPT_VERSION=…`) снята — закреплённая одна.
 - `fmt.sh` отдаёт gofumpt каталоги верхнего уровня с Go-файлами репо (`git ls-files -co`), а не файлы: сгенерированное
   gofumpt пропускает только при обходе каталога, а явный файл переформатировал бы.
+- `fmt.sh` берёт только каталоги, которые есть на диске (N9): удалённый без `git rm` ещё в индексе, но кода в дереве
+  у него нет — gofumpt на нём падал бы.
 - `LC_ALL=C` — первой строкой каждого bash-скрипта шагов и `new-domain.sh`, а не в `Makefile`: тесты и хуки зовут
   скрипты и мимо make.
 - `GOPACKAGESDRIVER` снимает `Makefile` вместе с `MOCKERY_*`: его читают golangci-lint и mockery, шаги гейта идут
@@ -335,4 +338,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N8 закрыты; дальше — N9–N13, N15.
+S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N9 закрыты; дальше — N10–N13, N15.
