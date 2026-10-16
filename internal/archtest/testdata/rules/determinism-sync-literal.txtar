@@ -1,0 +1,21 @@
+# Литерал sync и sync/atomic в переменной корня — состояние: метод Add или Store пишет его, а по тексту — чтение.
+rule: TestDomainDeterminism
+base: canon
+want: internal/domain/shop/cache.go declares package var created: state between requests lives in the database or a kit
+want: internal/domain/shop/cache.go declares package var seen: state between requests lives in the database or a kit
+-- internal/domain/shop/cache.go --
+package shop
+
+import (
+	"sync"
+	"sync/atomic"
+)
+
+var (
+	created = atomic.Int64{}
+	seen    = sync.Map{}
+)
+
+func countCreated() int64 { return created.Add(1) }
+
+func remember(id string) { seen.Store(id, true) }

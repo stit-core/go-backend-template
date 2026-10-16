@@ -119,8 +119,8 @@ paths:
   сессии пользователя (`RevokeAll` хранилища authnkit/session; тест — `mock.MatchedBy(pgkit.InTx)`):
   вход открывает сессию под `FOR SHARE` этой строки и сверяет пароль, роль и статус с проверенными.
   Состояния между запросами в `*Usecase` и переменных пакета нет — оно в БД или ките: переменная корня — только
-  sentinel `Err…`, `TrustedErrors`, исход `outcome.New`, шаблон `regexp.MustCompile`, значение структуры `T{…}`, и
-  функции корня её не пишут (archtest `TestDomainDeterminism`).
+  sentinel `Err…`, `TrustedErrors`, исход `outcome.New`, шаблон `regexp.MustCompile`, значение структуры `T{…}` типа
+  корня или `pkg/` (не `sync`, `sync/atomic`), и функции корня её не пишут (archtest `TestDomainDeterminism`).
 - **Логи — `logkit.Logger`.** Не `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` и не запись в
   `os.Stdout`/`os.Stderr` напрямую (forbidigo). Ключ ошибки в записи — `error`, как у китов: один
   запрос находит отказы сервиса и китов. В лог и payload события — ID и факты: токенов,

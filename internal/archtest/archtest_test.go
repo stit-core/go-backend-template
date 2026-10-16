@@ -972,7 +972,7 @@ var determinismKits = map[string]string{
 // TestDomainDeterminism: ID, случайность и время домен берёт у китов и из зависимостей — тест подменяет их, а
 // clockkit.Real{} и crypto/rand мимо инжекции — нет. Состояния между запросами в переменных корня нет: переменная
 // корня — sentinel Err… (errors.go), TrustedErrors, исход outcome.New, шаблон regexp.MustCompile, значение
-// структуры T{…} или проверка var _, и ни одна функция корня её не пишет.
+// структуры T{…} типа корня или pkg/ или проверка var _, и ни одна функция корня её не пишет.
 func TestDomainDeterminism(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -1043,16 +1043,19 @@ func domainDeterminism(c *check) {
 }
 
 // fixedValue — значение переменной корня, которое не состояние: исход outcome.New("…"), шаблон regexp.MustCompile("…"),
-// значение структуры T{…} (не указатель, не map и не slice).
+// значение структуры T{…} типа корня или pkg/ (не sync и sync/atomic: их методы пишут значение).
 func fixedValue(expr ast.Expr, byName map[string]string) bool {
 	switch x := expr.(type) {
 	case *ast.CallExpr:
 		pkg, name := kitCall(x, byName)
 		return pkg == module+"/pkg/outcome" && name == "New" || pkg == "regexp" && name == "MustCompile"
 	case *ast.CompositeLit:
-		switch x.Type.(type) {
-		case *ast.Ident, *ast.SelectorExpr:
+		switch t := x.Type.(type) {
+		case *ast.Ident:
 			return true
+		case *ast.SelectorExpr:
+			id, ok := t.X.(*ast.Ident)
+			return ok && strings.HasPrefix(byName[id.Name], module+"/pkg/")
 		}
 	}
 	return false
