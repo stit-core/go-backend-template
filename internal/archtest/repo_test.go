@@ -1,8 +1,10 @@
 package archtest
 
 import (
+	"encoding/json"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -107,5 +109,56 @@ func TestImagesPinned(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestAllowReadsOnly: allow .claude/settings.json пускает без вопроса чтение — и find, и git branch по списку, — а
+// формы тех же команд, которые пишут или исполняют (find -delete, -exec…, git branch -D), и правку go.mod — только с
+// вопросом (ask) или никогда (deny). Правило Bash сопоставляется, как его читает Claude Code: «*» — любая строка, deny и
+// ask сильнее allow.
+func TestAllowReadsOnly(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".claude", "settings.json"))
+	require.NoError(t, err)
+	var settings struct {
+		Permissions struct{ Allow, Ask, Deny []string }
+	}
+	require.NoError(t, json.Unmarshal(data, &settings))
+	matches := func(rules []string, command string) bool {
+		for _, rule := range rules {
+			pattern, ok := strings.CutPrefix(rule, "Bash(")
+			if !ok {
+				continue
+			}
+			parts := strings.Split(strings.TrimSuffix(pattern, ")"), "*")
+			for i := range parts {
+				parts[i] = regexp.QuoteMeta(parts[i])
+			}
+			if regexp.MustCompile("^" + strings.Join(parts, ".*") + "$").MatchString(command) {
+				return true
+			}
+		}
+		return false
+	}
+	p := settings.Permissions
+	for command, silent := range map[string]bool{
+		"find . -name '*.go' -type f":   true,
+		"find internal -newer go.mod":   true,
+		"git branch --contains HEAD":    true,
+		"git branch --list 'nine/*'":    true,
+		"find . -name '*.tmp' -delete":  false,
+		"find -delete":                  false,
+		"find . -name x -exec rm {} +":  false,
+		"find . -execdir chmod -x {} ;": false,
+		"find . -ok rm {} ;":            false,
+		"find . -fprint list.txt":       false,
+		"find . -fls list.txt":          false,
+		"git branch -D nine/s7-gate":    false,
+		"git branch -m main trunk":      false,
+		"go mod tidy":                   false,
+		"make tidy":                     false,
+	} {
+		allowed := matches(p.Allow, command) && !matches(p.Ask, command) && !matches(p.Deny, command)
+		require.Equal(t, silent, allowed, "%s: allowed without a question — %v", command, allowed)
 	}
 }

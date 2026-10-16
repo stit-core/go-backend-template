@@ -186,7 +186,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     отказ `TestTestsAssert`, стало ok (самопроверка `softExpectations` — таблицей в тесте); `init()` в `_test.go` — был
     отказ `gochecknoinits`, стал пропуск, в коде — отказ (`TestLintUsesItsConfig`); N12 — `cmd/tool/main.go` с
     циклом в `main`: у валидатора `OK: coverage 100.00%`, теперь отказ `TestMainOnlyEnters`; входы `cmd/` шаблона —
-    проходят
+    проходят; N13 — `find . -name …` и `git branch --contains`/`--list` шли с вопросом, теперь без него, а
+    `find … -delete`, `-exec…`, `-ok…`, `-fprint…`, `-fls` — с вопросом (`ask`), `git branch -D` и `tidy` — тоже
+    (`TestAllowReadsOnly`)
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -286,8 +288,10 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   отказ. Путь нормализуется и по `<каталог>/..`; `git-<подкоманда>` у «читателя» (`man`, `ls`) без подстановки в
   команде — данные; `git-core` — каталог бинарей, не подкоманда. `docs/contributing.md` § guard-bash и
   `guard-cases.txt` (трек harness) — те же формы.
-- Allow (RENF-13): `make tidy` и `go mod tidy` меняют `go.mod`/`go.sum` (зона «сначала спросить»), `find` пишет
-  (`-delete`, `-exec`), `git branch` с `-D`/`-f` — тоже: в allow остались только чтения `git branch`; deny не менялся.
+- Allow (RENF-13, N13): `make tidy` и `go mod tidy` меняют `go.mod`/`go.sum` (зона «сначала спросить») — не в allow;
+  `find` — в allow, а его пишущие и исполняющие формы (`-delete`, `-exec…`, `-ok…`, `-fprint…`, `-fls`) — в `ask`:
+  правило Claude Code не исключает опций, вопрос сильнее allow; `git branch` — только чтения (`--list`, `--contains`
+  — режим списка, с `-d`/`-m` git их не совмещает); deny не менялся. Политику держит `TestAllowReadsOnly`.
 - Секреты и образы (RENF-14) — archtest `repo_test.go` по индексу (`git ls-files`): ловит `make check` до коммита и
   pre-push на верхнем коммите; секрет промежуточного коммита, убранный следующим, гейт верхнего коммита не видит.
   `.gitignore` знает `.env.*` (кроме `*.example`) — `.env.production` не уходит обычным `git add`.
@@ -351,4 +355,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N12 закрыты; дальше — N13, N15.
+S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N13 закрыты; дальше — N15.
