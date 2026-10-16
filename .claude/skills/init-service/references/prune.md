@@ -49,17 +49,17 @@
        stale.ids RS= scripts/tools/mutants.txt >mutants.tmp && mv mutants.tmp scripts/tools/mutants.txt && rm stale.ids
    ```
 5. **Миграции** — свои — номерами подряд с `0001` (`git mv` с сохранением порядка: migrations-check
-   ждёт нумерацию с 0001, прод-БД у проекта ещё нет). Расширение `pgcrypto` и функция `set_updated_at()`
-   из `0001_users` уходят с ней: своя миграция, которой они нужны, заводит их сама.
+   ждёт нумерацию с 0001, прод-БД у проекта ещё нет), и тем же переименованием — их пути в блоках мутаций миграций
+   доменов: `sed -i 's#migrations/<было>_#migrations/<стало>_#' scripts/tools/mutants.txt`. Расширение `pgcrypto` и
+   функция `set_updated_at()` из `0001_users` уходят с ней: своя миграция, которой они нужны, заводит их сама.
 6. **Окружение** — `.env.example`: в `NATS_JS_STREAM_NAMES` — стримы своих доменов-публикаторов (без
    `user` и `verification`; публикаторов нет — `NATS_JS_STREAM_NAMES=`), комментарий над ним — про них;
    у `JWT_SECRET` — ключ проверки токенов внешней идентичности; строки `SESSION_*`, `BRUTEFORCE_SUBJECT_*`,
    `HTTP_AUTH_RATE_LIMIT_*` и `PASSWORD_RESET_MAIL_PAUSE` (и `AUDIT_RETENTION_DAYS`, если аудит ушёл шагом 3) с их
    комментариями удали, у e2e-стека `test/stack/compose.yml` — `HTTP_AUTH_RATE_LIMIT_RPS`.
-7. **Раскладка** — `internal/archtest/layout_settings_test.go`: запись
-   `archkit.WithUncheckedPackages("internal/platform/identity")` убери, если корень ни одного своего
-   домена не берёт `internal/platform/identity` (сам или через `pkg/`): лишняя запись — `TestLayout`
-   красный с подсказкой `remove it`.
+7. **Раскладка** — `internal/archtest/layout_settings_test.go`: строку `"internal/platform/identity"` списка
+   `uncheckedPackages` убери, если корень ни одного своего домена не берёт `internal/platform/identity` (сам
+   или через `pkg/`): лишняя запись — `TestLayout` красный с подсказкой `remove it`.
 8. **Свои домены поверх идентичности** — файлы раздела ниже: FK на `users` — вон (пользователь — строка из
    токена внешней идентичности), порт к `user` — к её источнику или вон, подписка на события `user` и
    `verification` — вон, сид `pgseed` в integration-тестах — свои строки без `users`.
