@@ -17,7 +17,7 @@ import (
 func TestMutate(t *testing.T) {
 	t.Parallel()
 	python, err := exec.LookPath("python3")
-	require.NoError(t, err, "make mutate, make new-domain и этот тест гейта — на python3: поставь его")
+	require.NoError(t, err, "make mutate, make new-domain and this test of the gate run on python3: install it")
 	root := repoRoot(t)
 	repo := t.TempDir()
 	const sign = "package p\n\n// Sign — знак числа.\nfunc Sign(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\tif x < 0 {\n\t\treturn -1\n\t}\n\treturn 0\n}\n"

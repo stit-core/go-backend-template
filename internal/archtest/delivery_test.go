@@ -316,7 +316,8 @@ func deliveryReachesUsecaseOnly(c *check) {
 		for _, imp := range f.imports {
 			kit, isKit := strings.CutPrefix(imp, golibinfra+"/")
 			if isKit && !slices.Contains(deliveryKits, kit) || under(imp, "database/sql") || under(imp, "github.com/jackc/pgx") {
-				c.Errorf("%s imports %s: delivery reaches the domain through its usecase port — stores, clients and drivers sit behind the usecase's ports", f.path, imp)
+				c.Errorf("%s imports %s: delivery reaches the domain through its usecase port — stores, clients and drivers sit behind the usecase's ports; "+
+					"a kit the delivery of the service needs (transport, log, helpers without I/O) is a line of deliveryKits in layout_settings_test.go", f.path, imp)
 			}
 		}
 		if services[domain] == nil {
