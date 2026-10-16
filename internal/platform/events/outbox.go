@@ -22,7 +22,7 @@ func OutboxFor(name, table string) fx.Option {
 	)
 }
 
-// Module — общее per-domain outbox'ов: фабрика хранилищ pgstore, tx-guard (OUTBOX_REQUIRE_TX) и retention.
+// Module — то, что outbox'ы доменов делят: фабрика хранилищ pgstore, tx-guard (OUTBOX_REQUIRE_TX) и retention.
 var Module = fx.Module(
 	"internal/platform/events",
 	outboxpg.FactoryModule,
