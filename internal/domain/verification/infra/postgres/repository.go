@@ -48,11 +48,12 @@ func (r *Repository) UpsertPasswordReset(ctx context.Context, issue verification
 	return true, nil
 }
 
-func (r *Repository) LockPasswordResets(ctx context.Context, userID string) error {
-	if err := r.q.LockPasswordResets(ctx, userID); err != nil {
-		return fmt.Errorf("verification repo: lock password resets: %w", err)
+func (r *Repository) TryLockPasswordResets(ctx context.Context, userID string) (bool, error) {
+	locked, err := r.q.TryLockPasswordResets(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("verification repo: lock password resets: %w", err)
 	}
-	return nil
+	return locked, nil
 }
 
 func (r *Repository) MarkPasswordResetSent(ctx context.Context, id string) error {

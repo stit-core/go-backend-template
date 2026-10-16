@@ -60,16 +60,6 @@ func (q *Queries) GetPasswordReset(ctx context.Context, tokenHash string) (GetPa
 	return i, err
 }
 
-const lockPasswordResets = `-- name: LockPasswordResets :exec
-SELECT pg_advisory_xact_lock(hashtext('verification.password_resets'), hashtext($1::text))
-`
-
-// Выпуски ссылок одного пользователя — по очереди до конца транзакции: пауза писем видит ссылку соседнего выпуска.
-func (q *Queries) LockPasswordResets(ctx context.Context, userID string) error {
-	_, err := q.db.Exec(ctx, lockPasswordResets, userID)
-	return err
-}
-
 const markPasswordResetSent = `-- name: MarkPasswordResetSent :exec
 UPDATE password_resets SET sent_at = NOW() WHERE id = $1
 `
@@ -103,6 +93,19 @@ func (q *Queries) RedeemPasswordResets(ctx context.Context, userID pgtype.UUID) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const tryLockPasswordResets = `-- name: TryLockPasswordResets :one
+SELECT pg_try_advisory_xact_lock(hashtext('verification.password_resets'), hashtext($1::text))
+`
+
+// Выпуски ссылок одного пользователя — по одному до конца транзакции: пауза писем видит ссылку соседнего выпуска.
+// Не ждёт: false — выпуски занял сосед.
+func (q *Queries) TryLockPasswordResets(ctx context.Context, userID string) (bool, error) {
+	row := q.db.QueryRow(ctx, tryLockPasswordResets, userID)
+	var pg_try_advisory_xact_lock bool
+	err := row.Scan(&pg_try_advisory_xact_lock)
+	return pg_try_advisory_xact_lock, err
 }
 
 const upsertPasswordReset = `-- name: UpsertPasswordReset :one

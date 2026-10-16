@@ -241,63 +241,6 @@ func (_c *MockRepository_GetPasswordReset_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
-// LockPasswordResets provides a mock function for the type MockRepository
-func (_mock *MockRepository) LockPasswordResets(ctx context.Context, userID string) error {
-	ret := _mock.Called(ctx, userID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for LockPasswordResets")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
-		r0 = returnFunc(ctx, userID)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockRepository_LockPasswordResets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LockPasswordResets'
-type MockRepository_LockPasswordResets_Call struct {
-	*mock.Call
-}
-
-// LockPasswordResets is a helper method to define mock.On call
-//   - ctx context.Context
-//   - userID string
-func (_e *MockRepository_Expecter) LockPasswordResets(ctx interface{}, userID interface{}) *MockRepository_LockPasswordResets_Call {
-	return &MockRepository_LockPasswordResets_Call{Call: _e.mock.On("LockPasswordResets", ctx, userID)}
-}
-
-func (_c *MockRepository_LockPasswordResets_Call) Run(run func(ctx context.Context, userID string)) *MockRepository_LockPasswordResets_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockRepository_LockPasswordResets_Call) Return(err error) *MockRepository_LockPasswordResets_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockRepository_LockPasswordResets_Call) RunAndReturn(run func(ctx context.Context, userID string) error) *MockRepository_LockPasswordResets_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // MarkEmailVerificationSent provides a mock function for the type MockRepository
 func (_mock *MockRepository) MarkEmailVerificationSent(ctx context.Context, id string) error {
 	ret := _mock.Called(ctx, id)
@@ -528,6 +471,72 @@ func (_c *MockRepository_RedeemPasswordReset_Call) Return(err error) *MockReposi
 }
 
 func (_c *MockRepository_RedeemPasswordReset_Call) RunAndReturn(run func(ctx context.Context, id string, userID string) error) *MockRepository_RedeemPasswordReset_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// TryLockPasswordResets provides a mock function for the type MockRepository
+func (_mock *MockRepository) TryLockPasswordResets(ctx context.Context, userID string) (bool, error) {
+	ret := _mock.Called(ctx, userID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for TryLockPasswordResets")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (bool, error)); ok {
+		return returnFunc(ctx, userID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) bool); ok {
+		r0 = returnFunc(ctx, userID)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, userID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRepository_TryLockPasswordResets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'TryLockPasswordResets'
+type MockRepository_TryLockPasswordResets_Call struct {
+	*mock.Call
+}
+
+// TryLockPasswordResets is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID string
+func (_e *MockRepository_Expecter) TryLockPasswordResets(ctx interface{}, userID interface{}) *MockRepository_TryLockPasswordResets_Call {
+	return &MockRepository_TryLockPasswordResets_Call{Call: _e.mock.On("TryLockPasswordResets", ctx, userID)}
+}
+
+func (_c *MockRepository_TryLockPasswordResets_Call) Run(run func(ctx context.Context, userID string)) *MockRepository_TryLockPasswordResets_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRepository_TryLockPasswordResets_Call) Return(b bool, err error) *MockRepository_TryLockPasswordResets_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockRepository_TryLockPasswordResets_Call) RunAndReturn(run func(ctx context.Context, userID string) (bool, error)) *MockRepository_TryLockPasswordResets_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -55,6 +55,7 @@ type ucOpts struct {
 	mailer   *mocks.MockMailer
 	audit    auditkit.Logger
 	metrics  *verification.Metrics
+	pause    time.Duration
 }
 
 type ucOption func(*ucOpts)
@@ -76,6 +77,8 @@ func withMetrics(m *verification.Metrics) ucOption { return func(o *ucOpts) { o.
 
 func withEvents(e outboxkit.Publisher) ucOption { return func(o *ucOpts) { o.events = e } }
 
+func withPause(d time.Duration) ucOption { return func(o *ucOpts) { o.pause = d } }
+
 // failingEvents — outbox, запись в который сбоит.
 type failingEvents struct{}
 
@@ -91,6 +94,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		pwSet:    mocks.NewMockPasswordSetter(t),
 		emailSet: mocks.NewMockEmailVerificationSetter(t),
 		mailer:   mocks.NewMockMailer(t),
+		pause:    mailPause,
 	}
 	for _, fn := range opts {
 		fn(o)
@@ -114,7 +118,7 @@ func newUC(t *testing.T, opts ...ucOption) ucFixture {
 		Tx:            tx,
 		Events:        o.events,
 		Mailer:        o.mailer,
-		Config:        verification.Config{ResetMailPause: mailPause},
+		Config:        verification.Config{ResetMailPause: o.pause},
 		Audit:         o.audit,
 		Log:           log,
 		Clock:         clockkit.NewFixed(fixedNow),
@@ -365,13 +369,13 @@ func TestRequestPasswordReset_Failure(t *testing.T) {
 }
 
 // resetIssued ждёт выпуск ссылки сброса запроса rid пользователя u1 версии 3, сделанного в requestedAt, сроком час
-// от него, с паузой писем конфига — в транзакции после очереди выпусков пользователя, — и копит хэши выпущенных
-// токенов; issued — ответы по порядку вызовов.
+// от него, с паузой писем конфига — в транзакции, занявшей выпуски пользователя, — и копит хэши выпущенных токенов;
+// issued — ответы по порядку вызовов.
 func resetIssued(t *testing.T, requestedAt time.Time, hashes *[]string, issued ...bool) *mocks.MockRepository {
 	t.Helper()
 	repo := mocks.NewMockRepository(t)
 	for _, ok := range issued {
-		lock := repo.EXPECT().LockPasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(nil).Once()
+		lock := repo.EXPECT().TryLockPasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(true, nil).Once()
 		repo.EXPECT().UpsertPasswordReset(mock.MatchedBy(pgkit.InTx), mock.MatchedBy(func(r verification.PasswordResetIssue) bool {
 			return r.RequestID == "rid" && r.UserID == "u1" && r.UserVersion == 3 &&
 				r.RequestedAt.Equal(requestedAt) && r.ExpiresAt.Equal(requestedAt.Add(time.Hour))
@@ -403,6 +407,27 @@ func TestIssuePasswordReset_HappyPath(t *testing.T) {
 	require.NoError(t, f.uc.IssuePasswordReset(context.Background(), "rid", "u1", requestedAt))
 	require.Equal(t, []string{authnkit.HashToken(sentToken)}, hashes, "the mailed token is the one stored by hash")
 	require.Zero(t, f.bus.Count(), "the handler of its own event publishes nothing: no loop through the outbox")
+}
+
+// Выпуски пользователя занял соседний выпуск — пауза писем: ссылки и письма нет, событие обработано, не ждёт.
+func TestIssuePasswordReset_Busy(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().TryLockPasswordResets(mock.MatchedBy(pgkit.InTx), "u1").Return(false, nil).Once()
+	f := newUC(t, withRepo(repo), withUsers(userByID(t, 1)))
+
+	require.NoError(t, f.uc.IssuePasswordReset(context.Background(), "rid", "u1", fixedNow))
+	require.True(t, f.log.Has(slog.LevelInfo, "password reset not issued: sent, redeemed or paused, skip"))
+}
+
+// Без паузы писем выпуски пользователя не занимают друг друга: занятость соседом паузой не была бы.
+func TestIssuePasswordReset_NoPause(t *testing.T) {
+	t.Parallel()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().UpsertPasswordReset(mock.MatchedBy(pgkit.InTx), mock.Anything, time.Duration(0)).Return(false, nil).Once()
+	f := newUC(t, withRepo(repo), withUsers(userByID(t, 1)), withPause(0))
+
+	require.NoError(t, f.uc.IssuePasswordReset(context.Background(), "rid", "u1", fixedNow))
 }
 
 // Доставка at-least-once: сбой mailer не теряет письмо — та же ссылка с новым токеном, — а повтор после
@@ -495,14 +520,14 @@ func TestIssuePasswordReset_Failure(t *testing.T) {
 			users.EXPECT().GetByID(mock.Anything, "u1").Return(nil, errDown).Once()
 			return []ucOption{withUsers(users)}
 		}},
-		{"issues not queued", func(t *testing.T) []ucOption {
+		{"issues not locked", func(t *testing.T) []ucOption {
 			repo := mocks.NewMockRepository(t)
-			repo.EXPECT().LockPasswordResets(mock.Anything, "u1").Return(errDown).Once()
+			repo.EXPECT().TryLockPasswordResets(mock.Anything, "u1").Return(false, errDown).Once()
 			return []ucOption{withUsers(userByID(t, 1)), withRepo(repo)}
 		}},
 		{"link not stored", func(t *testing.T) []ucOption {
 			repo := mocks.NewMockRepository(t)
-			repo.EXPECT().LockPasswordResets(mock.Anything, "u1").Return(nil).Once()
+			repo.EXPECT().TryLockPasswordResets(mock.Anything, "u1").Return(true, nil).Once()
 			repo.EXPECT().UpsertPasswordReset(mock.Anything, mock.Anything, mailPause).Return(false, errDown).Once()
 			return []ucOption{withUsers(userByID(t, 1)), withRepo(repo)}
 		}},

@@ -36,8 +36,8 @@ type EmailVerificationSetter interface {
 
 // Repository: Mark*Used и Redeem* гасят токен, только если он не погашен, иначе — ErrTokenUsed.
 type Repository interface {
-	// LockPasswordResets ставит выпуски ссылок пользователя в очередь до конца транзакции из ctx.
-	LockPasswordResets(ctx context.Context, userID string) error
+	// TryLockPasswordResets занимает выпуски ссылок пользователя до конца транзакции из ctx; false — их занял сосед.
+	TryLockPasswordResets(ctx context.Context, userID string) (bool, error)
 	// UpsertPasswordReset выпускает ссылку: новую или новый токен своей неотправленной; отправленную, погашенную, чужую,
 	// после погашения ссылки и при другой ссылке пользователя моложе pause — нет (issued=false).
 	UpsertPasswordReset(ctx context.Context, r PasswordResetIssue, pause time.Duration) (issued bool, err error)
@@ -185,11 +185,14 @@ func (uc *Usecase) IssuePasswordReset(ctx context.Context, requestID, userID str
 
 	token := authnkit.NewToken()
 	var issued bool
-	// Доставки подписчик обрабатывает параллельно: выпуски одного пользователя — по очереди, иначе пауза писем не
-	// увидела бы незакоммиченную ссылку соседнего запроса.
+	// Доставки подписчик обрабатывает параллельно: без блокировки пауза не увидела бы незакоммиченную ссылку соседнего
+	// выпуска, а занятые соседом выпуски — та же пауза, не очередь: поток в один ящик не держит соединения пула.
 	if err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
-		if err := uc.d.Repo.LockPasswordResets(txCtx, userID); err != nil {
-			return err
+		if uc.d.Config.ResetMailPause > 0 {
+			locked, err := uc.d.Repo.TryLockPasswordResets(txCtx, userID)
+			if err != nil || !locked {
+				return err
+			}
 		}
 		var err error
 		issued, err = uc.d.Repo.UpsertPasswordReset(txCtx, PasswordResetIssue{

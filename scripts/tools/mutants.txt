@@ -1023,13 +1023,25 @@ internal/domain/verification/usecase.go
 - }, uc.d.Config.ResetMailPause)
 + }, 0)
 
-## VI3 usecase/verification — IssuePasswordReset: выпуски ссылок пользователя не по очереди
+## VI3 usecase/verification — IssuePasswordReset: выпуски, занятые соседним, — не пауза (вторая ссылка и письмо)
 internal/domain/verification/usecase.go
-- 		if err := uc.d.Repo.LockPasswordResets(txCtx, userID); err != nil {
-- 			return err
-- 		}
-- 		var err error
-+ 		var err error
+- if err != nil || !locked {
++ if err != nil || !locked && false {
+
+## VI3b usecase/verification — IssuePasswordReset: выпуски ссылок пользователя не занимают друг друга
+internal/domain/verification/usecase.go
+- if uc.d.Config.ResetMailPause > 0 {
++ if uc.d.Config.ResetMailPause < 0 {
+
+## VI3c usecase/verification — IssuePasswordReset: без паузы занятые соседом выпуски теряют письма
+internal/domain/verification/usecase.go
+- if uc.d.Config.ResetMailPause > 0 {
++ if uc.d.Config.ResetMailPause >= 0 {
+
+## VS8 sql — TryLockPasswordResets: выпуски всех пользователей заняты одной блокировкой
+internal/domain/verification/infra/postgres/queries/password_resets.sql
+- hashtext(sqlc.arg('user_id')::text));
++ hashtext(sqlc.arg('user_id')::text) * 0);
 
 ## VI4 infra — лог-mailer поднимается вне dev (письма молча не уходят в проде)
 internal/domain/verification/infra/logmail/logmail.go

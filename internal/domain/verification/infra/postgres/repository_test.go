@@ -136,9 +136,9 @@ func TestUpsertPasswordReset_MailPause(t *testing.T) {
 	require.True(t, issue(idkit.NewV7(), owner.ID, "hash:pr-4"), "after the pause a request gets its link")
 }
 
-// Выпуски ссылок одного пользователя — по очереди: выпуск в соседней транзакции ждёт её коммита и видит её ссылку,
-// поэтому пауза писем держит и параллельные доставки; выпуск соседа очередь не ждёт.
-func TestLockPasswordResets(t *testing.T) {
+// Выпуски ссылок одного пользователя — по одному: занятые соседней транзакцией выпуски не ждут её (false), пока она не
+// закончится; выпуски соседа заняты отдельно, а после коммита выпуск видит ссылку первого — пауза.
+func TestTryLockPasswordResets(t *testing.T) {
 	t.Parallel()
 	pg := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations()))
 	repo := verifpg.NewRepository(pg.DB(t))
@@ -146,18 +146,33 @@ func TestLockPasswordResets(t *testing.T) {
 	ctx := context.Background()
 	users := userpg.NewRepository(pg.DB(t))
 	owner, neighbour := pgseed.InsertUser(t, users).ID, pgseed.InsertUser(t, users).ID
-	issue := func(txCtx context.Context, userID, hash string) (bool, error) {
-		if err := repo.LockPasswordResets(txCtx, userID); err != nil {
-			return false, err
-		}
-		return repo.UpsertPasswordReset(txCtx, resetIssue(idkit.NewV7(), userID, hash), 5*time.Minute)
+	issue := func(userID, hash string) (bool, bool) {
+		var locked, issued bool
+		require.NoError(t, tx.WithTx(ctx, func(txCtx context.Context) error {
+			var err error
+			if locked, err = repo.TryLockPasswordResets(txCtx, userID); err != nil || !locked {
+				return err
+			}
+			issued, err = repo.UpsertPasswordReset(txCtx, resetIssue(idkit.NewV7(), userID, hash), 5*time.Minute)
+			return err
+		}))
+		return locked, issued
 	}
 
 	locked, release := make(chan struct{}), make(chan struct{})
+	free := sync.OnceFunc(func() { close(release) })
+	defer free() // провал до конца теста не оставляет транзакцию первого висеть на закрытии пула
 	first := make(chan error, 1)
 	go func() {
 		first <- tx.WithTx(ctx, func(txCtx context.Context) error {
-			if _, err := issue(txCtx, owner, "hash:pr-1"); err != nil {
+			ok, err := repo.TryLockPasswordResets(txCtx, owner)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return errors.New("the first issue finds the owner's issues busy")
+			}
+			if _, err := repo.UpsertPasswordReset(txCtx, resetIssue(idkit.NewV7(), owner, "hash:pr-1"), 5*time.Minute); err != nil {
 				return err
 			}
 			close(locked)
@@ -165,29 +180,20 @@ func TestLockPasswordResets(t *testing.T) {
 			return nil
 		})
 	}()
-	<-locked
-	require.NoError(t, tx.WithTx(ctx, func(txCtx context.Context) error {
-		issued, err := issue(txCtx, neighbour, "hash:pr-n")
-		require.True(t, issued, "the neighbour does not wait for the queue of the owner")
-		return err
-	}))
-	second, secondErr := make(chan bool, 1), make(chan error, 1)
-	go func() {
-		secondErr <- tx.WithTx(ctx, func(txCtx context.Context) error {
-			issued, err := issue(txCtx, owner, "hash:pr-2")
-			second <- issued
-			return err
-		})
-	}()
-	require.Eventually(t, func() bool {
-		var waiting int
-		err := pg.Pool(t).QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE wait_event = 'advisory'`).Scan(&waiting)
-		return err == nil && waiting == 1
-	}, 10*time.Second, 20*time.Millisecond, "the second issue of the owner waits for the first one")
-	close(release)
+	select {
+	case <-locked:
+	case err := <-first:
+		require.Fail(t, "the first issue did not lock", "%v", err)
+	}
+	gotLocked, gotIssued := issue(neighbour, "hash:pr-n")
+	require.True(t, gotLocked && gotIssued, "the neighbour's issues are locked apart")
+	gotLocked, _ = issue(owner, "hash:pr-2")
+	require.False(t, gotLocked, "the owner's issues are busy: the second one does not wait")
+	free()
 	require.NoError(t, <-first)
-	require.NoError(t, <-secondErr)
-	require.False(t, <-second, "after the wait the second issue sees the link of the first one: paused")
+	gotLocked, gotIssued = issue(owner, "hash:pr-3")
+	require.True(t, gotLocked, "the lock ends with the transaction")
+	require.False(t, gotIssued, "after the first one commits the issue sees its link: paused")
 }
 
 // Job удаляет ссылки сброса и подтверждения адреса, истёкшие раньше before; живые остаются.
@@ -530,7 +536,7 @@ func TestRepository_Failures(t *testing.T) {
 			"MarkPasswordResetSent": func() error { return repo.MarkPasswordResetSent(ctx, id) },
 			"GetPasswordReset":      func() error { _, err := repo.GetPasswordReset(ctx, "hash:canceled"); return err },
 			"RedeemPasswordReset":   func() error { return repo.RedeemPasswordReset(ctx, id, userID) },
-			"LockPasswordResets":    func() error { return repo.LockPasswordResets(ctx, userID) },
+			"TryLockPasswordResets": func() error { _, err := repo.TryLockPasswordResets(ctx, userID); return err },
 			"DeleteExpiredLinks":    func() error { _, err := repo.DeleteExpiredLinks(ctx, tokenExpiry); return err },
 			"UpsertEmailVerification": func() error {
 				_, _, err := repo.UpsertEmailVerification(ctx, userID, "hash:canceled", tokenExpiry)

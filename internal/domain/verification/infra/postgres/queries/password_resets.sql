@@ -19,9 +19,10 @@ WHERE password_resets.user_id = EXCLUDED.user_id
   AND password_resets.used_at IS NULL
 RETURNING id;
 
--- name: LockPasswordResets :exec
--- Выпуски ссылок одного пользователя — по очереди до конца транзакции: пауза писем видит ссылку соседнего выпуска.
-SELECT pg_advisory_xact_lock(hashtext('verification.password_resets'), hashtext(sqlc.arg('user_id')::text));
+-- name: TryLockPasswordResets :one
+-- Выпуски ссылок одного пользователя — по одному до конца транзакции: пауза писем видит ссылку соседнего выпуска.
+-- Не ждёт: false — выпуски занял сосед.
+SELECT pg_try_advisory_xact_lock(hashtext('verification.password_resets'), hashtext(sqlc.arg('user_id')::text));
 
 -- name: MarkPasswordResetSent :exec
 UPDATE password_resets SET sent_at = NOW() WHERE id = $1;

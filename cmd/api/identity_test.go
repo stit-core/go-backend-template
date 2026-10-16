@@ -336,6 +336,35 @@ func TestIdentity_ResetMailPause(t *testing.T) {
 	require.Len(t, resets, 1, "one reset mail per pause into the mailbox, whatever the client addresses")
 }
 
+// Выпуск ссылки, когда выпуски пользователя занял соседний, — пауза писем, а не очередь: поток запросов в один ящик
+// не держит соединения пула в ожидании блокировки и не задерживает письма сброса других.
+func TestIdentity_ResetIssueBusyIsPause(t *testing.T) {
+	pg := serviceEnv(t)
+	logs, mail := &requestLog{}, &mailTap{}
+	var srv *httpkit.Server
+	app := fxtest.New(t, service, teeLog(logs),
+		fx.Decorate(func(m verification.Mailer) verification.Mailer { mail.Mailer = m; return mail }),
+		fx.Populate(&srv))
+	app.RequireStart()
+	defer app.RequireStop()
+	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: &http.Client{Timeout: 10 * time.Second}}
+	const victim = "busy@example.com"
+	id := api.register(victim)
+
+	neighbour, err := pg.Pool(t).Begin(t.Context())
+	require.NoError(t, err)
+	defer func() { require.NoError(t, neighbour.Rollback(context.Background())) }()
+	_, err = neighbour.Exec(t.Context(),
+		`SELECT pg_advisory_xact_lock(hashtext('verification.password_resets'), hashtext($1))`, id)
+	require.NoError(t, err)
+	status, _ := send(t, api.client, http.MethodPost, api.base+"/api/auth/password-reset/request", `{"email":"`+victim+`"}`)
+	require.Equal(t, http.StatusNoContent, status)
+	require.Eventually(t, func() bool { return logs.count("password reset not issued") == 1 }, 10*time.Second,
+		50*time.Millisecond, "the issue does not wait for the neighbour")
+	resets, _ := mail.sent()
+	require.Empty(t, resets, "a busy issue is a pause: no mail")
+}
+
 // count — записи лога, текст которых начинается с prefix.
 func (h *requestLog) count(prefix string) int {
 	h.mu.Lock()
