@@ -250,6 +250,12 @@ func TestMigrationsCheck(t *testing.T) {
 		return union(users, map[string]string{"0002_change.up.sql": up, "0002_change.down.sql": "-- noop: данные не возвращаются\n"})
 	}
 	turkish := []string{"LC_ALL=tr_TR.UTF-8"} // [a-z] без «i», а tr оставляет «I»
+	// Выпущенная 0003 шаблона (её хэш — в released скрипта) — строкой: у форка с внешней идентичностью prune снимает файл.
+	const releasedPendingIdx = "-- At-least-once consumer (user.events.registered) must not create a second\n" +
+		"-- pending verification per user: redelivery hits ON CONFLICT and becomes a no-op.\n" +
+		"CREATE UNIQUE INDEX email_verifications_pending_user_idx\n" +
+		"    ON email_verifications (user_id)\n" +
+		"    WHERE used_at IS NULL;\n"
 	for _, tc := range []struct {
 		name  string
 		files map[string]string // nil — каталога нет
@@ -288,7 +294,7 @@ func TestMigrationsCheck(t *testing.T) {
 		{name: "INSERT into an existing table", files: second("INSERT INTO users (id, name, role) VALUES (gen_random_uuid(), 'root', 'admin');\n"), want: "insert into users (id, name, role) values"},
 		{name: "INSERT into a table of the file", files: second("CREATE TABLE roles (name TEXT PRIMARY KEY);\nINSERT INTO roles (name) VALUES ('admin'), ('client');\n"), want: "OK: migrations (2 пар", ok: true},
 		{name: "a released migration under another number", files: union(users, map[string]string{
-			"0002_pending_idx.up.sql":   readFiles(t, root, "migrations/0003_email_verifications_idempotency.up.sql")["migrations/0003_email_verifications_idempotency.up.sql"],
+			"0002_pending_idx.up.sql":   releasedPendingIdx,
 			"0002_pending_idx.down.sql": "DROP INDEX email_verifications_pending_user_idx;\n",
 		}), want: "OK: migrations (2 пар", ok: true},
 		{name: "a migration of the fork named as a released one", files: map[string]string{
