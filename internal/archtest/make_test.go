@@ -297,6 +297,13 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	require.Contains(t, out, "сообщение не по правилу commit-msg его родителя")
 	require.Contains(t, out, "нет строки Review:")
 	require.NotContains(t, out, "toy gate")
+	// Выпуск шаблона: тег template/* создан до push'а и уходит этим же push'ем — его коммиты ещё не выпущены и судятся.
+	git(t, repo, "tag", "template/v9.9.9", newFeat)
+	out, err = push("refs/heads/main " + newFeat + " refs/heads/main " + stuff + "\nrefs/tags/template/v9.9.9 " + newFeat +
+		" refs/tags/template/v9.9.9 " + zero + "\n")
+	require.Error(t, err, "a template tag of this very push hides its commits from the message check:\n%s", out)
+	require.Contains(t, out, "нет строки Review:")
+	git(t, repo, "tag", "-d", "template/v9.9.9")
 	out, err = push("refs/heads/main " + ruled + " refs/heads/main " + stuff + "\n")
 	require.NoError(t, err, "the chain before the rule of Review is pushed:\n%s", out)
 	require.Contains(t, out, "toy gate: green")
