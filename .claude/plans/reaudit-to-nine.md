@@ -59,7 +59,7 @@ blocked-by: —
 от её `main`, план трека — в её `.claude/plans/`, валидатор — как в шаблоне; тяжёлые прогоны — под тем же замком.
 Слияние в её `main` и выпуск ведёт дирижёр.
 
-| Трек | Пункты бэклога шаблона | Владеет |
+| Трек | Пункты (формулировки — `git show f2a35fe:.claude/plans/backlog.md`) | Владеет |
 |---|---|---|
 | g-auth | `golibinfra-hash-queue` (RSECT-01), `golibinfra-rotation-retry` (RCOD-16) | `authnkit/`, фейки `testkit/{authntest,sessiontest}` |
 | g-arch | `golibinfra-archkit-alias` (NADP-03), `golibinfra-archkit-pkg` (RHAR-13), `golibinfra-archkit-tables` | `archkit/` |
