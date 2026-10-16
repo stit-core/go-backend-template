@@ -3,7 +3,8 @@
 # ref'а в свежем worktree (промежуточные коммиты push'а не гоняются). Вердикт — про то, что уходит в
 # remote: незакоммиченные правки и игнорируемые файлы рабочего дерева на него не влияют. Кеш lint у
 # свежего worktree холодный (lint.sh кладёт его в checkout). До гейта — сообщение каждого пушимого коммита
-# (его нет ни в одной ветке remote'ов) хуком commit-msg из дерева его родителя: коммит cherry-pick, rebase
+# (его нет ни в ветках remote'ов, ни под тегами шаблона template/* — эта история выпущена: клон форка без веток
+# remote'а пушит её в пустой remote) хуком commit-msg из дерева его родителя: коммит cherry-pick, rebase
 # (git rebase --continue хук не зовёт) или клона без хуков commit-msg не проходил, а правило — то, что
 # действовало, когда коммит делали: старые коммиты правилом, которого тогда не было, не судятся.
 #
@@ -43,7 +44,7 @@ refs=$(cat)
 # Корневой коммит и родитель без хука commit-msg не судятся: правила тогда не было.
 while read -r _ local_sha _ remote_sha; do
     [[ -n $local_sha && ! $local_sha =~ ^0+$ ]] || continue
-    known=(--remotes)
+    known=(--remotes '--tags=template/*')
     if [[ ! $remote_sha =~ ^0+$ ]] && git -C "$root" cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
         known+=("$remote_sha")
     fi
@@ -53,7 +54,8 @@ while read -r _ local_sha _ remote_sha; do
         if ! out=$(bash -p "$rule" "$msg" 2>&1); then
             echo "pre-push: коммит $(git -C "$root" rev-parse --short "$c") — сообщение не по правилу commit-msg его родителя:"
             sed 's/^/  /' <<<"$out"
-            echo "pre-push: допиши сообщение (git rebase -i, reword) и пушь снова"
+            echo "pre-push: допиши сообщение (git rebase -i, reword) и пушь снова; история шаблона известна по его тегам —"
+            echo "  нет их: git fetch --no-tags <remote шаблона> 'refs/tags/template/*:refs/tags/template/*'"
             exit 1
         fi
     done

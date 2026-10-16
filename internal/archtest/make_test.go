@@ -200,7 +200,8 @@ func TestCheckCoversItsOwnRun(t *testing.T) {
 // TestPrePushGatesPushedCommit: pre-push гоняет make check верхнего коммита пушимого ref'а в свежем
 // worktree — по дереву и Makefile самого коммита, а переменные make и оболочки пушащего до гейта не
 // доходят: каждая из них меняет шаги или выключает его самозащиту. До гейта — сообщение каждого пушимого коммита
-// (кроме тех, что уже в ветках remote'ов) хуком commit-msg из дерева его родителя: коммит cherry-pick, rebase или
+// (кроме тех, что уже в ветках remote'ов или под тегами шаблона template/*) хуком commit-msg из дерева его
+// родителя: коммит cherry-pick, rebase или
 // клона без хуков его не проходил, а старый коммит правилом, которого тогда не было, не судится. Гейт здесь
 // игрушечный: Makefile коммита печатает вердикт (файл verdict) и то, что дошло до него из окружения, а окружение
 // оболочки снимает строкой unexport Makefile репо; правило commit-msg — сначала старое, только Conventional
@@ -270,7 +271,15 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err = push("refs/heads/main " + stuff + " refs/heads/main " + green + "\n")
 	require.Error(t, err, "a commit that is not a Conventional Commit must not be pushed:\n%s", out)
 	require.Contains(t, out, "сообщение не по правилу commit-msg его родителя")
+	require.Contains(t, out, "refs/tags/template/*", "the refusal names the tags of the template history")
 	require.NotContains(t, out, "toy gate", "the message is checked before the gate")
+
+	// История шаблона под его тегами template/* выпущена: клон форка без веток remote'а пушит её в пустой remote, и
+	// её сообщения не судятся (ea1de93 clean шаблона).
+	git(t, repo, "tag", "template/v1.0.0", stuff)
+	out, err = push("refs/heads/main " + stuff + " refs/heads/main " + zero + "\n")
+	require.NoError(t, err, "the history of the template under its tags is judged:\n%s", out)
+	require.Contains(t, out, "toy gate: green")
 
 	// Коммит, который уже в ветке remote'а, — не пушимый: его сообщение больше не судится.
 	git(t, repo, "update-ref", "refs/remotes/origin/main", stuff)

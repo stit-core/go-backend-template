@@ -177,7 +177,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     `-c core.editor=…`, `GIT_SEQUENCE_EDITOR=…`, `filter-branch`, `difftool --extcmd`, `.git/hooks/../config`
     проходили, `man`/`ls` `git-send-pack` — отказ), стало 0; наборы аудитора и пробы валидатора — смены вердикта
     только задуманные (`N/s7g/guard-n6-probes.txt`); N7 — `Dockerfile` с `ARG BASE=<образ>@sha256:…` и `FROM ${BASE}`:
-    было FAIL `TestImagesPinned`, стало ok; формы `ARG` — в таблице теста
+    было FAIL `TestImagesPinned`, стало ok; формы `ARG` — в таблице теста; N8 — push `main` клоном без веток remote'а
+    в пустой remote: судилось 483 коммита, отказ `ea1de93 clean` и `a0f3fa9`, теперь — 160 вне тегов `template/*`,
+    отказов нет (`N/s7g/n8-history.log`); случай — в `TestPrePushGatesPushedCommit`
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -299,8 +301,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - pre-push судит всё сообщение пушимого коммита хуком `commit-msg` из дерева его родителя (дополнение дирижёра,
   вместо subject текущим хуком): `git rebase --continue` и cherry-pick без конфликта commit-msg не зовут, и `feat`
   без `Review:` иначе уходил бы молча, а правило родителя не судит старые коммиты правилом, которого тогда не было.
-  Корневой коммит и родитель без хука не судятся. Push из клона без веток remote'а в пустой remote судит и историю
-  шаблона: `ea1de93 clean` и `a0f3fa9` (subject длиннее 72) — отказ; такой push — руками человека.
+  Корневой коммит и родитель без хука не судятся. История шаблона под его тегами `template/*` — известная, как ветки
+  remote'ов (N8): клон форка без веток remote'а пушит её в пустой remote — законный push, а `ea1de93 clean` и
+  `a0f3fa9` шаблона (под `template/v1.0.0`) не судятся; клон без тегов шаблона — совет отказа: их `git fetch`.
 - Полный `make mutate` (прежний S10) дирижёр перенёс в S8 программы: его гоняют по коду после слияния обоих треков
   S7 — слияние с треком code+security+adapters сдвигает якоря (`N/validation-s7-gate.md` § 6). S10 — круг по
   валидатору, AC8 — без полного прогона.
@@ -332,4 +335,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N7 закрыты; дальше — N8–N13, N15.
+S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N8 закрыты; дальше — N9–N13, N15.
