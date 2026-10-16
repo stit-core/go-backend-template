@@ -51,20 +51,22 @@ Push в `main` разрешён (прямой или через PR); gate — `p
 
 Блокирует:
 - `git commit -n`, `--no-veri…`, `send-pack` — и со словом в кавычках (`$'…'` тоже), бинарём подкоманды
-  (`git-commit`, `/usr/lib/git-core/git-send-pack`) или кодом для оболочки: `eval` и оболочка (`sh`, `bash`, `dash`,
-  `zsh`, `ksh`, `ash`, `mksh`, `csh`, `tcsh`, `fish` — и с каталогом, обёрткой и опциями) с `-c` или `-s`, справа от
-  `|`, с heredoc или here-string (`bash -e -c`, `| sudo bash -x`, `sh<<<'…'`), и git, исполняющий строку
-  (`git rebase -x`, `git submodule foreach`, `git bisect run`);
+  (`git-commit`, `/usr/lib/git-core/git-send-pack`; у «читателя» без подстановки — `man`, `ls` — это данные) или
+  кодом для оболочки: `eval` и оболочка (`sh`, `bash`, `dash`, `zsh`, `ksh`, `ash`, `mksh`, `csh`, `tcsh`, `fish` — и с
+  каталогом, обёрткой и опциями) с `-c` или `-s`, справа от `|`, с heredoc или here-string (`bash -e -c`,
+  `| sudo bash -x`, `sh<<<'…'`), и git, исполняющий строку из значения: вложенный git в кавычках или после «=» команды
+  с git (`git rebase --exec=…`, `git submodule foreach`, `git bisect run`, `git filter-branch`, `git -c core.editor=…`,
+  `GIT_SEQUENCE_EDITOR=…`), кроме текста сообщения (`-m`);
 - `SKIP_PREPUSH` и `hooksPath` в любой команде;
 - алиасы и include конфига git в команде (`git -c alias.…`, `git config include.path …`, `GIT_CONFIG_KEY_0=alias.…` —
   и значением в кавычках: `-c 'alias.c=commit -n'`); снятие секции `core` (`git config --remove-section` или
   `--rename-section core`);
-- команду с путём `scripts/git-hooks`, хука или `.git/config` (и с `//` и `/./`), в которой не узнано чтение: запись
-  перенаправлением, команды-писатели (`chmod`, `rm`, `mv`, `tee`, `cp` в хук), текст `echo` и `printf` рядом с
-  оболочкой-интерпретатором (`echo '…' | bash`) и «читатели» с опцией или программой, которая пишет или запускает
-  (`sed -i` и скрипт `sed` с каталогом хуков или `.git/config`, программа `awk` с `>`, `|` или `system`, `sort -o`,
-  действия `find`, `git … --output`, `rg --pre` — `--pretty` читает, значение `git -c` и переменной окружения с таким
-  путём).
+- команду с путём `scripts/git-hooks`, хука или `.git/config` (и с `//`, `/./` и `<каталог>/..`), в которой не узнано
+  чтение: запись перенаправлением, команды-писатели (`chmod`, `rm`, `mv`, `tee`, `cp` в хук), текст `echo` и `printf`
+  рядом с оболочкой-интерпретатором (`echo '…' | bash`) и «читатели» с опцией или программой, которая пишет или
+  запускает (`sed -i` и скрипт `sed` с каталогом хуков или `.git/config`, программа `awk` с `>`, `|` или `system`,
+  `sort -o`, действия `find`, `git … --output`, `rg --pre` — `--pretty` читает, значение `git -c` и переменной
+  окружения с таким путём).
 
 Формы — `internal/archtest/testdata/guard-cases.txt`, `TestGuardBash`; подключение хука и `disableAllHooks` — и в
 локальном `.claude/settings.local.json` клона, где он есть, — `TestGuardWired`.
@@ -76,8 +78,8 @@ Push в `main` разрешён (прямой или через PR); gate — `p
 - код других интерпретаторов и команд, исполняющих строку (`python3 -c`, `perl -e`, `trap`, `su -c`, `watch`), скрипт
   из файла и со stdin текущей оболочки (`bash <файл>`, `source <файл>`, `source /dev/stdin`), запись в хук текстом,
   который оболочке передаёт не `echo` и не `printf` (`cat <<< 'chmod -x <хук>' | bash`), команду, которую «читатель»
-  исполняет из своих данных (`sed … e`), из конфига git или окружения без пути хука в ней
-  (`git -c core.pager=<скрипт>`, `GIT_EDITOR`);
+  исполняет из своих данных (`sed … e`), из конфига git или окружения без пути хука и вложенного git в ней
+  (`git -c core.pager=<скрипт>`, `GIT_EDITOR=<скрипт>`);
 - алиас и include из файла конфига, записанного мимо `git config` (`~/.gitconfig`, `GIT_CONFIG_GLOBAL=<файл>`);
   кавычку, открытую строкой выше, и маркер heredoc внутри кавычек;
 - push из свежего клона, из другого каталога (`git --git-dir=<репо>/.git push`) и из worktree на коммите без каталога

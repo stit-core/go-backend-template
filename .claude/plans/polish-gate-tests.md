@@ -172,7 +172,11 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   - Проверка: проба каждого пункта — верный вердикт или отказ с причиной в «Решениях»; `make check` →
     `✓ check clean` · Зависит от: S10
   - Сделано: N5 — `TestNewDomainRefusesOrRollsBack`: блок скелета с чужим «было» был не виден гейту, теперь — отказ с
-    правкой скрипта; сверка якорей (`OK: якоря`) — в каждом прогоне среза; `make new-domain NAME=ticket` — ✓
+    правкой скрипта; сверка якорей (`OK: якоря`) — в каждом прогоне среза; `make new-domain NAME=ticket` — ✓;
+    N6 — `guard-cases.txt` +19 форм: у guard ветки было 11 расхождений (`--exec='git commit -n'`, `-xgit`,
+    `-c core.editor=…`, `GIT_SEQUENCE_EDITOR=…`, `filter-branch`, `difftool --extcmd`, `.git/hooks/../config`
+    проходили, `man`/`ls` `git-send-pack` — отказ), стало 0; наборы аудитора и пробы валидатора — смены вердикта
+    только задуманные (`N/s7g/guard-n6-probes.txt`)
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -257,6 +261,12 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   подкоманда, git, исполняющий строку (`rebase -x`, `submodule foreach`, `bisect run`), — интерпретатор, а вложенный
   git — своя команда; `rg --pretty` — чтение. Случаи — в `internal/archtest/testdata/guard-cases.txt` (данные
   `TestGuardBash` трека harness): +15 отказов и +9 пропусков; раздел «guard-bash» `docs/contributing.md` — те же формы.
+- Guard (N6): git, исполняющий строку, — класс, а не перечень форм: вложенный git в кавычках или после «=» команды с
+  git (опция, `-c` конфига, переменная окружения) делает команду кодом, как у интерпретатора; текст сообщения
+  (`-m`, `--message`) — данные. Цена — поиск такого текста в аргументе git (`git log --grep='git commit -n'`) —
+  отказ. Путь нормализуется и по `<каталог>/..`; `git-<подкоманда>` у «читателя» (`man`, `ls`) без подстановки в
+  команде — данные; `git-core` — каталог бинарей, не подкоманда. `docs/contributing.md` § guard-bash и
+  `guard-cases.txt` (трек harness) — те же формы.
 - Allow (RENF-13): `make tidy` и `go mod tidy` меняют `go.mod`/`go.sum` (зона «сначала спросить»), `find` пишет
   (`-delete`, `-exec`), `git branch` с `-D`/`-f` — тоже: в allow остались только чтения `git branch`; deny не менялся.
 - Секреты и образы (RENF-14) — archtest `repo_test.go` по индексу (`git ls-files`): ловит `make check` до коммита и
@@ -318,4 +328,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5 закрыт; дальше — N6–N13, N15.
+S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5, N6 закрыты; дальше — N7–N13, N15.

@@ -448,6 +448,17 @@ B git submodule foreach git commit -n -m x
 B git rebase -x 'git commit --amend --no-edit -n' HEAD~1
 B git rebase --exec "git commit --amend --no-edit -n" HEAD~2
 B git submodule foreach 'git commit -an -m x'
+B git rebase --exec='git commit --amend -n' HEAD~1
+B git rebase --exec="git commit --amend --no-edit -n" HEAD~1
+B git rebase -x'git commit --amend -n' HEAD~1
+B git rebase --exec=git-commit\ -n HEAD~1
+B git -c core.editor='git commit -n' rebase -i HEAD~2
+B GIT_SEQUENCE_EDITOR='git commit -an' git rebase -i HEAD~2
+B git filter-branch --tree-filter 'git commit -n -m x' HEAD
+B git difftool --extcmd='git commit -n -m x' HEAD~1
+B git --exec-path=/usr/lib/git-core commit -n -m x
+B $(ls /usr/lib/git-core/git-send-pack) origin main
+B sed -i d .git/hooks/../config
 
 # --- отказ по замыслу, цена правил: интерпретатор в команде снимает кавычки со всей строки
 B git commit -m "fix: -n flag" && bash -c 'make check'
@@ -602,6 +613,14 @@ A git submodule foreach git status
 A git bisect run make test
 A ls /usr/lib/git-core/git-commit
 A /usr/lib/git-core/git-status --short
+A git commit -m "fix: git commit -n больше не проходит"
+A git commit -m 'docs: git rebase --exec=git описан'
+A git rebase --exec='make check' HEAD~3
+A man git-send-pack
+A ls -l /usr/lib/git-core/git-send-pack
+A git -c user.email=git@example.org log -1
+A git log --format='%h git %s' -3
+A cat .git/hooks/../config
 A git cherry-pick -x abc1234
 A git commit -m "fix: -n and --no-verify in a message"
 A python3 - <<'EOF'⏎print('bash -c, SKIP_PREPUSH and hooksPath here are data')⏎EOF
