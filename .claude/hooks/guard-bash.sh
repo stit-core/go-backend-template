@@ -59,40 +59,6 @@ re_interp+="|\\|&?([^;&|)${nl}]*[[:space:]/(])?(${shell})([[:space:];&|)<>]|\$)"
 re_interp+="|${before}(${shell})${rest}[[:space:]]*<<"
 # man исполняет пейджер (-P, --pager, MANPAGER, PAGER) и браузер (-H, --html): их значение — код.
 re_interp+="|${before}man${rest}[[:space:]](-[[:alpha:]]*[PH]|--(pager|html))|${start}(MAN)?PAGER="
-# Git исполняет и строку из значения — опции (git rebase -x и --exec=…, submodule foreach, bisect run, filter-branch,
-# difftool --extcmd), конфига (-c core.editor=…) или переменной (GIT_SEQUENCE_EDITOR=…): вложенный git в кавычках или
-# после «=» команды с git делает её кодом, как у интерпретатора. Текст сообщения и поиска по истории — данные: значения
-# -m, --message, --grep, -S, -G, --author, --committer, --format, --pretty, -e, --regexp и аргументы git grep без -O
-# (пейджер git grep исполняет).
-re_git='(^|[^[:alnum:]_.-])git([[:space:]]|$)'
-re_nested='(^|[[:space:];&|(=])([^[:space:]=]*/)?git(-[[:alnum:]-]+)?([[:space:];&|)\\]|$)'
-quoted='"([^"\\]|\\.)*"|'\''[^'\'']*'\'''
-data='(^|[[:space:]])(-[[:alnum:]]*m|--(message|grep|author|committer|format|pretty|regexp)|-[GSe])([[:space:]]*|=)'
-data+='('"$quoted"'|[^-[:space:]"'\''][^[:space:]"'\'']*)'
-git_runs() {
-    local body
-    body=$(printf '%s' "$1" | sed -E -e "s/$data/\\1/g" -e '/-O|--open-files-in-pager/!s/(git[[:space:]]+grep)[^;&|]*/\1/g')
-    [[ $(printf '%s' "$body" | sed -E "s/$quoted//g") =~ $re_git ]] &&
-        printf '%s' "$body" | grep -oE "$quoted|=[^[:space:]\"']+" | tr -d "\"'" | grep -qE "$re_nested"
-}
-norm=$(printf '%s' "$text" | join_lines | unquote)
-interp=0
-if [[ $norm =~ $re_interp ]] || git_runs "$norm"; then
-    interp=1
-    text=$(printf '%s' "$cmd" | tr -d "\"'")
-    norm=$(printf '%s' "$text" | join_lines | unquote)
-fi
-
-lower=$(printf '%s' "$norm" | tr '[:upper:]' '[:lower:]')
-# Ключевые слова ищем без кавычек вовсе: кавычка с пробелом внутри слово не прячет
-# (core.hooksP'ath=/tmp/a b', -c 'alias.c=commit -n').
-keys=$(printf '%s' "$lower" | sed -E "s/\\\$?[\"']//g")
-[[ $keys == *skip_prepush* ]] && block "SKIP_PREPUSH"
-[[ $keys == *hookspath* ]] && block "hooksPath"
-# Алиас и подключаемый конфиг прячут флаг или hooksPath от проверок ниже: git -c alias.c='commit -n' c.
-re_cfg='(-c[[:space:]]*|config[^;&|]*)(alias|include(if)?)\.'
-[[ $norm =~ $re_git && $keys =~ $re_cfg ]] && block "алиас или include конфига git"
-
 # Слова команды с учётом кавычек. Вне кавычек `\x` — буква, пробел — граница слова (код 037); в
 # кавычках и после `\` разделители команд прячутся в коды 001–006 и возвращаются, когда строка уже
 # разрезана на команды: слово в кавычках остаётся одним словом, и его текст виден целиком. Перед
@@ -125,6 +91,45 @@ split_words() {
             print out
         }'
 }
+
+# Git исполняет и строку из значения — опции (git rebase -x и --exec=…, submodule foreach, bisect run, filter-branch,
+# difftool --extcmd), конфига (-c core.editor=…) или переменной (GIT_SEQUENCE_EDITOR=…): вложенный git в кавычках или
+# после «=» команды с git делает её кодом, как у интерпретатора. Текст сообщения и поиска по истории — данные: значения
+# -m, --message, --grep, -S, -G, --author, --committer, --format, --pretty, -e, --regexp и аргументы git grep без -O
+# (пейджер git grep исполняет). Значение — своей команды: текст другой команды конвейера или списка (… | grep "git …",
+# echo "git …" > f) — её данные.
+re_git='(^|[^[:alnum:]_.-])git([[:space:]]|$)'
+re_nested='(^|[[:space:];&|(=])([^[:space:]=]*/)?git(-[[:alnum:]-]+)?([[:space:];&|)\\]|$)'
+quoted='"([^"\\]|\\.)*"|'\''[^'\'']*'\'''
+data='(^|[[:space:]])(-[[:alnum:]]*m|--(message|grep|author|committer|format|pretty|regexp)|-[GSe])([[:space:]]*|=)'
+data+='('"$quoted"'|[^-[:space:]"'\''][^[:space:]"'\'']*)'
+git_runs() {
+    local seg
+    while IFS= read -r seg; do
+        seg=$(printf '%s' "$seg" | sed -E -e "s/$data/\\1/g" -e '/-O|--open-files-in-pager/!s/(git[[:space:]]+grep).*/\1/')
+        [[ $(printf '%s' "$seg" | sed -E "s/$quoted//g") =~ $re_git ]] &&
+            printf '%s' "$seg" | grep -oE "$quoted|=[^[:space:]\"']+" | tr -d "\"'" | grep -qE "$re_nested" && return 0
+    done <<<"$(printf '%s' "$1" | tr -d '\001-\007\037' | split_words | tr ';&|()`' '\n\n\n\n\n\n' |
+        tr '\001\002\003\004\005\006\037' ';&|()` ' | tr -d '\007')"
+    return 1
+}
+norm=$(printf '%s' "$text" | join_lines | unquote)
+interp=0
+if [[ $norm =~ $re_interp ]] || git_runs "$norm"; then
+    interp=1
+    text=$(printf '%s' "$cmd" | tr -d "\"'")
+    norm=$(printf '%s' "$text" | join_lines | unquote)
+fi
+
+lower=$(printf '%s' "$norm" | tr '[:upper:]' '[:lower:]')
+# Ключевые слова ищем без кавычек вовсе: кавычка с пробелом внутри слово не прячет
+# (core.hooksP'ath=/tmp/a b', -c 'alias.c=commit -n').
+keys=$(printf '%s' "$lower" | sed -E "s/\\\$?[\"']//g")
+[[ $keys == *skip_prepush* ]] && block "SKIP_PREPUSH"
+[[ $keys == *hookspath* ]] && block "hooksPath"
+# Алиас и подключаемый конфиг прячут флаг или hooksPath от проверок ниже: git -c alias.c='commit -n' c.
+re_cfg='(-c[[:space:]]*|config[^;&|]*)(alias|include(if)?)\.'
+[[ $norm =~ $re_git && $keys =~ $re_cfg ]] && block "алиас или include конфига git"
 
 # Изменённый, неисполняемый или удалённый хук git молча пропускает, а .git/config задаёт, откуда хуки
 # берутся. Команда с таким путём проходит, только если в ней узнано чтение: readers, git без правки

@@ -466,6 +466,9 @@ B man -aP 'git commit -n -m x' ls
 B MANPAGER='git commit -n -m x' man ls
 B man -P 'chmod -x scripts/git-hooks/pre-push' ls
 B man -P git\ commit\ -n ls
+B git rebase --exec='make check | git commit -n' HEAD~1
+B git rebase --exec='make check; git commit -n' HEAD~1
+B git log --oneline | grep x; git rebase --exec='git commit -n' HEAD~1
 B git grep -O'git commit -n -m x' -e x
 B git grep --open-files-in-pager='git commit -n -m x' -e x
 
@@ -628,6 +631,10 @@ A git rebase --exec='make check' HEAD~3
 A man git-send-pack
 A man -k commit
 A man 5 gitignore
+A git log --oneline | grep "git commit -n"
+A git log -20 --format=%s | grep -c 'git commit -n'
+A git show HEAD:CLAUDE.md | grep -n "git commit -n"
+A echo "git commit -n" > /tmp/f && git add /tmp/f
 A git log --grep="git commit -n" --oneline
 A git log --grep 'git commit -n' -3
 A git log -S'git commit -n' --oneline
