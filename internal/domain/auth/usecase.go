@@ -135,9 +135,8 @@ func (uc *Usecase) login(ctx context.Context, in LoginInput) (*Session, outcome.
 	return &Session{AccessToken: access, RefreshToken: refresh.Value, User: u}, outcome.OK, nil
 }
 
-// openSession открывает сессию под строкой пользователя, которую держит её транзакция: смена пароля, роли
-// или статуса, успевшая между проверкой пароля и открытием, отказывает во входе (ErrInvalidCredentials),
-// а начатая позже ждёт коммита и закрывает сессию своим RevokeAll.
+// openSession держит строку пользователя транзакцией сессии: смена пароля, роли или статуса после проверки пароля
+// отказывает во входе, а начатая позже ждёт коммита и закрывает сессию своим RevokeAll.
 func (uc *Usecase) openSession(ctx context.Context, checked *User) (session.Token, error) {
 	var refresh session.Token
 	err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {

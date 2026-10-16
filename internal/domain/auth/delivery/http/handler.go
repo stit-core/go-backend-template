@@ -110,9 +110,8 @@ func (h *Handler) changePassword(ctx context.Context, in *AuthChangePasswordInpu
 	return &AuthChangePasswordOutput{SetCookie: authgate.BuildExpiredAuthCookies(h.cookieCfg)}, nil
 }
 
-// Правило каждой ошибки домена — одно. authErrors переводит в хендлерах их все (ни одна не уходит
-// 500 — archtest), таблица операции объявляет в OpenAPI те, что отдаёт её usecase. 401 входа и
-// refresh — «войти заново»; неверный старый пароль — ошибка поля: сессия цела.
+// authErrors переводит все ошибки домена (archtest), таблица операции объявляет коды своего usecase; неверный старый
+// пароль — ошибка поля (422), а не 401: сессия цела.
 var (
 	invalidCredentialsRule = httpkit.ErrorRule{Err: auth.ErrInvalidCredentials, Status: http.StatusUnauthorized, Code: "AUTH_INVALID_CREDENTIALS", Detail: "invalid email or password"}
 	accountLockedRule      = httpkit.ErrorRule{Err: auth.ErrAccountLocked, Status: http.StatusTooManyRequests, Code: "AUTH_ACCOUNT_LOCKED", Detail: "account temporarily locked"}

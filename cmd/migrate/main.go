@@ -1,7 +1,5 @@
-// Command migrate — прогон миграций отдельным шагом (lockstep с образом api).
-// Источники: kit-owned таблицы (sources.Kits) и каталог приложения PG_MIGRATIONS_PATH; у
-// каждого — своя таблица версий schema_migrations_<source>, новая миграция кита не сдвигает
-// версии приложения.
+// Command migrate — миграции отдельным шагом, lockstep с образом api: таблицы китов (sources.Kits) и каталог
+// PG_MIGRATIONS_PATH, у каждого источника своя таблица версий — миграция кита не сдвигает версии приложения.
 package main
 
 import (

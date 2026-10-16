@@ -12,9 +12,8 @@ import (
 	verifoutbox "git.stit.tech/stit-core/go-backend-template/internal/domain/verification/infra/outbox"
 )
 
-// Kits — kit-owned таблицы: киты golibinfra и outbox-таблицы доменов, у каждого своя таблица
-// версий schema_migrations_<source>. Накатываются раньше каталога приложения: его миграции
-// могут опираться на их таблицы.
+// Kits — таблицы китов и outbox доменов, у каждого своя schema_migrations_<source>; накатываются раньше миграций
+// приложения: те могут опираться на их таблицы.
 var Kits = []pgkit.Source{
 	sessionpg.Migrations,
 	bruteforcepg.Migrations,

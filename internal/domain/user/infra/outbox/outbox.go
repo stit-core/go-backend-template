@@ -6,13 +6,10 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/events"
 )
 
-// Table — per-domain outbox-таблица домена user.
 const Table = "outbox_user"
 
-// Migrations — схема таблицы (kit-owned DDL outboxkit/pgstore, своя таблица
-// версий schema_migrations_outbox_user); накатывает cmd/migrate.
+// Migrations — схема кита: её накатывает cmd/migrate своей таблицей версий schema_migrations_outbox_user.
 var Migrations = outboxpg.TableMigrations(Table)
 
-// Providers — per-domain outbox-инстанс (см. events.OutboxFor). Включается в user
-// fx.Module, чтобы fx.Private заскоупился доменным модулем.
+// Providers включает только fx.Module домена user: fx.Private скоупит publisher им.
 var Providers = events.OutboxFor("user", Table)

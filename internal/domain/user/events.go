@@ -2,7 +2,7 @@ package user
 
 import "time"
 
-// Subjects stay unexported: consumers declare their own literal (rule events-and-messaging).
+// Subject не экспортируется: потребитель держит свою константу (rule events-and-messaging).
 const (
 	subjectUserRegistered = "user.events.registered.v2"
 	subjectUserUpdated    = "user.events.updated"

@@ -86,10 +86,8 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 	return &Usecase{d: d}
 }
 
-// IssueEmailVerification — идемпотентный обработчик доставки user.events.registered.v2. Ключ — состояние
-// пользователя: подтверждённому адресу письмо не нужно, а погашенная ссылка ожидающей записи уже не держит.
-// Отправленное письмо повтор пропускает, неотправленное (сбой mailer) отправляет заново с новым токеном.
-// Адрес берётся у пользователя по ID: в событии его нет.
+// IssueEmailVerification — идемпотентный обработчик user.events.registered.v2: ключ — состояние пользователя
+// (подтверждённому письмо не нужно); отправленное повтор пропускает, неотправленное шлёт с новым токеном.
 func (uc *Usecase) IssueEmailVerification(ctx context.Context, userID string) error {
 	u, err := uc.d.Users.GetByID(ctx, userID)
 	switch {

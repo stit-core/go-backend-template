@@ -115,9 +115,8 @@ var service = fx.Options(
 // errStopBudget — остановка, заданная env, не помещается в stopTimeout.
 var errStopBudget = errors.New("shutdown env exceeds the stop budget")
 
-// checkStopBudget: пауза и дообработка запросов HTTP — в ⅔ бюджета остановки, NATS_DRAIN_TIMEOUT — не больше
-// его трети: больше закрытие шины не получит никогда. Дренажу подписки это не гарантия: ждущий хук кита
-// берёт ⅔ остатка бюджета (docs/reference/architecture.md § fx).
+// checkStopBudget: HTTP останавливается в ⅔ бюджета, больше трети NATS_DRAIN_TIMEOUT шина не получит никогда, а
+// дренажу подписки и это не гарантия (docs/reference/architecture.md § fx).
 func checkStopBudget(httpCfg httpkit.Config, natsCfg natskit.Config) error {
 	if d := httpCfg.ShutdownDrainDelay + httpCfg.ShutdownTimeout; d > stopTimeout*2/3 {
 		return fmt.Errorf("%w: HTTP_SHUTDOWN_DRAIN_DELAY + HTTP_SHUTDOWN_TIMEOUT = %s, at most %s", errStopBudget, d, stopTimeout*2/3)

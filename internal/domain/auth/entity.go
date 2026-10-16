@@ -2,7 +2,7 @@ package auth
 
 import "git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 
-// CanLogin is computed by the user domain (port carries decisions, not raw status enums).
+// CanLogin вычисляет домен user: порт переносит решение, а не сырой статус.
 type User struct {
 	ID           string
 	Email        string

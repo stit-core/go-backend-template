@@ -13,9 +13,8 @@ import (
 // maxEmailLen — предел адреса по RFC 5321 в байтах: длиннее не учтёт guard входа, и вход не состоится.
 const maxEmailLen = 254
 
-// validEmail — адрес ровно в той форме, в какую его разбирает mail.ParseAddress (без имени, скобок и
-// комментария), и без пробелов по краям — пробелы Unicode разбор оставляет в адресе. Всё это отбрасывают guard
-// входа и поиск по адресу: с ними у одного ящика было бы несколько учётных записей; регистр снимает LOWER(email).
+// validEmail — адрес в форме разбора mail.ParseAddress, без имени и пробелов по краям (Unicode разбор оставляет):
+// guard входа и поиск их отбрасывают, и у одного ящика было бы несколько учётных записей.
 func validEmail(email string) bool {
 	addr, err := mail.ParseAddress(email)
 	return err == nil && addr.Name == "" && addr.Address == email && strings.TrimSpace(email) == email &&

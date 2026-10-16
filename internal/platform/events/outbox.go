@@ -7,10 +7,8 @@ import (
 	outboxpg "git.stit.tech/stit-core/golibinfra/outboxkit/pgstore"
 )
 
-// OutboxFor — per-domain outbox на таблице table (outboxkit.Instance) и его Publisher без fx-тега:
-// UsecaseDeps имени инстанса не знает. Subject'ы событий — `<name>.>`: старт падает, если их не
-// накрывает стрим JetStream, Publish отвергает чужие. fx.Options, а не fx.Module — fx.Private скоупит
-// publisher модулем домена, в который его включают.
+// OutboxFor — Publisher без fx-тега (UsecaseDeps имени инстанса не знает) на subject'ы `<name>.>`: их накрывает стрим
+// JetStream, иначе старт падает; fx.Options, а не fx.Module: fx.Private скоупит publisher модулем домена.
 func OutboxFor(name, table string) fx.Option {
 	return fx.Options(
 		outboxkit.Instance(name, table, outboxkit.WithSubjects(name+".>")),
@@ -24,9 +22,7 @@ func OutboxFor(name, table string) fx.Option {
 	)
 }
 
-// Module — общий слой per-domain outbox'ов: фабрика pgstore-хранилищ на
-// произвольные таблицы; tx-guard (OUTBOX_REQUIRE_TX) и retention у всех
-// инстансов общие.
+// Module — общее per-domain outbox'ов: фабрика хранилищ pgstore, tx-guard (OUTBOX_REQUIRE_TX) и retention.
 var Module = fx.Module(
 	"internal/platform/events",
 	outboxpg.FactoryModule,

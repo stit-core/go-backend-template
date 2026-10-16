@@ -48,7 +48,7 @@ package <source>
 
 import "time"
 
-// Subjects stay unexported: consumers declare their own literal (rule events-and-messaging).
+// Subject не экспортируется: потребитель держит свою константу (rule events-and-messaging).
 const subject<Aggregate><PastEvent> = "<source>.events.<event>"
 
 type <Aggregate><PastEvent> struct {
