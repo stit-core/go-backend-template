@@ -39,11 +39,14 @@
      идентичности вместо `POST /api/auth/login`;
    - импорты — `go mod tidy`.
 4. **Генерация и мутации** — блоки удалённых доменов в `sqlc.yaml` и `.mockery.yml`. В спецификации мутаций
-   `scripts/tools/mutants.txt` блоки удалённых файлов снимает фильтр, блоки строк из шагов 2–3 — правкой по
-   `make mutate A=--check`:
+   `scripts/tools/mutants.txt` блоки удалённых файлов снимает первый фильтр, блоки строк, которые сняли шаги 2–3
+   (их якорь `make mutate A=--check` называет устаревшим), — второй:
    ```bash
    awk -v RS= -v ORS='\n\n' '{ n = split($0, l, "\n"); for (i = 2; i <= n; i++) if (l[i] !~ /^[-+=#]/ && system("test -e \"" l[i] "\"")) next; print }' \
        scripts/tools/mutants.txt >mutants.tmp && mv mutants.tmp scripts/tools/mutants.txt
+   make mutate A=--check | sed -n 's/^  \([^ :]*\): .*/\1/p' >stale.ids
+   awk 'FNR == NR { stale[$0]; next } { split($0, l, "\n"); split(l[1], h, " ") } !(h[2] in stale) { print; print "" }' \
+       stale.ids RS= scripts/tools/mutants.txt >mutants.tmp && mv mutants.tmp scripts/tools/mutants.txt && rm stale.ids
    ```
 5. **Миграции** — свои — номерами подряд с `0001` (`git mv` с сохранением порядка: migrations-check
    ждёт нумерацию с 0001, прод-БД у проекта ещё нет). Расширение `pgcrypto` и функция `set_updated_at()`
