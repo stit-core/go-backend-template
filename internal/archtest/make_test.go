@@ -363,7 +363,8 @@ func TestHooksIgnoreCallerEnvironment(t *testing.T) {
 
 // TestPreCommitChecksIndex: pre-commit судит то, что уходит в коммит, — снимок индекса: правка дерева вне индекса и
 // неотслеживаемый файл на вердикт не влияют, а неотформатированный файл индекса при исправленном дереве — отказ.
-// gofumpt и go — настоящие, golangci-lint — заглушка с ответом «0 issues.».
+// Снимок, который не worktree этого репо (репо скопировали или перенесли, первое создание оборвалось), хук создаёт
+// заново, а снимок прежнего репо не трогает. gofumpt и go — настоящие, golangci-lint — заглушка с ответом «0 issues.».
 func TestPreCommitChecksIndex(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -374,6 +375,26 @@ func TestPreCommitChecksIndex(t *testing.T) {
 		strings.TrimPrefix(pin(t, "golangci-lint"), "v")+" built with go1.26' ;;\nrun) echo '0 issues.' ;;\nesac\n")
 	const formatted = "package p\n\n// Join joins.\nfunc Join(a, b string) string { return a + b }\n"
 	const unformatted = "package p\n\n// Join joins.\nfunc Join(a string, b string) string { return a + b }\n"
+	// newRepo — репо с p/p.go index в индексе.
+	newRepo := func(t *testing.T, repo, index string) {
+		t.Helper()
+		writeFiles(t, repo, union(readFiles(t, root, "Makefile", ".golangci.yml", "scripts/tools/fmt.sh", "scripts/tools/lint.sh",
+			"scripts/tools/versions.sh"), map[string]string{
+			".gitignore": "/.cache/\n",
+			"go.mod":     "module example.com/hook\n\ngo 1.26\n",
+			"p/p.go":     index,
+		}))
+		git(t, repo, "init", "-q", "-b", "main")
+		git(t, repo, "add", "-A")
+	}
+	run := func(t *testing.T, repo string) (string, error) {
+		t.Helper()
+		cmd := exec.CommandContext(t.Context(), hook)
+		cmd.Dir = repo
+		cmd.Env = callerEnv("PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH"))
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
 	for _, tc := range []struct {
 		name        string
 		index, tree string // p/p.go в индексе и в дереве
@@ -386,23 +407,12 @@ func TestPreCommitChecksIndex(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo := t.TempDir()
-			writeFiles(t, repo, union(readFiles(t, root, "Makefile", ".golangci.yml", "scripts/tools/fmt.sh", "scripts/tools/lint.sh",
-				"scripts/tools/versions.sh"), map[string]string{
-				".gitignore": "/.cache/\n",
-				"go.mod":     "module example.com/hook\n\ngo 1.26\n",
-				"p/p.go":     tc.index,
-			}))
-			git(t, repo, "init", "-q", "-b", "main")
-			git(t, repo, "add", "-A")
+			newRepo(t, repo, tc.index)
 			writeFiles(t, repo, map[string]string{"p/p.go": tc.tree})
 			if tc.untracked {
 				writeFiles(t, repo, map[string]string{"p/q.go": strings.ReplaceAll(unformatted, "Join", "Glue")})
 			}
-			cmd := exec.CommandContext(t.Context(), hook)
-			cmd.Dir = repo
-			cmd.Env = callerEnv("PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH"))
-			data, err := cmd.CombinedOutput()
-			out := string(data)
+			out, err := run(t, repo)
 			if tc.ok {
 				require.NoError(t, err, "pre-commit judges the tree instead of the index:\n%s", out)
 				require.Contains(t, out, "pre-commit: all checks passed.")
@@ -413,6 +423,39 @@ func TestPreCommitChecksIndex(t *testing.T) {
 			require.Contains(t, out, "FAIL: fmt")
 		})
 	}
+
+	t.Run("a snapshot that is not a worktree of the repo", func(t *testing.T) {
+		t.Parallel()
+		base, snapshot := t.TempDir(), filepath.Join(".cache", "index-snapshot", "wt")
+		pass := func(repo, why string) {
+			t.Helper()
+			out, err := run(t, repo)
+			require.NoError(t, err, "%s:\n%s", why, out)
+			require.Contains(t, out, "pre-commit: all checks passed.")
+		}
+		original := filepath.Join(base, "original")
+		newRepo(t, original, formatted)
+		pass(original, "the first commit")
+		head := git(t, filepath.Join(original, snapshot), "rev-parse", "HEAD")
+
+		// Снимок копии ведёт в прежний репо, а нового коммита-снимка там нет.
+		copied := filepath.Join(base, "copy")
+		_, err := runIn(t, base, "cp", "-a", original, copied)
+		require.NoError(t, err)
+		writeFiles(t, copied, map[string]string{"p/p.go": formatted + "\n// Glue glues.\nfunc Glue(a, b string) string { return a + b }\n"})
+		git(t, copied, "add", "-A")
+		pass(copied, "a copy of the repo")
+		require.Equal(t, head, git(t, filepath.Join(original, snapshot), "rev-parse", "HEAD"), "the hook of a copy moves the snapshot of the original")
+
+		moved := filepath.Join(base, "moved")
+		require.NoError(t, os.Rename(original, moved))
+		pass(moved, "the moved repo")
+
+		broken := filepath.Join(base, "broken")
+		newRepo(t, broken, formatted)
+		writeFiles(t, broken, map[string]string{filepath.Join(snapshot, "leftover"): "the first add broke off\n"})
+		pass(broken, "a snapshot directory without .git")
+	})
 }
 
 // releaseSandbox — репо с Makefile и release.sh шаблона на заглушках: скрипты шагов гейта, preflight и

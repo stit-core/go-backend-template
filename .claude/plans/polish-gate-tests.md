@@ -140,7 +140,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     моков — `make gen` OK, моки переписаны, `go vet` OK; порт `GetByID` сменил сигнатуру (T7) — отказ сборкой;
     случай «устаревший мок» в `TestGenBuildsFirst`; B2 — копия пилота валидатора с доменом `status`
     (`N/s7g/b2/pilot-status`): `TestNewDomainRefusesOrRollsBack` — было FAIL «алиас statusmod … занят», стало PASS, и
-    с занятыми `probe_item`, `probe`, `code` (`field`, `probe_item2`, `probe2`)
+    с занятыми `probe_item`, `probe`, `code` (`field`, `probe_item2`, `probe2`); B3 — `TestPreCommitChecksIndex`: со
+    старой логикой снимка копия репо — «fatal: не удалось прочитать дерево», с новой копия (снимок оригинала не
+    тронут), перенос и каталог без `.git` — проходят; через симлинк на репо снимок и кеш lint переиспользуются
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -164,8 +166,13 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - `scaffold/references/migration.md` (трек code+security+adapters) — одна строка перечня классов migrations-check:
   reference называет, что гейт не пропустит.
 - pre-commit судит снимок индекса (`git write-tree` → коммит вне веток) в постоянном worktree
-  `.cache/pre-commit/wt` — как раннер мутаций: кеш lint тёплый между коммитами; замок не нужен — два коммита в
+  `.cache/index-snapshot/wt` — как раннер мутаций: кеш lint тёплый между коммитами; замок не нужен — два коммита в
   одном worktree не даёт `index.lock`. Проверки — целями make с пустыми `PKG`, `FORMAT`, `A`.
+- Снимок pre-commit — `.cache/index-snapshot/wt`: каталог, который не worktree этого репо (копия или перенос репо —
+  `.git` снимка ведёт в прежний; оборванное первое создание — каталог без `.git`), хук снимает и создаёт заново;
+  в пути нет имени хука — guard не мешает убрать снимок руками (B3). Раннер мутаций узнаёт свой снимок
+  `.cache/mutate/wt` только по `.git`: он вне коммитного пути — после переноса репо `make mutate` падает с ошибкой
+  git, и снимок убирают руками.
 - pre-push судит subject пушимых коммитов самим `commit-msg` (тело — строка `Review:` о проверке): шаблон subject
   один, его держит трек harness. Пушимые — те, которых нет в ветках remote'ов: история шаблона (`ea1de93 clean`) у
   форка там, а коммиты cherry-pick и клона без хуков — нет.
@@ -237,5 +244,5 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 —
 
 ## Где мы сейчас
-S10 — круг по валидатору: B1 (`make gen` без моков) и B2 (тест new-domain не занимает имён форка) закрыты. Дальше —
-B3, затем неблокирующие.
+S10 — круг по валидатору: блокирующие закрыты — B1 (`make gen` без моков), B2 (тест new-domain не занимает имён
+форка), B3 (снимок pre-commit чинит себя). Дальше — неблокирующие: `REBASE_HEAD`, python3, RADP-10, доки, handoff.
