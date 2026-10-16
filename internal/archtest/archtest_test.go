@@ -24,9 +24,9 @@
 //     TestDeliveryPortsBoundToUsecase (порт входа — над *Usecase), TestSecuredOperationsAskPolicy (операция под
 //     Security — с policy до чтения), TestIdentityWithOnlyInAuthgate (личность в ctx кладёт только authgate);
 //   - generated_test.go — TestMain (тест archtest не пропускается), TestGeneratedHeaderOnlyInGeneratorOutput
-//     (заголовок сгенерированного — только у вывода генераторов), TestMainOnlyEnters (main бинаря — только вход),
-//     TestBuildConstraints (ограничение сборки — только integration у тестов), TestLinterDirectives (директив
-//     линтеров мимо //nolint нет);
+//     (заголовок сгенерированного — только у вывода генераторов), TestMainOnlyEnters (main бинаря — только вход,
+//     литералов функций на уровне пакета cmd/ нет), TestBuildConstraints (ограничение сборки — только integration у
+//     тестов), TestLinterDirectives (директив линтеров мимо //nolint нет);
 //   - harness_test.go — TestDomainsAreWired (домены подключены в cmd/api), TestProseReferencesExist (ссылки прозы
 //     на make-цели, пути, тесты, разделы и ссылки, факты гейта) и TestSectionAnchors (якоря разделов и ссылок по
 //     правилу Gitea), TestRulesAndSkillsLoad (доставка правил и скиллов: шапка, paths:, name:, шаг 0),

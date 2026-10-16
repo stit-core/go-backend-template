@@ -1961,22 +1961,42 @@ internal/platform/identity/identity.go
 ## M29 cmd/api — граф: TrustProxyHops = 1 (XFF клиента — ключ антибрутфорса)
 cmd/api/main.go
 - 	httpkit.NewConfig,
-+ 	func() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 1; return c, err },
++ 	hopsConfig,
+cmd/api/main.go
+- func main() {
++ func hopsConfig() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 1; return c, err }
++
++ func main() {
 
 ## M29h2 cmd/api — граф: TrustProxyHops = 2
 cmd/api/main.go
 - 	httpkit.NewConfig,
-+ 	func() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 2; return c, err },
++ 	hopsConfig,
+cmd/api/main.go
+- func main() {
++ func hopsConfig() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 2; return c, err }
++
++ func main() {
 
 ## M29h3 cmd/api — граф: TrustProxyHops = 3
 cmd/api/main.go
 - 	httpkit.NewConfig,
-+ 	func() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 3; return c, err },
++ 	hopsConfig,
+cmd/api/main.go
+- func main() {
++ func hopsConfig() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 3; return c, err }
++
++ func main() {
 
 ## M29h4 cmd/api — доп., вне сопоставления (Решения: 1–3): TrustProxyHops = 4
 cmd/api/main.go
 - 	httpkit.NewConfig,
-+ 	func() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 4; return c, err },
++ 	hopsConfig,
+cmd/api/main.go
+- func main() {
++ func hopsConfig() (httpkit.Config, error) { c, err := httpkit.NewConfig(); c.TrustProxyHops = 4; return c, err }
++
++ func main() {
 
 ## K01 cmd/api — checkStopBudget: ровно ⅔ бюджета — отказ (граница)
 cmd/api/main.go
@@ -2046,8 +2066,8 @@ cmd/api/main.go
 
 ## K13 cmd/api — meter доменов без имени scope
 cmd/api/main.go
-- return p.MeterProvider.Meter("app") })
-+ return p.MeterProvider.Meter("") })
+- return p.MeterProvider.Meter("app") }
++ return p.MeterProvider.Meter("") }
 
 ## MG1 cmd/migrate — migrate version: dirty-источник — код 0
 cmd/migrate/main.go

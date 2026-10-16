@@ -103,49 +103,80 @@ func TestGeneratedHeaderOnlyInGeneratorOutput(t *testing.T) {
 // TestMainOnlyEnters: main бинаря cmd/ — вход: присваивания, вызовы и выход по ошибке или подкоманде (if без else,
 // чьё тело кончается os.Exit или return). Цикл, switch, select, go, else, вложенный if и литерал функции (вызванный на
 // месте, отложенный или переданный — его тело cover-check считает телом main) — логика: её место — функции пакета, их
-// судит cover-check, а main он не видит (main исполняют перезапущенный тестовый бинарь и образ).
+// судит cover-check, а main он не видит (main исполняют перезапущенный тестовый бинарь и образ). Литерал функции на
+// уровне пакета cmd/ (var run = func…, fx.Provide(func…)) — то же: его тело вне любой функции профиля.
 func TestMainOnlyEnters(t *testing.T) {
 	t.Parallel()
-	for body, logic := range map[string]bool{
-		"log, err := newLog()\nif err != nil {\n\tprintln(err)\n\tos.Exit(1)\n}\nos.Exit(run(log))": false,
-		"if len(os.Args) > 1 {\n\treturn\n}\nfx.New().Run()":                                        false,
-		"for _, a := range os.Args {\n\tuse(a)\n}":                                                  true,
-		"if ok {\n\tos.Exit(0)\n} else {\n\tos.Exit(1)\n}":                                          true,
-		"if ok {\n\tuse(1)\n}": true,
-		"if ok {\n\tif more {\n\t\tos.Exit(2)\n\t}\n\tos.Exit(1)\n}":    true,
-		"switch mode {\ncase 1:\n\tuse(1)\n}":                           true,
-		"func() {\n\tfor _, a := range os.Args {\n\t\tuse(a)\n\t}\n}()": true,
-		"os.Exit(run(func() int {\n\treturn 1\n}))":                     true,
+	inMain := func(body string) string { return "func main() {\n" + body + "\n}\n" }
+	for src, logic := range map[string]bool{
+		inMain("log, err := newLog()\nif err != nil {\n\tprintln(err)\n\tos.Exit(1)\n}\nos.Exit(run(log))"): false,
+		inMain("if len(os.Args) > 1 {\n\treturn\n}\nfx.New().Run()"):                                        false,
+		inMain("for _, a := range os.Args {\n\tuse(a)\n}"):                                                  true,
+		inMain("if ok {\n\tos.Exit(0)\n} else {\n\tos.Exit(1)\n}"):                                          true,
+		inMain("if ok {\n\tuse(1)\n}"):                                                                      true,
+		inMain("if ok {\n\tif more {\n\t\tos.Exit(2)\n\t}\n\tos.Exit(1)\n}"):                                true,
+		inMain("switch mode {\ncase 1:\n\tuse(1)\n}"):                                                       true,
+		inMain("func() {\n\tfor _, a := range os.Args {\n\t\tuse(a)\n\t}\n}()"):                             true,
+		inMain("os.Exit(run(func() int {\n\treturn 1\n}))"):                                                 true,
+		"var service = fx.Options(fx.Provide(newMeter))\n\n" + inMain("fx.New(service).Run()"):              false,
+		"var run = func() int {\n\treturn 1\n}\n\n" + inMain("os.Exit(run())"):                              true,
+		"var service = fx.Options(fx.Invoke(func() {}))\n\n" + inMain("fx.New(service).Run()"):              true,
 	} {
-		file, err := parser.ParseFile(token.NewFileSet(), "", "package main\n\nfunc main() {\n"+body+"\n}\n", 0)
+		file, err := parser.ParseFile(token.NewFileSet(), "", "package main\n\n"+src, 0)
 		require.NoError(t, err)
-		require.Equal(t, logic, len(mainLogic(file.Decls[0].(*ast.FuncDecl).Body)) > 0, body)
+		require.Equal(t, logic, len(cmdLogic(file)) > 0, src)
 	}
 	for _, f := range goFiles(t) {
 		if f.test || !strings.HasPrefix(f.pkg, "cmd/") {
 			continue
 		}
-		for _, decl := range parseGo(t, f.path).Decls {
-			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "main" && fn.Body != nil {
-				for _, logic := range mainLogic(fn.Body) {
-					t.Errorf("%s: main has logic (%s): it goes to a function of the package — main is out of cover-check", f.path, logic)
+		for _, logic := range cmdLogic(parseGo(t, f.path)) {
+			t.Errorf("%s: %s: it goes to a named function of the package — cover-check judges functions, but not main "+
+				"and not a literal outside them", f.path, logic)
+		}
+	}
+}
+
+// cmdLogic — логика файла cmd/, которую cover-check не судит: в теле main и литералы функций на уровне пакета.
+func cmdLogic(file *ast.File) []string {
+	var logic []string
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if d.Recv == nil && d.Name.Name == "main" && d.Body != nil {
+				for _, l := range mainLogic(d.Body) {
+					logic = append(logic, "main has logic ("+l+")")
 				}
+			}
+		case *ast.GenDecl:
+			for range funcLits(d) {
+				logic = append(logic, "a function literal at the level of the package")
 			}
 		}
 	}
+	return logic
 }
 
 // mainLogic — логика в теле main: инструкции логики и литералы функций.
 func mainLogic(body *ast.BlockStmt) []string {
 	logic := stmtLogic(body.List, true)
-	ast.Inspect(body, func(n ast.Node) bool {
+	for range funcLits(body) {
+		logic = append(logic, "function literal")
+	}
+	return logic
+}
+
+// funcLits — литералы функций в n; вложенный в литерал — его часть.
+func funcLits(n ast.Node) int {
+	count := 0
+	ast.Inspect(n, func(n ast.Node) bool {
 		_, lit := n.(*ast.FuncLit)
 		if lit {
-			logic = append(logic, "function literal")
+			count++
 		}
 		return !lit
 	})
-	return logic
+	return count
 }
 
 // stmtLogic — инструкции логики (top — верхний уровень main): всё, кроме присваивания, объявления, вызова, return и

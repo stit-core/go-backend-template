@@ -60,8 +60,7 @@ var (
 		// Первым: глобальные провайдеры OTel, в которые пишут киты; при OTEL_SDK_DISABLED=true сигналы
 		// не экспортируются, логи — только в stdout.
 		telemetry.Module,
-		// Meter доменов — провайдер telemetry из графа, а не глобал: порядок модулей ему не важен.
-		fx.Provide(func(p *telemetry.Providers) metric.Meter { return p.MeterProvider.Meter("app") }),
+		fx.Provide(appMeter),
 		logkit.Module,
 		pgkit.Module,
 		natskit.Module(""),
@@ -126,6 +125,9 @@ func checkStopBudget(httpCfg httpkit.Config, natsCfg natskit.Config) error {
 	}
 	return nil
 }
+
+// appMeter — Meter доменов: провайдер telemetry из графа, а не глобал — порядок модулей ему не важен.
+func appMeter(p *telemetry.Providers) metric.Meter { return p.MeterProvider.Meter("app") }
 
 // logStart: контекста запроса при сборке графа нет — корень процесса.
 func logStart(log logkit.Logger) {
