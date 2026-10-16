@@ -39,34 +39,50 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - Полный `make mutate` ветки — S8 программы (дирижёр).
 
 ## Критерии приёмки
-- [ ] **AC1** — Шаги гейта не зависят от локали, версии инструментов и мусора в `.cache/` (NENF-01, RENF-15,
+- [x] **AC1** — Шаги гейта не зависят от локали, версии инструментов и мусора в `.cache/` (NENF-01, RENF-15,
   RENF-16, RLIF-13, `GOPACKAGESDRIVER`, `fmt-check` в worktree раннера). Проверка: опыты на базе и ветке —
   `LC_ALL=tr_TR.UTF-8` у migrations-check (репо и `CREATE INDEX` по существующей таблице), `gofumpt` и
   `golangci-lint` чужой версии в `PATH`, `make setup` при закреплённых версиях без сети, неотформатированный файл в
   `.cache/mutate/wt`, драйвер `GOPACKAGESDRIVER` с меткой: база — ложный отказ, пропуск или переустановка, ветка —
   верный вердикт
-- [ ] **AC2** — migrations-check: `INSERT` в существующую таблицу — эффект, `.gitkeep` — пустой каталог,
+  - Подтверждено: валидатор (`N/validation-s7-gate.md` § 4, № 2–8 — локаль, версии, `make setup` без сети,
+    `.cache`, `GOPACKAGESDRIVER`, T7, UTF-8): база — ложный вердикт, ветка — верный; `make gen` после
+    переименования типа — B1 (S10)
+- [x] **AC2** — migrations-check: `INSERT` в существующую таблицу — эффект, `.gitkeep` — пустой каталог,
   выпущенные миграции — по содержимому, а не по имени. Проверка: `TestMigrationsCheck`; опыт — своя
   `0001_users.up.sql` форка с `CREATE INDEX` по существующей таблице: база — OK, ветка — FAIL
-- [ ] **AC3** — Хуки судят то, что уходит: pre-commit — снимок индекса (T9), pre-push — subject пушимых коммитов
+  - Подтверждено: валидатор (§ 4, № 9 — 15 каталогов): `INSERT`, `.gitkeep`, своя `0001_users`, шаблонная `0003`
+    под другим номером — верный вердикт
+- [x] **AC3** — Хуки судят то, что уходит: pre-commit — снимок индекса (T9), pre-push — subject пушимых коммитов
   (RENF-11); переменные окружения вызывающего снимает одно место на механизм. Проверка: `TestPreCommitChecksIndex`,
   `TestPrePushGatesPushedCommit`; опыт T9 (индекс чист, в дереве WIP с замечанием lint) и push коммита
   `update stuff` из cherry-pick: база — отказ и пропуск, ветка — наоборот
-- [ ] **AC4** — Формы «код без тестов» красные (NTST-02, NTST-04, RTSTT-03, RTSTT-07, RTSTT-08, RADP-10).
+  - Подтверждено: валидатор (§ 4, № 10–13 — pre-commit по индексу и формы коммита, pre-push, сообщения
+    настоящих диапазонов); снимок после копии и переноса репо — B3 (S10)
+- [x] **AC4** — Формы «код без тестов» красные (NTST-02, NTST-04, RTSTT-03, RTSTT-07, RTSTT-08, RADP-10).
   Проверка: CV07, CV09, CV10, CV14, CV20 аудитора, `.Maybe()` в `TestMe`, запись непокрываемого на тело функции:
   база — `✓ check clean`, ветка — красный своим шагом
-- [ ] **AC5** — Спецификация мутаций растёт с кодом (NTST-03, T12, RTSTT-05, остаток `make mutate`): мутации
+  - Подтверждено: валидатор (§ 4, № 14 — CV07, CV09, CV10, CV14, CV20, мягкие моки, NTST-04): база —
+    `✓ check clean`, ветка — красный своим шагом; пропуск теста archtest — `TestMain` (S10)
+- [x] **AC5** — Спецификация мутаций растёт с кодом (NTST-03, T12, RTSTT-05, остаток `make mutate`): мутации
   аудитора — в `mutants.txt`, `A=--check` называет файлы с кодом без мутаций, `make new-domain` дописывает блоки
   скелета, у раннера — тест в гейте. Проверка: `make mutate A=--check` → OK; `make new-domain NAME=order` →
   `make mutate A="order-…"` — убиты все, и `created_at` (SC25); `TestMutate`
-- [ ] **AC6** — Guard, allow и секреты (RENF-10, 13, 14). Проверка: `TestGuardBash` с формами `git-<подкоманда>`,
+  - Подтверждено: валидатор (§ 4, № 18–19): `make new-domain NAME=ticket`, `--strict` по блокам среза и RA —
+    убиты 34 из 35 (`ticket-24`, `created_at` — integration), RA25 — «=», код 0; `--check` — 401 якорь по месту
+- [x] **AC6** — Guard, allow и секреты (RENF-10, 13, 14). Проверка: `TestGuardBash` с формами `git-<подкоманда>`,
   `.git//config`, вложенного git и `rg --pretty`; N-s-env, N-s-key, N-s-envprod, N-d-latest — база
   `✓ check clean`, ветка — красный; в allow нет `tidy`, `find *`, `git branch*`
-- [ ] **AC7** — Остаток трений и minor: имена `new-domain` (`status`, `code`, `body`, `api`…) собираются и
+  - Подтверждено: валидатор (§ 4, № 15–17): `guard-cases.txt` (636) — 0 расхождений, формы аудитора — отказ;
+    allow без `tidy`, `find *`, `git branch*`; N-s-env, N-s-key, N-s-envprod, N-d-latest — красный
+- [x] **AC7** — Остаток трений и minor: имена `new-domain` (`status`, `code`, `body`, `api`…) собираются и
   проходят, `make gen` при несобранном коде называет причину (T7), `make e2e` гоняет ruff и mypy (RTSTT-09),
   тесты `cmd/api` легче (RTSTT-10). Проверка: опыты на базе и ветке; замер `N/s7g/api-rss.log`
-- [ ] **AC8** — Гейт ветки чист, законная работа не получает отказа (B1–B3 валидатора). Проверка: пробы
+  - Подтверждено: валидатор (§ 4, № 7, 20, 22, 23 — T7, имена, ruff и mypy e2e, `cmd/api.test` 1924 → 440 МиБ);
+    домен форка `status` — B2 (S10)
+- [x] **AC8** — Гейт ветки чист, законная работа не получает отказа (B1–B3 валидатора). Проверка: пробы
   валидатора B1–B3 на ветке — верный вердикт; `make check` → `✓ check clean`
+  - Подтверждено: B1–B3 — пробы S10, верный вердикт; `make check` → `✓ check clean` (`N/s7g/gc-*.log`)
 
 ## Шаги
 - [x] **S1** — План трека
@@ -133,7 +149,7 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     цепочка до правила и коммит, уже бывший в ветке remote'а, — проходят; 156 незапушенных коммитов
     `origin/main..nine/s7-gate` правилу родителя отвечают все, вся история `main` — кроме `ea1de93 clean` и
     `a0f3fa9` (оба давно в `origin/main`) (`N/s7g/bin/msg-check.sh`); `make check` → `✓ check clean`
-- [ ] **S10** — Круг по валидатору (`N/validation-s7-gate.md`, FAIL на `329a459`): ложные отказы B1–B3,
+- [x] **S10** — Круг по валидатору (`N/validation-s7-gate.md`, FAIL на `329a459`): ложные отказы B1–B3,
   герметичный `TestCommitMsgHook`, python3, RADP-10, список непокрываемого в `TestCoverCheck` (попутное), доки,
   handoff — коммитом на пункт
   - Проверка: пробы валидатора B1–B3 → верный вердикт; `make check` → `✓ check clean` · Закрывает: AC8 · Зависит от: S9
@@ -150,7 +166,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     поставь его»; `make new-domain` — отказ до первой правки, дерево чистое;
     RADP-10 — `t.Skip` в `TestLayout`: было `SKIP` и ok, стало отказ `TestMain` с местом;
     `TestCoverCheck` — с записью форка в списке `cover.sh` было FAIL «anchor of the uncoverable list», стало ok;
-    доки — `architecture.md`, CLAUDE.md § Стиль, `release/SKILL.md`, `tests-pipeline` (Argon2 boot-теста)
+    доки — `architecture.md`, CLAUDE.md § Стиль, `release/SKILL.md`, `tests-pipeline` (Argon2 boot-теста); handoff —
+    строки аннотации `template/v1.2.0` о гейте; на финальной голове проба B1 повторена (`N/s7g/v-gen-b1-final.log`)
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -266,9 +283,32 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   валидатору, AC8 — без полного прогона.
 
 ## Handoff
-—
+- В аннотацию `template/v1.2.0`, раздел «Гейт» (Breaking): после `make template-update` гейт форка отказывает, если —
+  - в коде `init()` — lint `gochecknoinits`: инициализацию — в конструктор или `main`;
+  - заголовок `Code generated … DO NOT EDIT.` стоит не у вывода sqlc (`infra/postgres/db`, файлы по `queries/`) и не
+    у mockery (`mocks`) — `TestGeneratedHeaderOnlyInGeneratorOutput`: рукописному коду — без заголовка;
+    сгенерированный клиент `pkg/` — генератор в `make gen` и его каталог в тесте (правка гейта);
+  - функцию `cmd/` (кроме `main`) или функцию под записью непокрываемого `cover.sh` тесты не исполняют —
+    cover-check «функций без тестов»: тест на неё;
+  - тест или fuzz-цель без утверждений, ожидание мока без `.Once()`, `.Twice()` или `.Times(n)` или с `.Maybe()` —
+    `TestTestsAssert`: утверждения и точное число вызовов, ожидание — одной цепочкой; `t.Skip` в тесте archtest —
+    отказ `TestMain` archtest;
+  - в индексе `.env` или `.env.<имя>` (кроме `*.example`), `*.pem`, `*.key` — `TestNoSecretFiles`: секрет — из
+    индекса и истории; базовый образ Dockerfile без digest в самой строке `FROM` (образ через `ARG` — тоже отказ),
+    образ compose без тега, с `:latest` или `:edge` — `TestImagesPinned`;
+  - migrations-check: `INSERT` в таблицу не из своего файла — миграция с эффектом; своя или правленая `0001_users`
+    форка проверяется целиком (выпущенные шаблона узнаются по содержимому);
+  - gofumpt, golangci-lint, sqlc или mockery не закреплённой версии — шаг отказывает: `make setup`; нет python3 —
+    отказывают `TestMutate` и `make new-domain`: поставить python3.
+- Хуки: pre-commit судит снимок индекса в worktree `.cache/index-snapshot/wt` (`.cache/` — в `.gitignore`); pre-push
+  судит сообщение каждого пушимого коммита правилом `commit-msg` его родителя — `feat`/`fix` без `Review:` (и
+  перенесённые `git rebase --continue` или cherry-pick без конфликта) отвергаются до гейта: дописать
+  (`git rebase -i`, reword); push из клона без веток remote'а судит и историю шаблона — такой push делает человек.
+- `make mutate A=--strict` (шаг `/release`) отказывает и за эквивалентную («=»), которую тесты убили, и за файл кода
+  без мутаций — блоки в `scripts/tools/mutants.txt`; `make new-domain` дописывает блоки среза сам. `make e2e` гоняет
+  ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S10 — круг по валидатору: блокирующие закрыты — B1 (`make gen` без моков), B2 (тест new-domain не занимает имён
-форка), B3 (снимок pre-commit чинит себя); неблокирующие `REBASE_HEAD`, python3, RADP-10 и попутное — список
-`TestCoverCheck`, доки — тоже. Дальше — handoff.
+S1–S10 закрыты, AC1–AC8 подтверждены: круг по валидатору — B1–B3 и неблокирующие (`REBASE_HEAD`, python3, RADP-10,
+`TestCoverCheck`, доки) коммитом на пункт, handoff — строки аннотации `template/v1.2.0`. Дальше — повторная валидация
+и слияние (дирижёр); полный `make mutate` — S8 программы.
