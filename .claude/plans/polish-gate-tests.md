@@ -176,7 +176,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     N6 — `guard-cases.txt` +19 форм: у guard ветки было 11 расхождений (`--exec='git commit -n'`, `-xgit`,
     `-c core.editor=…`, `GIT_SEQUENCE_EDITOR=…`, `filter-branch`, `difftool --extcmd`, `.git/hooks/../config`
     проходили, `man`/`ls` `git-send-pack` — отказ), стало 0; наборы аудитора и пробы валидатора — смены вердикта
-    только задуманные (`N/s7g/guard-n6-probes.txt`)
+    только задуманные (`N/s7g/guard-n6-probes.txt`); N7 — `Dockerfile` с `ARG BASE=<образ>@sha256:…` и `FROM ${BASE}`:
+    было FAIL `TestImagesPinned`, стало ok; формы `ARG` — в таблице теста
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -272,6 +273,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - Секреты и образы (RENF-14) — archtest `repo_test.go` по индексу (`git ls-files`): ловит `make check` до коммита и
   pre-push на верхнем коммите; секрет промежуточного коммита, убранный следующим, гейт верхнего коммита не видит.
   `.gitignore` знает `.env.*` (кроме `*.example`) — `.env.production` не уходит обычным `git add`.
+- Образ `FROM` сверяется со значениями `ARG` до первого `FROM` (N7): образ закрепляют и в одном месте
+  (`ARG BASE=<образ>@sha256:…`, `FROM ${BASE}`); `ARG` без значения по умолчанию и `ARG` стадии образа не
+  называют — отказ.
 - Имена `make new-domain`: список слов Go-шаблонов снят — он отвергал и имена, на которых срез собирается (`status`,
   `body`, `api`…). Имя, занятое кодом среза (`repo`, `id`, `tests`…), ловит сборка среза с откатом правок, ошибка
   называет имя; до первой правки отказывают ключевые слова и встроенные имена Go и объявления пакета домена.
@@ -328,4 +332,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5, N6 закрыты; дальше — N7–N13, N15.
+S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N7 закрыты; дальше — N8–N13, N15.
