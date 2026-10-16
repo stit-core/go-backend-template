@@ -208,7 +208,8 @@ func (p *Policy) CanCreate(_ context.Context, caller identity.Identity) policy.D
 	return adminOnly(caller)
 }
 
-func (p *Policy) CanGet(_ context.Context, caller identity.Identity, _ string) policy.Decision {
+// Ресурс с владельцем решает видимость (свои или все), а не id: образец — architecture.md § Usecase-канон.
+func (p *Policy) CanGet(_ context.Context, caller identity.Identity) policy.Decision {
 	return adminOnly(caller)
 }
 
@@ -241,7 +242,7 @@ type Repository interface {
 
 type Authorizer interface {
 	CanCreate(ctx context.Context, caller identity.Identity) policy.Decision
-	CanGet(ctx context.Context, caller identity.Identity, id string) policy.Decision
+	CanGet(ctx context.Context, caller identity.Identity) policy.Decision
 }
 
 type UsecaseDeps struct {
@@ -285,7 +286,7 @@ func (uc *Usecase) Get(ctx context.Context, id string) (*$TITLE, error) {
 	if !ok {
 		return nil, &policy.ForbiddenError{Reason: "no identity"}
 	}
-	if d := uc.d.Policy.CanGet(ctx, caller, id); !d.IsAllowed {
+	if d := uc.d.Policy.CanGet(ctx, caller); !d.IsAllowed {
 		return nil, &policy.ForbiddenError{Reason: d.Reason}
 	}
 	return uc.d.Repo.GetByID(ctx, id)
@@ -390,7 +391,7 @@ func TestPolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, p.CanCreate(context.Background(), tc.caller).IsAllowed)
-			require.Equal(t, tc.want, p.CanGet(context.Background(), tc.caller, "id-1").IsAllowed)
+			require.Equal(t, tc.want, p.CanGet(context.Background(), tc.caller).IsAllowed)
 		})
 	}
 }

@@ -1,0 +1,26 @@
+# Конструктор адаптера в module.go: тип и конструктор — в adapters.go.
+rule: TestModulesOnlyWire
+base: canon
+want: internal/domain/bill/module/module.go declares more than Module
+-- internal/domain/bill/module/module.go --
+package module
+
+import (
+	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+	billnats "git.stit.tech/stit-core/go-backend-template/internal/domain/bill/delivery/nats"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+)
+
+var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/bill/module",
+	fx.Provide(
+		newItems,
+		bill.NewUsecase,
+		func(uc *bill.Usecase) billnats.Usecase { return uc },
+		billnats.NewHandler,
+	),
+	fx.Invoke(billnats.Register),
+)
+
+func newItems(t *shop.Trusted) bill.Items { return newShopAdapter(t) }

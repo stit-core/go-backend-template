@@ -1,0 +1,20 @@
+# Публикация в JetStream адаптером infra мимо outbox: нет транзакционной гарантии.
+rule: TestDomainPackages
+base: canon
+want: internal/domain/shop/infra/natspub/natspub.go imports natskit: a domain publishes through its outbox
+-- internal/domain/shop/infra/natspub/natspub.go --
+package natspub
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/golibinfra/natskit"
+)
+
+type Notifier struct {
+	bus natskit.StreamBus
+}
+
+func (n *Notifier) Notify(ctx context.Context, id string) error {
+	return n.bus.PublishStream(ctx, "shop.events.item_noticed", []byte(id))
+}

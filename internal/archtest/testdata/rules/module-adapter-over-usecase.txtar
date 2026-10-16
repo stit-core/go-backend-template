@@ -1,0 +1,27 @@
+# Адаптер поверх Usecase чужого домена: его методы спрашивают policy вызывающего, а не доверяют адаптеру.
+rule: TestModulesOnlyWire
+base: canon
+want: internal/domain/bill/module/adapters.go uses shop.Usecase: an adapter calls another domain through its Trusted
+-- internal/domain/bill/module/adapters.go --
+package module
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+)
+
+type shopAdapter struct {
+	items *shop.Usecase
+}
+
+func newShopAdapter(items *shop.Usecase) *shopAdapter { return &shopAdapter{items: items} }
+
+func (a *shopAdapter) Lookup(ctx context.Context, id string) (*bill.Item, error) {
+	it, err := a.items.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &bill.Item{ID: it.ID, Name: it.Name}, nil
+}

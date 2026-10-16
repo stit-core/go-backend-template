@@ -1,0 +1,10 @@
+# Подпакет домена с другим именем: правила слоёв его не читают (репозиторий в store, фейк в usertest).
+rule: TestDomainPackages
+base: canon
+want: internal/domain/shop/store: a domain is its root, delivery/<transport>, infra/<adapter>, module and mocks
+-- internal/domain/shop/store/store.go --
+package store
+
+import "git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+
+func Find(id string) *shop.Item { return &shop.Item{ID: id} }

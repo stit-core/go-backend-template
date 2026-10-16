@@ -1,0 +1,18 @@
+# Законно: исход метрики outcome.New, шаблон regexp.MustCompile, TrustedErrors и проверка var _ — не состояние.
+rule: TestDomainDeterminism
+base: canon
+-- internal/domain/shop/metrics.go --
+package shop
+
+import (
+	"regexp"
+
+	"git.stit.tech/stit-core/go-backend-template/pkg/outcome"
+)
+
+var (
+	resultSoldOut = outcome.New("sold_out")
+	skuPattern    = regexp.MustCompile(`^[A-Z]{3}-[0-9]+$`)
+)
+
+var _ Authorizer = (*Policy)(nil)

@@ -1,0 +1,10 @@
+# Случайность мимо кита: тест её не закрепит.
+rule: TestDomainDeterminism
+base: canon
+want: internal/domain/shop/code.go imports crypto/rand: a domain takes IDs, tokens and randomness from authnkit or idkit
+-- internal/domain/shop/code.go --
+package shop
+
+import "crypto/rand"
+
+func newCode() string { return rand.Text() }

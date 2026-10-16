@@ -1,0 +1,10 @@
+# ID мимо idkit в репозитории.
+rule: TestDomainDeterminism
+base: canon
+want: internal/domain/shop/infra/postgres/id.go imports github.com/google/uuid: a domain takes IDs, tokens and randomness from idkit
+-- internal/domain/shop/infra/postgres/id.go --
+package postgres
+
+import "github.com/google/uuid"
+
+func newID() string { return uuid.NewString() }

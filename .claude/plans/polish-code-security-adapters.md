@@ -177,9 +177,17 @@ blocked-by: —
     релизе» (`contract-hand-payload` — отказ, `contract-previous-version`, `contract-other-service` — тишина);
     RADP-11 — интерфейсы и типы-функции входа без префикса; T3 — `TestSubjectVersions`; проза: rule
     `events-and-messaging`, `event.md`, `architecture.md`; `make check` → ✓
-- [ ] **S12** — Новые правила archtest (RADP-05…08, `identity.With`, чтение до policy) с примерами; T6 — образец и
+- [x] **S12** — Новые правила archtest (RADP-05…08, `identity.With`, чтение до policy) с примерами; T6 — образец и
   скелет; RADP-12 — проза
   - Проверка: кейсы AC7; AC10; `make check` → ✓ · Закрывает: AC7, AC8, AC10 · Зависит от: S11
+  - Сделано: правила `TestDomainPackages` (подпакеты домена, `infra` ↛ вход, SQL — `infra/postgres`, `natskit` —
+    `delivery/nats`), `TestModulesOnlyWire` (`module.go` — только `Module`, адаптеры поверх `Trusted`, без хуков fx,
+    литерал — один `return`), `TestDomainDependencies` (порт привязывает свой домен, граф доменов ацикличен),
+    `TestDomainDeterminism` (`clockkit.Real`, `crypto/rand`, uuid, переменные корня), `TestRootTypes` (теги
+    транспорта в корне, PII в payload), `TestIdentityWithOnlyInAuthgate`; `TestSecuredOperationsAskPolicy` — порядок
+    «policy до вызова порта»; у каждого — примеры (60 примеров и канон); T6 — образец «автор или админ» в
+    `architecture.md` и `endpoint.md`, `CanGet` скелета без id (`make new-domain NAME=order` → archtest и тесты
+    среза зелёные); RADP-12 — `event.md` § Когда НЕ применять, пометки archtest в rule; `make check` → ✓
 - [ ] **S13** — RCOD-15: комментарии кода — не длиннее двух строк, только WHY
   - Проверка: AST-скрипт → пусто; `make check` → ✓ · Закрывает: AC6 · Зависит от: S12
 - [ ] **S14** — Приёмка: эксперименты на базе и ветке, гейт, handoff
@@ -255,6 +263,16 @@ blocked-by: —
   вычислить по тексту (не литерал и не константа пакета подписки), правило не судит — предел, его держит ревью.
 - T3: `.v1` у subject домена этого репо — отказ (`TestSubjectVersions`); subject другого сервиса называет его
   контракт, правило его не трогает.
+- RADP-05…08, новые правила: по одному тесту на тему (пакеты домена, `module/`, зависимости доменов, детерминизм,
+  типы корня, личность в ctx), а не тест на находку: отказ называет правило, которое форк ищет в прозе. Переменная
+  корня — перечень неизменяемых форм (sentinel, `TrustedErrors`, `outcome.New`, `regexp.MustCompile`, `var _`), а не
+  поиск записи в неё: мутацию через метод (`atomic.Int64.Add`) по тексту не отличить от чтения.
+- RADP-06, порт привязывает свой домен — весь домен, а не только `module/`: конструктор `infra/` возвращает порт
+  (`NewRepository`); граф доменов — по импортам корня чужого домена из `module/`.
+- T6, порядок policy: первый вызов `Can…` (сам или своим методом) раньше первого вызова порта зависимостей; чтение
+  внутри своего метода до policy правило не видит — предел, держит ревью и канон теста usecase на строгом моке.
+- Правка чужого файла, S12: `scripts/new-domain.sh` (трек gate) — `CanGet` скелета без id и строка комментария к
+  нему (T6).
 - `scripts/tools/mutants.txt` (трек gate+tests) не правлю: якоря кода, который меняет трек, переписываются после
   слияния треков — список устаревших (`make mutate A=--check`) — в отчёте трека.
 
@@ -264,6 +282,5 @@ blocked-by: —
   к кому: владелец
 
 ## Где мы сейчас
-S1–S11 закрыты. Следующий шаг — S12 (новые правила archtest RADP-05…08, `identity.With`, чтение до policy; T6;
-RADP-12). Дополнение дирижёра:
+S1–S12 закрыты. Следующий шаг — S13 (комментарии кода не длиннее двух строк). Дополнение дирижёра:
 после S14 — S15 (N4, prune под код трека после rebase на `main`) и S16 (RHAR-10, блоки «Верификация»).

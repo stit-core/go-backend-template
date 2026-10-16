@@ -1,0 +1,10 @@
+# Теги транспорта в DTO корня: доменный тип становится телом запроса, контракт — его полями.
+rule: TestRootTypes
+base: canon
+want: internal/domain/shop/dto.go: CreateInput has a field tag `json:"name" maxLength:"200"`
+-- internal/domain/shop/dto.go --
+package shop
+
+type CreateInput struct {
+	Name string `json:"name" maxLength:"200"`
+}

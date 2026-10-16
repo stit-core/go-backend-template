@@ -1,0 +1,14 @@
+# Настенные часы мимо инжекции: clockkit.Real{} вместо Clock зависимостей.
+rule: TestDomainDeterminism
+base: canon
+want: internal/domain/shop/age.go uses clockkit.Real: a domain reads time from the injected clockkit.Clock
+-- internal/domain/shop/age.go --
+package shop
+
+import (
+	"time"
+
+	"git.stit.tech/stit-core/golibinfra/clockkit"
+)
+
+func age(since time.Time) time.Duration { return clockkit.Real{}.Now().Sub(since) }

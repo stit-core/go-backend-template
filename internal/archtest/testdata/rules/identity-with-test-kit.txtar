@@ -1,0 +1,15 @@
+# Законно: тестовый кит кладёт личность в ctx тестов.
+rule: TestIdentityWithOnlyInAuthgate
+base: canon
+-- internal/testkit/identitytest/identitytest.go --
+package identitytest
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+)
+
+func Client(id string) context.Context {
+	return identity.With(context.Background(), identity.Identity{UserID: id, Role: identity.RoleClient})
+}

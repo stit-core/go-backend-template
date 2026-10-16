@@ -1,0 +1,12 @@
+# Счётчик в переменной пакета: состояние между запросами мимо БД и кита.
+rule: TestDomainDeterminism
+base: canon
+want: internal/domain/shop/stats.go declares package var created: state between requests lives in the database or a kit
+-- internal/domain/shop/stats.go --
+package shop
+
+import "sync/atomic"
+
+var created atomic.Int64
+
+func Created() int64 { return created.Load() }

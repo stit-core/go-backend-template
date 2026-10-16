@@ -1,0 +1,47 @@
+# Домены знают друг друга адаптерами module/: цикл склеивает их в один.
+rule: TestDomainDependencies
+base: canon
+want: domains depend on each other through module/: bill → shop → bill
+-- internal/domain/bill/trusted.go --
+package bill
+
+import (
+	"context"
+
+	"go.uber.org/fx"
+)
+
+var TrustedErrors = map[string][]error{"Bill": {ErrItemNotFound}}
+
+type TrustedDeps struct {
+	fx.In
+
+	Items Items
+}
+
+type Trusted struct {
+	d TrustedDeps
+}
+
+func NewTrusted(d TrustedDeps) *Trusted { return &Trusted{d: d} }
+
+func (t *Trusted) Bill(ctx context.Context, itemID string) error {
+	_, err := t.d.Items.Lookup(ctx, itemID)
+	return err
+}
+-- internal/domain/shop/module/adapters.go --
+package module
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+)
+
+type billAdapter struct {
+	bills *bill.Trusted
+}
+
+func newBillAdapter(bills *bill.Trusted) *billAdapter { return &billAdapter{bills: bills} }
+
+func (a *billAdapter) Bill(ctx context.Context, itemID string) error { return a.bills.Bill(ctx, itemID) }

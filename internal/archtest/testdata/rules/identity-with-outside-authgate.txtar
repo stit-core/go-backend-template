@@ -1,0 +1,16 @@
+# Вход подставляет личность мимо cookie: policy решает за чужого.
+rule: TestIdentityWithOnlyInAuthgate
+base: canon
+want: internal/domain/shop/delivery/http/impersonate.go calls identity.With
+-- internal/domain/shop/delivery/http/impersonate.go --
+package http
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+)
+
+func asAdmin(ctx context.Context) context.Context {
+	return identity.With(ctx, identity.Identity{UserID: "admin", Role: identity.RoleAdmin})
+}

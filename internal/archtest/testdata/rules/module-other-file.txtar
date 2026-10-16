@@ -1,0 +1,8 @@
+# Третий файл module/ — место для логики вне адаптеров.
+rule: TestModulesOnlyWire
+base: canon
+want: internal/domain/bill/module/config.go: module/ is module.go (Module) and adapters.go (adapters)
+-- internal/domain/bill/module/config.go --
+package module
+
+const batch = 100

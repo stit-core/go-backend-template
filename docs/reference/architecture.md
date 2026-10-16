@@ -133,16 +133,28 @@ Generic-примитив, нужный не только этому сервис
 - Named returns не используются (линтер `nonamedreturns`).
 - Метод за операцией под Security (без `httpkit.Public`) спрашивает policy до чтения и записи — сам или своим методом
   (`uc.d.Policy.Can…`); без policy — только чтение самого вызывающего: его `UserID` из `identity.From` — аргумент
-  вызова порта зависимостей (`uc.d.Repo.GetByID`, `Me`); тот же ID в логе, тексте ошибки или функции пакета ключом не
-  считается. Форму держит archtest `TestSecuredOperationsAskPolicy`, решение — тест usecase и ревью: archtest не видит
-  ответа policy, который метод спросил и не проверил, и того, что ещё читает метод без policy помимо вызова с ключом
-  (свою запись по ключу, а затем всех — `uc.d.Repo.List`). Правило читает: операцию — литералом `huma.Operation` в
-  вызове регистрации или переменной пакета, которую не переобъявляет функция (другая форма — отказ: открытость
-  операции была бы не видна); policy — `uc.d.Policy.Can…` или параметром-портом policy функции корня
-  (`authorizeList(ctx, uc.d.Policy)`); ключ — `caller.UserID` или переменной, у которой каждая запись в функции —
-  ключ: параметр, `range`, `&x` и запись не ключа снимают метку
-  (`target := caller.UserID; if id != "" { target = id }` — не ключ); ключ отдаёт и свой метод
-  (`id, err := uc.callerID(ctx)`), если каждый его `return` — ключ или `""` с ошибкой.
+  вызова порта зависимостей (`Me`, `auth.ChangePassword`). Форму и порядок держит archtest
+  `TestSecuredOperationsAskPolicy` (как он узнаёт операцию, policy и ключ вызывающего — комментарий теста), решение —
+  тест usecase и ревью: archtest не видит ответа policy, который метод спросил и не проверил, и того, что ещё читает
+  метод без policy помимо вызова с ключом.
+- Ресурс с владельцем («автор или админ»: заметка, заказ): policy решает видимость до чтения — `CanSeeAll(ctx,
+  caller)`, без id; запрос берёт владельца параметром: свои — `caller.UserID`, право видеть все — без фильтра. Чужое
+  запрос не находит — `ErrNotFound` (404), как несуществующее; прочитать и сверить `OwnerID` (403) — выдать, что
+  ресурс есть.
+
+  ```go
+  func (uc *Usecase) Get(ctx context.Context, id string) (*Note, error) {
+      caller, ok := identity.From(ctx)
+      if !ok {
+          return nil, &policy.ForbiddenError{Reason: "no identity"}
+      }
+      owner := caller.UserID
+      if uc.d.Policy.CanSeeAll(ctx, caller).IsAllowed {
+          owner = "" // любой владелец
+      }
+      return uc.d.Repo.GetByID(ctx, id, owner) // чужое — ErrNotFound
+  }
+  ```
 - Метод с метрикой пишет исход ровно раз на любом пути: исход возвращает внутренняя функция
   (`Login` → `login`), запись — одна, в публичном методе.
 - Security-значимые операции (вход, выход, повтор refresh, смена и сброс пароля, verification, admin от seed-admin)
@@ -192,10 +204,13 @@ DTO в порте — локальные (не re-export из B).
 - **Identity-closure** (`func(u *user.Usecase) userhttp.Usecase { return u }`) — только внутри
   домена: delivery-порт своего usecase. Порт между доменами closure не реализует — чужие
   sentinel'ы уйдут потребителю без маппинга (archtest `TestLayout`).
-- **Типовой адаптер** — тип **и его конструктор** в `adapters.go` (не расщеплять между
-  module.go/adapters.go); один тип на домен-поставщика реализует все порты потребителя к нему и объявляет
-  каждый метод сам: структура со встроенным типом чужого домена отдала бы порту его методы и ошибки как есть
-  (archtest `TestModulesEmbedNoForeignTypes`).
+- **Типовой адаптер** — тип **и его конструктор** в `adapters.go`, поверх `Trusted` поставщика, не его `Usecase`
+  (`module.go` — только `Module`; archtest `TestModulesOnlyWire`); один тип на домен-поставщика реализует все порты
+  потребителя к нему и объявляет каждый метод сам: структура со встроенным типом чужого домена отдала бы порту его
+  методы и ошибки как есть (archtest `TestModulesEmbedNoForeignTypes`).
+- **Порт домена привязывает сам домен** (его `module/`, конструктор `infra/`): привязка в `cmd/` или чужом
+  `module/` отдала бы порту чужой тип мимо адаптера. Домены знают друг друга адаптерами `module/`, и этот граф
+  ацикличен: двустороннюю нужду закрывает событие (archtest `TestDomainDependencies`).
 - **Sentinel-маппинг исчерпывающий:** каждая ошибка методов `Trusted`, которые зовёт адаптер
   (`TrustedErrors[метод]`), → sentinel потребителя (`user.ErrConcurrentUpdate` → `auth.ErrConcurrentUpdate`),
   usecase-потребитель не может `errors.Is` по чужим sentinel'ам (archtest); тест адаптера идёт по строке

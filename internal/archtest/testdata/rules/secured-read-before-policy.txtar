@@ -1,0 +1,74 @@
+# Метод читает ресурс до вопроса policy: чужое — 403 после чтения, существование выдано.
+rule: TestSecuredOperationsAskPolicy
+base: canon
+want: operation getItem under Security calls shop.Usecase.Get, which calls uc.d.Repo.Get before it asks policy
+-- internal/domain/shop/usecase.go --
+package shop
+
+import (
+	"context"
+
+	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+)
+
+type Repository interface {
+	Insert(ctx context.Context, it *Item) error
+	Get(ctx context.Context, id, ownerID string) (*Item, error)
+	ListOwn(ctx context.Context, ownerID string) ([]*Item, error)
+}
+
+type Authorizer interface {
+	CanCreate(ctx context.Context, caller identity.Identity) policy.Decision
+	CanSeeAll(ctx context.Context, caller identity.Identity) policy.Decision
+}
+
+type UsecaseDeps struct {
+	fx.In
+
+	Repo   Repository
+	Policy Authorizer
+}
+
+type Usecase struct {
+	d UsecaseDeps
+}
+
+func NewUsecase(d UsecaseDeps) *Usecase { return &Usecase{d: d} }
+
+func (uc *Usecase) Create(ctx context.Context, in CreateInput) (*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	if d := uc.d.Policy.CanCreate(ctx, caller); !d.IsAllowed {
+		return nil, &policy.ForbiddenError{Reason: d.Reason}
+	}
+	it := &Item{OwnerID: caller.UserID, Name: in.Name}
+	return it, uc.d.Repo.Insert(ctx, it)
+}
+
+func (uc *Usecase) Get(ctx context.Context, id string) (*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	it, err := uc.d.Repo.Get(ctx, id, "")
+	if err != nil {
+		return nil, err
+	}
+	if it.OwnerID != caller.UserID && !uc.d.Policy.CanSeeAll(ctx, caller).IsAllowed {
+		return nil, &policy.ForbiddenError{Reason: "not the owner"}
+	}
+	return it, nil
+}
+
+func (uc *Usecase) Mine(ctx context.Context) ([]*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	return uc.d.Repo.ListOwn(ctx, caller.UserID)
+}

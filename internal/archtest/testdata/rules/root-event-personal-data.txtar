@@ -1,0 +1,18 @@
+# Payload события несёт имя: стрим читают многие и хранят долго.
+rule: TestRootTypes
+base: canon
+want: internal/domain/shop/events.go: event ItemCreated carries OwnerName
+want: internal/domain/shop/events.go: event ItemCreated carries OwnerEmail
+-- internal/domain/shop/events.go --
+package shop
+
+import "time"
+
+const subjectItemCreated = "shop.events.item_created"
+
+type ItemCreated struct {
+	ID         string
+	OwnerName  string
+	OwnerEmail string
+	At         time.Time
+}

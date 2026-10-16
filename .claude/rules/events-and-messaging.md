@@ -31,7 +31,8 @@ paths:
   `TestSubjectVersions`), breaking-change payload → следующий номер (`….v2`).
 - payload-типы — в `events.go` источника: `<Aggregate><PastEvent>`, поля без json-тегов
   (wire = Go-имена; смена формата = `.v2`), timestamp — `At time.Time`. Поля — ID и факты:
-  токенов, секретов и PII нет (rule `domain-architecture`).
+  токенов, секретов и PII нет (rule `domain-architecture`; имена полей — archtest `TestRootTypes`). Публикация — только
+  outbox: `natskit` в домене — лишь `delivery/nats` (archtest `TestDomainPackages`).
 
 ## Subscribers (in-domain)
 

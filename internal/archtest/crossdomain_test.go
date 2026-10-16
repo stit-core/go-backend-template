@@ -2,6 +2,9 @@ package archtest
 
 import (
 	"go/ast"
+	"go/token"
+	"maps"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -225,4 +228,162 @@ func noFxAs(c *check) {
 func isIdent(expr ast.Expr, name string) bool {
 	id, ok := expr.(*ast.Ident)
 	return ok && id.Name == name
+}
+
+// fxHooks — хуки жизненного цикла fx: логика старта в module/ ушла бы из-под тестов usecase.
+var fxHooks = []string{"Lifecycle", "Hook", "StartHook", "StopHook", "StartStopHook"}
+
+// TestModulesOnlyWire: module/ домена связывает граф и переводит типы, а не решает. module.go объявляет только
+// Module, тип и конструктор адаптера — в adapters.go; хуков fx (Lifecycle, Hook) нет — подписку ставит
+// natskit.SubscribeOnStart во входе, job — timerkit; литерал функции — один return (привязка порта, сборка значения).
+// Другой домен адаптер зовёт через его Trusted: методы Usecase спрашивают policy вызывающего.
+func TestModulesOnlyWire(t *testing.T) {
+	t.Parallel()
+	runRule(t)
+}
+
+func modulesOnlyWire(c *check) {
+	for _, f := range c.files {
+		domain, sub, ok := splitDomain(f.pkg)
+		if !ok || sub != "module" || f.test {
+			continue
+		}
+		file := c.parse(f.path)
+		byName := importsByName(file)
+		switch path.Base(f.path) {
+		case "module.go":
+			for _, decl := range file.Decls {
+				if gd, ok := decl.(*ast.GenDecl); ok && (gd.Tok == token.IMPORT || gd.Tok == token.VAR && declaresOnly(gd, "Module")) {
+					continue
+				}
+				c.Errorf("%s declares more than Module: an adapter's type and constructor live in adapters.go", f.path)
+			}
+		case "adapters.go":
+		default:
+			c.Errorf("%s: module/ is module.go (Module) and adapters.go (adapters)", f.path)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.SelectorExpr:
+				id, ok := x.X.(*ast.Ident)
+				if !ok {
+					return true
+				}
+				if byName[id.Name] == "go.uber.org/fx" && slices.Contains(fxHooks, x.Sel.Name) {
+					c.Errorf("%s uses fx.%s: module/ wires, it does not act on start or stop — logic lives in a tested usecase", f.path, x.Sel.Name)
+				}
+				if provider, provSub, ok := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/")); ok && provSub == "" && provider != domain && x.Sel.Name == "Usecase" {
+					c.Errorf("%s uses %s.Usecase: an adapter calls another domain through its Trusted — Usecase methods ask the caller's policy", f.path, id.Name)
+				}
+			case *ast.FuncLit:
+				if len(x.Body.List) != 1 || !isReturn(x.Body.List[0]) {
+					c.Errorf("%s: a function literal of module/ is one return (a port binding or a value): logic lives in a tested usecase or adapter", f.path)
+				}
+			}
+			return true
+		})
+	}
+}
+
+func isReturn(stmt ast.Stmt) bool {
+	_, ok := stmt.(*ast.ReturnStmt)
+	return ok
+}
+
+// declaresOnly — блок var объявляет одно имя name.
+func declaresOnly(gd *ast.GenDecl, name string) bool {
+	return len(gd.Specs) == 1 && len(gd.Specs[0].(*ast.ValueSpec).Names) == 1 && gd.Specs[0].(*ast.ValueSpec).Names[0].Name == name
+}
+
+// TestDomainDependencies: порт домена (интерфейс его корня) — результат функции только в самом домене: в cmd/,
+// platform или чужом module/ привязка отдала бы порту чужой тип мимо адаптера, который переводит ошибки. Домены
+// зависят друг от друга адаптерами module/, и этот граф ацикличен: цикл склеивает два домена в один.
+func TestDomainDependencies(t *testing.T) {
+	t.Parallel()
+	runRule(t)
+}
+
+func domainDependencies(c *check) {
+	ports := map[string]map[string]bool{} // корень домена (путь импорта) → его интерфейсы
+	for _, d := range c.domains() {
+		ports[module+"/internal/domain/"+d] = map[string]bool{}
+		for _, file := range rootFiles(c, d) {
+			ast.Inspect(file, func(n ast.Node) bool {
+				if ts, ok := n.(*ast.TypeSpec); ok {
+					if _, ok := ts.Type.(*ast.InterfaceType); ok {
+						ports[module+"/internal/domain/"+d][ts.Name.Name] = true
+					}
+				}
+				return true
+			})
+		}
+	}
+	edges := map[string][]string{} // домен → домены, которые знает его module/
+	for _, f := range c.files {
+		if f.test {
+			continue
+		}
+		domain, sub, inDomain := splitDomain(f.pkg)
+		if inDomain && sub == "module" {
+			for _, imp := range f.imports {
+				if other, otherSub, ok := splitDomain(strings.TrimPrefix(imp, module+"/")); ok && otherSub == "" && other != domain {
+					edges[domain] = append(edges[domain], other)
+				}
+			}
+		}
+		if !slices.ContainsFunc(f.imports, func(imp string) bool { return ports[imp] != nil }) {
+			continue
+		}
+		file := c.parse(f.path)
+		byName := importsByName(file)
+		ast.Inspect(file, func(n ast.Node) bool {
+			fn, _ := funcParts(n)
+			if fn == nil || fn.Results == nil {
+				return true
+			}
+			for _, res := range fn.Results.List {
+				sel, ok := res.Type.(*ast.SelectorExpr)
+				if !ok {
+					continue
+				}
+				id, ok := sel.X.(*ast.Ident)
+				if !ok || !ports[byName[id.Name]][sel.Sel.Name] {
+					continue
+				}
+				if owner, _, _ := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/")); !inDomain || domain != owner {
+					c.Errorf("%s returns %s.%s, a port of %s: a port is bound inside its domain — another domain's type gets there through an adapter in internal/domain/%s/module", f.path, id.Name, sel.Sel.Name, owner, owner)
+				}
+			}
+			return true
+		})
+	}
+	for _, cycle := range domainCycles(edges) {
+		c.Errorf("domains depend on each other through module/: %s — a consumer port goes one way, the other side subscribes to an event", strings.Join(cycle, " → "))
+	}
+}
+
+// domainCycles — циклы графа доменов: каждый — путь от домена к нему же.
+func domainCycles(edges map[string][]string) [][]string {
+	var cycles [][]string
+	seen := map[string]bool{}
+	for _, start := range slices.Sorted(maps.Keys(edges)) {
+		var walk func(d string, path []string)
+		walk = func(d string, path []string) {
+			for _, next := range edges[d] {
+				switch {
+				case next == start:
+					cycle := append(slices.Clone(path), next)
+					key := strings.Join(slices.Sorted(slices.Values(cycle[:len(cycle)-1])), ",")
+					if !seen[key] {
+						seen[key] = true
+						cycles = append(cycles, cycle)
+					}
+				case !slices.Contains(path, next):
+					walk(next, append(path, next))
+				}
+			}
+		}
+		walk(start, []string{start})
+	}
+	return cycles
 }

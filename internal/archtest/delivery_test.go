@@ -549,10 +549,11 @@ func usecaseClosure(fn *ast.FuncType, body *ast.BlockStmt, byName map[string]str
 }
 
 // TestSecuredOperationsAskPolicy: метод usecase за операцией под Security (не httpkit.Public) спрашивает policy
-// (…Policy.Can…) — сам или своим методом; без policy — только чтение самого вызывающего: его UserID из
-// identity.From — аргумент вызова порта зависимостей (uc.d.Repo.GetByID — Me), а не лога, кита или функции пакета.
-// Иначе операция отдала бы ресурс любому вошедшему. Операцию правило читает литералом в вызове регистрации или
-// переменной пакета (operation); другую форму — отказ: открытость операции была бы не видна.
+// (…Policy.Can…) — сам или своим методом и раньше вызова порта зависимостей: чтение до решения выдаёт, есть ли
+// ресурс. Без policy — только чтение самого вызывающего: его UserID из identity.From — аргумент вызова порта
+// зависимостей (uc.d.Repo.GetByID — Me), а не лога, кита или функции пакета. Иначе операция отдала бы ресурс любому
+// вошедшему. Операцию правило читает литералом в вызове регистрации или переменной пакета (operation); другую форму —
+// отказ: открытость операции была бы не видна.
 func TestSecuredOperationsAskPolicy(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -653,10 +654,14 @@ func securedOperationsAskPolicy(c *check) {
 				}
 				for _, name := range called {
 					m, ok := root.methods[name]
+					walk := policyWalk{root, map[*ast.FuncDecl]bool{}, map[*ast.FuncDecl]bool{}}
+					if read := walk.readBeforePolicy(m); ok && read != "" {
+						c.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which calls %s before it asks policy: a read before the decision gives away whether the resource exists — policy first, visibility is a parameter of the read (rule domain-architecture)", files[i].path, id, domain, name, read)
+					}
 					switch {
 					case !ok:
 						c.Errorf("%s: operation %s under Security calls %s, which *%s.Usecase does not declare", files[i].path, id, name, domain)
-					case !(policyWalk{root, map[*ast.FuncDecl]bool{}, map[*ast.FuncDecl]bool{}}).asks(m):
+					case !walk.asks(m):
 						c.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor only reads the caller's own record, as Me does (uc.d.Repo.GetByID(ctx, caller.UserID)): any signed-in caller would get it (rule domain-architecture)", files[i].path, id, domain, name)
 					}
 				}
@@ -875,6 +880,51 @@ func (w policyWalk) asks(fn *ast.FuncDecl) bool {
 	return asked
 }
 
+// asksCan — функция спрашивает порт policy (Can…) сама или своим методом, функцией корня.
+func (w policyWalk) asksCan(fn *ast.FuncDecl, seen map[*ast.FuncDecl]bool) bool {
+	if fn == nil || fn.Body == nil || seen[fn] {
+		return false
+	}
+	seen[fn] = true
+	params, sc := w.params(fn), w.scope(fn)
+	found := false
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			sel, isSel := call.Fun.(*ast.SelectorExpr)
+			found = isSel && strings.HasPrefix(sel.Sel.Name, "Can") && w.port(sel.X, params, true) || w.asksCan(sc.callee(call), seen)
+		}
+		return !found
+	})
+	return found
+}
+
+// readBeforePolicy — вызов порта зависимостей, который метод делает раньше первого вопроса policy (самого или своим
+// методом, функцией корня); "" — такого нет или метод policy не спрашивает (читает своё, как Me).
+func (w policyWalk) readBeforePolicy(fn *ast.FuncDecl) string {
+	if fn == nil || fn.Body == nil {
+		return ""
+	}
+	params, sc := w.params(fn), w.scope(fn)
+	read, asked := "", false
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok && !asked && read == "" {
+			sel, isSel := call.Fun.(*ast.SelectorExpr)
+			switch {
+			case isSel && strings.HasPrefix(sel.Sel.Name, "Can") && w.port(sel.X, params, true),
+				w.asksCan(sc.callee(call), map[*ast.FuncDecl]bool{}):
+				asked = true
+			case isSel && w.port(sel.X, params, false) && !w.port(sel.X, params, true):
+				read = types.ExprString(call.Fun)
+			}
+		}
+		return !asked && read == ""
+	})
+	if read == "" || !w.asksCan(fn, map[*ast.FuncDecl]bool{}) {
+		return ""
+	}
+	return read
+}
+
 // yields — каждый return функции отдаёт первым результатом ключ вызывающего (return caller.UserID, nil) или "" с
 // ошибкой (return "", err): функция, которая на одной из веток отдаёт ID входа, ключ не даёт.
 func (w policyWalk) yields(fn *ast.FuncDecl) bool {
@@ -1055,4 +1105,28 @@ func (w policyWalk) params(fn *ast.FuncDecl) map[string]string {
 		}
 	}
 	return out
+}
+
+// TestIdentityWithOnlyInAuthgate: личность вызывающего кладёт в ctx только authgate после проверки токена; identity.With
+// в коде домена, входа или cmd/ подставил бы чужую личность мимо cookie, и policy решала бы за неё. Тесты и
+// internal/testkit (identitytest) — можно.
+func TestIdentityWithOnlyInAuthgate(t *testing.T) {
+	t.Parallel()
+	runRule(t)
+}
+
+func identityWithOnlyInAuthgate(c *check) {
+	for _, f := range c.files {
+		if f.test || under(f.pkg, "internal/platform/authgate") || under(f.pkg, "internal/testkit") || !slices.Contains(f.imports, identityPath) {
+			continue
+		}
+		file := c.parse(f.path)
+		byName := importsByName(file)
+		ast.Inspect(file, func(n ast.Node) bool {
+			if e, ok := n.(ast.Expr); ok && isSelector(e, byName, identityPath, "With") {
+				c.Errorf("%s calls identity.With: only authgate puts the caller into ctx, after it checks the token", f.path)
+			}
+			return true
+		})
+	}
 }

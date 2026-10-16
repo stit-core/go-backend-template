@@ -1,0 +1,15 @@
+# Порт bill привязан в cmd/ к типу shop: мимо адаптера, который переводит ошибки.
+rule: TestDomainDependencies
+base: canon
+want: cmd/api/wiring.go returns bill.Items, a port of bill: a port is bound inside its domain
+-- cmd/api/wiring.go --
+package main
+
+import (
+	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+)
+
+var wiring = fx.Provide(func(t *shop.Trusted) bill.Items { return t })

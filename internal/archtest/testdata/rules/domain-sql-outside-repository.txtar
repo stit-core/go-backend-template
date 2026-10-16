@@ -1,0 +1,32 @@
+# Адаптер module/ читает чужую таблицу сырым SQL: мимо Trusted, его ошибок и правил таблиц.
+rule: TestDomainPackages
+base: canon
+want: internal/domain/bill/module/adapters.go uses pgkit.DB: outside infra/postgres a domain takes only pgkit.Transactor
+want: internal/domain/bill/module/adapters.go imports github.com/jackc/pgx/v5: SQL lives in infra/postgres
+-- internal/domain/bill/module/adapters.go --
+package module
+
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
+)
+
+type shopAdapter struct {
+	db *pgkit.DB
+}
+
+func newShopAdapter(db *pgkit.DB) *shopAdapter { return &shopAdapter{db: db} }
+
+func (a *shopAdapter) Lookup(ctx context.Context, id string) (*bill.Item, error) {
+	it := &bill.Item{ID: id}
+	err := a.db.QueryRow(ctx, "SELECT name FROM items WHERE id = $1", id).Scan(&it.Name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, bill.ErrItemNotFound
+	}
+	return it, err
+}

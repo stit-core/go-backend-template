@@ -23,7 +23,9 @@ paths:
   `metrics.go` (`biz_<domain>_*` под алерт, nil-safe) · `config.go` (`Config` домена из окружения — его
   собирает `module/` из `*config.App`) · `delivery/{http,nats}/` (вход — один пакет на
   транспорт, подпакет — только `mocks`; archtest) · `infra/postgres/` ·
-  `infra/<kit>/` (адаптер порта к киту, внешнему каналу или клиенту из `pkg/`) · `module/`. Файл существует
+  `infra/<kit>/` (адаптер порта к киту, внешнему каналу или клиенту из `pkg/`) · `module/` · `mocks/`. Других
+  подпакетов нет, `infra` не знает входа, SQL — только `infra/postgres` (вне его из pgkit — лишь `Transactor`),
+  `natskit` — только `delivery/nats` (archtest `TestDomainPackages`). Файл существует
   только вместе со своим содержимым (таблица обязательности — architecture.md); мёртвые
   типы/файлы удаляются.
 - **Логика — в usecase и policy, края тонкие.** Хендлер: разбор входа → вызов usecase →
@@ -38,11 +40,12 @@ paths:
   `used_at IS NULL`): кому что видно, решает usecase и передаёт параметром, `CASE` по ролям в SQL
   нет. Адаптер `module/` — только перевод типов и ошибок.
 - **Право — policy в usecase.** Метод usecase за операцией под `Security` спрашивает policy
-  (`Can<Verb>(ctx, caller, …)`) до чтения и записи — и по id, и для списка; исключение — чтение самого
+  (`Can<Verb>(ctx, caller, …)`) до чтения и записи — и по id, и для списка; ресурс с владельцем — видимость
+  параметром запроса (образец — architecture.md § Usecase-канон); исключение — чтение самого
   вызывающего (`Me`, `auth.ChangePassword`: `UserID` из `identity.From` — аргумент порта зависимостей `uc.d.…`, а
-  не лога, кита или функции пакета). Вызов `uc.d.Policy.Can…` (сам или своим методом) или такой ключ держит archtest
-  `TestSecuredOperationsAskPolicy`; верность решения и то, что метод без policy читает только своё, — тест usecase и
-  ревью. Без policy — публичные операции (решает секрет запроса: пароль,
+  не лога, кита или функции пакета). Вызов `uc.d.Policy.Can…` (сам или своим методом) раньше вызова порта или такой
+  ключ держит archtest `TestSecuredOperationsAskPolicy`; верность решения и то, что метод без policy читает только
+  своё, — тест usecase и ревью. Без policy — публичные операции (решает секрет запроса: пароль,
   токен), входы событий, вход оператора из `cmd/` (`user.EnsureAdmin`: решает доступ к БД) и `Trusted`.
   Ресурс вне видимости вызывающего — `ErrNotFound` (404), как
   несуществующий (видимость — параметр запроса репозитория); 403 — отказ, который не зависит от
@@ -68,17 +71,21 @@ paths:
   (`trusted.go`: без policy; ошибки метода — только его строка `TrustedErrors` (метод → ошибки), в каком бы файле
   корня метод ни лежал; берут только адаптеры `module/` — archtest). DTO в порте — локальные; порт возвращает
   sentinel'ы потребителя (адаптер мапит ошибки методов `Trusted`, которые зовёт, — тест по их строкам на каждом
-  методе, перечень методов теста сверен с типом через `reflect`) и вычисленные свойства — методы сущности поставщика (`CanLogin()`): в адаптере
-  нет условий по полям поставщика. Identity-closure (`return uc`) — только внутри домена (delivery-порты
-  своего usecase); порт между доменами — типовой адаптер (тип и конструктор — в `adapters.go`), а не
-  closure и не структура со встроенным типом чужого домена (archtest `TestLayout`,
-  `TestModulesEmbedNoForeignTypes`). Время во всём домене — инжектированный `clockkit.Clock`, настенных
-  часов нет (archtest `TestLayout`).
+  методе, перечень методов теста сверен с типом через `reflect`) и вычисленные свойства — методы сущности
+  поставщика (`CanLogin()`): в адаптере нет условий по полям поставщика. Identity-closure (`return uc`) — только
+  внутри домена (delivery-порты своего usecase); порт между доменами — типовой адаптер поверх `Trusted`, не
+  `Usecase` (тип и конструктор — в `adapters.go`), а не closure и не структура со встроенным типом чужого домена
+  (archtest `TestLayout`, `TestModulesEmbedNoForeignTypes`, `TestModulesOnlyWire`). Порт домена привязывает только сам
+  домен, граф доменов по адаптерам `module/` ацикличен (archtest `TestDomainDependencies`). Время во всём домене —
+  инжектированный `clockkit.Clock`, ID и случайность — киты (`idkit`, `authnkit`); настенных часов, `crypto/rand` и
+  uuid мимо них нет (archtest `TestLayout`, `TestDomainDeterminism`).
 - **DI — fx** (канон — `architecture.md` § fx). Модуль домена — `fx.Module` с именем-путём пакета
   в `module/module.go`, подключён в `cmd/api` (`TestDomainsAreWired`). Порт в графе — тип
   результата провайдера, тип с несколькими портами — identity-closure над своим типом; `fx.As`
   нет (archtest `TestNoFxAs`), `fx.Annotate` — только теги `name:`/`group:`. Outbox `Providers` —
-  внутри модуля домена (`fx.Private`). `context.Context` из графа не берут.
+  внутри модуля домена (`fx.Private`). `context.Context` из графа не берут. `module/` только связывает:
+  `module.go` — одна переменная `Module`, адаптеры — `adapters.go`, хуков fx (`Lifecycle`, `Hook`) нет, литерал
+  функции — один `return` (archtest `TestModulesOnlyWire`).
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
   Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)` и
@@ -101,19 +108,23 @@ paths:
   `ForbiddenError`) — `pkg/policy`; не inline в usecase. Исход метрики — `outcome.Result`, ID,
   которые создаёт код, — `idkit.NewV7()`, страница списка — `paging.Page`.
 - **Usecase не знает транспорта.** `httpkit`/`natskit`/huma в usecase запрещены; IP клиента —
-  `identity.IPFrom` (ctx-геттер — только `internal/platform/identity`), IP и ID запроса в аудит
+  `identity.IPFrom` (ctx-геттер — только `internal/platform/identity`), личность в ctx кладёт только `authgate`
+  (`identity.With` — archtest `TestIdentityWithOnlyInAuthgate`), IP и ID запроса в аудит
   auditkit берёт из ctx сам. Named returns не используем (линтер `nonamedreturns`).
   Метрика — только под алерт; у метода с метрикой исход пишется ровно раз на любом пути, запись
   проверяет тест. Security-операции пишут audit из usecase (`uc.audit`, в записи — ID, не адрес).
   Блокировка, удаление, смена роли или пароля пишут строку `users` и той же транзакцией закрывают все
   сессии пользователя (`RevokeAll` хранилища authnkit/session; тест — `mock.MatchedBy(pgkit.InTx)`):
   вход открывает сессию под `FOR SHARE` этой строки и сверяет пароль, роль и статус с проверенными.
-  Состояния между запросами в `*Usecase` и переменных пакета нет — оно в БД или ките.
+  Состояния между запросами в `*Usecase` и переменных пакета нет — оно в БД или ките: переменная корня — только
+  sentinel `Err…`, `TrustedErrors`, исход `outcome.New`, шаблон `regexp.MustCompile` (archtest
+  `TestDomainDeterminism`).
 - **Логи — `logkit.Logger`.** Не `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` и не запись в
   `os.Stdout`/`os.Stderr` напрямую (forbidigo). Ключ ошибки в записи — `error`, как у китов: один
   запрос находит отказы сервиса и китов. В лог и payload события — ID и факты: токенов,
   паролей, секретов и PII (email, телефон, имя) там нет — лог и стрим читают многие и хранят
-  долго; данные потребитель берёт по ID портом или API поставщика.
+  долго; данные потребитель берёт по ID портом или API поставщика. Имена полей payload и теги транспорта в типах
+  корня держит archtest `TestRootTypes`.
 - Файл кода (не `*_test.go`) > ~400 строк → разбей по потокам (`usecase_<flow>.go`, `handler_<op>.go`), порты и
   конструкторы остаются в `usecase.go`.
 - Pure-методы агрегата покрыты `*_test.go`; интерфейсы из `usecase.go` и `delivery/*` →

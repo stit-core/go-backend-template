@@ -1,0 +1,17 @@
+# Законно: payload — ID и факты; TokenID — ID записи, а не токен.
+rule: TestRootTypes
+base: canon
+-- internal/domain/shop/events.go --
+package shop
+
+import "time"
+
+const subjectItemCreated = "shop.events.item_created"
+
+type ItemCreated struct {
+	ID      string
+	OwnerID string
+	TokenID string
+	Price   int
+	At      time.Time
+}

@@ -9,20 +9,23 @@
 //   - archtest_test.go — TestHTTPTypes (префикс, уникальность и envelope HTTP-типов), TestDomainErrorTables
 //     (таблица ошибок домена и ответ хендлера — nil или она), TestDomainErrorsInErrorsGo (ошибки корня — только
 //     в errors.go), TestSubjectLiteralOwnership и TestNoExportedSubjectInDomainRoot (владение subject'ами),
-//     TestSubjectVersions (первая версия subject — без суффикса), TestTestsAssert (тесты и fuzz-цели без утверждений,
-//     мягкие ожидания моков), TestRuleExamples (примеры правил кода: нарушение — отказ с текстом, законная форма —
-//     тишина);
+//     TestSubjectVersions (первая версия subject — без суффикса), TestDomainPackages (подпакеты домена, SQL — только
+//     infra/postgres, natskit — только delivery/nats), TestDomainDeterminism (время, ID и случайность — киты, состояния
+//     в переменных корня нет), TestRootTypes (типы корня без тегов транспорта, payload событий без PII),
+//     TestTestsAssert (тесты и fuzz-цели без утверждений, мягкие ожидания моков), TestRuleExamples (примеры правил
+//     кода: нарушение — отказ с текстом, законная форма — тишина);
 //   - crossdomain_test.go — TestTrustedOnlyInModules и TestTrustedErrors (Trusted между доменами), TestNoFxAs
-//     (привязка портов без fx.As), TestModulesEmbedNoForeignTypes (порт между доменами — типовой адаптер);
+//     (привязка портов без fx.As), TestModulesEmbedNoForeignTypes (порт между доменами — типовой адаптер),
+//     TestModulesOnlyWire (module/ только связывает: Module, адаптеры поверх Trusted, без хуков fx),
+//     TestDomainDependencies (порт привязывает свой домен, граф доменов ацикличен);
 //   - delivery_test.go — вход домена: TestDeliveryPackages (пакет delivery/<транспорт>),
 //     TestInputsRegisterInDelivery (операции и подписки — только в нём), TestSubscriptionsHaveContractTest
 //     (контракт-тест подписки), TestDeliveryReachesUsecaseOnly (из корня — данные, киты — deliveryKits),
 //     TestDeliveryPortsBoundToUsecase (порт входа — над *Usecase), TestSecuredOperationsAskPolicy (операция под
-//     Security — с policy);
-//   - generated_test.go — TestMain (тест archtest не пропускается), TestGeneratedHeaderOnlyInGeneratorOutput
-//     (заголовок сгенерированного — только у вывода генераторов), TestMainOnlyEnters (main бинаря — только вход),
-//     TestBuildConstraints (ограничение сборки — только integration у тестов), TestLinterDirectives (директив
-//     линтеров мимо //nolint нет);
+//     Security — с policy до чтения), TestIdentityWithOnlyInAuthgate (личность в ctx кладёт только authgate);
+//   - generated_test.go — TestGeneratedHeaderOnlyInGeneratorOutput (заголовок сгенерированного — только у вывода
+//     генераторов), TestBuildConstraints (ограничение сборки — только integration у тестов),
+//     TestLinterDirectives (директив линтеров мимо //nolint нет);
 //   - harness_test.go — TestDomainsAreWired (домены подключены в cmd/api), TestProseReferencesExist (ссылки прозы
 //     на make-цели, пути, тесты, разделы и ссылки, факты гейта) и TestSectionAnchors (якоря разделов и ссылок по
 //     правилу Gitea), TestRulesAndSkillsLoad (доставка правил и скиллов: шапка, paths:, name:, шаг 0),
@@ -229,6 +232,12 @@ var rules = map[string]func(*check){
 	"TestDeliveryReachesUsecaseOnly":    deliveryReachesUsecaseOnly,
 	"TestDeliveryPortsBoundToUsecase":   deliveryPortsBoundToUsecase,
 	"TestSecuredOperationsAskPolicy":    securedOperationsAskPolicy,
+	"TestModulesOnlyWire":               modulesOnlyWire,
+	"TestDomainDependencies":            domainDependencies,
+	"TestDomainPackages":                domainPackages,
+	"TestDomainDeterminism":             domainDeterminism,
+	"TestRootTypes":                     rootTypes,
+	"TestIdentityWithOnlyInAuthgate":    identityWithOnlyInAuthgate,
 }
 
 // check — прогон правила по дереву: репо или пример testdata/rules. Нарушение правило отдаёт c.Errorf — в репо это
@@ -877,6 +886,168 @@ func subjectVersions(c *check) {
 			val, ok := stringLit(n)
 			if m := firstVersion.FindStringSubmatch(val); ok && m != nil && slices.Contains(names, m[1]) {
 				c.Errorf("%s names subject %q: the first version of an event has no suffix, a new one is the next .vN", f.path, val)
+			}
+			return true
+		})
+	}
+}
+
+// TestDomainPackages: домен — корень, delivery/<транспорт>, infra/<адаптер> (sqlc — infra/postgres/db), module и
+// mocks: правила слоёв читают эти пакеты, подпакет с другим именем (store, usertest) ушёл бы из-под них. infra не
+// знает входа; SQL — только infra/postgres: вне его из pgkit — лишь Transactor, без database/sql и pgx; natskit — только
+// delivery/nats: публикация идёт через outbox.
+func TestDomainPackages(t *testing.T) {
+	t.Parallel()
+	runRule(t)
+}
+
+func domainPackages(c *check) {
+	for _, f := range c.files {
+		_, sub, ok := splitDomain(f.pkg)
+		if !ok || f.test {
+			continue
+		}
+		parts := strings.Split(sub, "/")
+		switch {
+		case sub == "", sub == "module", sub == "mocks", parts[0] == "delivery", sub == "infra/postgres/db":
+		case parts[0] == "infra" && len(parts) == 2:
+		default:
+			c.Errorf("%s: a domain is its root, delivery/<transport>, infra/<adapter>, module and mocks — rules of layers read only these packages", f.pkg)
+		}
+		repository := under(sub, "infra/postgres")
+		for _, imp := range f.imports {
+			impDomain, impSub, inDomain := splitDomain(strings.TrimPrefix(imp, module+"/"))
+			switch {
+			case parts[0] == "infra" && inDomain && under(impSub, "delivery"):
+				c.Errorf("%s imports %s: infra serves the usecase's ports and knows no input of %s", f.path, imp, impDomain)
+			case !repository && (under(imp, "database/sql") || under(imp, "github.com/jackc/pgx")):
+				c.Errorf("%s imports %s: SQL lives in infra/postgres, the repository behind the usecase's port", f.path, imp)
+			case parts[0] != "delivery" && imp == natskitPath:
+				c.Errorf("%s imports natskit: a domain publishes through its outbox and subscribes in delivery/nats", f.path)
+			}
+		}
+		if repository || !slices.Contains(f.imports, pgkitPath) {
+			continue
+		}
+		file := c.parse(f.path)
+		byName := importsByName(file)
+		ast.Inspect(file, func(n ast.Node) bool {
+			if sel, ok := n.(*ast.SelectorExpr); ok && !isSelector(sel, byName, pgkitPath, "Transactor") && isSelector(sel, byName, pgkitPath, sel.Sel.Name) {
+				c.Errorf("%s uses pgkit.%s: outside infra/postgres a domain takes only pgkit.Transactor — SQL lives in the repository", f.path, sel.Sel.Name)
+			}
+			return true
+		})
+	}
+}
+
+const pgkitPath = golibinfra + "/pgkit"
+
+// determinismKits — пакеты, вместо которых домен берёт кит: ID — idkit, токены — authnkit, время — clockkit.Clock
+// из зависимостей.
+var determinismKits = map[string]string{
+	"crypto/rand":              "authnkit or idkit",
+	"math/rand":                "a kit",
+	"math/rand/v2":             "a kit",
+	"github.com/google/uuid":   "idkit",
+	"github.com/gofrs/uuid":    "idkit",
+	"github.com/oklog/ulid/v2": "idkit",
+}
+
+// TestDomainDeterminism: ID, случайность и время домен берёт у китов и из зависимостей — тест подменяет их, а
+// clockkit.Real{} и crypto/rand мимо инжекции — нет. Состояния между запросами в переменных корня нет: переменная
+// корня — sentinel Err… (errors.go), TrustedErrors, исход outcome.New, шаблон regexp.MustCompile или проверка var _.
+func TestDomainDeterminism(t *testing.T) {
+	t.Parallel()
+	runRule(t)
+}
+
+func domainDeterminism(c *check) {
+	for _, f := range c.files {
+		_, sub, ok := splitDomain(f.pkg)
+		if !ok || f.test {
+			continue
+		}
+		for _, imp := range f.imports {
+			if kit, ok := determinismKits[imp]; ok {
+				c.Errorf("%s imports %s: a domain takes IDs, tokens and randomness from %s, so tests can pin them", f.path, imp, kit)
+			}
+		}
+		file := c.parse(f.path)
+		byName := importsByName(file)
+		ast.Inspect(file, func(n ast.Node) bool {
+			if e, ok := n.(ast.Expr); ok && isSelector(e, byName, golibinfra+"/clockkit", "Real") {
+				c.Errorf("%s uses clockkit.Real: a domain reads time from the injected clockkit.Clock (Clock in its dependencies)", f.path)
+			}
+			return true
+		})
+		if sub != "" || path.Base(f.path) == "errors.go" {
+			continue
+		}
+		for _, decl := range file.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.VAR {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				vs := spec.(*ast.ValueSpec)
+				for i, name := range vs.Names {
+					if name.Name == "_" || name.Name == "TrustedErrors" || i < len(vs.Values) && immutableValue(vs.Values[i], byName) {
+						continue
+					}
+					c.Errorf("%s declares package var %s: state between requests lives in the database or a kit; a fixed value is a const or a function", f.path, name.Name)
+				}
+			}
+		}
+	}
+}
+
+// immutableValue — значение переменной корня, которое не состояние: исход outcome.New("…") или шаблон
+// regexp.MustCompile("…").
+func immutableValue(expr ast.Expr, byName map[string]string) bool {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	pkg, name := kitCall(call, byName)
+	return pkg == module+"/pkg/outcome" && name == "New" || pkg == "regexp" && name == "MustCompile"
+}
+
+// piiField — имя поля payload, которому место в данных поставщика, а не в событии: адрес, телефон, имя, IP, пароль,
+// токен, секрет; …ID — идентификатор (TokenID — ID записи токена).
+var piiField = regexp.MustCompile(`(?i)(email|phone|password|token|secret)|(name|address)$|IP$`)
+
+// TestRootTypes: типы корня — без тегов транспорта: форму провода задают DTO delivery, у payload событий тегов нет
+// (провод — Go-имена). Payload события — ID и факты: адрес, имя, телефон, IP и секреты потребитель берёт по ID
+// портом, а стрим читают многие и хранят долго.
+func TestRootTypes(t *testing.T) {
+	t.Parallel()
+	runRule(t)
+}
+
+func rootTypes(c *check) {
+	for _, f := range c.files {
+		if _, sub, ok := splitDomain(f.pkg); !ok || sub != "" || f.test {
+			continue
+		}
+		events := path.Base(f.path) == "events.go"
+		ast.Inspect(c.parse(f.path), func(n ast.Node) bool {
+			ts, ok := n.(*ast.TypeSpec)
+			if !ok {
+				return true
+			}
+			st, ok := ts.Type.(*ast.StructType)
+			if !ok {
+				return true
+			}
+			for _, field := range st.Fields.List {
+				if field.Tag != nil {
+					c.Errorf("%s: %s has a field tag %s: the wire form lives in DTOs of delivery, an event payload has none", f.path, ts.Name.Name, field.Tag.Value)
+				}
+				for _, name := range field.Names {
+					if events && piiField.MatchString(name.Name) && !strings.HasSuffix(name.Name, "ID") {
+						c.Errorf("%s: event %s carries %s: a payload holds IDs and facts — the consumer reads personal data and secrets by ID through a port", f.path, ts.Name.Name, name.Name)
+					}
+				}
 			}
 			return true
 		})

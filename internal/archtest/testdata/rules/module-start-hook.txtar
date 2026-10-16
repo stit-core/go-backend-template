@@ -1,0 +1,36 @@
+# Хук OnStart в module/: логика старта без своих тестов (их покрытие даёт boot-тест).
+rule: TestModulesOnlyWire
+base: canon
+want: internal/domain/shop/module/module.go uses fx.Lifecycle
+want: internal/domain/shop/module/module.go uses fx.Hook
+want: internal/domain/shop/module/module.go: a function literal of module/ is one return
+-- internal/domain/shop/module/module.go --
+package module
+
+import (
+	"context"
+
+	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	shophttp "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/delivery/http"
+	shoppg "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/infra/postgres"
+)
+
+var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/shop/module",
+	fx.Provide(
+		shoppg.NewRepository,
+		func(r *shoppg.Repository) shop.Repository { return r },
+		shop.NewPolicy,
+		shop.NewUsecase,
+		shop.NewTrusted,
+		func(uc *shop.Usecase) shophttp.Usecase { return uc },
+		shophttp.NewHandler,
+	),
+	fx.Invoke(func(lc fx.Lifecycle, uc *shop.Usecase) {
+		lc.Append(fx.Hook{OnStart: func(ctx context.Context) error {
+			_, err := uc.Create(ctx, shop.CreateInput{Name: "default"})
+			return err
+		}})
+	}),
+)
