@@ -8,8 +8,8 @@
 # Создаёт рабочий срез — миграцию таблицы, sqlc-запросы, репозиторий с integration-тестом,
 # сущность, policy и usecase с тестами, HTTP-операции под cookie-сессией с тестами, fx-модуль —
 # подключает домен в cmd/api, вписывает sqlc.yaml, .mockery.yml и блоки мутаций среза в
-# scripts/tools/mutants.txt, гонит make gen, проверяет, что срез собирается (go vet с тегом integration) и
-# якоря его мутаций на месте (make mutate A=--check, нужен python3), и ставит созданное в индекс: следующий
+# scripts/tools/mutants.txt, сверяет якоря его мутаций (make mutate A=--check, нужен python3), гонит make gen,
+# проверяет, что срез собирается (go vet с тегом integration), и ставит созданное в индекс: следующий
 # шаг — make check.
 # Негодное имя и занятая таблица — отказ до первой правки; сбой после неё — откат всех правок скрипта.
 # Дальше домен растёт по skill `scaffold`.
@@ -120,8 +120,7 @@ rollback() {
     if [ -z "$completed" ]; then
         for f in "${shared[@]}"; do cp "$backup/${f//\//_}" "$f"; done
         rm -rf "$DOMAIN_DIR" "${MIGRATION}.up.sql" "${MIGRATION}.down.sql"
-        echo "ERROR: срез $NAME не собрался (вывод выше; ошибка об имени $NAME — оно занято кодом среза, возьми другое) —" >&2
-        echo "       правки откатаны, дерево — как до запуска" >&2
+        echo "ERROR: срез $NAME не собран (причина — выше): правки откатаны, дерево — как до запуска" >&2
     fi
     rm -rf "$backup"
 }
@@ -1112,16 +1111,23 @@ insert_before cmd/api/http.go '^func registerHTTP\(' '^\}$' "	${FLAT}http.Regist
 # Импорты среза и cmd/api — по порядку module path форка: он сортируется и после golibinfra.
 gofumpt -w cmd/api/main.go cmd/api/http.go "$DOMAIN_DIR"
 
+# Блоки мутаций среза правят его рукописные файлы: якоря сверяются до make gen — так их видит и тест скрипта.
+echo "→ make mutate A=--check: якоря мутаций среза"
+mutants=$(grep -oE "^## ${NAME}-[0-9]+ " scripts/tools/mutants.txt | awk '{print $2}')
+# shellcheck disable=SC2086 # id мутаций — отдельными словами
+python3 -I scripts/tools/mutate.py --check $mutants || {
+    echo "ERROR: блоки мутаций среза разошлись с его кодом — их пишет scripts/new-domain.sh: правка скрипта, а не имени" >&2
+    exit 1
+}
+
 echo "→ make gen"
 make --no-print-directory gen
 
 echo "→ go vet: срез и cmd/api собираются"
-go vet -tags=integration "./$DOMAIN_DIR/..." ./cmd/api/
-
-echo "→ make mutate A=--check: якоря мутаций среза"
-mutants=$(grep -oE "^## ${NAME}-[0-9]+ " scripts/tools/mutants.txt | awk '{print $2}')
-# shellcheck disable=SC2086 # id мутаций — отдельными словами
-python3 -I scripts/tools/mutate.py --check $mutants
+go vet -tags=integration "./$DOMAIN_DIR/..." ./cmd/api/ || {
+    echo "ERROR: срез не собирается (вывод выше): ошибка об имени $NAME — оно занято кодом среза, возьми другое" >&2
+    exit 1
+}
 
 completed=1
 git add "$DOMAIN_DIR" "${MIGRATION}.up.sql" "${MIGRATION}.down.sql" sqlc.yaml .mockery.yml scripts/tools/mutants.txt \
