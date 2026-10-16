@@ -299,7 +299,7 @@ func TestGetPasswordReset_UnknownTokenHash(t *testing.T) {
 }
 
 // Погашение ссылки гасит все непогашенные ссылки её пользователя одним оператором; ссылки соседа целы. Ссылка,
-// погашенная раньше (своим или соседним погашением), — ErrTokenUsed.
+// погашенная раньше (своим или соседним погашением), — ErrTokenUsed, и когда у пользователя есть свежая.
 func TestRedeemPasswordReset(t *testing.T) {
 	t.Parallel()
 	db := testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations())).DB(t)
@@ -319,6 +319,10 @@ func TestRedeemPasswordReset(t *testing.T) {
 	}
 	require.ErrorIs(t, repo.RedeemPasswordReset(ctx, first, owner.ID), verification.ErrTokenUsed)
 	require.ErrorIs(t, repo.RedeemPasswordReset(ctx, second, owner.ID), verification.ErrTokenUsed, "a link redeemed with its neighbour")
+
+	issueReset(t, repo, owner.ID, "hash:pr-3")
+	require.ErrorIs(t, repo.RedeemPasswordReset(ctx, first, owner.ID), verification.ErrTokenUsed,
+		"a redeemed link stays redeemed while the owner has a fresh one")
 }
 
 // Две ссылки одного пользователя гасят одновременно: блокировки строк — в одном порядке, одно погашение
