@@ -204,8 +204,9 @@ DTO в порте — локальные (не re-export из B).
 - **Identity-closure** (`func(u *user.Usecase) userhttp.Usecase { return u }`) — только внутри
   домена: delivery-порт своего usecase. Порт между доменами closure не реализует — чужие
   sentinel'ы уйдут потребителю без маппинга (archtest `TestLayout`).
-- **Типовой адаптер** — тип **и его конструктор** в `adapters.go`, поверх `Trusted` поставщика, не его `Usecase`
-  (`module.go` — только `Module`; archtest `TestModulesOnlyWire`); один тип на домен-поставщика реализует все порты
+- **Типовой адаптер** — тип **и его конструктор** в `adapters.go`, поверх `Trusted` поставщика, не его `Usecase`;
+  `adapters.go` знает лишь stdlib и корни доменов — кит, драйвер и клиент живут в `infra/<адаптер>` (`module.go` —
+  только `Module`; archtest `TestModulesOnlyWire`); один тип на домен-поставщика реализует все порты
   потребителя к нему и объявляет каждый метод сам: структура со встроенным типом чужого домена отдала бы порту его
   методы и ошибки как есть (archtest `TestModulesEmbedNoForeignTypes`).
 - **Порт домена привязывает сам домен** (его `module/`, конструктор `infra/`): привязка в `cmd/` или чужом

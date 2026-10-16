@@ -1,0 +1,36 @@
+# Обёртка кита в adapters.go: место адаптера к киту — infra/<адаптер> домена, module/ только связывает.
+rule: TestModulesOnlyWire
+base: canon
+want: internal/domain/bill/module/adapters.go imports git.stit.tech/stit-core/golibinfra/bruteforcekit: an adapter translates types and errors between domains
+-- internal/domain/bill/module/adapters.go --
+package module
+
+import (
+	"context"
+	"errors"
+
+	"{module}/internal/domain/bill"
+	"{module}/internal/domain/shop"
+	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
+)
+
+type shopAdapter struct {
+	items *shop.Trusted
+}
+
+func newShopAdapter(items *shop.Trusted) *shopAdapter { return &shopAdapter{items: items} }
+
+func (a *shopAdapter) Lookup(ctx context.Context, id string) (*bill.Item, error) {
+	it, err := a.items.Lookup(ctx, id)
+	if errors.Is(err, shop.ErrNotFound) {
+		return nil, bill.ErrItemNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &bill.Item{ID: it.ID, Name: it.Name}, nil
+}
+
+type limiter struct {
+	guard bruteforcekit.Guard
+}

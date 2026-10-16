@@ -127,7 +127,7 @@ func <provider>To<Consumer>(s *<provider>.<Entity>) *<consumer>.<DTO> {
 }
 ```
 
-`module/adapters.go` имеет право импортить корневой пакет другого домена (не его `infra`/`delivery`). Время в адаптере — только через инжектированный `clockkit.Clock`, не `time.Now()`. Обёртка кита (JWT, brute-force guard) — не здесь: адаптер порта к киту живёт в `<consumer>/infra/<kit>/`.
+`module/adapters.go` имеет право импортить корневой пакет другого домена (не его `infra`/`delivery`). Время в адаптере — только через инжектированный `clockkit.Clock`, не `time.Now()`. Обёртка кита (JWT, brute-force guard) — не здесь: адаптер порта к киту живёт в `<consumer>/infra/<kit>/` (импорт кита в `adapters.go` — отказ archtest `TestModulesOnlyWire`).
 
 ### 6. Зарегистрировать в `module/module.go` потребителя
 

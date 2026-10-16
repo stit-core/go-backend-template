@@ -234,9 +234,10 @@ func isIdent(expr ast.Expr, name string) bool {
 var fxHooks = []string{"Lifecycle", "Hook", "StartHook", "StopHook", "StartStopHook"}
 
 // TestModulesOnlyWire: module/ домена связывает граф и переводит типы, а не решает. module.go объявляет только
-// Module, тип и конструктор адаптера — в adapters.go; хуков fx (Lifecycle, Hook) нет — подписку ставит
-// natskit.SubscribeOnStart во входе, job — timerkit; литерал функции — один return (привязка порта, сборка значения).
-// Другой домен адаптер зовёт через его Trusted: методы Usecase спрашивают policy вызывающего.
+// Module, тип и конструктор адаптера — в adapters.go, и он знает лишь stdlib и корни доменов: кит, драйвер и клиент —
+// в infra/<адаптер>; хуков fx (Lifecycle, Hook) нет — подписку ставит natskit.SubscribeOnStart во входе, job —
+// timerkit; литерал функции — один return. Другой домен адаптер зовёт через его Trusted: методы Usecase спрашивают
+// policy вызывающего.
 func TestModulesOnlyWire(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -259,6 +260,11 @@ func modulesOnlyWire(c *check) {
 				c.Errorf("%s declares more than Module: an adapter's type and constructor live in adapters.go", f.path)
 			}
 		case "adapters.go":
+			for _, imp := range f.imports {
+				if _, sub, ok := splitDomain(strings.TrimPrefix(imp, module+"/")); strings.Contains(strings.Split(imp, "/")[0], ".") && (!ok || sub != "") {
+					c.Errorf("%s imports %s: an adapter translates types and errors between domains — a kit, a driver or a client lives in infra/<adapter> of the domain", f.path, imp)
+				}
+			}
 		default:
 			c.Errorf("%s: module/ is module.go (Module) and adapters.go (adapters)", f.path)
 		}
