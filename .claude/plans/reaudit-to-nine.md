@@ -124,9 +124,16 @@ blocked-by: —
     security 9, обвязка 9, адаптеры 9, принуждение 9, тесты 9 (было 7–8), жизненный цикл 8 (NLIF-01 medium — первый
     перенос обвязки без `PATHS`); новых minor 24; догфудинг домена `note` на ветке `dog/note` — 12 трений (T4
     medium — флак `TestIdentity`). Всё — в S7; аудитор code+security начат от `5d88ad9` (см. «Решения»)
-- [ ] **S7** — Добор: находки переаудита, трения догфудинга и minor бэклога — треками с валидаторами по углам;
+- [x] **S7** — Добор: находки переаудита, трения догфудинга и minor бэклога — треками с валидаторами по углам;
   в бэклоге остаётся только то, что не закрыть в этом репо, с причиной
   - Проверка: повтор экспериментов находок → чисто; `make check` → `✓ check clean` · Закрывает: AC2, AC3 · Зависит от: S6
+  - Сделано: три трека по владению файлами, за каждым — валидатор (`N/validation-s7-{harness,gate,code}.md`), все PASS:
+    harness+lifecycle (`192779f` — NLIF-01 medium закрыт, история пересобрана без коммитов с красным гейтом),
+    gate+tests (`6e46ce3` — с хвостом; B5 guard проверил дирижёр), code+security+adapters (`b8f95a1` — 50 коммитов,
+    пауза писем сброса вместо лимитера адреса, ссылка с версией учётной записи, правила archtest с примерами
+    `testdata/rules`); minor из бэклога, находок переаудита и трений догфудинга закрыты; гейт под каждым коммитом —
+    зелёный; полный `make mutate A=--strict` — в S8; вопросы Q1–Q3 — у владельца
+
 - [ ] **S8** — Закрытие: бэклог прополот, handoff в накопителе, тег `template/v1.2.0` и push — с OK владельца,
   план удалён
   - Проверка: `make status` → нет планов программы; тег на remote · Закрывает: AC4, AC5 · Зависит от: S7
@@ -186,9 +193,13 @@ blocked-by: —
   fuzz-целях, секреты и образы (`TestNoSecretFiles`, `TestImagesPinned`), migrations-check по содержимому, закреплённые
   версии инструментов и python3, `main` бинаря — только вход, allow без пишущих форм и без `ask`; хуки — снимок индекса
   и pre-push по правилу `commit-msg` родителя; `make mutate A=--strict` и блоки среза от `make new-domain`.
+- Из трека S7 code+security+adapters — в аннотацию `template/v1.2.0`, Breaking для форков: раздел «Handoff» плана трека
+  в истории (`git show b8f95a1:.claude/plans/polish-code-security-adapters.md`) — API доменов идентичности
+  (`TrustedErrors` — карта, `HashPassword`, `RegisterInput`, `Session`, `ChangePassword`), тело смены пароля без
+  `user_id`, настройки `rootLibs`, `uncheckedPackages`, `releasedSubjects` в `layout_settings_test.go` форка, `.v1`,
+  required `AUDIT_RETENTION_DAYS`, `PASSWORD_RESET_MAIL_PAUSE`, миграция `0007`.
 
 ## Где мы сейчас
-S1–S6 закрыты. S7: harness+lifecycle (`192779f`) и gate+tests с хвостом (`6e46ce3`) в `main`;
-code+security+adapters (`nine/s7-code`) — круг фиксов валидатора и перенос на `main` (правило `main` бинаря, якоря
-мутаций, скелет). Следующее: его перепроверка и слияние, затем S8 (полный `make mutate A=--strict` на итоговом
-`main`).
+S1–S7 закрыты: все треки в `main` (`b8f95a1`). S8: полный `make mutate A=--strict` и `make e2e` на итоговом `main`,
+аннотация `template/v1.2.0` (черновик — `N/annotation-template-v1.2.0.md`), бэклог, handoff, OK владельца на push и
+тег, ответы на Q1–Q3 (вход с неподтверждённым адресом, экспорт `authgate.SecurityScheme`, пароль из пробелов).

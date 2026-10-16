@@ -81,6 +81,8 @@ https://claude.ai/artifact/L3Y8vWRofsvzf8PGQos4dE). Medium-пункты и minor
   RADP-05), CTE с именем чужой таблицы — ложный отказ (часть RADP-11). Триггер: сшивка экосистемы.
 - **golibinfra-httpkit-429** — 429 общего лимитера кита не описан в контракте операций (`describeErrors`).
   Триггер: сшивка экосистемы.
+- **golibinfra-logkit-env** — `newLog` (логгер из `LOG_*`) продублирован в `cmd/migrate` и `cmd/seed-admin`: помощник
+  — в `logkit`. Триггер: сшивка экосистемы.
 - **strategy-schema** — у артефактов strategy-репо нет версии схемы: `domain-mapping.md` шаблона сверен с ними
   вручную. Триггер: сшивка экосистемы, правка схемы strategy.
 - **hub-upgrade-channel** — RLIF-02: хабу `<org>/infra` — периодический `/upgrade` по сервисам и строка о канале
