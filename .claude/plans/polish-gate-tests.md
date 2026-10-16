@@ -138,7 +138,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   - Проверка: пробы валидатора B1–B3 → верный вердикт; `make check` → `✓ check clean` · Закрывает: AC8 · Зависит от: S9
   - Сделано: B1 — `N/s7g/bin/v-gen-b1.sh` → `N/s7g/v-gen-b1-branch.log`: `user.ListFilter` → `user.ListQuery` мимо
     моков — `make gen` OK, моки переписаны, `go vet` OK; порт `GetByID` сменил сигнатуру (T7) — отказ сборкой;
-    случай «устаревший мок» в `TestGenBuildsFirst`
+    случай «устаревший мок» в `TestGenBuildsFirst`; B2 — копия пилота валидатора с доменом `status`
+    (`N/s7g/b2/pilot-status`): `TestNewDomainRefusesOrRollsBack` — было FAIL «алиас statusmod … занят», стало PASS, и
+    с занятыми `probe_item`, `probe`, `code` (`field`, `probe_item2`, `probe2`)
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -209,6 +211,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - Имена `make new-domain`: список слов Go-шаблонов снят — он отвергал и имена, на которых срез собирается (`status`,
   `body`, `api`…). Имя, занятое кодом среза (`repo`, `id`, `tests`…), ловит сборка среза с откатом правок, ошибка
   называет имя; до первой правки отказывают ключевые слова и встроенные имена Go и объявления пакета домена.
+- Тест `make new-domain` берёт имена, которые форк вправе взять своему домену, свободными у сервиса (`freeDomain`):
+  слово среза — первое свободное из `status`, `code`, `field`, `api`, `caller`, занятая таблица — `probe_item`, сбой
+  после правки — `probe` (занятые — с номером): домен форка не роняет его гейт (B2).
 - RTSTT-10: `ARGON2_MEMORY_KIB=8192` в `serviceEnv` (`cmd/api/boot_test.go`, трек code+security+adapters — одна
   строка): память хэша потоки тестов не меняет, параметры кита по умолчанию проверяет smoke релиза на стеке;
   `-p` у `test-int` не нужен — бинарь `cmd/api` один держал 2,2 ГБ.
@@ -232,4 +237,5 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 —
 
 ## Где мы сейчас
-S10 — круг по валидатору: B1 закрыт (`make gen` собирает код без моков). Дальше — B2, B3, затем неблокирующие.
+S10 — круг по валидатору: B1 (`make gen` без моков) и B2 (тест new-domain не занимает имён форка) закрыты. Дальше —
+B3, затем неблокирующие.

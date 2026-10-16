@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -12,10 +13,11 @@ import (
 
 // TestNewDomainRefusesOrRollsBack: make new-domain с ключевым словом Go, объявлением пакета домена и таблицей,
 // которую уже создаёт миграция, отказывает до первой правки, а слово кода среза, на котором срез собирается
-// (status), — нет; сбой после первой правки (здесь — make gen без Makefile; у имени, которое код среза уже
+// (status, code…), — нет; сбой после первой правки (здесь — make gen без Makefile; у имени, которое код среза уже
 // объявляет, — сборка) откатывает все правки скрипта, и блоки мутаций среза тоже: дерево — как до запуска. Песочница —
 // git-репо со скриптом, go.mod, cmd/api, конфигами генераторов, спецификацией мутаций, миграциями репо и своей
-// миграцией с занятой таблицей (у форка после prune таблиц доменов идентичности нет); инструменты — заглушки.
+// миграцией с занятой таблицей (у форка после prune таблиц доменов идентичности нет); инструменты — заглушки. Имена,
+// которые форк вправе взять своему домену, тест берёт свободными у сервиса (freeDomain).
 func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -28,7 +30,9 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 	for _, m := range migrations {
 		files = union(files, readFiles(t, root, "migrations/"+m.Name()))
 	}
-	files["migrations/9000_occupied.up.sql"] = "CREATE TABLE probe_items (id UUID PRIMARY KEY);\n"
+	// Имена — до своей миграции: её таблица занимает имя occupied.
+	word, occupied, free := freeDomain(files, "status", "code", "field", "api", "caller"), freeDomain(files, "probe_item"), freeDomain(files, "probe")
+	files["migrations/9000_occupied.up.sql"] = "CREATE TABLE " + occupied + "s (id UUID PRIMARY KEY);\n"
 
 	bin := stubTools(t, "sqlc", "mockery")
 	gofumpt, err := exec.LookPath("true")
@@ -41,9 +45,9 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 	}{
 		{name: "a keyword", domain: "func", want: "ключевое слово"},
 		{name: "a declaration of the domain package", domain: "repository", want: "объявление пакета домена"},
-		{name: "a word of the slice that builds", domain: "status", want: "правки откатаны"},
-		{name: "an occupied table", domain: "probe_item", want: "таблицу probe_items уже создаёт миграция"},
-		{name: "a failure after the first edit", domain: freeDomain(files), want: "правки откатаны"},
+		{name: "a word of the slice that builds", domain: word, want: "правки откатаны"},
+		{name: "an occupied table", domain: occupied, want: "таблицу " + occupied + "s уже создаёт миграция"},
+		{name: "a failure after the first edit", domain: free, want: "правки откатаны"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -63,17 +67,31 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 	}
 }
 
-// freeDomain — имя домена, которого у сервиса нет (ни алиаса в cmd/api, ни таблицы в миграциях): срез с ним
-// доходит до первой правки, какие бы домены ни завёл форк.
-func freeDomain(files map[string]string) string {
+// freeDomain — первое из имён, которого у сервиса нет (ни алиаса в cmd/api, ни таблицы в миграциях), а заняты все —
+// первое с номером: срез с ним доходит до таблицы и первой правки, какие бы домены ни завёл форк. Таблица — с
+// любым окончанием (status → statuses), номер окончания не меняет (probe_item2 → probe_item2s).
+func freeDomain(files map[string]string, names ...string) string {
 	var all strings.Builder
 	for _, text := range files {
-		all.WriteString(strings.ToLower(text))
+		all.WriteString(strings.ToLower(text) + "\n")
 	}
-	name := "probe"
-	for strings.Contains(all.String(), name+"mod") || strings.Contains(all.String(), name+"http") ||
-		strings.Contains(all.String(), "table "+name+"s") {
-		name += "x"
+	taken := func(name string) bool {
+		flat := strings.ReplaceAll(name, "_", "")
+		for _, use := range []string{flat + "mod", flat + "http", "table " + name, "exists " + name} {
+			if strings.Contains(all.String(), use) {
+				return true
+			}
+		}
+		return false
 	}
-	return name
+	for _, name := range names {
+		if !taken(name) {
+			return name
+		}
+	}
+	for n := 2; ; n++ {
+		if name := names[0] + strconv.Itoa(n); !taken(name) {
+			return name
+		}
+	}
 }
