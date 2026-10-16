@@ -1,7 +1,7 @@
 # Третий файл module/ — место для логики вне адаптеров.
 rule: TestModulesOnlyWire
 base: canon
-want: internal/domain/bill/module/config.go: module/ is module.go (Module and bindings) and adapters.go (adapters)
+want: internal/domain/bill/module/config.go: module/ is module.go (Module and bindings) and adapters.go or adapters_<supplier>.go (adapters)
 -- internal/domain/bill/module/config.go --
 package module
 

@@ -1,0 +1,26 @@
+# Законно: моки интерфейса адаптера infra — рядом с ним, в infra/<адаптер>/mocks (dir mockery по умолчанию).
+rule: TestDomainPackages
+base: canon
+-- internal/domain/shop/infra/smtp/smtp.go --
+package smtp
+
+import "context"
+
+// Client — клиент почтового API: адаптер тестирует его моком.
+type Client interface {
+	Send(ctx context.Context, to, body string) error
+}
+
+type Mailer struct{ c Client }
+
+func NewMailer(c Client) *Mailer { return &Mailer{c: c} }
+
+func (m *Mailer) Send(ctx context.Context, to, body string) error { return m.c.Send(ctx, to, body) }
+-- internal/domain/shop/infra/smtp/mocks/client.go --
+package mocks
+
+import "context"
+
+type MockClient struct{}
+
+func (m *MockClient) Send(ctx context.Context, to, body string) error { return nil }

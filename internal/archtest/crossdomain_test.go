@@ -234,8 +234,8 @@ func isIdent(expr ast.Expr, name string) bool {
 var fxHooks = []string{"Lifecycle", "Hook", "StartHook", "StopHook", "StartStopHook"}
 
 // TestModulesOnlyWire: module/ домена связывает граф и переводит типы, а не решает. Его файлы — module.go (Module и
-// привязки) и adapters.go (адаптеры): тип и конструктор адаптера — в adapters.go, и он видит то же, что корень
-// домена, — кит, драйвер и клиент живут в infra/<адаптер>; функция module.go и литерал в нём — один return
+// привязки) и adapters.go или adapters_<поставщик>.go (адаптеры): тип и конструктор адаптера — там, и он видит то же,
+// что корень домена, — кит, драйвер и клиент живут в infra/<адаптер>; функция module.go и литерал в нём — один return
 // (привязка порта, сборка значения, job); хуков fx (Lifecycle, Hook) нет — подписку ставит natskit.SubscribeOnStart
 // во входе, job — timerkit. Другой домен адаптер зовёт через его Trusted: методы Usecase спрашивают policy вызывающего.
 func TestModulesOnlyWire(t *testing.T) {
@@ -266,17 +266,17 @@ func modulesOnlyWire(c *check) {
 		}
 		file := c.parse(f.path)
 		byName := importsByName(file)
-		switch path.Base(f.path) {
-		case "module.go":
+		switch base := path.Base(f.path); {
+		case base == "module.go":
 			moduleGo(c, f.path, file, adapters[f.pkg])
-		case "adapters.go":
+		case base == "adapters.go", strings.HasPrefix(base, "adapters_"):
 			for _, imp := range f.imports {
 				if !visible(imp) {
 					c.Errorf("%s imports %s: an adapter translates types and errors between domains and sees what a domain root sees — a kit, a driver or a client lives in infra/<adapter> of the domain", f.path, imp)
 				}
 			}
 		default:
-			c.Errorf("%s: module/ is module.go (Module and bindings) and adapters.go (adapters)", f.path)
+			c.Errorf("%s: module/ is module.go (Module and bindings) and adapters.go or adapters_<supplier>.go (adapters)", f.path)
 		}
 		ast.Inspect(file, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
@@ -423,7 +423,7 @@ func domainDependencies(c *check) {
 					continue
 				}
 				if owner, _, _ := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/")); !inDomain || domain != owner {
-					c.Errorf("%s returns %s.%s, a port of %s: a port is bound inside its domain — another domain's type gets there through an adapter in internal/domain/%s/module", f.path, id.Name, sel.Sel.Name, owner, owner)
+					c.Errorf("%s returns %s.%s, a port of %s: a port is bound inside its domain — another domain's type gets there through an adapter in internal/domain/%s/module; a test fake returns its own concrete type", f.path, id.Name, sel.Sel.Name, owner, owner)
 				}
 			}
 			return true

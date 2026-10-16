@@ -909,10 +909,10 @@ func subjectVersions(c *check) {
 	}
 }
 
-// TestDomainPackages: домен — корень, delivery/<транспорт>, infra/<адаптер> (sqlc — infra/postgres/db), module и
-// mocks: правила слоёв читают эти пакеты, подпакет с другим именем (store, usertest) ушёл бы из-под них. infra не
-// знает входа; SQL — только infra/postgres: вне его из pgkit — лишь Transactor, без database/sql и pgx; natskit — только
-// delivery/nats: публикация идёт через outbox.
+// TestDomainPackages: домен — корень, delivery/<транспорт>, infra/<адаптер> (sqlc — infra/postgres/db, моки —
+// infra/<адаптер>/mocks), module и mocks: правила слоёв читают эти пакеты, подпакет с другим именем (store, usertest)
+// ушёл бы из-под них. infra не знает входа; SQL — только infra/postgres: вне его из pgkit — лишь Transactor, без
+// database/sql и pgx; natskit — только delivery/nats: публикация идёт через outbox.
 func TestDomainPackages(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -927,9 +927,9 @@ func domainPackages(c *check) {
 		parts := strings.Split(sub, "/")
 		switch {
 		case sub == "", sub == "module", sub == "mocks", parts[0] == "delivery", sub == "infra/postgres/db":
-		case parts[0] == "infra" && len(parts) == 2:
+		case parts[0] == "infra" && (len(parts) == 2 || len(parts) == 3 && parts[2] == "mocks"):
 		default:
-			c.Errorf("%s: a domain is its root, delivery/<transport>, infra/<adapter>, module and mocks — rules of layers read only these packages", f.pkg)
+			c.Errorf("%s: a domain is its root, delivery/<transport>, infra/<adapter>, module and mocks (an adapter's mocks — infra/<adapter>/mocks) — rules of layers read only these packages", f.pkg)
 		}
 		repository := under(sub, "infra/postgres")
 		for _, imp := range f.imports {

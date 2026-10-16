@@ -87,7 +87,9 @@ paths:
   нет (archtest `TestNoFxAs`), `fx.Annotate` — только теги `name:`/`group:`. Outbox `Providers` —
   внутри модуля домена (`fx.Private`). `context.Context` из графа не берут. `module/` только связывает:
   `module.go` — `Module` и привязки, его функция и литерал — один `return`; тип и конструктор адаптера —
-  `adapters.go`; хуков fx (`Lifecycle`, `Hook`) нет (archtest `TestModulesOnlyWire`).
+  `adapters.go` (у нескольких поставщиков можно по файлу: `adapters_<поставщик>.go`); хуков fx (`Lifecycle`, `Hook`)
+  нет (archtest `TestModulesOnlyWire`). Моки интерфейса адаптера `infra/<адаптер>` — в `infra/<адаптер>/mocks`
+  (archtest `TestDomainPackages`).
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
   имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
   Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)` и

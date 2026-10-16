@@ -1,0 +1,31 @@
+# Фейк порта в internal/testkit отдаёт тип порта: привязка мимо домена; фейку хватает своего конкретного типа.
+rule: TestDomainDependencies
+base: canon
+want: internal/testkit/itemtest/itemtest.go returns bill.Items, a port of bill: a port is bound inside its domain
+want: a test fake returns its own concrete type
+-- internal/testkit/itemtest/itemtest.go --
+package itemtest
+
+import (
+	"context"
+
+	"{module}/internal/domain/bill"
+)
+
+type items struct{ byID map[string]*bill.Item }
+
+func (f *items) Lookup(_ context.Context, id string) (*bill.Item, error) {
+	if it, ok := f.byID[id]; ok {
+		return it, nil
+	}
+	return nil, bill.ErrItemNotFound
+}
+
+// Items — фейк порта bill.Items для тестов.
+func Items(list ...*bill.Item) bill.Items {
+	f := &items{byID: map[string]*bill.Item{}}
+	for _, it := range list {
+		f.byID[it.ID] = it
+	}
+	return f
+}

@@ -1,0 +1,32 @@
+# Законно: адаптеры module/ — по файлу на домен-поставщика (adapters_<поставщик>.go).
+rule: TestModulesOnlyWire
+base: canon
+drop: internal/domain/bill/module/adapters.go
+-- internal/domain/bill/module/adapters_shop.go --
+package module
+
+import (
+	"context"
+	"errors"
+
+	"{module}/internal/domain/bill"
+	"{module}/internal/domain/shop"
+)
+
+// shopAdapter — порт bill.Items к домену shop.
+type shopAdapter struct {
+	items *shop.Trusted
+}
+
+func newShopAdapter(items *shop.Trusted) *shopAdapter { return &shopAdapter{items: items} }
+
+func (a *shopAdapter) Lookup(ctx context.Context, id string) (*bill.Item, error) {
+	it, err := a.items.Lookup(ctx, id)
+	if errors.Is(err, shop.ErrNotFound) {
+		return nil, bill.ErrItemNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &bill.Item{ID: it.ID, Name: it.Name}, nil
+}
