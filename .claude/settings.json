@@ -35,7 +35,6 @@
       "Bash(mockery*)",
       "Bash(rg *)",
       "Bash(grep *)",
-      "Bash(find *)",
       "Bash(git status)",
       "Bash(git diff*)",
       "Bash(git log*)",
@@ -47,8 +46,6 @@
       "Bash(git branch -v)",
       "Bash(git branch -vv)",
       "Bash(git branch --show-current)",
-      "Bash(git branch --list*)",
-      "Bash(git branch --contains*)",
       "Bash(git ls-files*)",
       "Bash(git describe*)",
       "Bash(git rev-parse*)",
@@ -57,13 +54,6 @@
       "Read(*)",
       "Glob(*)",
       "Grep(*)"
-    ],
-    "ask": [
-      "Bash(find*-delete*)",
-      "Bash(find*-exec*)",
-      "Bash(find*-ok*)",
-      "Bash(find*-fprint*)",
-      "Bash(find*-fls*)"
     ],
     "deny": [
       "Bash(*--no-veri*)",

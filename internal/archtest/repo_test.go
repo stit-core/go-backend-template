@@ -112,18 +112,22 @@ func TestImagesPinned(t *testing.T) {
 	}
 }
 
-// TestAllowReadsOnly: allow .claude/settings.json пускает без вопроса чтение — и find, и git branch по списку, — а
-// формы тех же команд, которые пишут или исполняют (find -delete, -exec…, git branch -D), и правку go.mod — только с
-// вопросом (ask) или никогда (deny). Правило Bash сопоставляется, как его читает Claude Code: «*» — любая строка, deny и
-// ask сильнее allow.
+// TestAllowReadsOnly: allow .claude/settings.json пускает без вопроса только то, что не пишет: ни одна пишущая форма
+// команды (find -delete и -exec, git branch -D, go mod tidy) с его правилами не сходится. Раздела ask нет: ask
+// спрашивает человека в любом режиме, и в bypass, — а чтение find и git branch Claude Code пускает без вопроса сам
+// (встроенный набор команд только для чтения), и deny законному чтению не мешает. Правило Bash сопоставляется, как
+// его читает Claude Code: «*» — любая строка.
 func TestAllowReadsOnly(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".claude", "settings.json"))
 	require.NoError(t, err)
-	var settings struct {
-		Permissions struct{ Allow, Ask, Deny []string }
-	}
+	var settings struct{ Permissions map[string]json.RawMessage }
 	require.NoError(t, json.Unmarshal(data, &settings))
+	_, ask := settings.Permissions["ask"]
+	require.False(t, ask, ".claude/settings.json: ask asks the human in every mode, bypass too")
+	var allow, deny []string
+	require.NoError(t, json.Unmarshal(settings.Permissions["allow"], &allow))
+	require.NoError(t, json.Unmarshal(settings.Permissions["deny"], &deny))
 	matches := func(rules []string, command string) bool {
 		for _, rule := range rules {
 			pattern, ok := strings.CutPrefix(rule, "Bash(")
@@ -140,25 +144,17 @@ func TestAllowReadsOnly(t *testing.T) {
 		}
 		return false
 	}
-	p := settings.Permissions
-	for command, silent := range map[string]bool{
-		"find . -name '*.go' -type f":   true,
-		"find internal -newer go.mod":   true,
-		"git branch --contains HEAD":    true,
-		"git branch --list 'nine/*'":    true,
-		"find . -name '*.tmp' -delete":  false,
-		"find -delete":                  false,
-		"find . -name x -exec rm {} +":  false,
-		"find . -execdir chmod -x {} ;": false,
-		"find . -ok rm {} ;":            false,
-		"find . -fprint list.txt":       false,
-		"find . -fls list.txt":          false,
-		"git branch -D nine/s7-gate":    false,
-		"git branch -m main trunk":      false,
-		"go mod tidy":                   false,
-		"make tidy":                     false,
+	for _, command := range []string{
+		"find . -name '*.tmp' -delete", "find . -name x -exec rm {} +", "find . -execdir chmod -x {} ;", "find . -ok rm {} ;",
+		"find . -fprint list.txt", "find . -fls list.txt", "git branch -D nine/s7-gate", "git branch -m main trunk",
+		"go mod tidy", "make tidy",
 	} {
-		allowed := matches(p.Allow, command) && !matches(p.Ask, command) && !matches(p.Deny, command)
-		require.Equal(t, silent, allowed, "%s: allowed without a question — %v", command, allowed)
+		require.False(t, matches(allow, command), "%s: allow lets a writing form through without a question", command)
+	}
+	for _, command := range []string{
+		"find . -name '*.go' -type f", "find internal -path '*/mocks/*' -name '*.go'", "git branch --list 'nine/*'",
+		"git branch --contains HEAD",
+	} {
+		require.False(t, matches(deny, command), "%s: deny blocks a read", command)
 	}
 }

@@ -186,9 +186,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     отказ `TestTestsAssert`, стало ok (самопроверка `softExpectations` — таблицей в тесте); `init()` в `_test.go` — был
     отказ `gochecknoinits`, стал пропуск, в коде — отказ (`TestLintUsesItsConfig`); N12 — `cmd/tool/main.go` с
     циклом в `main`: у валидатора `OK: coverage 100.00%`, теперь отказ `TestMainOnlyEnters`; входы `cmd/` шаблона —
-    проходят; N13 — `find . -name …` и `git branch --contains`/`--list` шли с вопросом, теперь без него, а
-    `find … -delete`, `-exec…`, `-ok…`, `-fprint…`, `-fls` — с вопросом (`ask`), `git branch -D` и `tidy` — тоже
-    (`TestAllowReadsOnly`); N15 — каталог убитого прогона в `.cache/mutate/tmp` оставался, теперь его снимает
+    проходят; N13 — чтение `find` (`-name`, `-path`) и `git branch --list`/`--contains` Claude Code пускает без
+    вопроса сам (встроенный набор только для чтения), пишущих форм в allow нет, `ask` нет — он спрашивает и в
+    bypass (`TestAllowReadsOnly`; guard ветки и `main` чтение пропускают, deny его не трогает); N15 — каталог убитого прогона в `.cache/mutate/tmp` оставался, теперь его снимает
     следующий прогон (`TestMutate`); `vet` — целью make в `make check` и pre-commit (`TestPreCommitChecksIndex`);
     общий коммит двух пушимых ref'ов судился дважды (4 вызова правила на 2 коммита), теперь один раз
 
@@ -293,10 +293,11 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   отказ. Путь нормализуется и по `<каталог>/..`; `git-<подкоманда>` у «читателя» (`man`, `ls`) без подстановки в
   команде — данные; `git-core` — каталог бинарей, не подкоманда. `docs/contributing.md` § guard-bash и
   `guard-cases.txt` (трек harness) — те же формы.
-- Allow (RENF-13, N13): `make tidy` и `go mod tidy` меняют `go.mod`/`go.sum` (зона «сначала спросить») — не в allow;
-  `find` — в allow, а его пишущие и исполняющие формы (`-delete`, `-exec…`, `-ok…`, `-fprint…`, `-fls`) — в `ask`:
-  правило Claude Code не исключает опций, вопрос сильнее allow; `git branch` — только чтения (`--list`, `--contains`
-  — режим списка, с `-d`/`-m` git их не совмещает); deny не менялся. Политику держит `TestAllowReadsOnly`.
+- Allow (RENF-13, N13): только то, что не пишет. `make tidy` и `go mod tidy` меняют `go.mod`/`go.sum` (зона «сначала
+  спросить») — не в allow; `find` и чтение `git branch` в allow не нужны — их Claude Code пускает без вопроса сам
+  (встроенный набор команд только для чтения), а пишущие формы `find` спросят в обычном режиме и выполнятся в bypass.
+  Раздела `ask` нет: он спрашивает человека в любом режиме, и в bypass, — владелец не хочет вопросов (решение
+  дирижёра). Инвариант держит `TestAllowReadsOnly`; deny не менялся.
 - Секреты и образы (RENF-14) — archtest `repo_test.go` по индексу (`git ls-files`): ловит `make check` до коммита и
   pre-push на верхнем коммите; секрет промежуточного коммита, убранный следующим, гейт верхнего коммита не видит.
   `.gitignore` знает `.env.*` (кроме `*.example`) — `.env.production` не уходит обычным `git add`.
@@ -353,8 +354,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     отказывают `TestMutate` и `make new-domain`: поставить python3;
   - в `main` бинаря `cmd/` — логика (цикл, `switch`, `else`, вложенный `if`) — `TestMainOnlyEnters`: логику — в
     функцию пакета (`run`), её судит cover-check;
-  - allow `.claude/settings.json` форка пускает без вопроса пишущую форму (`go mod tidy`, `find` без `ask` на
-    `-delete`/`-exec`) — `TestAllowReadsOnly`: такую форму — в `ask` или из allow.
+  - allow `.claude/settings.json` форка пускает без вопроса пишущую форму (`go mod tidy`, `find *`) или в нём есть
+    раздел `ask` — `TestAllowReadsOnly`: пишущую форму — из allow, `ask` — снять (он спрашивает и в bypass).
 - Хуки: pre-commit судит снимок индекса в worktree `.cache/index-snapshot/wt` (`.cache/` — в `.gitignore`); pre-push
   судит сообщение каждого пушимого коммита правилом `commit-msg` его родителя — `feat`/`fix` без `Review:` (и
   перенесённые `git rebase --continue` или cherry-pick без конфликта) отвергаются до гейта: дописать
