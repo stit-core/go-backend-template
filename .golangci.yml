@@ -86,11 +86,13 @@ linters:
 
   exclusions:
     rules:
+      # init() теста покрытие не засчитывает: gochecknoinits держит только код.
       - path: _test\.go
         linters:
           - gosec
           - errcheck
           - forbidigo
+          - gochecknoinits
       # int → int4 запроса: версия optimistic-lock — из int4 колонки, страница — в пределах paging.Page.
       - path: internal/domain/.+/infra/postgres/repository\.go
         linters:

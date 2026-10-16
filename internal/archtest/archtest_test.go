@@ -644,9 +644,20 @@ func TestNoExportedSubjectInDomainRoot(t *testing.T) {
 // тестового кита — его пакета (archkit.Check, testkit.MigrationLadder) или значения из него
 // (envAllowlist.Check), а не любому вызову (fmt.Println(t)). Ожидание мока тоже утверждение, и мягкое — ничего не
 // обещает: .Maybe() (вызова может не быть) и цепочка EXPECT() без .Once(), .Twice() или .Times(n) (вызовов
-// сколько угодно) — отказ.
+// сколько угодно) — отказ; цепочку можно продолжить и вторым выражением через переменную.
 func TestTestsAssert(t *testing.T) {
 	t.Parallel()
+	for src, want := range map[string][]string{
+		"m.EXPECT().Get(id).Return(u, nil).Once()":                       nil,
+		"m.EXPECT().Get(id).Return(u, nil)":                              {"EXPECT().Get without .Once(), .Twice() or .Times(n)"},
+		"m.EXPECT().Get(id).Return(u, nil).Maybe()":                      {".Maybe()"},
+		"call := m.EXPECT().Get(id)\ncall.Return(u, nil).Times(2)":       nil,
+		"call := m.EXPECT().Get(id).Return(u, nil)\ncall.Return(u, nil)": {"EXPECT().Get without .Once(), .Twice() or .Times(n)"},
+	} {
+		file, err := parser.ParseFile(token.NewFileSet(), "", "package p\n\nfunc f() {\n"+src+"\n}\n", 0)
+		require.NoError(t, err)
+		require.Equal(t, want, softExpectations(file.Decls[0].(*ast.FuncDecl).Body), src)
+	}
 	type testFile struct {
 		path   string
 		file   *ast.File
@@ -711,12 +722,15 @@ func TestTestsAssert(t *testing.T) {
 	}
 }
 
-// softExpectations — мягкие ожидания моков в теле: .Maybe() и цепочка EXPECT() одним выражением без .Once(),
-// .Twice() или .Times(n); значение — что нашлось.
+// softExpectations — мягкие ожидания моков в теле: .Maybe() и цепочка EXPECT() без .Once(), .Twice() или .Times(n) —
+// одним выражением или продолженная через переменную (call := m.EXPECT().X(); call.Return(…).Once()); значение —
+// что нашлось.
 func softExpectations(body ast.Node) []string {
-	var soft []string
+	var soft, pending []string // pending — переменные с цепочкой EXPECT() без числа вызовов
+	expectOf, timed := map[string]string{}, map[string]bool{}
 	ast.Inspect(body, func(n ast.Node) bool {
 		var expr ast.Expr
+		variable := ""
 		switch x := n.(type) {
 		case *ast.ExprStmt:
 			expr = x.X
@@ -725,6 +739,9 @@ func softExpectations(body ast.Node) []string {
 				return true
 			}
 			expr = x.Rhs[0]
+			if id, ok := x.Lhs[0].(*ast.Ident); ok && len(x.Lhs) == 1 {
+				variable = id.Name
+			}
 		default:
 			return true
 		}
@@ -741,15 +758,30 @@ func softExpectations(body ast.Node) []string {
 			chain = append(chain, sel.Sel.Name)
 			expr = sel.X
 		}
+		times := func(chain []string) bool {
+			return slices.ContainsFunc(chain, func(m string) bool { return m == "Once" || m == "Twice" || m == "Times" })
+		}
 		expect := slices.Index(chain, "EXPECT")
 		switch {
 		case slices.Contains(chain, "Maybe"):
 			soft = append(soft, ".Maybe()")
-		case expect > 0 && !slices.ContainsFunc(chain[:expect], func(m string) bool { return m == "Once" || m == "Twice" || m == "Times" }):
+		case expect > 0 && !times(chain[:expect]) && variable != "":
+			pending = append(pending, variable)
+			expectOf[variable] = chain[expect-1]
+		case expect > 0 && !times(chain[:expect]):
 			soft = append(soft, "EXPECT()."+chain[expect-1]+" without .Once(), .Twice() or .Times(n)")
+		case expect < 0 && times(chain):
+			if id, ok := expr.(*ast.Ident); ok {
+				timed[id.Name] = true
+			}
 		}
 		return true
 	})
+	for _, variable := range pending {
+		if !timed[variable] {
+			soft = append(soft, "EXPECT()."+expectOf[variable]+" without .Once(), .Twice() or .Times(n)")
+		}
+	}
 	return soft
 }
 

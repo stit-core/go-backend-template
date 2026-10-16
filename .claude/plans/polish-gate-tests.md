@@ -182,7 +182,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     отказов нет (`N/s7g/n8-history.log`); случай — в `TestPrePushGatesPushedCommit`; N9 — каталог, удалённый с диска
     без `git rm`: было FAIL «lstat gone», стало OK (`TestFmtAppliesLintRules`); N10 — заглушка чужой версии раньше в
     `PATH`, чем `GOPATH/bin`: совет был «make setup» (он её не заслонит), стал — путь найденного и порядок `PATH`;
-    в `GOPATH/bin` — «make setup» (`TestToolVersions`)
+    в `GOPATH/bin` — «make setup» (`TestToolVersions`); N11 — `call := m.EXPECT().Get(id)` и `call…Times(2)`: было
+    отказ `TestTestsAssert`, стало ok (самопроверка `softExpectations` — таблицей в тесте); `init()` в `_test.go` — был
+    отказ `gochecknoinits`, стал пропуск, в коде — отказ (`TestLintUsesItsConfig`)
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -242,9 +244,11 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   `WithUncheckedPackages`, `WithInternalDirs`), известное нарушение с любым ID, строка `publicOperations` — законная
   правка форка в диффе: её держат ревью и CLAUDE.md § Границы; строка `Gate:` в сообщении коммита не вводится —
   правку гейта ревью видит в диффе.
-- `init()` держит линтер (`gochecknoinits`), а не archtest: одно место для правил кода — golangci-lint.
-- Мягкие ожидания моков — в `TestTestsAssert` (сила теста), отдельного теста нет; ожидание — одним выражением
-  цепочки, как во всём коде шаблона.
+- `init()` держит линтер (`gochecknoinits`), а не archtest: одно место для правил кода — golangci-lint. Тесты — вне
+  правила (N11): покрытие их `init()` не засчитывает.
+- Мягкие ожидания моков — в `TestTestsAssert` (сила теста), отдельного теста нет; ожидание — цепочкой одним выражением
+  или продолженной через переменную (N11): переменная с `EXPECT()` без числа вызовов, которую дальше не доводят до
+  `.Once()`, `.Twice()` или `.Times(n)`, — отказ.
 - Мутации аудитора для нового кода — в `mutants.txt` как есть (id `RA…`, у пяти несобиравшихся — их вариант `…b`).
   RA25 (`MarkPasswordResetSent … OR TRUE`) — со строкой «=»: тест, который её убивает, пишет трек
   code+security+adapters; после его слияния `make mutate A="--strict RA25"` — отказ «эквивалентная убита», и строку
@@ -342,4 +346,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
 
 ## Где мы сейчас
-S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N10 закрыты; дальше — N11–N13, N15.
+S1–S10 закрыты. S11 — добор неблокирующих валидатора: N5–N11 закрыты; дальше — N12, N13, N15.

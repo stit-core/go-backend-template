@@ -112,7 +112,8 @@ func TestCoverCheck(t *testing.T) {
 
 // TestLintUsesItsConfig: lint гейта читает только .golangci.yml — слабый .golangci.toml рядом его не
 // заслоняет, — своя директива gosec ничего не глушит, а пакеты грузит go list: драйвер go/packages из окружения
-// (GOPACKAGESDRIVER) до линтера не доходит. Модуль игрушечный, Makefile, конфиг и скрипты — репо.
+// (GOPACKAGESDRIVER) до линтера не доходит. init() — отказ в коде (его исполнила бы загрузка пакета без теста), но не
+// в тесте. Модуль игрушечный, Makefile, конфиг и скрипты — репо.
 func TestLintUsesItsConfig(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -122,6 +123,8 @@ func TestLintUsesItsConfig(t *testing.T) {
 		".golangci.toml": "version = \"2\"\n\n[linters]\ndefault = \"none\"\nenable = [\"govet\"]\n",
 		"p/p.go": "package p\n\nimport (\n\t\"crypto/md5\" // #nosec G501\n\t\"os\"\n)\n\n// Close drops an error.\n" +
 			"func Close(f *os.File) {\n\tf.Close()\n}\n\n// Sum hashes weakly.\nfunc Sum(s string) [16]byte {\n\treturn md5.Sum([]byte(s)) // #nosec G401\n}\n",
+		"p/q.go":      "package p\n\nvar ready bool\n\nfunc init() { ready = true }\n",
+		"p/q_test.go": "package p\n\nvar testReady bool\n\nfunc init() { testReady = ready }\n",
 	}))
 	git(t, repo, "init", "-q", "-b", "main")
 	driver := filepath.Join(t.TempDir(), "driver")
@@ -130,6 +133,8 @@ func TestLintUsesItsConfig(t *testing.T) {
 	require.Error(t, err, out)
 	require.Contains(t, out, "(errcheck)", ".golangci.toml shadows .golangci.yml")
 	require.Contains(t, out, "(gosec)", "the gosec directive silences gosec")
+	require.Regexp(t, `p/q\.go:\d+:\d+: .*\(gochecknoinits\)`, out, "init() in code passes lint")
+	require.NotRegexp(t, `q_test\.go:\d+:\d+: .*\(gochecknoinits\)`, out, "init() of a test fails lint")
 	require.NoFileExists(t, driver+".called", "GOPACKAGESDRIVER of the caller loads the packages of the lint step")
 }
 
