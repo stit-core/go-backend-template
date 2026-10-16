@@ -17,6 +17,10 @@ var layout = []archkit.Option{
 // читает IP клиента из ctx запроса через httpkit — транспортный кит; за чистотой пакета следит ревью.
 var uncheckedPackages = []string{"internal/platform/identity"}
 
+// releasedSubjects — subject'ы событий сервиса с .v1, выпущенные до канона «первая версия без суффикса»
+// (TestSubjectVersions): переименование живого subject сломало бы потребителей; строка без такого subject — отказ.
+var releasedSubjects = []string{}
+
 // rootLibs — внешние пакеты, которые видят корень домена и адаптер module/: порты и значения китов, чистые киты без
 // I/O, DI. Перечень разрешённого: драйвер, транспорт или кит с I/O в корне падает без правки списка.
 var rootLibs = []string{

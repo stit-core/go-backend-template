@@ -1,0 +1,16 @@
+# Законно: .v1, выпущенный до канона «первая версия без суффикса», — строкой releasedSubjects настроек сервиса:
+# переименование живого subject сломало бы потребителей.
+rule: TestSubjectVersions
+base: canon
+released: shop.events.item_created.v1
+-- internal/domain/shop/events.go --
+package shop
+
+import "time"
+
+const subjectItemCreated = "shop.events.item_created.v1"
+
+type ItemCreated struct {
+	ID string
+	At time.Time
+}

@@ -1,0 +1,5 @@
+# Строка releasedSubjects без такого subject в коде: перечень выпущенных не копит снятое.
+rule: TestSubjectVersions
+base: canon
+released: shop.events.item_removed.v1
+want: releasedSubjects lists "shop.events.item_removed.v1", and no file of the service names it

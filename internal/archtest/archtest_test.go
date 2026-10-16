@@ -244,10 +244,11 @@ var rules = map[string]func(*check){
 // check — прогон правила по дереву: репо или пример testdata/rules. Нарушение правило отдаёт c.Errorf — в репо это
 // отказ теста, в примере — запись, которую пример сверяет со своими want; сбой чтения — require на c.T.
 type check struct {
-	T     *testing.T
-	root  string
-	files []goFile  // .go-файлы дерева
-	found *[]string // отказы примера; nil — дерево репо
+	T        *testing.T
+	root     string
+	files    []goFile  // .go-файлы дерева
+	found    *[]string // отказы примера; nil — дерево репо
+	released []string  // subject'ы .v1, выпущенные до канона (releasedSubjects)
 }
 
 // runRule — правило теста t (rules[t.Name()]) по дереву репо.
@@ -255,7 +256,7 @@ func runRule(t *testing.T) {
 	t.Helper()
 	rule, ok := rules[t.Name()]
 	require.True(t, ok, "%s is not in rules", t.Name())
-	rule(&check{T: t, root: repoRoot(t), files: goFiles(t)})
+	rule(&check{T: t, root: repoRoot(t), files: goFiles(t), released: releasedSubjects})
 }
 
 func (c *check) Errorf(format string, args ...any) {
@@ -305,7 +306,7 @@ func TestRuleExamples(t *testing.T) {
 			writeFiles(t, root, ex.files)
 			for _, rule := range checked {
 				var found []string
-				rules[rule](&check{T: t, root: root, files: goFilesAt(t, root), found: &found})
+				rules[rule](&check{T: t, root: root, files: goFilesAt(t, root), found: &found, released: ex.released})
 				for _, want := range ex.want {
 					require.True(t, slices.ContainsFunc(found, func(f string) bool { return strings.Contains(f, want) }),
 						"%s: no refusal with %q; refusals: %q", rule, want, found)
@@ -325,11 +326,11 @@ func TestRuleExamples(t *testing.T) {
 
 // example — пример из testdata/rules/<name>.txtar. Комментарий архива: rule — правила через пробел (* — все), want —
 // подстрока ожидаемого отказа (без want — законная форма), base — пример, чьё дерево берётся за основу, drop — файл
-// основы, которого в дереве нет; строки с # — пояснения. Файлы архива дописывают и заменяют файлы основы; {module} в
+// основы, которого в дереве нет, released — строка releasedSubjects; строки с # — пояснения. Файлы архива дописывают и заменяют файлы основы; {module} в
 // файлах и want — module path сервиса: de-template меняет его в коде, а примеры остаются верны.
 type example struct {
-	rules, want []string
-	files       map[string]string
+	rules, want, released []string
+	files                 map[string]string
 }
 
 func loadExample(t *testing.T, name string, withBase bool) example {
@@ -353,6 +354,8 @@ func loadExample(t *testing.T, name string, withBase bool) example {
 			maps.Copy(ex.files, loadExample(t, value, false).files)
 		case "drop":
 			drop = append(drop, value)
+		case "released":
+			ex.released = append(ex.released, value)
 		default:
 			require.True(t, line == "" || strings.HasPrefix(line, "#"), "%s: unknown line %q", name, line)
 		}
@@ -874,7 +877,7 @@ var firstVersion = regexp.MustCompile(`^([a-z0-9_]+)\.events\..+\.v1$`)
 
 // TestSubjectVersions: первая версия события домена этого репо — subject без суффикса, новая — следующий номер .vN
 // (event.md § Versioning): .v1 рядом с subject без суффикса дал бы два имени одной версии. Subject другого сервиса
-// называет его контракт.
+// называет его контракт, .v1, выпущенный до канона, — строка releasedSubjects настроек сервиса.
 func TestSubjectVersions(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -882,17 +885,26 @@ func TestSubjectVersions(t *testing.T) {
 
 func subjectVersions(c *check) {
 	names := c.domains()
+	named := map[string]bool{}
 	for _, f := range c.files {
 		if !under(f.pkg, "internal") {
 			continue
 		}
 		ast.Inspect(c.parse(f.path), func(n ast.Node) bool {
 			val, ok := stringLit(n)
-			if m := firstVersion.FindStringSubmatch(val); ok && m != nil && slices.Contains(names, m[1]) {
-				c.Errorf("%s names subject %q: the first version of an event has no suffix, a new one is the next .vN", f.path, val)
+			if ok {
+				named[val] = true
+			}
+			if m := firstVersion.FindStringSubmatch(val); ok && m != nil && slices.Contains(names, m[1]) && !slices.Contains(c.released, val) {
+				c.Errorf("%s names subject %q: the first version of an event has no suffix, a new one is the next .vN; a .v1 released before the canon is a line of releasedSubjects", f.path, val)
 			}
 			return true
 		})
+	}
+	for _, s := range c.released {
+		if !named[s] {
+			c.Errorf("releasedSubjects lists %q, and no file of the service names it: remove the line", s)
+		}
 	}
 }
 

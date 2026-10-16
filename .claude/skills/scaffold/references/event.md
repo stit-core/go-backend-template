@@ -37,7 +37,7 @@ Outbox оправдан когда:
 
 - Какой домен **публикует**?
 - Какие поля в payload (ID и факты, минимум — ID агрегата + `At`; токенов и PII нет)?
-- Какой Subject? Формат: `<source>.events.<event>`; первая версия — без суффикса (`.v1` — отказ archtest `TestSubjectVersions`), новая версия payload — следующий номер `.v2`, `.v3`… (реф. — `user.events.registered.v2`, `verification.events.password_reset_requested.v3` в `internal/domain/*/events.go`).
+- Какой Subject? Формат: `<source>.events.<event>`; первая версия — без суффикса (`.v1` — отказ archtest `TestSubjectVersions`; `.v1`, выпущенный до этого канона, — строка `releasedSubjects` в `internal/archtest/layout_settings_test.go`), новая версия payload — следующий номер `.v2`, `.v3`… (реф. — `user.events.registered.v2`, `verification.events.password_reset_requested.v3` в `internal/domain/*/events.go`).
 - Какой домен **обрабатывает** (или несколько)?
 - Idempotency: на каком ключе — событие (idempotency-key) или состояние агрегата — consumer отсечёт повторную доставку?
 

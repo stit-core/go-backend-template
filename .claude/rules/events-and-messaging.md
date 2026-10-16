@@ -28,7 +28,8 @@ paths:
 - Subject `<domain>.events.<event>` — unexported const `subject<Event>` в `events.go`
   источника, рядом с payload (не inline-литерал в usecase, не экспорт). Consumer заводит
   свою const в `delivery/nats/`. Первая версия — без суффикса (`.v1` — отказ archtest
-  `TestSubjectVersions`), breaking-change payload → следующий номер (`….v2`).
+  `TestSubjectVersions`; выпущенный до канона `.v1` — строка `releasedSubjects` настроек archtest),
+  breaking-change payload → следующий номер (`….v2`).
 - payload-типы — в `events.go` источника: `<Aggregate><PastEvent>`, поля без json-тегов
   (wire = Go-имена; смена формата = `.v2`), timestamp — `At time.Time`. Поля — ID и факты:
   токенов, секретов и PII нет (rule `domain-architecture`; имена полей — archtest `TestRootTypes`). Публикация — только
