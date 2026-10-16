@@ -97,17 +97,19 @@ split_words() {
 # после «=» команды с git делает её кодом, как у интерпретатора. Текст сообщения и поиска по истории — данные: значения
 # -m, --message, --grep, -S, -G, --author, --committer, --format, --pretty, -e, --regexp и аргументы git grep без -O
 # (пейджер git grep исполняет). Значение — своей команды: текст другой команды конвейера или списка (… | grep "git …",
-# echo "git …" > f) — её данные.
+# echo "git …" > f) — её данные; но присваивание в строке с git (VAR=…, export VAR=…) — значение, которое git может
+# исполнить позже (export GIT_SEQUENCE_EDITOR='…'; git rebase -i).
 re_git='(^|[^[:alnum:]_.-])git([[:space:]]|$)'
 re_nested='(^|[[:space:];&|(=])([^[:space:]=]*/)?git(-[[:alnum:]-]+)?([[:space:];&|)\\]|$)'
 quoted='"([^"\\]|\\.)*"|'\''[^'\'']*'\'''
 data='(^|[[:space:]])(-[[:alnum:]]*m|--(message|grep|author|committer|format|pretty|regexp)|-[GSe])([[:space:]]*|=)'
 data+='('"$quoted"'|[^-[:space:]"'\''][^[:space:]"'\'']*)'
 git_runs() {
-    local seg
+    local seg assign='^[[:space:]]*((export|declare|typeset|readonly|local)([[:space:]]+-[[:alpha:]]+)*[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*='
+    [[ $(printf '%s' "$1" | sed -E "s/$quoted//g") =~ $re_git ]] || return 1
     while IFS= read -r seg; do
         seg=$(printf '%s' "$seg" | sed -E -e "s/$data/\\1/g" -e '/-O|--open-files-in-pager/!s/(git[[:space:]]+grep).*/\1/')
-        [[ $(printf '%s' "$seg" | sed -E "s/$quoted//g") =~ $re_git ]] &&
+        { [[ $(printf '%s' "$seg" | sed -E "s/$quoted//g") =~ $re_git ]] || [[ $seg =~ $assign ]]; } &&
             printf '%s' "$seg" | grep -oE "$quoted|=[^[:space:]\"']+" | tr -d "\"'" | grep -qE "$re_nested" && return 0
     done <<<"$(printf '%s' "$1" | tr -d '\001-\007\037' | split_words | tr ';&|()`' '\n\n\n\n\n\n' |
         tr '\001\002\003\004\005\006\037' ';&|()` ' | tr -d '\007')"

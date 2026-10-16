@@ -58,7 +58,8 @@ Push в `main` разрешён (прямой или через PR); gate — `p
   `| sudo bash -x`, `sh<<<'…'`), и git, исполняющий строку из значения: вложенный git в кавычках или после «=» команды
   с git (`git rebase --exec=…`, `git submodule foreach`, `git bisect run`, `git filter-branch`, `git -c core.editor=…`,
   `GIT_SEQUENCE_EDITOR=…`), кроме текста сообщения и поиска по истории (`-m`, `--grep`, `-S`, `-G`, `--format`,
-  шаблон `git grep` без `-O`); значение — своей команды: текст `grep` или `echo` в конвейере и списке — данные;
+  шаблон `git grep` без `-O`); значение — своей команды: текст `grep` или `echo` в конвейере и списке — данные, а
+  присваивание в строке с git (`VAR=…`, `export VAR=…`) — значение, которое git исполнит;
 - `SKIP_PREPUSH` и `hooksPath` в любой команде;
 - алиасы и include конфига git в команде (`git -c alias.…`, `git config include.path …`, `GIT_CONFIG_KEY_0=alias.…` —
   и значением в кавычках: `-c 'alias.c=commit -n'`); снятие секции `core` (`git config --remove-section` или

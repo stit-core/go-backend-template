@@ -469,6 +469,13 @@ B man -P git\ commit\ -n ls
 B git rebase --exec='make check | git commit -n' HEAD~1
 B git rebase --exec='make check; git commit -n' HEAD~1
 B git log --oneline | grep x; git rebase --exec='git commit -n' HEAD~1
+B export GIT_SEQUENCE_EDITOR='git commit -n -m x'; git rebase -i HEAD~1
+B export GIT_SEQUENCE_EDITOR="git commit -n -m x" && git rebase -i HEAD~2
+B export GIT_EDITOR='git commit -n -m x'; git commit --amend
+B GIT_EDITOR='git commit -n -m x'; export GIT_EDITOR; git commit --amend
+B (export GIT_SEQUENCE_EDITOR='git commit -n -m x'; git rebase -i HEAD~1)
+B export GIT_PAGER='git commit -n -m x'; git log -1
+B export PAGER='git commit -n -m x'; git log -1
 B git grep -O'git commit -n -m x' -e x
 B git grep --open-files-in-pager='git commit -n -m x' -e x
 
@@ -635,6 +642,9 @@ A git log --oneline | grep "git commit -n"
 A git log -20 --format=%s | grep -c 'git commit -n'
 A git show HEAD:CLAUDE.md | grep -n "git commit -n"
 A echo "git commit -n" > /tmp/f && git add /tmp/f
+A GIT_PAGER=cat git log -1
+A export GIT_PAGER=cat; git log --oneline -3
+A LANG=C git log --oneline -3 && git status
 A git log --grep="git commit -n" --oneline
 A git log --grep 'git commit -n' -3
 A git log -S'git commit -n' --oneline
