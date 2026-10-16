@@ -2,10 +2,12 @@ package archtest
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,19 +21,30 @@ var secretList = regexp.MustCompile(`(?m)^secret='([^']+)' example='([^']+)'$`)
 // TestNoSecretFiles: секретам не место в репо (CLAUDE.md § Не делать никогда): файл окружения или ключа в индексе —
 // отказ, и под именем, которого .gitignore не знает, и добавленный мимо него (git add -f). Перечень один — строка
 // pre-push: ею хук судит дерево каждого пушимого коммита (секрет, убранный следующим коммитом, уходит в remote).
+// Регистр имени не важен — server.KEY тоже ключ; .gitignore не пускает в индекс те же имена (свой глобальный и
+// локальный exclude разработчика тест не читает).
 func TestNoSecretFiles(t *testing.T) {
 	t.Parallel()
-	list := secretList.FindStringSubmatch(readFiles(t, repoRoot(t), "scripts/git-hooks/pre-push")["scripts/git-hooks/pre-push"])
+	root := repoRoot(t)
+	list := secretList.FindStringSubmatch(readFiles(t, root, "scripts/git-hooks/pre-push")["scripts/git-hooks/pre-push"])
 	require.NotNil(t, list, "pre-push holds the list of secrets: secret='<ERE>' example='<ERE>'")
-	secret, example := regexp.MustCompile(list[1]), regexp.MustCompile(list[2])
+	secret, example := regexp.MustCompile("(?i)"+list[1]), regexp.MustCompile("(?i)"+list[2])
 	secretFile := func(name string) bool { return secret.MatchString(name) && !example.MatchString(name) }
-	for name, want := range map[string]bool{
+	names := map[string]bool{
 		".env": true, "deploy/.env.production": true, "server.key": true, "tls/cert.pem": true,
-		".env.example": false, ".env.local.example": false, ".envrc": false, "internal/platform/env.go": false,
-	} {
-		require.Equal(t, want, secretFile(name), name)
+		".ENV": true, ".Env.local": true, "server.KEY": true, "tls/cert.PEM": true,
+		".env.example": false, ".env.local.example": false, ".ENV.EXAMPLE": false, ".envrc": false, "internal/platform/env.go": false,
 	}
-	for _, f := range trackedFiles(t, repoRoot(t)) {
+	probe := t.TempDir()
+	writeFiles(t, probe, readFiles(t, root, ".gitignore"))
+	git(t, probe, "init", "-q")
+	ignored := strings.Split(git(t, probe, append([]string{"-c", "core.excludesFile=/dev/null", "check-ignore", "--no-index", "--"},
+		slices.Collect(maps.Keys(names))...)...), "\n")
+	for name, want := range names {
+		require.Equal(t, want, secretFile(name), name)
+		require.Equal(t, want, slices.Contains(ignored, name), ".gitignore: %s ignored", name)
+	}
+	for _, f := range trackedFiles(t, root) {
 		if secretFile(f) {
 			t.Errorf("%s: a secret in the repo — the environment and the keys stay out of git, a template is *.example", f)
 		}

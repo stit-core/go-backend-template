@@ -44,7 +44,8 @@ trap 'cleanup; rm -f "$msg" "$rule"' EXIT
 refs=$(cat)
 
 # Секрет — файл окружения (.env, .env.local, .env.production) или ключа (*.pem, *.key), но не шаблон окружения
-# *.example. Перечень один на гейт: индекс судит по этой строке archtest TestNoSecretFiles.
+# *.example; регистр имени не важен (server.KEY — тоже ключ). Перечень один на гейт: индекс судит по этой строке
+# archtest TestNoSecretFiles, он же сверяет с ней .gitignore.
 secret='(^|/)\.env(\.[^/]*)?$|\.(pem|key)$' example='\.example$'
 
 # Сообщение корневого коммита и коммита, у родителя которого нет хука commit-msg, не судится: правила тогда не было.
@@ -77,7 +78,7 @@ while read -r _ local_sha remote_ref remote_sha; do
     for c in $(git -C "$root" rev-list --reverse "$local_sha" --not "${known[@]}"); do
         [[ $judged == *" $c "* ]] && continue
         judged+="$c "
-        secrets=$(git -C "$root" ls-tree -r -z --name-only "$c" | grep -zE "$secret" | grep -zvE "$example" | tr '\0' '\n' || true)
+        secrets=$(git -C "$root" ls-tree -r -z --name-only "$c" | grep -zEi "$secret" | grep -zvEi "$example" | tr '\0' '\n' || true)
         if [ -n "$secrets" ]; then
             echo "pre-push: коммит $(git -C "$root" rev-parse --short "$c") несёт секрет — файл окружения или ключа:"
             sed 's/^/  /' <<<"$secrets"

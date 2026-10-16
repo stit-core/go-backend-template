@@ -359,15 +359,19 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	require.Equal(t, 2, strings.Count(readFiles(t, tmp, "judged")["judged"], "\n"), "a commit of two pushed refs is judged twice:\n%s", out)
 
 	// Секрет промежуточного коммита ушёл бы в remote и тогда, когда следующий коммит его убрал: судится дерево каждого
-	// пушимого коммита, а шаблон окружения *.example — не секрет.
-	writeFiles(t, repo, map[string]string{"deploy/.env.production": "TOKEN=leaked\n", "deploy/.env.production.example": "TOKEN=\n"})
+	// пушимого коммита, регистр имени не важен, а шаблон окружения *.example — не секрет.
+	writeFiles(t, repo, map[string]string{
+		"deploy/.env.production": "TOKEN=leaked\n", "tls/cert.PEM": "leaked\n", "deploy/.env.production.example": "TOKEN=\n",
+	})
 	leaked := commitAs("chore: окружение выкатки", "green")
 	require.NoError(t, os.Remove(filepath.Join(repo, "deploy", ".env.production")))
+	require.NoError(t, os.Remove(filepath.Join(repo, "tls", "cert.PEM")))
 	cleaned := commitAs("chore: секрет выкатки — вне репо", "green")
 	out, err = push("refs/heads/main " + cleaned + " refs/heads/main " + second + "\n")
 	require.Error(t, err, "a secret of an intermediate commit must not be pushed:\n%s", out)
 	require.Contains(t, out, "pre-push: коммит "+strings.TrimSpace(git(t, repo, "rev-parse", "--short", leaked))+" несёт секрет")
 	require.Contains(t, out, "\n  deploy/.env.production\n")
+	require.Contains(t, out, "\n  tls/cert.PEM\n")
 	require.NotContains(t, out, "toy gate", "the secret is checked before the gate")
 	out, err = push("refs/heads/main " + cleaned + " refs/heads/main " + leaked + "\n")
 	require.NoError(t, err, "a template of the environment is not a secret:\n%s", out)

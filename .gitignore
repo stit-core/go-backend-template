@@ -1,8 +1,9 @@
 .idea/
 .vscode/
-.env
-.env.*
-!*.example
+# Окружение и ключи — имена перечня секретов pre-push, без учёта регистра (сверяет TestNoSecretFiles).
+.[eE][nN][vV]
+.[eE][nN][vV].*
+!*.[eE][xX][aA][mM][pP][lL][eE]
 bin/
 /.cache/
 *.test
@@ -10,8 +11,8 @@ bin/
 coverage.*
 
 # Секреты / TLS-артефакты — в репо не хранятся
-*.pem
-*.key
+*.[pP][eE][mM]
+*.[kK][eE][yY]
 credentials.md
 
 # Python e2e-харнес (test/)

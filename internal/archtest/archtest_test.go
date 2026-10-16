@@ -53,8 +53,9 @@
 //   - newdomain_test.go — TestNewDomainRefusesOrRollsBack (make new-domain: отказ до первой правки, откат после);
 //   - mutate_test.go — TestMutate (раннер make mutate: вердикты, --strict, файлы кода без мутаций, дерево
 //     разработчика);
-//   - repo_test.go — TestNoSecretFiles (секретов в индексе нет, перечень — строка pre-push), TestImagesPinned
-//     (образы — по digest и тегу), TestAllowReadsOnly (allow .claude/settings.json — только то, что не пишет, ask нет);
+//   - repo_test.go — TestNoSecretFiles (секретов в индексе нет, перечень — строка pre-push, с ним сверен
+//     .gitignore), TestImagesPinned (образы — по digest и тегу), TestAllowReadsOnly (allow .claude/settings.json —
+//     только то, что не пишет, ask нет);
 //   - release_test.go — TestReleaseImage (путь образа релиза).
 package archtest
 
