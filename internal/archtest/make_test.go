@@ -200,12 +200,12 @@ func TestCheckCoversItsOwnRun(t *testing.T) {
 // TestPrePushGatesPushedCommit: pre-push гоняет make check верхнего коммита пушимого ref'а в свежем
 // worktree — по дереву и Makefile самого коммита, а переменные make и оболочки пушащего до гейта не
 // доходят: каждая из них меняет шаги или выключает его самозащиту. До гейта — каждый пушимый коммит (кроме тех, что
-// уже в ветках remote'ов или под тегами шаблона template/*): секрет в его дереве — отказ, а сообщение судит хук
-// commit-msg из дерева его родителя: коммит cherry-pick, rebase или
-// клона без хуков его не проходил, а старый коммит правилом, которого тогда не было, не судится. Гейт здесь
-// игрушечный: Makefile коммита печатает вердикт (файл verdict) и то, что дошло до него из окружения, а окружение
-// оболочки снимает строкой unexport Makefile репо; правило commit-msg — сначала старое, только Conventional
-// Commits, затем хук репо.
+// уже в ветках remote'ов или — при push'е в пустой remote, пустоту хук узнаёт git ls-remote, — под тегами шаблона
+// template/*): секрет в его дереве — отказ, а сообщение судит хук commit-msg из дерева его родителя: коммит
+// cherry-pick, rebase или клона без хуков его не проходил, а старый коммит правилом, которого тогда не было, не
+// судится. Гейт здесь игрушечный: Makefile коммита печатает вердикт (файл verdict) и то, что дошло до него из
+// окружения, а окружение оболочки снимает строкой unexport Makefile репо; правило commit-msg — сначала старое, только
+// Conventional Commits, затем хук репо.
 func TestPrePushGatesPushedCommit(t *testing.T) {
 	t.Parallel()
 	hook := filepath.Join(repoRoot(t), "scripts", "git-hooks", "pre-push")
@@ -231,14 +231,21 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 		t.Helper()
 		return commitAs("chore: toy gate "+verdict, verdict)
 	}
-	push := func(stdin string, env ...string) (string, error) {
+	remote := filepath.Join(t.TempDir(), "backend.git")
+	git(t, repo, "init", "-q", "--bare", remote)
+	// pushTo — хук так, как его зовёт git push в remote с этим именем (push по URL — имя и есть URL).
+	pushTo := func(name, stdin string, env ...string) (string, error) {
 		t.Helper()
-		cmd := exec.CommandContext(t.Context(), hook, "origin", "git@example.org:acme/backend.git")
+		cmd := exec.CommandContext(t.Context(), hook, name, remote)
 		cmd.Dir = repo
 		cmd.Stdin = strings.NewReader(stdin)
 		cmd.Env = callerEnv(append([]string{"PATH=" + os.Getenv("PATH"), "TMPDIR=" + tmp}, env...)...)
 		out, err := cmd.CombinedOutput()
 		return string(out), err
+	}
+	push := func(stdin string, env ...string) (string, error) {
+		t.Helper()
+		return pushTo("origin", stdin, env...)
 	}
 	zero := strings.Repeat("0", 40)
 	red := commit("red")
@@ -307,6 +314,12 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err = push("refs/heads/main " + newFeat + " refs/heads/main " + stuff + "\nrefs/tags/template/v9.9.9 " + newFeat +
 		" refs/tags/template/v9.9.9 " + zero + "\n")
 	require.Error(t, err, "a template tag of this very push hides its commits from the message check:\n%s", out)
+	require.Contains(t, out, "нет строки Review:")
+	// Выпуск по URL в новую ветку: веток remote-tracking у URL нет, sha remote'а в push'е — нули, а remote не пуст.
+	git(t, repo, "push", "-q", remote, stuff+":refs/heads/main")
+	out, err = pushTo(remote, "refs/heads/release "+newFeat+" refs/heads/release "+zero+"\nrefs/tags/template/v9.9.9 "+newFeat+
+		" refs/tags/template/v9.9.9 "+zero+"\n")
+	require.Error(t, err, "a release by URL into a new branch hides the commits under its tag:\n%s", out)
 	require.Contains(t, out, "нет строки Review:")
 	git(t, repo, "tag", "-d", "template/v9.9.9")
 	out, err = push("refs/heads/main " + ruled + " refs/heads/main " + stuff + "\n")

@@ -48,12 +48,13 @@ secret='(^|/)\.env(\.[^/]*)?$|\.(pem|key)$' example='\.example$'
 
 # Сообщение корневого коммита и коммита, у родителя которого нет хука commit-msg, не судится: правила тогда не было.
 # Коммит, общий нескольким пушимым ref'ам, судится один раз. История под тегами шаблона template/* выпущена, когда push
-# идёт в пустой remote (ни его веток у нас, ни его ref'ов в push'е): так клон форка переносит её — и с тегами (--tags,
-# push.followTags). В непустой remote тег шаблона — выпуск (git tag -a, затем git push origin main template/vX.Y.Z): его
-# коммиты судятся.
+# идёт в пустой remote: так клон форка переносит её — и с тегами (--tags, push.followTags). Пустой — без единого ref'а
+# (git ls-remote): ни его веток у нас, ни его ref'ов в push'е нет и у выпуска по URL в новую ветку. В непустой remote
+# тег шаблона — выпуск (git tag -a, затем git push origin main template/vX.Y.Z): его коммиты судятся.
 released=()
 if [ -z "$(git -C "$root" for-each-ref --count=1 "refs/remotes/$1/")" ] &&
-    awk '$4 !~ /^0+$/ {found = 1} END {exit found}' <<<"$refs"; then
+    awk '$4 !~ /^0+$/ {found = 1} END {exit found}' <<<"$refs" &&
+    advertised=$(git -C "$root" ls-remote "$2") && [ -z "$advertised" ]; then
     mapfile -t released < <(git -C "$root" for-each-ref --format='%(refname)' 'refs/tags/template/*')
 fi
 judged=" "
