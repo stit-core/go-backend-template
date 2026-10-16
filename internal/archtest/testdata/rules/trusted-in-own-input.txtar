@@ -1,0 +1,21 @@
+# Trusted (операции без policy) в своём входе поставщика.
+rule: TestTrustedOnlyInModules
+base: canon
+want: internal/domain/shop/delivery/http/peek.go uses shop.Trusted: operations without policy are for adapters in module/
+-- internal/domain/shop/delivery/http/peek.go --
+package http
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+)
+
+// Peeker смотрит товар мимо policy.
+type Peeker struct {
+	trusted *shop.Trusted
+}
+
+func (p *Peeker) peek(ctx context.Context, id string) (*shop.Item, error) {
+	return p.trusted.Lookup(ctx, id)
+}

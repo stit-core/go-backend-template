@@ -1,0 +1,23 @@
+# Хендлер не из пакета входа: правила таблиц ошибок и policy читают только его функции.
+rule: TestInputsRegisterInDelivery
+base: canon
+want: registers handler shoppg.Count, which is not a method, function or literal of delivery/http
+-- internal/domain/shop/delivery/http/count.go --
+package http
+
+import (
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
+
+	shoppg "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/infra/postgres"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+)
+
+func RegisterCount(api huma.API) {
+	huma.Register(api, getErrors.Declare(authgate.Secured(huma.Operation{
+		OperationID: "countItems",
+		Method:      http.MethodGet,
+		Path:        "/api/items/count",
+	})), shoppg.Count)
+}

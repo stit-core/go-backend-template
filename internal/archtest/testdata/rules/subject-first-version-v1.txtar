@@ -1,0 +1,15 @@
+# Первая версия события — без суффикса: .v1 дал бы второе имя той же версии.
+rule: TestSubjectVersions
+base: canon
+want: names subject "shop.events.item_created.v1"
+-- internal/domain/shop/events.go --
+package shop
+
+import "time"
+
+const subjectItemCreated = "shop.events.item_created.v1"
+
+type ItemCreated struct {
+	ID string
+	At time.Time
+}

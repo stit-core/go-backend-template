@@ -1,0 +1,10 @@
+# fmt.Errorf без %w теряет sentinel и причину.
+rule: TestDomainErrorsInErrorsGo
+base: canon
+want: calls fmt.Errorf without %w
+-- internal/domain/shop/stock.go --
+package shop
+
+import "fmt"
+
+func soldOut(id string) error { return fmt.Errorf("item %s sold out", id) }

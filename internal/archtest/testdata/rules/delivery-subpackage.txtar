@@ -1,0 +1,8 @@
+# Подпакет входа: правила входа читают только пакет delivery/<транспорт>.
+rule: TestDeliveryPackages
+base: canon
+want: internal/domain/shop/delivery/http/admin: a domain input is one package delivery/<transport> with its mocks
+-- internal/domain/shop/delivery/http/admin/handler.go --
+package admin
+
+type Handler struct{}

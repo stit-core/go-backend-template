@@ -1,0 +1,10 @@
+# Таблица операции, которую не объявил Declare: её кодов нет в OpenAPI.
+rule: TestDomainErrorTables
+base: canon
+want: operation table stockErrors is not declared
+-- internal/domain/shop/delivery/http/stock.go --
+package http
+
+import "git.stit.tech/stit-core/golibinfra/httpkit"
+
+var stockErrors = httpkit.NewErrorMap(notFoundRule)

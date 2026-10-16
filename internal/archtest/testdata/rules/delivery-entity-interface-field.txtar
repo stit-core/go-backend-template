@@ -1,0 +1,28 @@
+# Законно: поле сущности с интерфейсом корня (sum-type) не делает сущность зависимостью.
+rule: TestDeliveryReachesUsecaseOnly
+base: canon
+-- internal/domain/shop/badge.go --
+package shop
+
+// Badge — отличие товара: запечатанный sum-type, вариант задаёт сущность.
+type Badge interface {
+	badge()
+}
+
+type NewBadge struct{}
+
+type SaleBadge struct {
+	Percent int
+}
+
+func (NewBadge) badge()  {}
+func (SaleBadge) badge() {}
+-- internal/domain/shop/entity.go --
+package shop
+
+type Item struct {
+	ID      string
+	OwnerID string
+	Name    string
+	Badge   Badge
+}

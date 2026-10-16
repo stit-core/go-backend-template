@@ -1,0 +1,45 @@
+# Законно: sum-type корня и тип с полем такого типа — данные; вход разбирает варианты type switch'ем.
+rule: TestDeliveryReachesUsecaseOnly
+base: canon
+-- internal/domain/shop/badge.go --
+package shop
+
+// Badge — отличие товара: запечатанный sum-type, вариант задаёт сущность.
+type Badge interface {
+	badge()
+}
+
+type NewBadge struct{}
+
+type SaleBadge struct {
+	Percent int
+}
+
+func (NewBadge) badge()  {}
+func (SaleBadge) badge() {}
+-- internal/domain/shop/card.go --
+package shop
+
+// Card — витрина товара.
+type Card struct {
+	Item   Item
+	Badges []Badge
+}
+-- internal/domain/shop/delivery/http/badges.go --
+package http
+
+import "git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+
+func badgeNames(c shop.Card) []string {
+	var out []string
+	for _, b := range c.Badges {
+		switch v := b.(type) {
+		case shop.NewBadge:
+			out = append(out, "new")
+		case shop.SaleBadge:
+			_ = v.Percent
+			out = append(out, "sale")
+		}
+	}
+	return out
+}

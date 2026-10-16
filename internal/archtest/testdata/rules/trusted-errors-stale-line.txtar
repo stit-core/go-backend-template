@@ -1,0 +1,33 @@
+# Строка TrustedErrors без метода.
+rule: TestTrustedErrors
+base: canon
+want: TrustedErrors lists Rename, which Trusted does not declare
+-- internal/domain/shop/trusted.go --
+package shop
+
+import (
+	"context"
+
+	"go.uber.org/fx"
+)
+
+var TrustedErrors = map[string][]error{
+	"Lookup": {ErrNotFound},
+	"Rename": {ErrNotFound},
+}
+
+type TrustedDeps struct {
+	fx.In
+
+	Repo Repository
+}
+
+type Trusted struct {
+	d TrustedDeps
+}
+
+func NewTrusted(d TrustedDeps) *Trusted { return &Trusted{d: d} }
+
+func (t *Trusted) Lookup(ctx context.Context, id string) (*Item, error) {
+	return t.d.Repo.Get(ctx, id, "")
+}

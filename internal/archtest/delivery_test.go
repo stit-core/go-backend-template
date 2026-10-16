@@ -6,13 +6,12 @@ import (
 	"go/types"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -25,15 +24,19 @@ const (
 // подпакет под ним (delivery/http/admin) они бы не увидели.
 func TestDeliveryPackages(t *testing.T) {
 	t.Parallel()
+	runRule(t)
+}
+
+func deliveryPackages(c *check) {
 	seen := map[string]bool{}
-	for _, f := range goFiles(t) {
+	for _, f := range c.files {
 		_, sub, ok := splitDomain(f.pkg)
 		if !ok || !under(sub, "delivery") || seen[f.pkg] {
 			continue
 		}
 		seen[f.pkg] = true
 		if parts := strings.Split(sub, "/"); len(parts) != 2 && (len(parts) != 3 || parts[2] != "mocks") {
-			t.Errorf("%s: a domain input is one package delivery/<transport> with its mocks — the rules of HTTP types, error tables, policy and event contracts read that package", f.pkg)
+			c.Errorf("%s: a domain input is one package delivery/<transport> with its mocks — the rules of HTTP types, error tables, policy and event contracts read that package", f.pkg)
 		}
 	}
 }
@@ -55,14 +58,18 @@ var registrars = map[string]map[string]int{
 // регистрация значением-функцией, обёрткой или с хендлером-декоратором обошла бы их.
 func TestInputsRegisterInDelivery(t *testing.T) {
 	t.Parallel()
-	files := goFiles(t)
+	runRule(t)
+}
+
+func inputsRegisterInDelivery(c *check) {
+	files := c.files
 	declared := map[string]map[string]bool{} // пакет delivery/http → «m:<метод>», «f:<функция>»
 	for _, f := range files {
 		if _, sub, ok := splitDomain(f.pkg); ok && sub == "delivery/http" && !f.test {
 			if declared[f.pkg] == nil {
 				declared[f.pkg] = map[string]bool{}
 			}
-			for _, decl := range parseGo(t, f.path).Decls {
+			for _, decl := range c.parse(f.path).Decls {
 				if fn, ok := decl.(*ast.FuncDecl); ok {
 					declared[f.pkg][map[bool]string{true: "m:", false: "f:"}[fn.Recv != nil]+fn.Name.Name] = true
 				}
@@ -73,10 +80,10 @@ func TestInputsRegisterInDelivery(t *testing.T) {
 		if f.test || !slices.ContainsFunc(f.imports, func(imp string) bool { return imp == humaPath || imp == ssePath || imp == natskitPath }) {
 			continue
 		}
-		file := parseGo(t, f.path)
+		file := c.parse(f.path)
 		for _, imp := range file.Imports {
 			if p, _ := strconv.Unquote(imp.Path.Value); imp.Name != nil && imp.Name.Name == "." && (p == humaPath || p == ssePath || p == natskitPath) {
-				t.Errorf("%s dot-imports %s: archtest would not see the operations and subscriptions it registers", f.path, p)
+				c.Errorf("%s dot-imports %s: archtest would not see the operations and subscriptions it registers", f.path, p)
 			}
 		}
 		byName := importsByName(file)
@@ -100,18 +107,18 @@ func TestInputsRegisterInDelivery(t *testing.T) {
 				_, registrar := registrars[pkg][name]
 				switch {
 				case pkg == humaPath && slices.Contains(humaShortcuts, name):
-					t.Errorf("%s registers an operation with huma.%s: an operation is registered by huma.Register with its error table", f.path, name)
+					c.Errorf("%s registers an operation with huma.%s: an operation is registered by huma.Register with its error table", f.path, name)
 				case registrar && !inHTTP:
-					t.Errorf("%s registers an HTTP operation (%s): operations live in internal/domain/<d>/delivery/http, where the rules of error tables and policy read them", f.path, types.ExprString(x))
+					c.Errorf("%s registers an HTTP operation (%s): operations live in internal/domain/<d>/delivery/http, where the rules of error tables and policy read them", f.path, types.ExprString(x))
 				case registrar && !called[x]:
-					t.Errorf("%s uses %s as a value: an operation is registered by a direct call, which the rules of error tables and policy read", f.path, types.ExprString(x))
+					c.Errorf("%s uses %s as a value: an operation is registered by a direct call, which the rules of error tables and policy read", f.path, types.ExprString(x))
 				case pkg == natskitPath && strings.HasPrefix(name, "Subscribe") && !inNATS:
-					t.Errorf("%s subscribes to events (natskit.%s): subscriptions live in internal/domain/<d>/delivery/nats, where the consumer's contract test checks them", f.path, name)
+					c.Errorf("%s subscribes to events (natskit.%s): subscriptions live in internal/domain/<d>/delivery/nats, where the consumer's contract test checks them", f.path, name)
 				}
 			case *ast.CallExpr:
 				pkg, name := kitCall(x, byName)
 				if arg, ok := registrars[pkg][name]; ok && inHTTP && len(x.Args) > arg && !localHandler(x.Args[arg], byName, declared[f.pkg]) {
-					t.Errorf("%s registers handler %s, which is not a method, function or literal of delivery/http: the rules of error tables and policy read only those", f.path, types.ExprString(x.Args[arg]))
+					c.Errorf("%s registers handler %s, which is not a method, function or literal of delivery/http: the rules of error tables and policy read only those", f.path, types.ExprString(x.Args[arg]))
 				}
 			}
 			return true
@@ -147,31 +154,134 @@ func localHandler(expr ast.Expr, byName map[string]string, declared map[string]b
 // TestSubscriptionsHaveContractTest: схему подписки со схемой поставщика сверяет контракт-тест потребителя
 // delivery/nats/contract_test.go — каждой подписке Register (bus.Subscriptions()) событие настоящего usecase
 // поставщика. Без него схема подписки держится только на её собственном тесте, а он пишет payload сам. Правило
-// держит присутствие теста и вызова Subscriptions; что сверка верна, держит сам тест.
+// держит присутствие теста, вызова Subscriptions и источник событий: событие, записанное рукой (outboxtest.Event),
+// с subject домена этого репо — только payload прежней версии, в функции с «снять в релизе» в комментарии (event.md
+// § Versioning); событие другого сервиса — из его контракта. Что сверка верна, держит сам тест.
 func TestSubscriptionsHaveContractTest(t *testing.T) {
 	t.Parallel()
+	runRule(t)
+}
+
+func subscriptionsHaveContractTest(c *check) {
 	subscribers := map[string]bool{} // пакеты delivery/nats с подпиской
-	for _, f := range goFiles(t) {
+	for _, f := range c.files {
 		if _, sub, ok := splitDomain(f.pkg); ok && sub == "delivery/nats" && !f.test && slices.Contains(f.imports, natskitPath) {
 			subscribers[f.pkg] = true
 		}
 	}
+	domains := c.domains()
 	for pkg := range subscribers {
 		contract := pkg + "/contract_test.go"
-		if _, err := os.Stat(filepath.Join(repoRoot(t), contract)); err != nil {
-			t.Errorf("%s subscribes to events without %s: the contract test delivers every subscription an event of the provider's usecase (rule events-and-messaging)", pkg, contract)
+		if _, err := os.Stat(filepath.Join(c.root, contract)); err != nil {
+			c.Errorf("%s subscribes to events without %s: the contract test delivers every subscription an event of the provider's usecase (rule events-and-messaging)", pkg, contract)
 			continue
 		}
+		file := c.parse(contract)
 		checked := false
-		ast.Inspect(parseGo(t, contract), func(n ast.Node) bool {
+		ast.Inspect(file, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
 			checked = checked || ok && sel.Sel.Name == "Subscriptions"
 			return !checked
 		})
 		if !checked {
-			t.Errorf("%s does not check the subscriptions of Register against the provider events it delivers (bus.Subscriptions()): a subscription without an event would pass", contract)
+			c.Errorf("%s does not check the subscriptions of Register against the provider events it delivers (bus.Subscriptions()): a subscription without an event would pass", contract)
+		}
+		subjects := packageStrings(c, pkg, file)
+		byName := importsByName(file)
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Doc != nil && strings.Contains(fn.Doc.Text(), "снять в релизе") {
+				continue
+			}
+			for _, subject := range handEventSubjects(decl, byName, module+"/"+pkg, subjects) {
+				if d, _, _ := strings.Cut(subject, ".events."); slices.Contains(domains, d) && strings.Contains(subject, ".events.") {
+					c.Errorf("%s writes an event of %s by hand (%q): an event of a provider of this repo comes from its usecase; a recorded payload of the previous version sits in a function whose comment says «снять в релизе …» (event.md § Versioning)", contract, d, subject)
+				}
+			}
 		}
 	}
+}
+
+const outboxtestPath = golibinfra + "/testkit/outboxtest"
+
+// packageStrings — строковые константы пакета pkg и файла file: имя → значение.
+func packageStrings(c *check, pkg string, file *ast.File) map[string]string {
+	out := map[string]string{}
+	collect := func(f *ast.File) {
+		for _, decl := range f.Decls {
+			if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == token.CONST {
+				for _, spec := range gd.Specs {
+					vs := spec.(*ast.ValueSpec)
+					for i, name := range vs.Names {
+						if i < len(vs.Values) {
+							if val, ok := stringLit(vs.Values[i]); ok {
+								out[name.Name] = val
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, f := range c.files {
+		if f.pkg == pkg && !f.test {
+			collect(c.parse(f.path))
+		}
+	}
+	collect(file)
+	return out
+}
+
+// handEventSubjects — subject'ы событий, записанных рукой в узле: литерал outboxtest.Event{…} (и элемент
+// []outboxtest.Event{{…}}), чей Subject — строковый литерал или константа пакета подписки (pkgPath) либо файла.
+func handEventSubjects(node ast.Node, byName map[string]string, pkgPath string, consts map[string]string) []string {
+	var out []string
+	event := func(lit *ast.CompositeLit) {
+		for i, elt := range lit.Elts {
+			value := elt
+			if kv, ok := elt.(*ast.KeyValueExpr); ok {
+				if !isIdent(kv.Key, "Subject") {
+					continue
+				}
+				value = kv.Value
+			} else if i != 0 {
+				continue
+			}
+			switch v := value.(type) {
+			case *ast.BasicLit:
+				if val, ok := stringLit(v); ok {
+					out = append(out, val)
+				}
+			case *ast.Ident:
+				if val, ok := consts[v.Name]; ok {
+					out = append(out, val)
+				}
+			case *ast.SelectorExpr:
+				if id, ok := v.X.(*ast.Ident); ok && byName[id.Name] == pkgPath {
+					if val, ok := consts[v.Sel.Name]; ok {
+						out = append(out, val)
+					}
+				}
+			}
+		}
+	}
+	ast.Inspect(node, func(n ast.Node) bool {
+		lit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		if isSelector(lit.Type, byName, outboxtestPath, "Event") {
+			event(lit)
+		}
+		if arr, ok := lit.Type.(*ast.ArrayType); ok && isSelector(arr.Elt, byName, outboxtestPath, "Event") {
+			for _, elt := range lit.Elts {
+				if inner, ok := elt.(*ast.CompositeLit); ok && inner.Type == nil {
+					event(inner)
+				}
+			}
+		}
+		return true
+	})
+	return out
 }
 
 // kitCall — пакет и имя вызова <пакет>.<имя>(…), и с параметрами типа (huma.Register[I, O]); "" — не такой вызов.
@@ -193,23 +303,27 @@ func kitCall(call *ast.CallExpr, byName map[string]string) (string, string) {
 // policy. Клиент stdlib (net/http) и хранилище за пакетом internal/platform или pkg/ правило не видит — ревью.
 func TestDeliveryReachesUsecaseOnly(t *testing.T) {
 	t.Parallel()
+	runRule(t)
+}
+
+func deliveryReachesUsecaseOnly(c *check) {
 	services := map[string]map[string]bool{} // домен → имена корня, за которыми зависимости
-	for _, f := range goFiles(t) {
+	for _, f := range c.files {
 		domain, sub, ok := splitDomain(f.pkg)
-		if !ok || f.test || !under(sub, "delivery") {
+		if !ok || f.test || !under(sub, "delivery") || path.Base(sub) == "mocks" {
 			continue
 		}
 		for _, imp := range f.imports {
 			kit, isKit := strings.CutPrefix(imp, golibinfra+"/")
 			if isKit && !slices.Contains(deliveryKits, kit) || under(imp, "database/sql") || under(imp, "github.com/jackc/pgx") {
-				t.Errorf("%s imports %s: delivery reaches the domain through its usecase port — stores, clients and drivers sit behind the usecase's ports", f.path, imp)
+				c.Errorf("%s imports %s: delivery reaches the domain through its usecase port — stores, clients and drivers sit behind the usecase's ports", f.path, imp)
 			}
 		}
 		if services[domain] == nil {
-			services[domain] = rootServices(t, domain)
+			services[domain] = rootServices(c, domain)
 		}
 		root := module + "/internal/domain/" + domain
-		file := parseGo(t, f.path)
+		file := c.parse(f.path)
 		byName := importsByName(file)
 		ast.Inspect(file, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
@@ -217,29 +331,26 @@ func TestDeliveryReachesUsecaseOnly(t *testing.T) {
 				return true
 			}
 			if id, ok := sel.X.(*ast.Ident); ok && byName[id.Name] == root && services[domain][sel.Sel.Name] {
-				t.Errorf("%s uses %s.%s: delivery takes data types from its domain root and calls the domain through its Usecase port — ports, the usecase, Trusted and their dependencies are wired in module/", f.path, id.Name, sel.Sel.Name)
+				c.Errorf("%s uses %s.%s: delivery takes data types from its domain root and calls the domain through its Usecase port — ports, the usecase, Trusted and their dependencies are wired in module/", f.path, id.Name, sel.Sel.Name)
 			}
 			return true
 		})
 	}
 }
 
-// rootServices — имена корня домена, за которыми зависимости, а не данные: интерфейсы (порты), структуры с
-// fx.In, типы с полем такого типа (Usecase, Trusted) и функции с ними в сигнатуре (NewUsecase, NewPolicy).
-func rootServices(t *testing.T, domain string) map[string]bool {
-	t.Helper()
-	paths, err := filepath.Glob(filepath.Join(repoRoot(t), "internal", "domain", domain, "*.go"))
-	require.NoError(t, err)
+// rootServices — имена корня домена, за которыми зависимости, а не данные: структуры с fx.In и типы корня в их полях
+// (порты), параметры конструкторов Usecase и Trusted, сами Usecase и Trusted, типы, которые упоминают эти имена, и
+// функции с ними в сигнатуре (NewUsecase, NewPolicy). Интерфейс корня вне зависимостей — данные: sum-type сущности,
+// приёмник, который метод usecase получает параметром.
+func rootServices(c *check, domain string) map[string]bool {
 	var (
 		specs []*ast.TypeSpec
 		funcs []*ast.FuncDecl
+		deps  []*ast.StructType
 	)
-	services := map[string]bool{}
-	for _, p := range paths {
-		if strings.HasSuffix(p, "_test.go") {
-			continue
-		}
-		file := parseGo(t, "internal/domain/"+domain+"/"+filepath.Base(p))
+	declared := map[string]bool{}                                 // типы корня
+	services := map[string]bool{"Usecase": true, "Trusted": true} // и структуры с fx.In
+	for _, file := range rootFiles(c, domain) {
 		byName := importsByName(file)
 		for _, decl := range file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil {
@@ -255,13 +366,33 @@ func rootServices(t *testing.T, domain string) map[string]bool {
 					continue
 				}
 				specs = append(specs, ts)
-				switch typ := ts.Type.(type) {
-				case *ast.InterfaceType:
+				declared[ts.Name.Name] = true
+				if st, ok := ts.Type.(*ast.StructType); ok && embedsFxIn(st, byName) {
+					deps = append(deps, st)
 					services[ts.Name.Name] = true
-				case *ast.StructType:
-					services[ts.Name.Name] = embedsFxIn(typ, byName)
 				}
 			}
+		}
+	}
+	addTypes := func(node ast.Node) {
+		ast.Inspect(node, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.SelectorExpr:
+				return false
+			case *ast.Ident:
+				services[x.Name] = services[x.Name] || declared[x.Name]
+			}
+			return true
+		})
+	}
+	for _, st := range deps {
+		for _, field := range st.Fields.List {
+			addTypes(field.Type)
+		}
+	}
+	for _, fn := range funcs {
+		if fn.Type.Results != nil && mentions(fn.Type.Results, map[string]bool{"Usecase": true, "Trusted": true}) {
+			addTypes(fn.Type.Params)
 		}
 	}
 	for grew := true; grew; {
@@ -278,6 +409,17 @@ func rootServices(t *testing.T, domain string) map[string]bool {
 		}
 	}
 	return services
+}
+
+// rootFiles — не-тестовые файлы корня домена.
+func rootFiles(c *check, domain string) []*ast.File {
+	var out []*ast.File
+	for _, f := range c.files {
+		if d, sub, ok := splitDomain(f.pkg); ok && d == domain && sub == "" && !f.test {
+			out = append(out, c.parse(f.path))
+		}
+	}
+	return out
 }
 
 // mentions — в типе есть тип своего пакета из names; имена полей и параметров и типы других пакетов — не они.
@@ -305,7 +447,11 @@ func mentions(node ast.Node, names map[string]bool) bool {
 // привязать, а функция репозитория или Trusted дала бы то же.
 func TestDeliveryPortsBoundToUsecase(t *testing.T) {
 	t.Parallel()
-	files := goFiles(t)
+	runRule(t)
+}
+
+func deliveryPortsBoundToUsecase(c *check) {
+	files := c.files
 	ports := map[string]map[string]bool{}     // путь импорта пакета delivery/<транспорт> → его порты-интерфейсы
 	funcTypes := map[string]map[string]bool{} // … → его экспортируемые типы-функции
 	for _, f := range files {
@@ -316,7 +462,7 @@ func TestDeliveryPortsBoundToUsecase(t *testing.T) {
 		if ports[pkg] == nil {
 			ports[pkg], funcTypes[pkg] = map[string]bool{}, map[string]bool{}
 		}
-		ast.Inspect(parseGo(t, f.path), func(n ast.Node) bool {
+		ast.Inspect(c.parse(f.path), func(n ast.Node) bool {
 			if ts, ok := n.(*ast.TypeSpec); ok {
 				switch ts.Type.(type) {
 				case *ast.InterfaceType:
@@ -333,7 +479,7 @@ func TestDeliveryPortsBoundToUsecase(t *testing.T) {
 		if f.test || inDomain && under(sub, "delivery") || !slices.ContainsFunc(f.imports, func(imp string) bool { return ports[imp] != nil }) {
 			continue
 		}
-		file := parseGo(t, f.path)
+		file := c.parse(f.path)
 		byName := importsByName(file)
 		bound := map[ast.Expr]bool{} // результаты closure над *Usecase в module/ своего домена
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -355,10 +501,10 @@ func TestDeliveryPortsBoundToUsecase(t *testing.T) {
 			}
 			port := types.ExprString(sel)
 			if domain, ok := portDomain(sel, byName, ports); ok {
-				t.Errorf("%s uses %s otherwise than as the result of func(uc *%s.Usecase) %s { return uc } in internal/domain/%s/module: an input port gets the usecase of its domain and its policy", f.path, port, domain, port, domain)
+				c.Errorf("%s uses %s otherwise than as the result of func(uc *%s.Usecase) %s { return uc } in internal/domain/%s/module: an input port gets the usecase of its domain and its policy", f.path, port, domain, port, domain)
 			}
 			if domain, ok := portDomain(sel, byName, funcTypes); ok {
-				t.Errorf("%s uses %s, a function type of internal/domain/%s/delivery: an input port is an interface of delivery, bound to *%s.Usecase by func(uc *%s.Usecase) <Port> { return uc } in its module — a function would hand the input an operation past the usecase and its policy", f.path, port, domain, domain, domain)
+				c.Errorf("%s uses %s, a function type of internal/domain/%s/delivery: an input port is an interface of delivery, bound to *%s.Usecase by func(uc *%s.Usecase) <Port> { return uc } in its module — a function would hand the input an operation past the usecase and its policy", f.path, port, domain, domain, domain)
 			}
 			return true
 		})
@@ -409,19 +555,23 @@ func usecaseClosure(fn *ast.FuncType, body *ast.BlockStmt, byName map[string]str
 // переменной пакета (operation); другую форму — отказ: открытость операции была бы не видна.
 func TestSecuredOperationsAskPolicy(t *testing.T) {
 	t.Parallel()
+	runRule(t)
+}
+
+func securedOperationsAskPolicy(c *check) {
 	byDomain := map[string][]goFile{} // домен → не-тестовые файлы delivery/http
-	for _, f := range goFiles(t) {
+	for _, f := range c.files {
 		if domain, sub, ok := splitDomain(f.pkg); ok && sub == "delivery/http" && !f.test {
 			byDomain[domain] = append(byDomain[domain], f)
 		}
 	}
 	for domain, files := range byDomain {
-		root := loadPolicyRoot(t, domain)
+		root := loadPolicyRoot(c, domain)
 		parsed := make([]*ast.File, len(files))
 		ifaces := map[string]bool{}
 		funcs := map[string]*ast.FuncDecl{} // методы и функции пакета
 		for i, f := range files {
-			parsed[i] = parseGo(t, f.path)
+			parsed[i] = c.parse(f.path)
 			for _, decl := range parsed[i].Decls {
 				if fn, ok := decl.(*ast.FuncDecl); ok {
 					funcs[fn.Name.Name] = fn
@@ -487,7 +637,7 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 				lit, open := operation(call.Args[1], vars, pkgByName, map[string]bool{})
 				switch {
 				case lit == nil:
-					t.Errorf("%s: operation %s is neither a huma.Operation literal in the call nor a package var that no function redeclares: archtest reads httpkit.Public only there (rule domain-architecture)", files[i].path, types.ExprString(call.Args[1]))
+					c.Errorf("%s: operation %s is neither a huma.Operation literal in the call nor a package var that no function redeclares: archtest reads httpkit.Public only there (rule domain-architecture)", files[i].path, types.ExprString(call.Args[1]))
 					return true
 				case open:
 					return true
@@ -499,15 +649,15 @@ func TestSecuredOperationsAskPolicy(t *testing.T) {
 				id := operationID(lit)
 				called := usecaseCalls(body, funcs, ports, map[string]bool{})
 				if len(called) == 0 {
-					t.Errorf("%s: operation %s under Security calls no usecase method: the handler reaches its domain through the usecase", files[i].path, id)
+					c.Errorf("%s: operation %s under Security calls no usecase method: the handler reaches its domain through the usecase", files[i].path, id)
 				}
 				for _, name := range called {
 					m, ok := root.methods[name]
 					switch {
 					case !ok:
-						t.Errorf("%s: operation %s under Security calls %s, which *%s.Usecase does not declare", files[i].path, id, name, domain)
+						c.Errorf("%s: operation %s under Security calls %s, which *%s.Usecase does not declare", files[i].path, id, name, domain)
 					case !(policyWalk{root, map[*ast.FuncDecl]bool{}, map[*ast.FuncDecl]bool{}}).asks(m):
-						t.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor only reads the caller's own record, as Me does (uc.d.Repo.GetByID(ctx, caller.UserID)): any signed-in caller would get it (rule domain-architecture)", files[i].path, id, domain, name)
+						c.Errorf("%s: operation %s under Security calls %s.Usecase.%s, which neither asks policy (uc.d.Policy.Can…) nor only reads the caller's own record, as Me does (uc.d.Repo.GetByID(ctx, caller.UserID)): any signed-in caller would get it (rule domain-architecture)", files[i].path, id, domain, name)
 					}
 				}
 				return true
@@ -613,20 +763,14 @@ type policyRoot struct {
 	policyFields   map[string]bool
 }
 
-func loadPolicyRoot(t *testing.T, domain string) policyRoot {
-	t.Helper()
-	paths, err := filepath.Glob(filepath.Join(repoRoot(t), "internal", "domain", domain, "*.go"))
-	require.NoError(t, err)
+func loadPolicyRoot(c *check, domain string) policyRoot {
+	c.T.Helper()
 	root := policyRoot{
 		methods: map[string]*ast.FuncDecl{}, funcs: map[string]*ast.FuncDecl{}, byName: map[*ast.FuncDecl]map[string]string{},
 		ports: map[string]bool{}, policies: map[string]bool{}, portFields: map[string]bool{}, policyFields: map[string]bool{},
 	}
 	var deps []*ast.StructType
-	for _, p := range paths {
-		if strings.HasSuffix(p, "_test.go") {
-			continue
-		}
-		file := parseGo(t, "internal/domain/"+domain+"/"+filepath.Base(p))
+	for _, file := range rootFiles(c, domain) {
 		byName := importsByName(file)
 		for _, decl := range file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok {

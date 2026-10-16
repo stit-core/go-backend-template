@@ -1,5 +1,6 @@
 // Package archtest машинно держит обвязку шаблона и канон доменов (rule domain-architecture) для любого
-// каталога internal/domain/*; на archtest и archkit //nolint не действует. Тесты по файлам:
+// каталога internal/domain/*; на archtest и archkit //nolint не действует. Правила кода (rules) читают дерево с
+// корнем: репо или пример testdata/rules/*.txtar — у каждого есть нарушение и законная форма. Тесты по файлам:
 //
 //   - layout_test.go — TestLayout: раскладку держит archkit (golibinfra) — каталоги internal/, импорты между
 //     доменами и слоями, чистоту корня и чистых слоёв, настенные часы, порты между доменами без
@@ -8,7 +9,9 @@
 //   - archtest_test.go — TestHTTPTypes (префикс, уникальность и envelope HTTP-типов), TestDomainErrorTables
 //     (таблица ошибок домена и ответ хендлера — nil или она), TestDomainErrorsInErrorsGo (ошибки корня — только
 //     в errors.go), TestSubjectLiteralOwnership и TestNoExportedSubjectInDomainRoot (владение subject'ами),
-//     TestTestsAssert (тесты и fuzz-цели без утверждений, мягкие ожидания моков);
+//     TestSubjectVersions (первая версия subject — без суффикса), TestTestsAssert (тесты и fuzz-цели без утверждений,
+//     мягкие ожидания моков), TestRuleExamples (примеры правил кода: нарушение — отказ с текстом, законная форма —
+//     тишина);
 //   - crossdomain_test.go — TestTrustedOnlyInModules и TestTrustedErrors (Trusted между доменами), TestNoFxAs
 //     (привязка портов без fx.As), TestModulesEmbedNoForeignTypes (порт между доменами — типовой адаптер);
 //   - delivery_test.go — вход домена: TestDeliveryPackages (пакет delivery/<транспорт>),
@@ -51,11 +54,13 @@
 package archtest
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"go/types"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -80,7 +85,13 @@ func repoRoot(t *testing.T) string {
 
 func domains(t *testing.T) []string {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(repoRoot(t), "internal", "domain"))
+	return domainsAt(t, repoRoot(t))
+}
+
+// domainsAt — каталоги internal/domain дерева root.
+func domainsAt(t *testing.T, root string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(root, "internal", "domain"))
 	require.NoError(t, err)
 	var out []string
 	for _, e := range entries {
@@ -116,7 +127,12 @@ type goFile struct {
 // goFiles — все .go-файлы репо вне скрытых каталогов (.git, .cache, worktree'ы в .claude).
 func goFiles(t *testing.T) []goFile {
 	t.Helper()
-	root := repoRoot(t)
+	return goFilesAt(t, repoRoot(t))
+}
+
+// goFilesAt — .go-файлы дерева root вне скрытых каталогов.
+func goFilesAt(t *testing.T, root string) []goFile {
+	t.Helper()
 	var files []goFile
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		switch {
@@ -147,7 +163,13 @@ func goFiles(t *testing.T) []goFile {
 
 func parseGo(t *testing.T, rel string) *ast.File {
 	t.Helper()
-	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repoRoot(t), rel), nil, 0)
+	return parseGoAt(t, repoRoot(t), rel)
+}
+
+// parseGoAt — файл дерева root по пути от корня, с комментариями.
+func parseGoAt(t *testing.T, root, rel string) *ast.File {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, rel), nil, parser.ParseComments)
 	require.NoError(t, err)
 	return f
 }
@@ -188,19 +210,194 @@ func under(p, dir string) bool {
 	return p == dir || strings.HasPrefix(p, dir+"/")
 }
 
+// rules — правила кода по имени их теста: тест гоняет правило по репо (runRule), TestRuleExamples — по примерам
+// testdata/rules.
+var rules = map[string]func(*check){
+	"TestHTTPTypes":                     httpTypes,
+	"TestDomainErrorTables":             domainErrorTables,
+	"TestDomainErrorsInErrorsGo":        domainErrorsInErrorsGo,
+	"TestSubjectLiteralOwnership":       subjectLiteralOwnership,
+	"TestNoExportedSubjectInDomainRoot": noExportedSubjectInDomainRoot,
+	"TestSubjectVersions":               subjectVersions,
+	"TestTrustedOnlyInModules":          trustedOnlyInModules,
+	"TestTrustedErrors":                 trustedErrors,
+	"TestModulesEmbedNoForeignTypes":    modulesEmbedNoForeignTypes,
+	"TestNoFxAs":                        noFxAs,
+	"TestDeliveryPackages":              deliveryPackages,
+	"TestInputsRegisterInDelivery":      inputsRegisterInDelivery,
+	"TestSubscriptionsHaveContractTest": subscriptionsHaveContractTest,
+	"TestDeliveryReachesUsecaseOnly":    deliveryReachesUsecaseOnly,
+	"TestDeliveryPortsBoundToUsecase":   deliveryPortsBoundToUsecase,
+	"TestSecuredOperationsAskPolicy":    securedOperationsAskPolicy,
+}
+
+// check — прогон правила по дереву: репо или пример testdata/rules. Нарушение правило отдаёт c.Errorf — в репо это
+// отказ теста, в примере — запись, которую пример сверяет со своими want; сбой чтения — require на c.T.
+type check struct {
+	T     *testing.T
+	root  string
+	files []goFile  // .go-файлы дерева
+	found *[]string // отказы примера; nil — дерево репо
+}
+
+// runRule — правило теста t (rules[t.Name()]) по дереву репо.
+func runRule(t *testing.T) {
+	t.Helper()
+	rule, ok := rules[t.Name()]
+	require.True(t, ok, "%s is not in rules", t.Name())
+	rule(&check{T: t, root: repoRoot(t), files: goFiles(t)})
+}
+
+func (c *check) Errorf(format string, args ...any) {
+	c.T.Helper()
+	if c.found == nil {
+		c.T.Errorf(format, args...)
+		return
+	}
+	*c.found = append(*c.found, fmt.Sprintf(format, args...))
+}
+
+func (c *check) parse(rel string) *ast.File {
+	c.T.Helper()
+	return parseGoAt(c.T, c.root, rel)
+}
+
+func (c *check) domains() []string {
+	c.T.Helper()
+	return domainsAt(c.T, c.root)
+}
+
+// TestRuleExamples: у каждого правила rules — примеры testdata/rules/*.txtar: нарушение (want — подстрока отказа:
+// каждая находит отказ, каждый отказ — свою want) и законная форма (без want — правило молчит). Правило, которое
+// замолчало или шумит на законной форме, роняет пример; правило без примера нарушения или законной формы — отказ.
+func TestRuleExamples(t *testing.T) {
+	t.Parallel()
+	paths, err := filepath.Glob(filepath.Join("testdata", "rules", "*.txtar"))
+	require.NoError(t, err)
+	violation, legit := map[string]bool{}, map[string]bool{}
+	for _, p := range paths {
+		name := strings.TrimSuffix(filepath.Base(p), ".txtar")
+		ex := loadExample(t, name, true)
+		checked := ex.rules
+		if slices.Equal(checked, []string{"*"}) {
+			checked = slices.Sorted(maps.Keys(rules))
+		}
+		require.NotEmpty(t, checked, "%s names no rule", p)
+		require.True(t, len(ex.want) == 0 || len(checked) == 1, "%s: a violation example checks one rule", p)
+		for _, rule := range checked {
+			require.Contains(t, rules, rule, "%s: unknown rule", p)
+			violation[rule] = violation[rule] || len(ex.want) > 0
+			legit[rule] = legit[rule] || len(ex.want) == 0
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFiles(t, root, ex.files)
+			for _, rule := range checked {
+				var found []string
+				rules[rule](&check{T: t, root: root, files: goFilesAt(t, root), found: &found})
+				for _, want := range ex.want {
+					require.True(t, slices.ContainsFunc(found, func(f string) bool { return strings.Contains(f, want) }),
+						"%s: no refusal with %q; refusals: %q", rule, want, found)
+				}
+				for _, f := range found {
+					require.True(t, slices.ContainsFunc(ex.want, func(w string) bool { return strings.Contains(f, w) }),
+						"%s refuses what the example does not want: %s", rule, f)
+				}
+			}
+		})
+	}
+	for rule := range rules {
+		require.True(t, violation[rule], "%s has no violation example in testdata/rules", rule)
+		require.True(t, legit[rule], "%s has no legit example in testdata/rules", rule)
+	}
+}
+
+// example — пример из testdata/rules/<name>.txtar. Комментарий архива: rule — правила через пробел (* — все), want —
+// подстрока ожидаемого отказа (без want — законная форма), base — пример, чьё дерево берётся за основу, drop — файл
+// основы, которого в дереве нет; строки с # — пояснения. Файлы архива дописывают и заменяют файлы основы.
+type example struct {
+	rules, want []string
+	files       map[string]string
+}
+
+func loadExample(t *testing.T, name string, withBase bool) example {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", "rules", name+".txtar"))
+	require.NoError(t, err)
+	comment, files := parseTxtar(t, name, string(data))
+	ex := example{files: map[string]string{}}
+	var drop []string
+	for line := range strings.Lines(comment) {
+		line = strings.TrimSpace(line)
+		key, value, _ := strings.Cut(line, ":")
+		value = strings.TrimSpace(value)
+		switch key {
+		case "rule":
+			ex.rules = append(ex.rules, strings.Fields(value)...)
+		case "want":
+			ex.want = append(ex.want, value)
+		case "base":
+			require.True(t, withBase, "%s: the base %s has a base itself", name, value)
+			maps.Copy(ex.files, loadExample(t, value, false).files)
+		case "drop":
+			drop = append(drop, value)
+		default:
+			require.True(t, line == "" || strings.HasPrefix(line, "#"), "%s: unknown line %q", name, line)
+		}
+	}
+	maps.Copy(ex.files, files)
+	for _, f := range drop {
+		require.Contains(t, ex.files, f, "%s drops a file the tree does not have", name)
+		delete(ex.files, f)
+	}
+	return ex
+}
+
+// parseTxtar — комментарий и файлы архива: строка «-- путь --» открывает файл (формат golang.org/x/tools/txtar).
+func parseTxtar(t *testing.T, name, data string) (string, map[string]string) {
+	t.Helper()
+	var comment string
+	files := map[string]string{}
+	file, body := "", strings.Builder{}
+	flush := func() {
+		if file == "" {
+			comment = body.String()
+		} else {
+			require.NotContains(t, files, file, "%s: file %s twice", name, file)
+			files[file] = body.String()
+		}
+		body.Reset()
+	}
+	for line := range strings.Lines(data) {
+		if marker, ok := strings.CutPrefix(strings.TrimSuffix(line, "\n"), "-- "); ok && strings.HasSuffix(marker, " --") {
+			flush()
+			file = strings.TrimSuffix(marker, " --")
+			continue
+		}
+		body.WriteString(line)
+	}
+	flush()
+	return comment, files
+}
+
 // TestHTTPTypes: huma регистрирует схемы по имени Go-типа на весь API, и одноимённые типы двух
 // доменов роняют старт паникой — поэтому у типа delivery/http префикс домена и уникальное имя;
-// тело ответа — envelope {data}. Handler и Usecase — канон пакета, в схемы не попадают.
+// тело ответа — envelope {data}. Handler, интерфейсы (порты входа) и типы-функции в схемы не попадают.
 func TestHTTPTypes(t *testing.T) {
 	t.Parallel()
+	runRule(t)
+}
+
+func httpTypes(c *check) {
 	seen := map[string]string{} // имя типа → файл
-	for _, f := range goFiles(t) {
+	for _, f := range c.files {
 		domain, sub, ok := splitDomain(f.pkg)
 		if !ok || sub != "delivery/http" || f.test {
 			continue
 		}
 		prefix := exportedName(domain)
-		for _, decl := range parseGo(t, f.path).Decls {
+		for _, decl := range c.parse(f.path).Decls {
 			gd, ok := decl.(*ast.GenDecl)
 			if !ok || gd.Tok != token.TYPE {
 				continue
@@ -208,19 +405,23 @@ func TestHTTPTypes(t *testing.T) {
 			for _, spec := range gd.Specs {
 				ts := spec.(*ast.TypeSpec)
 				name := ts.Name.Name
-				if !ast.IsExported(name) || name == "Handler" || name == "Usecase" {
+				switch ts.Type.(type) {
+				case *ast.InterfaceType, *ast.FuncType:
+					continue
+				}
+				if !ast.IsExported(name) || name == "Handler" {
 					continue
 				}
 				// Регистр — не важен: инициализм revive пишет заглавными (api_key → APIKey).
 				if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
-					t.Errorf("%s declares %s: an HTTP type starts with the domain prefix %s", f.path, name, prefix)
+					c.Errorf("%s declares %s: an HTTP type starts with the domain prefix %s", f.path, name, prefix)
 				}
 				if prev, dup := seen[name]; dup {
-					t.Errorf("type %s is declared in both %s and %s: huma names schemas by Go type", name, prev, f.path)
+					c.Errorf("type %s is declared in both %s and %s: huma names schemas by Go type", name, prev, f.path)
 				}
 				seen[name] = f.path
 				if body := structField(ts.Type, "Body"); strings.HasSuffix(name, "Output") && body != nil && structField(body.Type, "Data") == nil {
-					t.Errorf("%s declares %s with a Body without Data: a response body is the envelope {data}", f.path, name)
+					c.Errorf("%s declares %s with a Body without Data: a response body is the envelope {data}", f.path, name)
 				}
 			}
 		}
@@ -261,8 +462,12 @@ func structField(expr ast.Expr, name string) *ast.Field {
 // регистрации.
 func TestDomainErrorTables(t *testing.T) {
 	t.Parallel()
+	runRule(t)
+}
+
+func domainErrorTables(c *check) {
 	files := map[string][]goFile{} // домен → не-тестовые файлы его delivery/http
-	for _, f := range goFiles(t) {
+	for _, f := range c.files {
 		if domain, sub, ok := splitDomain(f.pkg); ok && sub == "delivery/http" && !f.test {
 			files[domain] = append(files[domain], f)
 		}
@@ -282,7 +487,7 @@ func TestDomainErrorTables(t *testing.T) {
 		literals := map[*ast.FuncLit]string{} // хендлеры-литералы huma.Register → файл
 		parsed := make([]*ast.File, len(pkgFiles))
 		for i, f := range pkgFiles {
-			file := parseGo(t, f.path)
+			file := c.parse(f.path)
 			parsed[i] = file
 			byName := importsByName(file)
 			for _, decl := range file.Decls {
@@ -339,7 +544,7 @@ func TestDomainErrorTables(t *testing.T) {
 		}
 		path := "internal/domain/" + domain + "/delivery/http"
 		if tableArgs == nil {
-			t.Errorf("%s registers operations without the domain error table %s = httpkit.NewErrorMap(…)", path, table)
+			c.Errorf("%s registers operations without the domain error table %s = httpkit.NewErrorMap(…)", path, table)
 			continue
 		}
 		covered := map[string]bool{}
@@ -349,14 +554,14 @@ func TestDomainErrorTables(t *testing.T) {
 			}
 			covered[ruleErr(arg, tableByName, root)] = true
 		}
-		for _, sentinel := range domainErrors(t, domain) {
+		for _, sentinel := range domainErrors(c, domain) {
 			if !covered[sentinel] {
-				t.Errorf("%s.%s has no rule in %s.%s: the domain error would answer 500", domain, sentinel, path, table)
+				c.Errorf("%s.%s has no rule in %s.%s: the domain error would answer 500", domain, sentinel, path, table)
 			}
 		}
 		for name := range errorMaps {
 			if name != table && !declared[name] {
-				t.Errorf("%s: operation table %s is not declared in huma.Register(api, %s.Declare(op), …): its codes are missing from OpenAPI", path, name, name)
+				c.Errorf("%s: operation table %s is not declared in huma.Register(api, %s.Declare(op), …): its codes are missing from OpenAPI", path, name, name)
 			}
 		}
 		for i, file := range parsed {
@@ -364,26 +569,25 @@ func TestDomainErrorTables(t *testing.T) {
 				switch x := n.(type) {
 				case *ast.CallExpr:
 					if m := calledOn(x, "Map"); errorMaps[m] && m != table {
-						t.Errorf("%s maps errors with %s: a handler maps through the domain table %s, an operation table only declares", pkgFiles[i].path, m, table)
+						c.Errorf("%s maps errors with %s: a handler maps through the domain table %s, an operation table only declares", pkgFiles[i].path, m, table)
 					}
 				case *ast.FuncDecl:
 					if handlers[x.Name.Name] {
-						handlerReturns(t, pkgFiles[i].path, x.Name.Name, x.Body, table)
+						handlerReturns(c, pkgFiles[i].path, x.Name.Name, x.Body, table)
 					}
 				}
 				return true
 			})
 		}
 		for lit, where := range literals {
-			handlerReturns(t, where, "func literal", lit.Body, table)
+			handlerReturns(c, where, "func literal", lit.Body, table)
 		}
 	}
 }
 
 // handlerReturns: хендлер отдаёт ошибкой nil или <таблица домена>.Map(…) — другая ошибка ушла бы клиенту 500
 // или мимо кодов таблицы. Литерал внутри хендлера — своя функция: его return — не ответ хендлера.
-func handlerReturns(t *testing.T, path, handler string, body *ast.BlockStmt, table string) {
-	t.Helper()
+func handlerReturns(c *check, path, handler string, body *ast.BlockStmt, table string) {
 	ast.Inspect(body, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.FuncLit:
@@ -393,7 +597,7 @@ func handlerReturns(t *testing.T, path, handler string, body *ast.BlockStmt, tab
 				return true
 			}
 			if last := x.Results[len(x.Results)-1]; !isIdent(last, "nil") && calledOn(last, "Map") != table {
-				t.Errorf("%s: handler %s returns %s: a handler returns nil or %s.Map(err) — any other error answers 500 or bypasses the codes of the table", path, handler, types.ExprString(last), table)
+				c.Errorf("%s: handler %s returns %s: a handler returns nil or %s.Map(err) — any other error answers 500 or bypasses the codes of the table", path, handler, types.ExprString(last), table)
 			}
 		}
 		return true
@@ -447,10 +651,10 @@ func isSelector(expr ast.Expr, byName map[string]string, pkg, name string) bool 
 }
 
 // domainErrors — ошибки (переменные Err*) из errors.go домена.
-func domainErrors(t *testing.T, domain string) []string {
-	t.Helper()
+func domainErrors(c *check, domain string) []string {
+	c.T.Helper()
 	var names []string
-	for _, decl := range parseGo(t, "internal/domain/"+domain+"/errors.go").Decls {
+	for _, decl := range c.parse("internal/domain/" + domain + "/errors.go").Decls {
 		gd, ok := decl.(*ast.GenDecl)
 		if !ok || gd.Tok != token.VAR {
 			continue
@@ -474,11 +678,15 @@ var sentinelName = regexp.MustCompile(`^Err[A-Z]`)
 // для sentinel переводит и тип.
 func TestDomainErrorsInErrorsGo(t *testing.T) {
 	t.Parallel()
-	for _, f := range goFiles(t) {
+	runRule(t)
+}
+
+func domainErrorsInErrorsGo(c *check) {
+	for _, f := range c.files {
 		if _, sub, ok := splitDomain(f.pkg); !ok || sub != "" || f.test {
 			continue
 		}
-		file := parseGo(t, f.path)
+		file := c.parse(f.path)
 		byName := importsByName(file)
 		inErrorsGo := path.Base(f.path) == "errors.go"
 		sentinels := map[string]bool{}
@@ -496,9 +704,9 @@ func TestDomainErrorsInErrorsGo(t *testing.T) {
 								values[vs.Values[j]] = true
 							}
 						case inErrorsGo:
-							t.Errorf("%s declares %s: errors.go holds exported sentinels Err… — an unexported one has no rule in the HTTP table", f.path, id.Name)
+							c.Errorf("%s declares %s: errors.go holds exported sentinels Err… — an unexported one has no rule in the HTTP table", f.path, id.Name)
 						case named:
-							t.Errorf("%s declares %s: a sentinel lives in errors.go, where the HTTP error table is checked against it", f.path, id.Name)
+							c.Errorf("%s declares %s: a sentinel lives in errors.go, where the HTTP error table is checked against it", f.path, id.Name)
 						}
 					}
 				}
@@ -511,15 +719,15 @@ func TestDomainErrorsInErrorsGo(t *testing.T) {
 			case *ast.CallExpr:
 				switch {
 				case isSelector(x.Fun, byName, "errors", "New") && !values[x]:
-					t.Errorf("%s creates an error with errors.New outside a sentinel var Err… of errors.go: a domain error is such a sentinel, with a rule in the HTTP error table", f.path)
+					c.Errorf("%s creates an error with errors.New outside a sentinel var Err… of errors.go: a domain error is such a sentinel, with a rule in the HTTP error table", f.path)
 				case isSelector(x.Fun, byName, "fmt", "Errorf") && !wrapsError(x):
-					t.Errorf("%s calls fmt.Errorf without %%w: the error loses its sentinel or cause — wrap it, a new domain error is a sentinel of errors.go", f.path)
+					c.Errorf("%s calls fmt.Errorf without %%w: the error loses its sentinel or cause — wrap it, a new domain error is a sentinel of errors.go", f.path)
 				}
 			case *ast.FuncDecl:
 				recv := receiverName(x)
 				switch {
 				case recv != "" && x.Name.Name == "Error" && !inErrorsGo:
-					t.Errorf("%s declares error type %s: domain error types live in errors.go", f.path, recv)
+					c.Errorf("%s declares error type %s: domain error types live in errors.go", f.path, recv)
 				case recv != "" && x.Name.Name == "Error":
 					errorTypes = append(errorTypes, recv)
 				case recv != "" && x.Name.Name == "Unwrap" && returnsOneOf(x, sentinels):
@@ -530,7 +738,7 @@ func TestDomainErrorsInErrorsGo(t *testing.T) {
 		})
 		for _, typ := range errorTypes {
 			if !unwraps[typ] {
-				t.Errorf("%s: error type %s does not unwrap to a sentinel of errors.go: the HTTP table maps sentinels, the type would answer 500", f.path, typ)
+				c.Errorf("%s: error type %s does not unwrap to a sentinel of errors.go: the HTTP table maps sentinels, the type would answer 500", f.path, typ)
 			}
 		}
 	}
@@ -582,60 +790,96 @@ func returnsOneOf(fn *ast.FuncDecl, names map[string]bool) bool {
 // источника запрещён (consumers обязаны держать свою константу).
 func TestSubjectLiteralOwnership(t *testing.T) {
 	t.Parallel()
-	names := domains(t)
-	for _, f := range goFiles(t) {
+	runRule(t)
+}
+
+func subjectLiteralOwnership(c *check) {
+	names := c.domains()
+	for _, f := range c.files {
 		if !under(f.pkg, "internal") || f.test {
 			continue
 		}
-		ast.Inspect(parseGo(t, f.path), func(n ast.Node) bool {
-			lit, ok := n.(*ast.BasicLit)
-			if !ok || lit.Kind != token.STRING {
-				return true
-			}
-			val, err := strconv.Unquote(lit.Value)
-			if err != nil {
+		ast.Inspect(c.parse(f.path), func(n ast.Node) bool {
+			val, ok := stringLit(n)
+			if !ok {
 				return true
 			}
 			for _, d := range names {
-				if !strings.HasPrefix(val, d+".events.") {
-					continue
+				if strings.HasPrefix(val, d+".events.") && !under(f.pkg, "internal/domain/"+d) && !strings.Contains(f.pkg, "delivery/nats") {
+					c.Errorf("%s contains subject literal %q — only the owning domain or a delivery/nats consumer may declare it", f.path, val)
 				}
-				inOwner := under(f.pkg, "internal/domain/"+d)
-				inConsumerNATS := strings.Contains(f.pkg, "delivery/nats")
-				require.True(t, inOwner || inConsumerNATS,
-					"%s contains subject literal %q — only the owning domain or a delivery/nats consumer may declare it", f.path, val)
 			}
 			return true
 		})
 	}
 }
 
+// stringLit — значение строкового литерала; false — не он.
+func stringLit(n ast.Node) (string, bool) {
+	lit, ok := n.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return "", false
+	}
+	val, err := strconv.Unquote(lit.Value)
+	return val, err == nil
+}
+
+// TestNoExportedSubjectInDomainRoot: subject — неэкспортируемая константа источника, у потребителя — своя
+// (TestSubjectLiteralOwnership): экспорт отдал бы его потребителю мимо контракт-теста.
 func TestNoExportedSubjectInDomainRoot(t *testing.T) {
 	t.Parallel()
-	root := repoRoot(t)
-	for _, d := range domains(t) {
-		matches, err := filepath.Glob(filepath.Join(root, "internal", "domain", d, "*.go"))
-		require.NoError(t, err)
-		for _, path := range matches {
-			f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-			require.NoError(t, err)
-			for _, decl := range f.Decls {
-				gd, ok := decl.(*ast.GenDecl)
+	runRule(t)
+}
+
+func noExportedSubjectInDomainRoot(c *check) {
+	for _, f := range c.files {
+		if _, sub, ok := splitDomain(f.pkg); !ok || sub != "" || f.test {
+			continue
+		}
+		for _, decl := range c.parse(f.path).Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
 				if !ok {
 					continue
 				}
-				for _, spec := range gd.Specs {
-					vs, ok := spec.(*ast.ValueSpec)
-					if !ok {
-						continue
-					}
-					for _, n := range vs.Names {
-						require.False(t, strings.HasPrefix(n.Name, "Subject"),
-							"%s exports %q — subjects stay unexported in the source domain", path, n.Name)
+				for _, n := range vs.Names {
+					if strings.HasPrefix(n.Name, "Subject") {
+						c.Errorf("%s exports %q — subjects stay unexported in the source domain", f.path, n.Name)
 					}
 				}
 			}
 		}
+	}
+}
+
+// firstVersion — subject с суффиксом первой версии: <домен>.events.<событие>.v1.
+var firstVersion = regexp.MustCompile(`^([a-z0-9_]+)\.events\..+\.v1$`)
+
+// TestSubjectVersions: первая версия события домена этого репо — subject без суффикса, новая — следующий номер .vN
+// (event.md § Versioning): .v1 рядом с subject без суффикса дал бы два имени одной версии. Subject другого сервиса
+// называет его контракт.
+func TestSubjectVersions(t *testing.T) {
+	t.Parallel()
+	runRule(t)
+}
+
+func subjectVersions(c *check) {
+	names := c.domains()
+	for _, f := range c.files {
+		if !under(f.pkg, "internal") {
+			continue
+		}
+		ast.Inspect(c.parse(f.path), func(n ast.Node) bool {
+			val, ok := stringLit(n)
+			if m := firstVersion.FindStringSubmatch(val); ok && m != nil && slices.Contains(names, m[1]) {
+				c.Errorf("%s names subject %q: the first version of an event has no suffix, a new one is the next .vN", f.path, val)
+			}
+			return true
+		})
 	}
 }
 

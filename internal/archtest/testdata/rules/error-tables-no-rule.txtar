@@ -1,0 +1,13 @@
+# Ошибка errors.go без правила в таблице домена ушла бы клиенту 500.
+rule: TestDomainErrorTables
+base: canon
+want: shop.ErrSoldOut has no rule in internal/domain/shop/delivery/http.shopErrors
+-- internal/domain/shop/errors.go --
+package shop
+
+import "errors"
+
+var (
+	ErrNotFound = errors.New("shop: not found")
+	ErrSoldOut  = errors.New("shop: sold out")
+)

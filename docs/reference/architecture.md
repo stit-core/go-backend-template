@@ -101,7 +101,7 @@ Generic-примитив, нужный не только этому сервис
   тип домена его переводит хендлер.
 - **События** (`events.go`): `<Aggregate><PastEvent>` (`UserRegistered`,
   `EmailVerificationRequested`); payload — без json-тегов (wire = Go-имена; смена формата =
-  новый subject `.v2`), timestamp-поле — `At time.Time`. Subject — unexported const
+  новый subject `.v2`, первая версия — без суффикса), timestamp-поле — `At time.Time`. Subject — unexported const
   `subject<Event>` рядом с payload-типом.
 - **Sentinel** (`errors.go`): `Err<What> = errors.New("<domain>: <lowercase text>")`.
 - **HTTP-DTO** (`delivery/http/dto.go`): `<Domain><Op>Input/Output` — глобально уникальные
@@ -261,7 +261,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 имена publicly-named DTO в `delivery/http/dto.go` — domain-specific: `EventListOutput`,
 не `ListOutput`. Inline `Body struct{...}` именуется по Outer-типу — уникальность Outer
 гарантирует уникальность Body. Префикс домена, уникальность и envelope `data` экспортируемых
-типов `delivery/http` (кроме `Handler` и `Usecase`) держит archtest `TestHTTPTypes`.
+типов `delivery/http` (кроме `Handler`, интерфейсов и типов-функций — в схемы они не попадают) держит archtest
+`TestHTTPTypes`.
 
 Операцию регистрирует вызов `huma.Register` (поток — `sse.Register`) в `delivery/http` своего домена, хендлер —
 метод, функция или литерал этого пакета: правила таблиц ошибок и policy читают его, а операция в
@@ -338,7 +339,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   **локальный** payload-DTO (archtest запрещает импорт домена-источника); что он сходится со
   схемой поставщика, держит контракт-тест consumer'а (`delivery/nats/contract_test.go`: событие
   usecase поставщика в JSON outbox → подписки consumer'а, и каждой подписке `Register` —
-  событие поставщика: `bus.Subscriptions()`); подписка без такого теста — отказ archtest
+  событие поставщика: `bus.Subscriptions()`); подписка без такого теста и событие поставщика из этого репо,
+  записанное в нём рукой (кроме прежней версии с «снять в релизе …»), — отказ archtest
   `TestSubscriptionsHaveContractTest`. Регистрируются в `module/module.go` consumer'а.
 - **Idempotency.** JetStream = at-least-once → subscriber обязан быть идемпотентен (unique-индекс
   + `ON CONFLICT`, `UPDATE … WHERE status='pending'`, idempotency-key). Не «вряд ли задвоится».

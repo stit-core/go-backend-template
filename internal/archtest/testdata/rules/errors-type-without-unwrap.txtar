@@ -1,0 +1,16 @@
+# Тип ошибки без Unwrap в sentinel: таблица переводит sentinel'ы, тип ушёл бы 500.
+rule: TestDomainErrorsInErrorsGo
+base: canon
+want: error type SoldOutError does not unwrap to a sentinel of errors.go
+-- internal/domain/shop/errors.go --
+package shop
+
+import "errors"
+
+var ErrNotFound = errors.New("shop: not found")
+
+type SoldOutError struct {
+	ID string
+}
+
+func (e *SoldOutError) Error() string { return "shop: sold out " + e.ID }

@@ -1,0 +1,30 @@
+# Хендлер отдаёт ошибку мимо таблицы домена.
+rule: TestDomainErrorTables
+base: canon
+want: handler stock returns err
+-- internal/domain/shop/delivery/http/stock.go --
+package http
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+)
+
+func RegisterStock(api huma.API, h *Handler) {
+	huma.Register(api, getErrors.Declare(authgate.Secured(huma.Operation{
+		OperationID: "getStock",
+		Method:      http.MethodGet,
+		Path:        "/api/items/{id}/stock",
+	})), h.stock)
+}
+
+func (h *Handler) stock(ctx context.Context, in *ShopGetInput) (*ShopGetOutput, error) {
+	if _, err := h.uc.Get(ctx, in.ID); err != nil {
+		return nil, err
+	}
+	return &ShopGetOutput{}, nil
+}

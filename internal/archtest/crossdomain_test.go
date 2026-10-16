@@ -14,12 +14,16 @@ import (
 // своему же входу.
 func TestTrustedOnlyInModules(t *testing.T) {
 	t.Parallel()
-	for _, f := range goFiles(t) {
+	runRule(t)
+}
+
+func trustedOnlyInModules(c *check) {
+	for _, f := range c.files {
 		if f.test {
 			continue
 		}
 		domain, sub, inDomain := splitDomain(f.pkg)
-		file := parseGo(t, f.path)
+		file := c.parse(f.path)
 		byName := importsByName(file)
 		ast.Inspect(file, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
@@ -32,7 +36,7 @@ func TestTrustedOnlyInModules(t *testing.T) {
 			}
 			provider, provSub, ok := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/"))
 			if ok && provSub == "" && (!inDomain || sub != "module" || provider == domain) {
-				t.Errorf("%s uses %s.Trusted: operations without policy are for adapters in module/ of consumer domains", f.path, id.Name)
+				c.Errorf("%s uses %s.Trusted: operations without policy are for adapters in module/ of consumer domains", f.path, id.Name)
 			}
 			return true
 		})
@@ -44,8 +48,12 @@ func TestTrustedOnlyInModules(t *testing.T) {
 // держит тест Trusted, свои return — этот.
 func TestTrustedErrors(t *testing.T) {
 	t.Parallel()
+	runRule(t)
+}
+
+func trustedErrors(c *check) {
 	byDomain := map[string][]goFile{} // домен → не-тестовые файлы корня
-	for _, f := range goFiles(t) {
+	for _, f := range c.files {
 		if domain, sub, ok := splitDomain(f.pkg); ok && sub == "" && !f.test {
 			byDomain[domain] = append(byDomain[domain], f)
 		}
@@ -55,7 +63,7 @@ func TestTrustedErrors(t *testing.T) {
 		var listed map[string]map[string]bool // метод → ошибки его строки
 		where := "internal/domain/" + domain
 		for _, f := range files {
-			file := parseGo(t, f.path)
+			file := c.parse(f.path)
 			for _, decl := range file.Decls {
 				if fn, ok := decl.(*ast.FuncDecl); ok && receiverName(fn) == "Trusted" {
 					methods = append(methods, fn)
@@ -74,16 +82,16 @@ func TestTrustedErrors(t *testing.T) {
 			continue
 		}
 		if listed == nil {
-			t.Errorf("%s declares Trusted without TrustedErrors = map[string][]error{<method>: {<errors>}}: consumer adapters translate the listed errors of each method", where)
+			c.Errorf("%s declares Trusted without TrustedErrors = map[string][]error{<method>: {<errors>}}: consumer adapters translate the listed errors of each method", where)
 			continue
 		}
-		sentinels := domainErrors(t, domain)
+		sentinels := domainErrors(c, domain)
 		declared := map[string]bool{}
 		for _, m := range methods {
 			declared[m.Name.Name] = true
 			allowed, ok := listed[m.Name.Name]
 			if !ok {
-				t.Errorf("%s: Trusted.%s has no line in TrustedErrors: its consumers would not know which errors to translate", where, m.Name.Name)
+				c.Errorf("%s: Trusted.%s has no line in TrustedErrors: its consumers would not know which errors to translate", where, m.Name.Name)
 				continue
 			}
 			ast.Inspect(m.Body, func(n ast.Node) bool {
@@ -93,7 +101,7 @@ func TestTrustedErrors(t *testing.T) {
 				}
 				ast.Inspect(ret, func(n ast.Node) bool {
 					if id, ok := n.(*ast.Ident); ok && slices.Contains(sentinels, id.Name) && !allowed[id.Name] {
-						t.Errorf("%s: Trusted.%s returns %s, which is not in its line of TrustedErrors: consumer adapters translate only the listed errors", where, m.Name.Name, id.Name)
+						c.Errorf("%s: Trusted.%s returns %s, which is not in its line of TrustedErrors: consumer adapters translate only the listed errors", where, m.Name.Name, id.Name)
 					}
 					return true
 				})
@@ -102,7 +110,7 @@ func TestTrustedErrors(t *testing.T) {
 		}
 		for name := range listed {
 			if !declared[name] {
-				t.Errorf("%s: TrustedErrors lists %s, which Trusted does not declare", where, name)
+				c.Errorf("%s: TrustedErrors lists %s, which Trusted does not declare", where, name)
 			}
 		}
 	}
@@ -149,12 +157,16 @@ func trustedErrorLines(expr ast.Expr) map[string]map[string]bool {
 // sentinel'ы как есть — тот же обход, что identity-closure.
 func TestModulesEmbedNoForeignTypes(t *testing.T) {
 	t.Parallel()
-	for _, f := range goFiles(t) {
+	runRule(t)
+}
+
+func modulesEmbedNoForeignTypes(c *check) {
+	for _, f := range c.files {
 		domain, sub, ok := splitDomain(f.pkg)
 		if !ok || sub != "module" || f.test {
 			continue
 		}
-		file := parseGo(t, f.path)
+		file := c.parse(f.path)
 		byName := importsByName(file)
 		ast.Inspect(file, func(n ast.Node) bool {
 			st, ok := n.(*ast.StructType)
@@ -175,7 +187,7 @@ func TestModulesEmbedNoForeignTypes(t *testing.T) {
 					continue
 				}
 				if provider, provSub, ok := splitDomain(strings.TrimPrefix(byName[id.Name], module+"/")); ok && provSub == "" && provider != domain {
-					t.Errorf("%s embeds %s.%s: a port between domains is a typed adapter that declares each method and maps its errors", f.path, id.Name, sel.Sel.Name)
+					c.Errorf("%s embeds %s.%s: a port between domains is a typed adapter that declares each method and maps its errors", f.path, id.Name, sel.Sel.Name)
 				}
 			}
 			return true
@@ -187,11 +199,15 @@ func TestModulesEmbedNoForeignTypes(t *testing.T) {
 // fx.As — вторая идиома, и порт между доменами через неё обошёл бы правило archkit об identity-closure.
 func TestNoFxAs(t *testing.T) {
 	t.Parallel()
-	for _, f := range goFiles(t) {
+	runRule(t)
+}
+
+func noFxAs(c *check) {
+	for _, f := range c.files {
 		if f.test || !slices.Contains(f.imports, "go.uber.org/fx") {
 			continue
 		}
-		file := parseGo(t, f.path)
+		file := c.parse(f.path)
 		byName := importsByName(file)
 		ast.Inspect(file, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
@@ -199,7 +215,7 @@ func TestNoFxAs(t *testing.T) {
 				return true
 			}
 			if id, ok := sel.X.(*ast.Ident); ok && byName[id.Name] == "go.uber.org/fx" {
-				t.Errorf("%s uses fx.As: a port is bound by the provider's result type or an identity closure (architecture.md § fx)", f.path)
+				c.Errorf("%s uses fx.As: a port is bound by the provider's result type or an identity closure (architecture.md § fx)", f.path)
 			}
 			return true
 		})

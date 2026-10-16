@@ -1,0 +1,28 @@
+# Законно: приёмник выгрузки — интерфейс корня, который вход реализует и отдаёт методу usecase с policy.
+rule: TestDeliveryReachesUsecaseOnly
+base: canon
+-- internal/domain/shop/export.go --
+package shop
+
+import "context"
+
+// ExportSink — приёмник выгрузки: строки товаров по одной.
+type ExportSink interface {
+	Write(ctx context.Context, it *Item) error
+}
+-- internal/domain/shop/delivery/http/export.go --
+package http
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+)
+
+type Exporter interface {
+	ExportAll(ctx context.Context, sink shop.ExportSink) error
+}
+
+type csvSink struct{}
+
+func (csvSink) Write(ctx context.Context, it *shop.Item) error { return nil }

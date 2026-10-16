@@ -1,0 +1,14 @@
+# Адаптер со встроенным типом чужого домена отдал бы порту его методы и ошибки как есть.
+rule: TestModulesEmbedNoForeignTypes
+base: canon
+want: internal/domain/bill/module/adapters.go embeds shop.Trusted
+-- internal/domain/bill/module/adapters.go --
+package module
+
+import "git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+
+type shopAdapter struct {
+	*shop.Trusted
+}
+
+func newShopAdapter(items *shop.Trusted) *shopAdapter { return &shopAdapter{Trusted: items} }

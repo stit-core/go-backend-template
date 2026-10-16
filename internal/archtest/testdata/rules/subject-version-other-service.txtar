@@ -1,0 +1,18 @@
+# Законно: subject другого сервиса называет его контракт, и .v1 тоже; новая версия своего — .v2.
+rule: TestSubjectVersions
+base: canon
+-- internal/domain/bill/delivery/nats/billing.go --
+package nats
+
+const SubjectInvoicePaid = "billing.events.invoice_paid.v1"
+-- internal/domain/shop/events.go --
+package shop
+
+import "time"
+
+const subjectItemCreated = "shop.events.item_created.v2"
+
+type ItemCreated struct {
+	ID string
+	At time.Time
+}

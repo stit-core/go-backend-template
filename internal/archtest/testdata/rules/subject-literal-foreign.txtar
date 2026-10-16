@@ -1,0 +1,8 @@
+# Subject чужого домена вне delivery/nats потребителя.
+rule: TestSubjectLiteralOwnership
+base: canon
+want: contains subject literal "shop.events.item_created"
+-- internal/domain/bill/subjects.go --
+package bill
+
+const itemCreated = "shop.events.item_created"

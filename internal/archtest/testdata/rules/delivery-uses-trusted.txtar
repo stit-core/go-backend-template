@@ -1,0 +1,21 @@
+# Вход берёт из корня Trusted — зависимость, а не данные.
+rule: TestDeliveryReachesUsecaseOnly
+base: canon
+want: internal/domain/shop/delivery/http/peek.go uses shop.Trusted: delivery takes data types from its domain root
+-- internal/domain/shop/delivery/http/peek.go --
+package http
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+)
+
+// Peeker смотрит товар мимо policy.
+type Peeker struct {
+	trusted *shop.Trusted
+}
+
+func (p *Peeker) peek(ctx context.Context, id string) (*shop.Item, error) {
+	return p.trusted.Lookup(ctx, id)
+}

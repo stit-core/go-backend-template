@@ -1,0 +1,15 @@
+# Законно: интерфейс входа без префикса домена — в схемы huma он не попадает.
+rule: TestHTTPTypes
+base: canon
+-- internal/domain/shop/delivery/http/reader.go --
+package http
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+)
+
+type Reader interface {
+	Get(ctx context.Context, id string) (*shop.Item, error)
+}

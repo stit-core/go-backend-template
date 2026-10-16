@@ -1,0 +1,17 @@
+# Подписка в module/: контракт-тест потребителя её не сверит.
+rule: TestInputsRegisterInDelivery
+base: canon
+want: internal/domain/bill/module/subscribe.go subscribes to events (natskit.SubscribeStreamJSON)
+-- internal/domain/bill/module/subscribe.go --
+package module
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/golibinfra/natskit"
+)
+
+func subscribe(ctx context.Context, bus natskit.StreamBus) (natskit.Subscription, error) {
+	return natskit.SubscribeStreamJSON(bus, ctx, "shop", "shop.events.item_created", "bill-direct",
+		func(context.Context, struct{ ID string }) error { return nil })
+}

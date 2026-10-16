@@ -1,0 +1,12 @@
+# Операция параметром функции: открыта она или под Security, правилу не видно.
+rule: TestSecuredOperationsAskPolicy
+base: canon
+want: operation op is neither a huma.Operation literal in the call nor a package var
+-- internal/domain/shop/delivery/http/generic.go --
+package http
+
+import "github.com/danielgtaylor/huma/v2"
+
+func registerGet(api huma.API, h *Handler, op huma.Operation) {
+	huma.Register(api, op, h.get)
+}

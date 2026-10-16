@@ -1,0 +1,523 @@
+# Дерево, на котором молчит каждое правило: домен shop (вход HTTP, Trusted, событие) и домен bill (адаптер к
+# shop.Trusted, подписка на событие shop с контракт-тестом). Это фикстура правил, а не образец домена: образец —
+# домены идентичности и скелет make new-domain. Пример нарушения — канон с правкой (base: canon).
+rule: *
+-- internal/domain/shop/errors.go --
+package shop
+
+import "errors"
+
+var ErrNotFound = errors.New("shop: not found")
+-- internal/domain/shop/entity.go --
+package shop
+
+type Item struct {
+	ID      string
+	OwnerID string
+	Name    string
+}
+-- internal/domain/shop/dto.go --
+package shop
+
+type CreateInput struct {
+	Name string
+}
+-- internal/domain/shop/events.go --
+package shop
+
+import "time"
+
+const subjectItemCreated = "shop.events.item_created"
+
+type ItemCreated struct {
+	ID string
+	At time.Time
+}
+-- internal/domain/shop/policy.go --
+package shop
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+)
+
+type Policy struct{}
+
+func NewPolicy() Authorizer { return &Policy{} }
+
+func (p *Policy) CanCreate(_ context.Context, caller identity.Identity) policy.Decision {
+	if caller.UserID == "" {
+		return policy.Deny("no user")
+	}
+	return policy.Allow()
+}
+
+// CanSeeAll — чужие товары видит только админ: остальным видимость сужает запрос до своих.
+func (p *Policy) CanSeeAll(_ context.Context, caller identity.Identity) policy.Decision {
+	if caller.Role != identity.RoleAdmin {
+		return policy.Deny("admin only")
+	}
+	return policy.Allow()
+}
+-- internal/domain/shop/usecase.go --
+package shop
+
+import (
+	"context"
+	"fmt"
+
+	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
+	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/outboxkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
+)
+
+type Repository interface {
+	Insert(ctx context.Context, it *Item) error
+	// Get — товар id владельца ownerID; "" — любого владельца.
+	Get(ctx context.Context, id, ownerID string) (*Item, error)
+	ListOwn(ctx context.Context, ownerID string) ([]*Item, error)
+}
+
+type Authorizer interface {
+	CanCreate(ctx context.Context, caller identity.Identity) policy.Decision
+	CanSeeAll(ctx context.Context, caller identity.Identity) policy.Decision
+}
+
+type UsecaseDeps struct {
+	fx.In
+
+	Repo   Repository
+	Policy Authorizer
+	Tx     pgkit.Transactor
+	Events outboxkit.Publisher
+	Clock  clockkit.Clock
+}
+
+type Usecase struct {
+	d UsecaseDeps
+}
+
+func NewUsecase(d UsecaseDeps) *Usecase { return &Usecase{d: d} }
+
+func (uc *Usecase) Create(ctx context.Context, in CreateInput) (*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	if d := uc.d.Policy.CanCreate(ctx, caller); !d.IsAllowed {
+		return nil, &policy.ForbiddenError{Reason: d.Reason}
+	}
+	it := &Item{OwnerID: caller.UserID, Name: in.Name}
+	err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		if err := uc.d.Repo.Insert(txCtx, it); err != nil {
+			return fmt.Errorf("insert item: %w", err)
+		}
+		return uc.d.Events.Publish(txCtx, subjectItemCreated, ItemCreated{ID: it.ID, At: uc.d.Clock.Now()})
+	})
+	return it, err
+}
+
+// Get — свой товар или, у кого есть право видеть все, любой; чужой без права — ErrNotFound, как несуществующий.
+func (uc *Usecase) Get(ctx context.Context, id string) (*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	owner := caller.UserID
+	if uc.d.Policy.CanSeeAll(ctx, caller).IsAllowed {
+		owner = ""
+	}
+	return uc.d.Repo.Get(ctx, id, owner)
+}
+
+// Mine — товары вызывающего: читает только своё.
+func (uc *Usecase) Mine(ctx context.Context) ([]*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	return uc.d.Repo.ListOwn(ctx, caller.UserID)
+}
+-- internal/domain/shop/trusted.go --
+package shop
+
+import (
+	"context"
+
+	"go.uber.org/fx"
+)
+
+// TrustedErrors — ошибки методов Trusted: их переводит адаптер потребителя.
+var TrustedErrors = map[string][]error{
+	"Lookup": {ErrNotFound},
+}
+
+type TrustedDeps struct {
+	fx.In
+
+	Repo Repository
+}
+
+// Trusted — операции shop для других доменов, без policy.
+type Trusted struct {
+	d TrustedDeps
+}
+
+func NewTrusted(d TrustedDeps) *Trusted { return &Trusted{d: d} }
+
+func (t *Trusted) Lookup(ctx context.Context, id string) (*Item, error) {
+	return t.d.Repo.Get(ctx, id, "")
+}
+-- internal/domain/shop/infra/postgres/repository.go --
+package postgres
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
+)
+
+type Repository struct {
+	db pgkit.DB
+}
+
+func NewRepository(db pgkit.DB) *Repository { return &Repository{db: db} }
+
+func (r *Repository) Insert(ctx context.Context, it *shop.Item) error { return nil }
+
+func (r *Repository) Get(ctx context.Context, id, ownerID string) (*shop.Item, error) {
+	return nil, shop.ErrNotFound
+}
+
+func (r *Repository) ListOwn(ctx context.Context, ownerID string) ([]*shop.Item, error) { return nil, nil }
+-- internal/domain/shop/delivery/http/dto.go --
+package http
+
+type ShopCreateInput struct {
+	Body struct {
+		Name string `json:"name" maxLength:"200" minLength:"1"`
+	}
+}
+
+type ShopCreateOutput struct {
+	Body struct {
+		Data ShopItemView `json:"data"`
+	}
+}
+
+type ShopGetInput struct {
+	ID string `path:"id"`
+}
+
+type ShopGetOutput struct {
+	Body struct {
+		Data ShopItemView `json:"data"`
+	}
+}
+
+type ShopMineOutput struct {
+	Body struct {
+		Data []ShopItemView `json:"data"`
+	}
+}
+
+type ShopItemView struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+-- internal/domain/shop/delivery/http/handler.go --
+package http
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
+	"git.stit.tech/stit-core/golibinfra/httpkit"
+)
+
+type Usecase interface {
+	Create(ctx context.Context, in shop.CreateInput) (*shop.Item, error)
+	Get(ctx context.Context, id string) (*shop.Item, error)
+	Mine(ctx context.Context) ([]*shop.Item, error)
+}
+
+type Handler struct {
+	uc Usecase
+}
+
+func NewHandler(uc Usecase) *Handler { return &Handler{uc: uc} }
+
+func Register(api huma.API, h *Handler) {
+	huma.Register(api, createErrors.Declare(authgate.Secured(huma.Operation{
+		OperationID:   "createItem",
+		Method:        http.MethodPost,
+		Path:          "/api/items",
+		DefaultStatus: http.StatusCreated,
+	})), h.create)
+
+	huma.Register(api, getErrors.Declare(authgate.Secured(huma.Operation{
+		OperationID: "getItem",
+		Method:      http.MethodGet,
+		Path:        "/api/items/{id}",
+	})), h.get)
+
+	huma.Register(api, mineErrors.Declare(authgate.Secured(huma.Operation{
+		OperationID: "listMyItems",
+		Method:      http.MethodGet,
+		Path:        "/api/items/mine",
+	})), h.mine)
+}
+
+func (h *Handler) create(ctx context.Context, in *ShopCreateInput) (*ShopCreateOutput, error) {
+	it, err := h.uc.Create(ctx, shop.CreateInput{Name: in.Body.Name})
+	if err != nil {
+		return nil, shopErrors.Map(err)
+	}
+	out := &ShopCreateOutput{}
+	out.Body.Data = view(it)
+	return out, nil
+}
+
+func (h *Handler) get(ctx context.Context, in *ShopGetInput) (*ShopGetOutput, error) {
+	it, err := h.uc.Get(ctx, in.ID)
+	if err != nil {
+		return nil, shopErrors.Map(err)
+	}
+	out := &ShopGetOutput{}
+	out.Body.Data = view(it)
+	return out, nil
+}
+
+func (h *Handler) mine(ctx context.Context, _ *struct{}) (*ShopMineOutput, error) {
+	items, err := h.uc.Mine(ctx)
+	if err != nil {
+		return nil, shopErrors.Map(err)
+	}
+	out := &ShopMineOutput{}
+	for _, it := range items {
+		out.Body.Data = append(out.Body.Data, view(it))
+	}
+	return out, nil
+}
+
+func view(it *shop.Item) ShopItemView { return ShopItemView{ID: it.ID, Name: it.Name} }
+
+var (
+	notFoundRule = httpkit.ErrorRule{Err: shop.ErrNotFound, Status: http.StatusNotFound, Code: "SHOP_NOT_FOUND", Detail: "item not found"}
+
+	shopErrors = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
+
+	createErrors = httpkit.NewErrorMap(authgate.ForbiddenRule)
+	getErrors    = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
+	mineErrors   = httpkit.NewErrorMap(authgate.ForbiddenRule)
+)
+-- internal/domain/shop/module/module.go --
+package module
+
+import (
+	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	shophttp "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/delivery/http"
+	shoppg "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/infra/postgres"
+)
+
+var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/shop/module",
+	fx.Provide(
+		shoppg.NewRepository,
+		func(r *shoppg.Repository) shop.Repository { return r },
+		shop.NewPolicy,
+		shop.NewUsecase,
+		shop.NewTrusted,
+		func(uc *shop.Usecase) shophttp.Usecase { return uc },
+		shophttp.NewHandler,
+	),
+)
+-- internal/domain/bill/errors.go --
+package bill
+
+import "errors"
+
+var ErrItemNotFound = errors.New("bill: item not found")
+-- internal/domain/bill/entity.go --
+package bill
+
+// Item — товар shop, каким его видит bill.
+type Item struct {
+	ID   string
+	Name string
+}
+-- internal/domain/bill/usecase.go --
+package bill
+
+import (
+	"context"
+	"fmt"
+
+	"go.uber.org/fx"
+)
+
+type Items interface {
+	Lookup(ctx context.Context, id string) (*Item, error)
+}
+
+type UsecaseDeps struct {
+	fx.In
+
+	Items Items
+}
+
+type Usecase struct {
+	d UsecaseDeps
+}
+
+func NewUsecase(d UsecaseDeps) *Usecase { return &Usecase{d: d} }
+
+// OnItemCreated — реакция на событие shop: вход событий policy не спрашивает.
+func (uc *Usecase) OnItemCreated(ctx context.Context, itemID string) error {
+	if _, err := uc.d.Items.Lookup(ctx, itemID); err != nil {
+		return fmt.Errorf("lookup item: %w", err)
+	}
+	return nil
+}
+-- internal/domain/bill/module/adapters.go --
+package module
+
+import (
+	"context"
+	"errors"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+)
+
+// shopAdapter — порт bill.Items к домену shop.
+type shopAdapter struct {
+	items *shop.Trusted
+}
+
+func newShopAdapter(items *shop.Trusted) *shopAdapter { return &shopAdapter{items: items} }
+
+func (a *shopAdapter) Lookup(ctx context.Context, id string) (*bill.Item, error) {
+	it, err := a.items.Lookup(ctx, id)
+	if errors.Is(err, shop.ErrNotFound) {
+		return nil, bill.ErrItemNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &bill.Item{ID: it.ID, Name: it.Name}, nil
+}
+-- internal/domain/bill/module/module.go --
+package module
+
+import (
+	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+	billnats "git.stit.tech/stit-core/go-backend-template/internal/domain/bill/delivery/nats"
+)
+
+var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/bill/module",
+	fx.Provide(
+		newShopAdapter,
+		func(a *shopAdapter) bill.Items { return a },
+		bill.NewUsecase,
+		func(uc *bill.Usecase) billnats.Usecase { return uc },
+		billnats.NewHandler,
+	),
+	fx.Invoke(billnats.Register),
+)
+-- internal/domain/bill/delivery/nats/handler.go --
+package nats
+
+import (
+	"context"
+
+	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/golibinfra/natskit"
+)
+
+const (
+	streamShop         = "shop"
+	durableItemCreated = "bill-item-created"
+	// SubjectItemCreated — subject события shop: своя константа потребителя.
+	SubjectItemCreated = "shop.events.item_created"
+)
+
+type ItemCreatedEvent struct {
+	ID string
+}
+
+type Usecase interface {
+	OnItemCreated(ctx context.Context, itemID string) error
+}
+
+type Handler struct {
+	uc Usecase
+}
+
+func NewHandler(uc Usecase) *Handler { return &Handler{uc: uc} }
+
+func (h *Handler) onItemCreated(ctx context.Context, e ItemCreatedEvent) error {
+	return h.uc.OnItemCreated(ctx, e.ID)
+}
+
+func Register(lc fx.Lifecycle, bus natskit.StreamBus, h *Handler) {
+	natskit.SubscribeOnStart(lc, func(ctx context.Context) (natskit.Subscription, error) {
+		return natskit.SubscribeStreamJSON(bus, ctx, streamShop, SubjectItemCreated, durableItemCreated, h.onItemCreated)
+	})
+}
+-- internal/domain/bill/delivery/nats/contract_test.go --
+package nats_test
+
+import (
+	"context"
+	"slices"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/fx/fxtest"
+
+	billnats "git.stit.tech/stit-core/go-backend-template/internal/domain/bill/delivery/nats"
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+	"git.stit.tech/stit-core/golibinfra/natskit"
+	"git.stit.tech/stit-core/golibinfra/testkit/natstest"
+	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
+)
+
+// TestContracts: событие настоящего usecase shop доставляется подписке Register и разбирается её схемой.
+func TestContracts(t *testing.T) {
+	events := itemCreated(t)
+	bus := natstest.New(natstest.WithStream("shop"))
+	lc := fxtest.NewLifecycle(t)
+	billnats.Register(lc, bus, billnats.NewHandler(nil))
+	lc.RequireStart()
+	for _, e := range events {
+		require.NoError(t, bus.Deliver(context.Background(), e.Subject, e.Payload))
+	}
+	for _, filter := range bus.Subscriptions() {
+		require.True(t, slices.ContainsFunc(events, func(e outboxtest.Event) bool { return natskit.SubjectMatches(filter, e.Subject) }))
+	}
+}
+
+// itemCreated — событие, которое публикует настоящий shop.Usecase.Create.
+func itemCreated(t *testing.T) []outboxtest.Event {
+	published := &outboxtest.Recorder{}
+	uc := shop.NewUsecase(shop.UsecaseDeps{Events: published})
+	_, err := uc.Create(context.Background(), shop.CreateInput{Name: "pen"})
+	require.NoError(t, err)
+	return published.All()
+}

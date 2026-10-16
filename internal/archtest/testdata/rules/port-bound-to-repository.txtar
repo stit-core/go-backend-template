@@ -1,0 +1,21 @@
+# Порт входа привязан к репозиторию: вход получил бы операции мимо usecase и policy.
+rule: TestDeliveryPortsBoundToUsecase
+base: canon
+want: internal/domain/shop/module/module.go uses shophttp.Usecase otherwise than as the result of func(uc *shop.Usecase) shophttp.Usecase { return uc }
+-- internal/domain/shop/module/module.go --
+package module
+
+import (
+	"go.uber.org/fx"
+
+	shophttp "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/delivery/http"
+	shoppg "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/infra/postgres"
+)
+
+var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/shop/module",
+	fx.Provide(
+		shoppg.NewRepository,
+		func(r *shoppg.Repository) shophttp.Usecase { return r },
+		shophttp.NewHandler,
+	),
+)

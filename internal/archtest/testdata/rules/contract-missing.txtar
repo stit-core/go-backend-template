@@ -1,0 +1,5 @@
+# Подписка без контракт-теста: её схему со схемой поставщика ничто не сверяет.
+rule: TestSubscriptionsHaveContractTest
+base: canon
+drop: internal/domain/bill/delivery/nats/contract_test.go
+want: internal/domain/bill/delivery/nats subscribes to events without internal/domain/bill/delivery/nats/contract_test.go

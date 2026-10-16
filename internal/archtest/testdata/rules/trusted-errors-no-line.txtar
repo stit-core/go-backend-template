@@ -1,0 +1,10 @@
+# Метод Trusted без строки TrustedErrors: потребитель не знает, что переводить.
+rule: TestTrustedErrors
+base: canon
+want: Trusted.Archive has no line in TrustedErrors
+-- internal/domain/shop/trusted_archive.go --
+package shop
+
+import "context"
+
+func (t *Trusted) Archive(ctx context.Context, id string) error { return nil }

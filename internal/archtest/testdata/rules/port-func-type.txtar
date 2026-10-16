@@ -1,0 +1,25 @@
+# Тип-функция входа вне входа: функция репозитория дала бы операцию мимо usecase.
+rule: TestDeliveryPortsBoundToUsecase
+base: canon
+want: internal/domain/shop/module/finder.go uses shophttp.Finder, a function type of internal/domain/shop/delivery
+-- internal/domain/shop/delivery/http/finder.go --
+package http
+
+import (
+	"context"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/shop"
+)
+
+type Finder func(ctx context.Context, id string) (*shop.Item, error)
+-- internal/domain/shop/module/finder.go --
+package module
+
+import (
+	shophttp "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/delivery/http"
+	shoppg "git.stit.tech/stit-core/go-backend-template/internal/domain/shop/infra/postgres"
+)
+
+func finder(r *shoppg.Repository) shophttp.Finder {
+	return func(ctx context.Context, id string) (*shop.Item, error) { return r.Get(ctx, id, "") }
+}

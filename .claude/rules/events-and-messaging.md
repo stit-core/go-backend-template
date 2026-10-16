@@ -27,7 +27,8 @@ paths:
   `NATS_JETSTREAM_ENABLED=true` + стрим, покрывающий subject (`NATS_JS_STREAM_NAMES`).
 - Subject `<domain>.events.<event>` — unexported const `subject<Event>` в `events.go`
   источника, рядом с payload (не inline-литерал в usecase, не экспорт). Consumer заводит
-  свою const в `delivery/nats/`. Breaking-change payload → новый subject (`….v2`).
+  свою const в `delivery/nats/`. Первая версия — без суффикса (`.v1` — отказ archtest
+  `TestSubjectVersions`), breaking-change payload → следующий номер (`….v2`).
 - payload-типы — в `events.go` источника: `<Aggregate><PastEvent>`, поля без json-тегов
   (wire = Go-имена; смена формата = `.v2`), timestamp — `At time.Time`. Поля — ID и факты:
   токенов, секретов и PII нет (rule `domain-architecture`).
@@ -47,6 +48,10 @@ paths:
   сверяет контракт-тест потребителя `delivery/nats/contract_test.go`: событие настоящего usecase
   поставщика в JSON (как его отдаёт outbox) доставляется подпискам `Register` — subject и поля сходятся;
   подписка без события поставщика в нём — отказ теста, `delivery/nats` без такого теста — отказ archtest.
+  Событие поставщика из этого репо — только из его usecase: записанное рукой (`outboxtest.Event{…}`) с его
+  subject — лишь payload прежней версии в функции с «снять в релизе …» в комментарии (archtest
+  `TestSubscriptionsHaveContractTest`); поставщик — другой сервис: payload из его контракта (артефакт strategy
+  или `testdata/`), ссылка на источник — в комментарии сценария.
 - **Идемпотентность обязательна** (at-least-once), и она — свойство схемы, не удачи:
   unique-индекс под natural key (`INSERT … ON CONFLICT`), либо `UPDATE … WHERE
   status='pending'`, либо idempotency-key из payload. Внешний эффект (письмо, вебхук) схема

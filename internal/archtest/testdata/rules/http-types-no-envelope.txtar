@@ -1,0 +1,12 @@
+# Тело ответа без envelope {data}.
+rule: TestHTTPTypes
+base: canon
+want: declares ShopCountOutput with a Body without Data
+-- internal/domain/shop/delivery/http/count.go --
+package http
+
+type ShopCountOutput struct {
+	Body struct {
+		Count int `json:"count"`
+	}
+}

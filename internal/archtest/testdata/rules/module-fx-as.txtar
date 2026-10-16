@@ -1,0 +1,19 @@
+# fx.As — вторая идиома привязки порта.
+rule: TestNoFxAs
+base: canon
+want: internal/domain/bill/module/module.go uses fx.As
+-- internal/domain/bill/module/module.go --
+package module
+
+import (
+	"go.uber.org/fx"
+
+	"git.stit.tech/stit-core/go-backend-template/internal/domain/bill"
+)
+
+var Module = fx.Module("git.stit.tech/stit-core/go-backend-template/internal/domain/bill/module",
+	fx.Provide(
+		fx.Annotate(newShopAdapter, fx.As(new(bill.Items))),
+		bill.NewUsecase,
+	),
+)

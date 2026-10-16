@@ -1,0 +1,18 @@
+# Короткая форма huma.Get — операция без таблицы ошибок.
+rule: TestInputsRegisterInDelivery
+base: canon
+want: registers an operation with huma.Get
+-- internal/domain/shop/delivery/http/ping.go --
+package http
+
+import (
+	"context"
+
+	"github.com/danielgtaylor/huma/v2"
+)
+
+func RegisterPing(api huma.API, h *Handler) {
+	huma.Get(api, "/api/items/ping", h.ping)
+}
+
+func (h *Handler) ping(ctx context.Context, _ *struct{}) (*struct{}, error) { return nil, nil }

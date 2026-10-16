@@ -1,0 +1,10 @@
+# errors.New вне sentinel errors.go: у такой ошибки нет правила в таблице.
+rule: TestDomainErrorsInErrorsGo
+base: canon
+want: creates an error with errors.New outside a sentinel var Err… of errors.go
+-- internal/domain/shop/stock.go --
+package shop
+
+import "errors"
+
+var errSoldOut = errors.New("shop: sold out")

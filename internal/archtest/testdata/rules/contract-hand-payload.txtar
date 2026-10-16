@@ -1,0 +1,37 @@
+# Событие поставщика из этого репо записано рукой по схеме самой подписки: схема поставщика не сверена.
+rule: TestSubscriptionsHaveContractTest
+base: canon
+want: internal/domain/bill/delivery/nats/contract_test.go writes an event of shop by hand ("shop.events.item_created")
+-- internal/domain/bill/delivery/nats/contract_test.go --
+package nats_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/fx/fxtest"
+
+	billnats "git.stit.tech/stit-core/go-backend-template/internal/domain/bill/delivery/nats"
+	"git.stit.tech/stit-core/golibinfra/testkit/natstest"
+	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
+)
+
+func TestContracts(t *testing.T) {
+	bus := natstest.New(natstest.WithStream("shop"), natstest.WithStream("billing"))
+	lc := fxtest.NewLifecycle(t)
+	billnats.Register(lc, bus, billnats.NewHandler(nil))
+	lc.RequireStart()
+	events := itemCreated()
+	for _, e := range events {
+		require.NoError(t, bus.Deliver(context.Background(), e.Subject, e.Payload))
+	}
+	for _, filter := range bus.Subscriptions() {
+		require.NotEmpty(t, filter)
+	}
+}
+
+// itemCreated — событие shop, записанное по схеме подписки.
+func itemCreated() []outboxtest.Event {
+	return []outboxtest.Event{{Subject: billnats.SubjectItemCreated, Payload: []byte(`{"ID":"i1"}`)}}
+}

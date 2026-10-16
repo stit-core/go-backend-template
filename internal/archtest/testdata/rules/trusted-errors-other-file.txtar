@@ -1,0 +1,53 @@
+# Метод Trusted в другом файле корня отдаёт ошибку вне своей строки TrustedErrors.
+rule: TestTrustedErrors
+base: canon
+want: Trusted.Rename returns ErrInvalidName, which is not in its line of TrustedErrors
+-- internal/domain/shop/errors.go --
+package shop
+
+import "errors"
+
+var (
+	ErrNotFound    = errors.New("shop: not found")
+	ErrInvalidName = errors.New("shop: invalid name")
+)
+-- internal/domain/shop/trusted.go --
+package shop
+
+import (
+	"context"
+
+	"go.uber.org/fx"
+)
+
+var TrustedErrors = map[string][]error{
+	"Lookup": {ErrNotFound},
+	"Rename": {ErrNotFound},
+}
+
+type TrustedDeps struct {
+	fx.In
+
+	Repo Repository
+}
+
+type Trusted struct {
+	d TrustedDeps
+}
+
+func NewTrusted(d TrustedDeps) *Trusted { return &Trusted{d: d} }
+
+func (t *Trusted) Lookup(ctx context.Context, id string) (*Item, error) {
+	return t.d.Repo.Get(ctx, id, "")
+}
+-- internal/domain/shop/trusted_rename.go --
+package shop
+
+import "context"
+
+func (t *Trusted) Rename(ctx context.Context, id, name string) error {
+	if name == "" {
+		return ErrInvalidName
+	}
+	return nil
+}

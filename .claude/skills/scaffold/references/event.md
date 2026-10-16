@@ -37,7 +37,7 @@ Outbox оправдан когда:
 
 - Какой домен **публикует**?
 - Какие поля в payload (ID и факты, минимум — ID агрегата + `At`; токенов и PII нет)?
-- Какой Subject? Формат: `<source>.events.<event>`, у новой версии payload — суффикс следующего номера `.vN` (реф. — `user.events.registered.v2`, `verification.events.password_reset_requested.v3` в `internal/domain/*/events.go`).
+- Какой Subject? Формат: `<source>.events.<event>`; первая версия — без суффикса (`.v1` — отказ archtest `TestSubjectVersions`), новая версия payload — следующий номер `.v2`, `.v3`… (реф. — `user.events.registered.v2`, `verification.events.password_reset_requested.v3` в `internal/domain/*/events.go`).
 - Какой домен **обрабатывает** (или несколько)?
 - Idempotency: на каком ключе — событие (idempotency-key) или состояние агрегата — consumer отсечёт повторную доставку?
 
@@ -203,6 +203,7 @@ JetStream доставляет at-least-once, поэтому идемпотен�
 - В домене-публикаторе: `usecase_test.go` с фейком `golibinfra/testkit/outboxtest.Recorder` в `UsecaseDeps.Events` и `pgtest.Identity{}` (`golibinfra/testkit/pgtest`) в `Tx` — payload по subject — `Recorder.Last(subject)`, лишних событий нет — `Count()`. Публикация мимо транзакции даёт `outboxkit.ErrNoTx`, как в проде.
 - Subscriber: unit-тест на handler-метод с моком `Usecase`-порта (добавь `delivery/nats` в `.mockery.yml` → `make gen`): happy path, error path (usecase вернул err → handler вернул err, сообщение уйдёт на redelivery) и дубль-доставка.
 - Контракт (у потребителя, `delivery/nats/contract_test.go`, один тест `TestContracts`): сценарий поставщика — его настоящий usecase публикует событие в `outboxtest.Recorder` (JSON, как его отдаёт outbox) и ставит ожидание usecase-порта потребителя с ID из события; события всех сценариев доставь подпискам `Register` через `natstest`, затем каждая подписка (`bus.Subscriptions()`) должна получить событие поставщика — подписка без него роняет тест. Новая подписка — новый сценарий. Переименование поля или subject на одной стороне роняет его, даже если каждая сторона поправила свои тесты. `delivery/nats` с подпиской без такого теста — отказ archtest `TestSubscriptionsHaveContractTest`. Образец — `internal/domain/verification/delivery/nats/contract_test.go`.
+- Источник события в сценарии: поставщик из этого репо — только его usecase; payload, записанный рукой (`outboxtest.Event{…}`) с его subject, archtest пускает лишь в функции с «снять в релизе …» в комментарии (прежняя версия, § Versioning). Поставщик — другой сервис: его usecase в репо нет, сценарий — payload из его контракта (артефакт strategy или файл `testdata/`), источник — в комментарии сценария.
 - Поставщик события — домен идентичности (`user`, `auth`, `verification`): контракт-тест потребителя берёт его
   usecase, и в шаблоне и у форка без решения `TestPruneNamesIdentityDependents` требует назвать
   `delivery/nats/contract_test.go` потребителя в `.claude/skills/init-service/references/prune.md` — prune его правит
@@ -236,9 +237,9 @@ make gen-check  # если добавил интерфейс из .mockery.yml
 новым durable, а старый subject ещё один релиз — прежним durable тем же обработчиком (локальный DTO
 без убранного поля читает обе версии): так доходят события, записанные в outbox до выкатки, и
 недоставленные прежнему консьюмеру. Следующий релиз снимает эту подписку, durable удаляет инфра
-(INFRA-HANDOFF). Прежнюю версию поставщик уже не публикует: её подписку в `TestContracts` сверяет сценарий с
-записанным payload прежней схемы и строкой «снять в релизе …» — его снимают вместе с подпиской. Не правь
-существующий тип события без breaking-version-bump.
+(INFRA-HANDOFF). Прежнюю версию поставщик уже не публикует: её подписку в `TestContracts` сверяет сценарий —
+функция с записанным payload прежней схемы и «снять в релизе <версия>» в комментарии; его снимают вместе с
+подпиской. Не правь существующий тип события без breaking-version-bump.
 
 ## Anti-patterns
 

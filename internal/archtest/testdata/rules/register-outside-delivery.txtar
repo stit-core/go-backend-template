@@ -1,0 +1,18 @@
+# Операция HTTP в module/: правила таблиц ошибок и policy её не видят.
+rule: TestInputsRegisterInDelivery
+base: canon
+want: internal/domain/shop/module/ping.go registers an HTTP operation (huma.Register)
+-- internal/domain/shop/module/ping.go --
+package module
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
+)
+
+func registerPing(api huma.API) {
+	huma.Register(api, huma.Operation{OperationID: "ping", Method: http.MethodGet, Path: "/api/ping"},
+		func(ctx context.Context, _ *struct{}) (*struct{}, error) { return nil, nil })
+}

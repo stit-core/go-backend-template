@@ -1,0 +1,29 @@
+# Контракт-тест не сверяет подписки Register: подписка без события прошла бы.
+rule: TestSubscriptionsHaveContractTest
+base: canon
+want: internal/domain/bill/delivery/nats/contract_test.go does not check the subscriptions of Register
+-- internal/domain/bill/delivery/nats/contract_test.go --
+package nats_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/fx/fxtest"
+
+	billnats "git.stit.tech/stit-core/go-backend-template/internal/domain/bill/delivery/nats"
+	"git.stit.tech/stit-core/golibinfra/testkit/natstest"
+	"git.stit.tech/stit-core/golibinfra/testkit/outboxtest"
+)
+
+func TestContracts(t *testing.T) {
+	bus := natstest.New(natstest.WithStream("shop"))
+	lc := fxtest.NewLifecycle(t)
+	billnats.Register(lc, bus, billnats.NewHandler(nil))
+	lc.RequireStart()
+	var events []outboxtest.Event
+	for _, e := range events {
+		require.NoError(t, bus.Deliver(context.Background(), e.Subject, e.Payload))
+	}
+}

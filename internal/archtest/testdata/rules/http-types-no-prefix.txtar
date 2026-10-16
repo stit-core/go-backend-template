@@ -1,0 +1,10 @@
+# Тип delivery/http без префикса домена: huma назвал бы схему его именем на весь API.
+rule: TestHTTPTypes
+base: canon
+want: declares ItemPage: an HTTP type starts with the domain prefix Shop
+-- internal/domain/shop/delivery/http/page.go --
+package http
+
+type ItemPage struct {
+	Items []ShopItemView `json:"items"`
+}

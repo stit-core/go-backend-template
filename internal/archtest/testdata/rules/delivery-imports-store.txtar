@@ -1,0 +1,12 @@
+# Вход держит хранилище кита: операция прошла бы мимо usecase и policy.
+rule: TestDeliveryReachesUsecaseOnly
+base: canon
+want: internal/domain/shop/delivery/http/raw.go imports git.stit.tech/stit-core/golibinfra/pgkit: delivery reaches the domain through its usecase port
+-- internal/domain/shop/delivery/http/raw.go --
+package http
+
+import "git.stit.tech/stit-core/golibinfra/pgkit"
+
+type rawStore struct {
+	db pgkit.DB
+}

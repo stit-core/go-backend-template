@@ -1,0 +1,15 @@
+# Экспортированный subject корня отдал бы его потребителю мимо его константы.
+rule: TestNoExportedSubjectInDomainRoot
+base: canon
+want: exports "SubjectItemCreated"
+-- internal/domain/shop/events.go --
+package shop
+
+import "time"
+
+const SubjectItemCreated = "shop.events.item_created"
+
+type ItemCreated struct {
+	ID string
+	At time.Time
+}
