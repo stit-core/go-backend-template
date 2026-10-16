@@ -38,12 +38,17 @@ echo "Пример: feat(user): add password reset"
 echo
 echo "        Review: /code-review — находок нет"
 echo "Агент без собеседника: Review: принимает хаб (infra:<slug>) — дифф отдан, ревью не проводилось"
-# cherry-pick и rebase после конфликта приносят сообщение чужого коммита — его дописывают, а не обходят.
+# cherry-pick после конфликта и git commit посреди rebase приносят сообщение чужого коммита — его дописывают, а не
+# обходят (git rebase --continue хук не зовёт).
 for state in CHERRY_PICK_HEAD REBASE_HEAD; do
   if [ -e "$(git rev-parse --git-path "$state" 2>/dev/null)" ]; then
     echo "Перенос коммита ($state): сообщение — его, допиши subject и строку Review: — ревью переноса"
-    echo "  (Review: <кто или чем> — перенос <коммит>, <итог>): git commit -e (или -F <файл>) закончит этот"
-    echo "  коммит; если в цепочке есть ещё коммиты — git cherry-pick --continue или git rebase --continue"
+    echo "  (Review: <кто или чем> — перенос <коммит>, <итог>) и закончи коммит: git commit -e (или -F <файл>);"
+    if [ "$state" = CHERRY_PICK_HEAD ]; then
+      echo "  если в цепочке есть ещё коммиты — git cherry-pick --continue"
+    else
+      echo "  затем всегда git rebase --continue — без него rebase не закончится"
+    fi
     break
   fi
 done

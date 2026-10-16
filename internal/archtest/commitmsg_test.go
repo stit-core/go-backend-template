@@ -14,8 +14,8 @@ import (
 // TestCommitMsgHook: первая строка коммита — Conventional Commit с типом из CLAUDE.md § Git workflow (тот же
 // список, что TYPES хука) или сообщение самого git; предел subject — 72 символа, а не байта, при любой локали
 // коммитящего (под LC_ALL=C русская буква — два байта); у feat, fix и переноса обвязки chore(template) в теле —
-// строка Review: (CLAUDE.md § Готово). Отказ переносу чужого коммита (cherry-pick, rebase) говорит, как его
-// дописать.
+// строка Review: (CLAUDE.md § Готово). Отказ переносу чужого коммита (cherry-pick --continue, git commit посреди
+// rebase) говорит, как его дописать и закончить перенос.
 func TestCommitMsgHook(t *testing.T) {
 	t.Parallel()
 	hook := filepath.Join(repoRoot(t), "scripts", "git-hooks", "commit-msg")
@@ -91,25 +91,62 @@ func TestCommitMsgHook(t *testing.T) {
 				require.ErrorAs(t, err, &exit, "commit-msg accepts %q: %s", tc.msg, out)
 				require.Equal(t, 1, exit.ExitCode(), "commit-msg must refuse, not break: %s", out)
 				require.Contains(t, string(out), tc.why, "commit-msg refuses %q for another reason", tc.msg)
+				require.NotContains(t, string(out), "Перенос коммита", "no carry, no hint")
 			})
 		}
 	}
 
-	// Перенос коммита без следа ревью: отказ, и он объясняет, как дописать сообщение, — только во время переноса.
-	for state, hint := range map[string]bool{"CHERRY_PICK_HEAD": true, "REBASE_HEAD": true, "": false} {
-		t.Run("carry "+state, func(t *testing.T) {
-			t.Parallel()
-			repo := t.TempDir()
-			git(t, repo, "init", "-q")
-			if state != "" {
-				writeFiles(t, repo, map[string]string{".git/" + state: "0123456789012345678901234567890123456789\n"})
-			}
-			writeFiles(t, repo, map[string]string{"msg": "feat(user): старый коммит без следа\n"})
-			out, err := runIn(t, repo, "bash", hook, "msg")
-			var exit *exec.ExitError
-			require.ErrorAs(t, err, &exit, out)
-			require.Contains(t, out, noReview)
-			require.Equal(t, hint, strings.Contains(out, "Перенос коммита ("+state+")"), out)
-		})
-	}
+	// Перенос коммита без следа ревью настоящими cherry-pick и rebase с конфликтом: отказ объясняет, как дописать
+	// сообщение и закончить перенос — одиночный cherry-pick заканчивает git commit, rebase — только ещё
+	// git rebase --continue; без переноса подсказки нет (таблица выше гоняет хук вне переноса).
+	t.Run("carry", func(t *testing.T) {
+		t.Parallel()
+		hooks, repo := t.TempDir(), t.TempDir()
+		writeExecutable(t, filepath.Join(hooks, "commit-msg"), files["scripts/git-hooks/commit-msg"])
+		git(t, repo, "init", "-q", "-b", "main")
+		commit := func(file, content, msg string) {
+			writeFiles(t, repo, map[string]string{file: content})
+			git(t, repo, "add", file)
+			git(t, repo, "commit", "-qm", msg)
+		}
+		commit("f.txt", "a\n", "chore: init")
+		git(t, repo, "checkout", "-q", "-b", "side1")
+		commit("f.txt", "side1\n", "feat(x): старый коммит без следа")
+		git(t, repo, "checkout", "-q", "-b", "side2", "main")
+		commit("g.txt", "g\n", "chore: отдельный файл")
+		commit("f.txt", "side2\n", "feat(y): правка f без следа")
+		git(t, repo, "checkout", "-q", "main")
+		commit("f.txt", "main\n", "chore: main")
+		git(t, repo, "config", "core.hooksPath", hooks)
+		git(t, repo, "config", "core.editor", "true")
+		message := filepath.Join(t.TempDir(), "msg")
+		require.NoError(t, os.WriteFile(message, []byte("feat(x): перенос\n\nReview: archtest — перенос\n"), 0o600))
+		conflict := func(args ...string) {
+			out, err := runIn(t, repo, "git", args...)
+			require.Error(t, err, "a conflict stops git %v: %s", args, out)
+			writeFiles(t, repo, map[string]string{"f.txt": strings.Join(args, " ") + "\n"})
+			git(t, repo, "add", "f.txt")
+		}
+
+		conflict("cherry-pick", "side1")
+		out, err := runIn(t, repo, "git", "cherry-pick", "--continue")
+		require.Error(t, err, out)
+		require.Contains(t, out, "если в цепочке есть ещё коммиты — git cherry-pick --continue")
+		git(t, repo, "commit", "-q", "-F", message)
+		_, err = runIn(t, repo, "git", "rev-parse", "-q", "--verify", "CHERRY_PICK_HEAD")
+		require.Error(t, err, "git commit finishes a single cherry-pick")
+
+		// git rebase --continue хук не зовёт: отказ с подсказкой получает git commit посреди переноса.
+		git(t, repo, "checkout", "-q", "side2")
+		conflict("rebase", "main")
+		out, err = runIn(t, repo, "git", "commit", "--no-edit")
+		require.Error(t, err, out)
+		require.Contains(t, out, "затем всегда git rebase --continue")
+		git(t, repo, "commit", "-q", "-F", message)
+		rebase := strings.TrimSpace(git(t, repo, "rev-parse", "--git-path", "rebase-merge"))
+		require.DirExists(t, filepath.Join(repo, rebase), "git commit does not finish a rebase")
+		git(t, repo, "rebase", "--continue")
+		require.NoDirExists(t, filepath.Join(repo, rebase))
+		require.Equal(t, git(t, repo, "rev-parse", "HEAD"), git(t, repo, "rev-parse", "side2"))
+	})
 }
