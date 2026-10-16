@@ -2089,6 +2089,26 @@ internal/platform/config/config.go
 - if httpCfg.DocsEnabled {
 + if !httpCfg.DocsEnabled {
 
+## C09 platform/config — Guard: JWT_SECRET из примеров окружения вне dev пускается (подпись — у читателя репо)
+internal/platform/config/config.go
+- 	if slices.Contains(exampleJWTSecrets, jwt.Secret) {
+- 		unsafe = append(unsafe, "JWT_SECRET from an example env")
+- 	}
+
+## C10 platform/config — Guard: JWT_PREVIOUS_SECRET из примеров окружения вне dev пускается
+internal/platform/config/config.go
+- 	if slices.Contains(exampleJWTSecrets, jwt.PreviousSecret) {
+- 		unsafe = append(unsafe, "JWT_PREVIOUS_SECRET from an example env")
+- 	}
+
+## C11 platform/config — Guard: ключ .env.example — не из примеров (вне dev пускается)
+internal/platform/config/config.go
+- 	"local-dev-only-jwt-secret-at-least-32-bytes",
+
+## C12 platform/config — Guard: ключ стенда e2e test/stack — не из примеров (вне dev пускается)
+internal/platform/config/config.go
+- 	"smoke-only-secret-do-not-use-in-prod-min-32chars",
+
 ## EV1 platform/events — outbox домена без ограничения subject'ов
 internal/platform/events/outbox.go
 - outboxkit.Instance(name, table, outboxkit.WithSubjects(name+".>")),
@@ -2220,6 +2240,30 @@ cmd/api/main.go
 cmd/api/main.go
 - return p.MeterProvider.Meter("app") }
 + return p.MeterProvider.Meter("") }
+
+## K14 cmd/api — noStore: Cache-Control не ставится (ответы /api/* — в общем кэше и истории браузера)
+cmd/api/http.go
+- 			w.Header().Set("Cache-Control", "no-store")
+
+## K15 cmd/api — noStore: условие инвертировано (no-store у проб, ответы /api/* — в кэшах)
+cmd/api/http.go
+- if strings.HasPrefix(r.URL.Path, apiPathPrefix) {
++ if !strings.HasPrefix(r.URL.Path, apiPathPrefix) {
+
+## K16 cmd/api — noStore: только под /api/auth/ (данные учётных записей /api/users — в кэшах)
+cmd/api/http.go
+- const apiPathPrefix = "/api/"
++ const apiPathPrefix = "/api/auth/"
+
+## K17 cmd/api — noStore объявлен, но в цепочке middleware не стоит
+cmd/api/http.go
+- return httpkit.Middlewares{noStore, authlimit.Middleware(app.AuthRateLimit)}
++ return httpkit.Middlewares{authlimit.Middleware(app.AuthRateLimit)}
+
+## K18 cmd/api — noStore внутри строгого лимита: отказ 429 /api/auth/* — без no-store
+cmd/api/http.go
+- return httpkit.Middlewares{noStore, authlimit.Middleware(app.AuthRateLimit)}
++ return httpkit.Middlewares{authlimit.Middleware(app.AuthRateLimit), noStore}
 
 ## MG1 cmd/migrate — migrate version: dirty-источник — код 0
 cmd/migrate/main.go
