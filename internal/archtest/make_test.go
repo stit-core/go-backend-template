@@ -280,6 +280,11 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err = push("refs/heads/main " + stuff + " refs/heads/main " + zero + "\n")
 	require.NoError(t, err, "the history of the template under its tags is judged:\n%s", out)
 	require.Contains(t, out, "toy gate: green")
+	// Тот же первый push с тегами (--tags, push.followTags): тег шаблона переносится, а не выпускается.
+	out, err = push("refs/heads/main " + stuff + " refs/heads/main " + zero + "\nrefs/tags/template/v1.0.0 " + stuff +
+		" refs/tags/template/v1.0.0 " + zero + "\n")
+	require.NoError(t, err, "the template tags of a first push with --tags are judged as a release:\n%s", out)
+	require.Contains(t, out, "toy gate: green")
 
 	// Коммит, который уже в ветке remote'а, — не пушимый: его сообщение больше не судится.
 	git(t, repo, "update-ref", "refs/remotes/origin/main", stuff)
