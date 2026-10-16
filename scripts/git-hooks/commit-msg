@@ -30,7 +30,7 @@ if [[ "$HEAD_LINE" =~ $PATTERN ]]; then
   fi
 fi
 echo "ERROR: $WHY"
-echo "Формат: <type>(<scope>)?: <subject>  (≤72 символа)"
+echo "Формат: <type>(<scope>)?: <subject>  (≤72 символа; scope — строчные a-z, цифры, _, / и -)"
 echo "Допустимые types: ${TYPES//|/, }"
 echo "У feat, fix и chore(template) в теле — строка Review: <кто или чем> — <итог> (CLAUDE.md § Готово)"
 echo "Сообщения самого git (Revert \"…\", fixup!/squash!/amend! …) тоже проходят"

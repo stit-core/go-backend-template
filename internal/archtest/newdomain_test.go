@@ -10,9 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewDomainRefusesOrRollsBack: make new-domain с именем, на котором срез не собрался бы, и с таблицей,
-// которую уже создаёт миграция, отказывает до первой правки, а сбой после первой правки (здесь — make gen
-// без Makefile) откатывает все правки скрипта, и блоки мутаций среза тоже: дерево — как до запуска. Песочница —
+// TestNewDomainRefusesOrRollsBack: make new-domain с ключевым словом Go, объявлением пакета домена и таблицей,
+// которую уже создаёт миграция, отказывает до первой правки, а слово кода среза, на котором срез собирается
+// (status), — нет; сбой после первой правки (здесь — make gen без Makefile; у имени, которое код среза уже
+// объявляет, — сборка) откатывает все правки скрипта, и блоки мутаций среза тоже: дерево — как до запуска. Песочница —
 // git-репо со скриптом, go.mod, cmd/api, конфигами генераторов, спецификацией мутаций, миграциями репо и своей
 // миграцией с занятой таблицей (у форка после prune таблиц доменов идентичности нет); инструменты — заглушки.
 func TestNewDomainRefusesOrRollsBack(t *testing.T) {
@@ -38,11 +39,9 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 		domain string
 		want   string
 	}{
-		{name: "a local of the slice tests", domain: "repo", want: "имя из кода среза"},
-		{name: "a parameter of the slice", domain: "id", want: "имя из кода среза"},
-		{name: "a local of the slice code", domain: "row", want: "имя из кода среза"},
 		{name: "a keyword", domain: "func", want: "ключевое слово"},
-		{name: "a declaration of the domain package", domain: "repository", want: "имя из кода среза"},
+		{name: "a declaration of the domain package", domain: "repository", want: "объявление пакета домена"},
+		{name: "a word of the slice that builds", domain: "status", want: "правки откатаны"},
 		{name: "an occupied table", domain: "probe_item", want: "таблицу probe_items уже создаёт миграция"},
 		{name: "a failure after the first edit", domain: freeDomain(files), want: "правки откатаны"},
 	} {

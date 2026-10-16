@@ -116,8 +116,14 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     проходят, `rg --pretty` — ложный отказ), ветки — 0; обычные (158) и формы (129) аудитора — 0 расхождений; проба
     `server.key` (`git add -f`) и `FROM golang:latest` — красные `TestNoSecretFiles`, `TestImagesPinned` (у аудитора
     на базе — `✓ check clean`); allow без `tidy`, `find *` и `git branch*`; `make check` → `✓ check clean`
-- [ ] **S8** — Имена `new-domain`, e2e-харнес, лёгкий Argon2 тестов `cmd/api`, мелочи RENF-16
+- [x] **S8** — Имена `new-domain`, e2e-харнес, лёгкий Argon2 тестов `cmd/api`, мелочи RENF-16
   - Проверка: опыты AC7; `make check` → `✓ check clean` · Закрывает: AC7 · Зависит от: S6
+  - Сделано: имена — база отвергает `status`, `code`, `field`, `body`, `api`, `database`, `caller`, `resp` до правки
+    (`N/s7g/exp-names-base.log`), ветка — срез, lint и юнит-тесты зелёные, а `repo`, `id`, `tests`, `setup`,
+    `created` — откат после сборки с ошибкой об имени, дерево чистое (`N/s7g/exp-names-branch.log`); `make e2e-smoke`
+    → 9 passed, `make e2e` → 16 passed (`N/s7g/e2e-s8.log`), ruff и mypy — отказ до стека, у базы их нет
+    (`N/s7g/e2e-lint-probe.log`); пик памяти `cmd/api.test` под `-race` — 2207 → 418 МиБ (`N/s7g/api-rss.log`);
+    `tests-pipeline.md` — 12,6 → 11,5 тыс. символов; `make check` → `✓ check clean`
 - [ ] **S9** — Приёмка: полный `make mutate` кусками под замком, повтор опытов AC1–AC7
   - Проверка: `make mutate` → код 0; `make check` → `✓ check clean` · Закрывает: AC8 · Зависит от: S8
 
@@ -185,9 +191,22 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - Секреты и образы (RENF-14) — archtest `repo_test.go` по индексу (`git ls-files`): ловит `make check` до коммита и
   pre-push на верхнем коммите; секрет промежуточного коммита, убранный следующим, гейт верхнего коммита не видит.
   `.gitignore` знает `.env.*` (кроме `*.example`) — `.env.production` не уходит обычным `git add`.
+- Имена `make new-domain`: список слов Go-шаблонов снят — он отвергал и имена, на которых срез собирается (`status`,
+  `body`, `api`…). Имя, занятое кодом среза (`repo`, `id`, `tests`…), ловит сборка среза с откатом правок, ошибка
+  называет имя; до первой правки отказывают ключевые слова и встроенные имена Go и объявления пакета домена.
+- RTSTT-10: `ARGON2_MEMORY_KIB=8192` в `serviceEnv` (`cmd/api/boot_test.go`, трек code+security+adapters — одна
+  строка): память хэша потоки тестов не меняет, параметры кита по умолчанию проверяет smoke релиза на стеке;
+  `-p` у `test-int` не нужен — бинарь `cmd/api` один держал 2,2 ГБ.
+- RTSTT-09: `e2e.sh` гоняет ruff и mypy харнеса до стека и ставит venv заново, когда сменился `requirements.txt`;
+  smoke (шаг релиза) — ещё права (`test_authz.py`) и событие между доменами (`test_event_flow.py`); полный
+  `make e2e` — инструмент разработчика, его потоки держат и Go-тесты.
+- RENF-16: подсказка scope в `commit-msg` и пример `triage-failure` с настоящими именами — по строке в файлах трека
+  harness (уже в `main`).
+- RHAR-10 (дополнение дирижёра): строки `tests-pipeline` о `TestBoot`, `TestRun` и `TestIdentity` — по инварианту
+  слоя, перечень проверок — в комментариях самих тестов.
 
 ## Handoff
 —
 
 ## Где мы сейчас
-S7 закрыт: guard видит формы RENF-10, allow — без записи, секреты и плавающие образы — красные. Дальше — S8.
+S8 закрыт: имена `new-domain` без лишних отказов, e2e с линтерами харнеса, тесты `cmd/api` легче. Дальше — S9: полный `make mutate` кусками и приёмка.

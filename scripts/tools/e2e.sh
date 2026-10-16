@@ -6,9 +6,9 @@
 #   scripts/tools/e2e.sh --smoke         # только -m smoke
 #   scripts/tools/e2e.sh --format=detailed
 #
-# Гоняет pytest; стек поднимает/сносит pytest session-фикстура (test/conftest.py
-# shell-out'ит в test/stack/{up,down}.sh — нужен Docker). venv в test/.venv
-# создаётся/обновляется из test/requirements.txt автоматически.
+# Сначала линтеры харнеса (ruff, mypy по test/pyproject.toml), затем pytest; стек поднимает/сносит pytest
+# session-фикстура (test/conftest.py shell-out'ит в test/stack/{up,down}.sh — нужен Docker). venv в test/.venv
+# создаётся из test/requirements.txt, а когда файл сменился, pip ставит его закреплённые версии заново.
 #
 # Канонический status-line в конце: `OK` / `FAIL: <reason>`.
 
@@ -23,7 +23,7 @@ for arg in "$@"; do
         --smoke) MARK=(-m smoke);;
         --format=*) FORMAT="${arg#--format=}";;
         --max-bytes=*) MAX_BYTES="${arg#--max-bytes=}";;
-        -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+        -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
         *) echo "FAIL: unknown arg: $arg" >&2; exit 1;;
     esac
 done
@@ -31,8 +31,9 @@ done
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 VENV="test/.venv"
-if [ ! -x "$VENV/bin/pytest" ]; then
-    echo "== bootstrap $VENV =="
+want=$(sha256sum test/requirements.txt | cut -d' ' -f1)
+if [ ! -x "$VENV/bin/pytest" ] || [ "$(cat "$VENV/.requirements.sha256" 2>/dev/null)" != "$want" ]; then
+    echo "== bootstrap $VENV (test/requirements.txt) =="
     if ! python3 -m venv "$VENV" 2>/dev/null; then
         echo "FAIL: python3 -m venv не сработал (нужен пакет python3-venv)." >&2
         exit 1
@@ -41,7 +42,19 @@ if [ ! -x "$VENV/bin/pytest" ]; then
         echo "FAIL: pip install -r test/requirements.txt" >&2
         exit 1
     fi
+    echo "$want" >"$VENV/.requirements.sha256"
 fi
+
+# Харнес — типизированный код: ruff и mypy (test/pyproject.toml) — до стека.
+for lint in "ruff check ." "mypy"; do
+    # shellcheck disable=SC2086 # команда и её аргументы — отдельными словами
+    if ! out=$(cd test && ".venv/bin/"$lint 2>&1); then
+        echo "$out" | tail -30
+        echo "FAIL: ${lint%% *} — харнес test/ (вывод выше)"
+        exit 1
+    fi
+done
+echo "OK: ruff и mypy харнеса"
 
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT

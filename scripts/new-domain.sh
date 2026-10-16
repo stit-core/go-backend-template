@@ -32,10 +32,10 @@ if ! [[ "$NAME" =~ ^[a-z][a-z0-9]*(_[a-z0-9]+)*$ ]]; then
     echo "       получено: '$NAME'" >&2
     exit 1
 fi
-# Пакет домена не может называться ключевым словом или встроенным именем Go, именем, с которым тип
-# домена совпал бы с объявлением пакета домена (Repository, Usecase…), и именем, которое код среза
-# объявляет или зовёт рядом с пакетом домена (repo, id, got…): срез не собрался бы. Последние берутся из
-# Go-шаблонов этого скрипта — список не отстаёт от шаблонов.
+# Пакет домена не может называться ключевым словом или встроенным именем Go и именем, с которым тип домена
+# совпал бы с объявлением пакета домена (Repository, Usecase…) или с пакетом, который он берёт (policy). Имя,
+# которое код среза объявляет или зовёт рядом с пакетом домена (repo, id, tests…), ловит сборка среза (go vet
+# ниже) с откатом правок: список таких слов отвергал бы и имена, на которых срез собирается (status, body, api…).
 reserved=(
     break case chan const continue default defer else fallthrough for func go goto if import interface
     map package range return select struct switch type var
@@ -44,11 +44,9 @@ reserved=(
     real recover rune string true uint uint8 uint16 uint32 uint64 uintptr
     authorizer create_input policy repository usecase usecase_deps
 )
-template_words=$(awk '/<<EOF$/ && /\.go"/ { go = 1; next } /^EOF$/ { go = 0 } go' "$0" |
-    sed -E 's://.*$::; s/"([^"\\]|\\.)*"//g; s/`[^`]*`//g' | grep -oE '[A-Za-z_][A-Za-z0-9_]*' | grep -E '^[a-z]' | sort -u)
-for word in "${reserved[@]}" $template_words; do
+for word in "${reserved[@]}"; do
     if [ "$NAME" = "$word" ]; then
-        echo "ERROR: '$NAME' — ключевое слово или встроенное имя Go либо имя из кода среза: возьми другое" >&2
+        echo "ERROR: '$NAME' — ключевое слово или встроенное имя Go либо объявление пакета домена: возьми другое" >&2
         exit 1
     fi
 done
@@ -120,7 +118,8 @@ rollback() {
     if [ -z "$completed" ]; then
         for f in "${shared[@]}"; do cp "$backup/${f//\//_}" "$f"; done
         rm -rf "$DOMAIN_DIR" "${MIGRATION}.up.sql" "${MIGRATION}.down.sql"
-        echo "ERROR: срез $NAME не собрался (вывод выше) — правки откатаны, дерево — как до запуска" >&2
+        echo "ERROR: срез $NAME не собрался (вывод выше; ошибка об имени $NAME — оно занято кодом среза, возьми другое) —" >&2
+        echo "       правки откатаны, дерево — как до запуска" >&2
     fi
     rm -rf "$backup"
 }

@@ -19,6 +19,7 @@ USER_REGISTERED = "user.events.registered.v2"
 EMAIL_VERIF_REQUESTED = "verification.events.email_verification_requested.v2"
 
 
+@pytest.mark.smoke
 @pytest.mark.e2e
 def test_register_event_flow(
     api: Api,

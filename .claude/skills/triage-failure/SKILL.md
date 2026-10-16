@@ -63,7 +63,7 @@ go test -race -run Test<Name> -count=10 ./path/to/pkg   # для flaky/race
 Одно предложение: "X падает потому что Y" — проверяемое.
 
 Примеры:
-- "TestRefresh_ReusedToken падает потому что MarkUsed не идемпотентен относительно дубликатов в одной транзакции"
+- "TestMarkUsed_Concurrent падает потому что погашение ссылки читает used_at, а не гасит условным UPDATE: два погашения проходят оба"
 - "build падает потому что после миграции NNNN sqlc не перегенерирован — старая сигнатура в repository.go"
 - "lint forbidigo падает потому что добавили `slog.Info` в новом файле — нужно logkit"
 

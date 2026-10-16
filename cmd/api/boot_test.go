@@ -94,6 +94,9 @@ func serviceEnv(t *testing.T) *testkit.PostgresFixture {
 		"PG_DSN": pg.DSN, "NATS_URL": nats.URL, "HTTP_ADDR": "127.0.0.1:0", "LOG_SILENT": "true",
 		// Спецификацию сервис отдаёт только с HTTP_DOCS_ENABLED.
 		"HTTP_DOCS_ENABLED": "true",
+		// Argon2id с памятью кита по умолчанию (64 МиБ на хэш) под -race держит бинарь тестов на 2,2 ГБ: потоки
+		// тестов от памяти хэша не зависят, а параметры по умолчанию проверяет smoke релиза на стеке.
+		"ARGON2_MEMORY_KIB": "8192",
 	} {
 		env[k] = v
 	}

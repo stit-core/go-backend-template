@@ -10,6 +10,7 @@ from infra.pg import Pg
 from scenarios.auth import login
 
 
+@pytest.mark.smoke
 @pytest.mark.e2e
 def test_list_admin_only(api: Api, user: RegisteredUser, admin: Api) -> None:
     login(api, user.email, user.password)
@@ -21,6 +22,7 @@ def test_list_admin_only(api: Api, user: RegisteredUser, admin: Api) -> None:
     assert isinstance(body["data"], list)
 
 
+@pytest.mark.smoke
 @pytest.mark.e2e
 def test_get_by_id_self_or_admin(
     api: Api, user: RegisteredUser, other_user: RegisteredUser, admin: Api, pg: Pg
@@ -37,6 +39,7 @@ def test_get_by_id_self_or_admin(
     assert admin.status("GET", f"/api/users/{other_id}") == 200
 
 
+@pytest.mark.smoke
 @pytest.mark.e2e
 def test_update_delete_cross_user_forbidden(
     api: Api, user: RegisteredUser, other_user: RegisteredUser, pg: Pg

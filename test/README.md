@@ -12,7 +12,7 @@
 | Транспорт+модели | `client/` | типизированная httpx-обёртка + pydantic-DTO (строгое зеркало huma: лишнее поле или тип — ошибка разбора). |
 | Сценарии | `scenarios/` | переиспользуемые step-функции над `client` (без ассертов). |
 | Infra-интроспекция | `infra/` | типизированный доступ к side-effects: `pg.py` (psycopg, users/сессии refresh/bruteforce/email_verifications), `outbox.py` (per-domain `outbox_<domain>`), `nats.py` (core-NATS collector). |
-| Smoke-тесты | `smoke/` | boot + критический happy-path, `@pytest.mark.smoke`. |
+| Smoke-тесты | `smoke/` и помеченные в `e2e/` | boot, вход и сессии, права, событие между доменами — `@pytest.mark.smoke` (шаг `make release`). |
 | E2E-тесты | `e2e/` | сценарии по доменам, `@pytest.mark.e2e`. |
 | Фикстуры | `conftest.py` | session-стек, `endpoints` (резолвнутые адреса), `api`, `user`, `admin`, `other_user`, `pg`, `nats_collector`. |
 
@@ -93,8 +93,9 @@ make e2e          # весь набор (поднимает стек, гоняе
 make e2e-smoke    # только -m smoke (шаг make release)
 ```
 
-Под капотом: `test/.venv` (из `test/requirements.txt`) + pytest. Конкретно —
-`scripts/tools/e2e.sh` (сжатый вывод, каноничная строка `OK`/`FAIL`).
+Под капотом: `test/.venv` (из `test/requirements.txt`; сменился файл — pip ставит его версии заново), затем
+`ruff check` и `mypy` харнеса и pytest. Конкретно — `scripts/tools/e2e.sh` (сжатый вывод, каноничная строка
+`OK`/`FAIL`).
 
 ## Зависимости
 
