@@ -7,11 +7,17 @@ import "git.stit.tech/stit-core/golibinfra/archkit"
 var layout = []archkit.Option{
 	archkit.WithInternalDirs("internal/archtest", "internal/testkit"),
 	archkit.WithPurePackages("internal/platform/identity", "pkg/policy"),
+	archkit.WithPkgPackages(pkgPackages...),
 	archkit.WithUncheckedPackages(uncheckedPackages...),
 	archkit.WithRootLibs(rootLibs...),
 	// Известное нарушение — «нарушение из строки отказа → ID находки»; запись без нарушения — отказ.
 	archkit.WithKnownViolations(map[string]string{}),
 }
+
+// pkgPackages — пакеты pkg/ сервиса: правила и типы без I/O, общие доменам, и сгенерированные клиенты. Пакет pkg/ вне
+// перечня (и подпакет перечисленного) — нарушение TestLayout: новый пакет — строкой здесь, generic-примитив — в
+// golibinfra.
+var pkgPackages = []string{"pkg/outcome", "pkg/paging", "pkg/policy"}
 
 // uncheckedPackages — пакеты модуля под корнем домена, в чьи импорты правило не заглядывает: identity.IPFrom
 // читает IP клиента из ctx запроса через httpkit — транспортный кит; за чистотой пакета следит ревью.

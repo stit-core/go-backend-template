@@ -147,6 +147,7 @@ var Module = fx.Module(
 адаптера (канон fx — `docs/reference/architecture.md § fx`).
 
 Identity-closure (`func(uc *<provider>.Usecase) <consumer>.<Port> { return uc }`) для порта между доменами запрещён (archtest): чужие sentinel'ы ушли бы потребителю без маппинга. Всегда типовой адаптер.
+Порт привязывается только к типу адаптера: структура `fx.In` или `fx.Out` с `*<provider>.Trusted` в привязке порта — тот же обход (archkit ловит литерал и прямое поле, не каждую форму).
 
 ### 7. Проверить границы
 

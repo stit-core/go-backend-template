@@ -106,6 +106,18 @@ func TestRegister_Conflict(t *testing.T) {
 	handlertest.AssertAPIError(t, resp, http.StatusConflict, "USER_ALREADY_EXISTS")
 }
 
+// Перегрузка хэшера — 503 с Retry-After из ошибки кита в цепочке: регистрацию повторяют.
+func TestRegister_Busy(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().Register(mock.Anything, mock.Anything).Return(nil, fmt.Errorf("%w: %w", user.ErrBusy, authnkit.ErrBusy)).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/register", strings.NewReader(registerBody(strings.Repeat("p", policy.MinPasswordLen))))
+	handlertest.AssertAPIError(t, resp, http.StatusServiceUnavailable, "USER_BUSY")
+	require.Equal(t, "1", resp.Header().Get("Retry-After"))
+}
+
 func TestRegister_WeakPassword(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)

@@ -50,3 +50,14 @@ func TestLoginGuard_RecordSuccess(t *testing.T) {
 	require.NoError(t, authbruteforce.NewLoginGuard(rec).RecordSuccess(context.Background(), "a@b.com", "10.0.0.1"))
 	require.Equal(t, []bruteforcetest.Attempt{{Subject: "a@b.com", IP: "10.0.0.1"}}, rec.Successes())
 }
+
+// Возврат попытки уходит guard'у кита с ключом клиента, его отказ — как есть.
+func TestLoginGuard_Refund(t *testing.T) {
+	t.Parallel()
+	rec := &bruteforcetest.Recorder{}
+	require.NoError(t, authbruteforce.NewLoginGuard(rec).Refund(context.Background(), "a@b.com", "10.0.0.1"))
+	require.Equal(t, []bruteforcetest.Attempt{{Subject: "a@b.com", IP: "10.0.0.1"}}, rec.Refunds())
+
+	err := authbruteforce.NewLoginGuard(bruteforcetest.Permissive{}).Refund(context.Background(), " ", "10.0.0.1")
+	require.ErrorIs(t, err, bruteforcekit.ErrInvalidKey, "the guard's refusal reaches the usecase as is")
+}

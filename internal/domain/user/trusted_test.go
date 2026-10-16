@@ -74,7 +74,8 @@ func FuzzTrusted_LookupByEmail(f *testing.F) {
 	})
 }
 
-// Хэш нового пароля — по правилу пароля продукта; пароль длиннее предела хэшера — ошибка поля, сбой хэшера — ошибка.
+// Хэш нового пароля — по правилу пароля продукта; пароль длиннее предела хэшера — ошибка поля, полная очередь хэшера —
+// ErrBusy с ошибкой кита в цепочке (Retry-After ответа), сбой хэшера — ошибка.
 func TestTrusted_HashPassword(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -88,6 +89,7 @@ func TestTrusted_HashPassword(t *testing.T) {
 		{name: "weak", plain: "short", hasher: &authntest.DeterministicHasher{}, err: user.ErrWeakPassword},
 		{name: "over the hasher limit", plain: strings.Repeat("я", authnkit.MaxPasswordLen), hasher: &authntest.DeterministicHasher{}, err: user.ErrPasswordTooLong},
 		{name: "hasher failure", plain: "secret-123", hasher: &authntest.DeterministicHasher{HashErr: errHashing}, err: errHashing},
+		{name: "hasher busy", plain: "secret-123", hasher: &authntest.DeterministicHasher{Busy: true}, err: user.ErrBusy},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -96,6 +98,9 @@ func TestTrusted_HashPassword(t *testing.T) {
 
 			got, err := tr.HashPassword(context.Background(), tc.plain)
 			require.ErrorIs(t, err, tc.err)
+			if errors.Is(tc.err, user.ErrBusy) {
+				require.ErrorIs(t, err, authnkit.ErrBusy, "the kit's error stays in the chain: the 503 takes its Retry-After")
+			}
 			require.Equal(t, tc.want, got)
 		})
 	}
@@ -176,9 +181,12 @@ func TestTrusted_ErrorsAreDeclared(t *testing.T) {
 			return err
 		}},
 		// Исходы HashPassword — от пароля и хэшера, а не от репозитория.
-		"HashPassword": {[]error{user.ErrWeakPassword, user.ErrPasswordTooLong}, func(tr *user.Trusted, _ *mocks.MockRepository, _ *mocks.MockSessions, outcome error) error {
+		"HashPassword": {[]error{user.ErrWeakPassword, user.ErrPasswordTooLong, user.ErrBusy}, func(tr *user.Trusted, _ *mocks.MockRepository, _ *mocks.MockSessions, outcome error) error {
 			plain := map[error]string{nil: "secret-123", user.ErrWeakPassword: "short", user.ErrPasswordTooLong: strings.Repeat("я", authnkit.MaxPasswordLen)}
-			if _, input := plain[outcome]; !input {
+			switch _, input := plain[outcome]; {
+			case errors.Is(outcome, user.ErrBusy):
+				tr = user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{Busy: true}})
+			case !input:
 				tr = user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{HashErr: outcome}})
 			}
 			_, err := tr.HashPassword(context.Background(), cmp.Or(plain[outcome], "secret-123"))

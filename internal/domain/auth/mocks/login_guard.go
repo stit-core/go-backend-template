@@ -174,3 +174,66 @@ func (_c *MockLoginGuard_RecordSuccess_Call) RunAndReturn(run func(ctx context.C
 	_c.Call.Return(run)
 	return _c
 }
+
+// Refund provides a mock function for the type MockLoginGuard
+func (_mock *MockLoginGuard) Refund(ctx context.Context, subject string, ip string) error {
+	ret := _mock.Called(ctx, subject, ip)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Refund")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, subject, ip)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockLoginGuard_Refund_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Refund'
+type MockLoginGuard_Refund_Call struct {
+	*mock.Call
+}
+
+// Refund is a helper method to define mock.On call
+//   - ctx context.Context
+//   - subject string
+//   - ip string
+func (_e *MockLoginGuard_Expecter) Refund(ctx interface{}, subject interface{}, ip interface{}) *MockLoginGuard_Refund_Call {
+	return &MockLoginGuard_Refund_Call{Call: _e.mock.On("Refund", ctx, subject, ip)}
+}
+
+func (_c *MockLoginGuard_Refund_Call) Run(run func(ctx context.Context, subject string, ip string)) *MockLoginGuard_Refund_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockLoginGuard_Refund_Call) Return(err error) *MockLoginGuard_Refund_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockLoginGuard_Refund_Call) RunAndReturn(run func(ctx context.Context, subject string, ip string) error) *MockLoginGuard_Refund_Call {
+	_c.Call.Return(run)
+	return _c
+}

@@ -16,6 +16,7 @@ var (
 	resultLocked       = outcome.New("locked")
 	resultBlocked      = outcome.New("blocked")
 	resultReused       = outcome.New("reused")
+	resultBusy         = outcome.New("busy")
 )
 
 // Metrics — сигналы для алертов: перебор паролей (исходы входа) и кража сессии (повтор refresh).

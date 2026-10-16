@@ -44,8 +44,11 @@ def test_auth_cookie_flow(
     assert len(sessions) == 1
     assert (sessions[0]["tokens"], sessions[0]["live_tokens"]) == (2, 1)
 
-    # 4. повтор погашенного refresh-cookie из отдельной сессии → 401: сессия закрыта целиком,
-    #    следующий токен цепочки тоже мёртв
+    # 4. повтор погашенного refresh-cookie из отдельной сессии, когда следующий токен уже обновил
+    #    сессию → 401: сессия закрыта целиком, последний токен цепочки тоже мёртв (повтор до
+    #    того — в окне SESSION_RETRY_WINDOW — выдал бы новый токен: так повторяет клиент, чей
+    #    ответ потерян)
+    rotate_refresh(api)
     with Api(stack) as replay:
         assert replay_refresh_status(replay, old) == 401
     assert _open(pg.sessions_for(uid)) == []

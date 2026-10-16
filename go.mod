@@ -5,7 +5,7 @@ go 1.26.6
 toolchain go1.26.9
 
 require (
-	git.stit.tech/stit-core/golibinfra v1.5.0
+	git.stit.tech/stit-core/golibinfra v1.6.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/stretchr/testify v1.12.1

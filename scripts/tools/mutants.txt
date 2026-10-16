@@ -217,10 +217,8 @@ internal/domain/user/usecase.go
 internal/domain/user/usecase.go
 - 	case errors.Is(err, authnkit.ErrPasswordTooLong):
 - 		return "", ErrPasswordTooLong
-- 	case err != nil:
 + 	case errors.Is(err, authnkit.ErrPasswordTooLong):
 + 		return "", fmt.Errorf("hash password: %w", err)
-+ 	case err != nil:
 
 ## U06 usecase/user — GetByID: policy спрашивают о вызывающем (IDOR)
 internal/domain/user/usecase.go
@@ -328,6 +326,16 @@ internal/domain/user/usecase.go
 + id := caller.UserID
 + return uc.d.Repo.GetByID(ctx, id)
 + }
+
+## U26 usecase/user — hashPassword: полная очередь хэшера — сбой (500), а не ErrBusy (503)
+internal/domain/user/usecase.go
+- 		return "", fmt.Errorf("%w: %w", ErrBusy, err)
++ 		return "", fmt.Errorf("hash password: %w", err)
+
+## U27 usecase/user — hashPassword: ErrBusy без ошибки кита — 503 без Retry-After
+internal/domain/user/usecase.go
+- 		return "", fmt.Errorf("%w: %w", ErrBusy, err)
++ 		return "", ErrBusy
 
 ## T01 usecase/auth — passwordMatches: пароль длиннее предела хэшера — «совпал»
 internal/domain/auth/usecase.go
@@ -794,7 +802,10 @@ internal/domain/auth/usecase.go
 ## A03 usecase/auth — Login: заблокированный доходит до проверки пароля (останавливает только перечитывание под блокировкой)
 internal/domain/auth/usecase.go
 - 	case !u.CanLogin:
-- 		uc.d.Hasher.VerifyDummy(ctx)
+- 		if err := uc.d.Hasher.VerifyDummy(ctx); err != nil {
+- 			result, err := uc.unchecked(ctx, in.Email, ip, passwordCheckErr(err))
+- 			return nil, result, err
+- 		}
 - 		uc.auditLoginFailed(ctx, u.ID, resultBlocked)
 - 		return nil, resultBlocked, ErrInvalidCredentials
 - 	}
@@ -802,11 +813,12 @@ internal/domain/auth/usecase.go
 
 ## A04 usecase/auth — Login: неизвестный адрес — без холостой проверки (тайминг выдаёт учётную запись)
 internal/domain/auth/usecase.go
-- 		uc.d.Hasher.VerifyDummy(ctx)
+- 		if err := uc.d.Hasher.VerifyDummy(ctx); err != nil {
+- 			result, err := uc.unchecked(ctx, in.Email, ip, passwordCheckErr(err))
+- 			return nil, result, err
+- 		}
 - 		return nil, resultInvalidLogin, ErrInvalidCredentials
-- 	case err != nil:
 + 		return nil, resultInvalidLogin, ErrInvalidCredentials
-+ 	case err != nil:
 
 ## A05 usecase/auth — Login: неверный пароль принимается
 internal/domain/auth/usecase.go
@@ -973,6 +985,93 @@ internal/domain/auth/usecase.go
 - RefreshToken: refresh.Value, User: u}, outcome.OK, nil
 + RefreshToken: refresh.Value, User: &User{ID: u.ID}}, outcome.OK, nil
 
+## A37 usecase/auth — Login: сбой холостой проверки неизвестного адреса проглочен — под перегрузкой 401 сразу (код выдаёт учётную запись)
+internal/domain/auth/usecase.go
+- 		if err := uc.d.Hasher.VerifyDummy(ctx); err != nil {
+- 			result, err := uc.unchecked(ctx, in.Email, ip, passwordCheckErr(err))
+- 			return nil, result, err
+- 		}
+- 		return nil, resultInvalidLogin, ErrInvalidCredentials
++ 		_ = uc.d.Hasher.VerifyDummy(ctx)
++ 		return nil, resultInvalidLogin, ErrInvalidCredentials
+
+## A38 usecase/auth — Login: сбой холостой проверки заблокированного проглочен — под перегрузкой 401 с аудитом
+internal/domain/auth/usecase.go
+- 		if err := uc.d.Hasher.VerifyDummy(ctx); err != nil {
+- 			result, err := uc.unchecked(ctx, in.Email, ip, passwordCheckErr(err))
+- 			return nil, result, err
+- 		}
+- 		uc.auditLoginFailed(ctx, u.ID, resultBlocked)
++ 		_ = uc.d.Hasher.VerifyDummy(ctx)
++ 		uc.auditLoginFailed(ctx, u.ID, resultBlocked)
+
+## A39 usecase/auth — Login: сбой проверки пароля — без возврата попытки (повторы 503 блокируют честного)
+internal/domain/auth/usecase.go
+- 	case err != nil:
+- 		result, err := uc.unchecked(ctx, in.Email, ip, err)
+- 		return nil, result, err
+- 	case !ok:
++ 	case err != nil:
++ 		return nil, outcome.Error, err
++ 	case !ok:
+
+## A40 usecase/auth — unchecked: попытка возвращается на любой ошибке проверки, а не только на ErrBusy (перебору — лишние попытки)
+internal/domain/auth/usecase.go
+- 	if !errors.Is(err, ErrBusy) {
+- 		return outcome.Error, err
+- 	}
+- 	if rerr := uc.d.Guard.Refund(context.WithoutCancel(ctx), subject, ip); rerr != nil {
+- 		uc.d.Log.Error(ctx, "guard refund", "error", rerr)
+- 	}
++ 	if rerr := uc.d.Guard.Refund(context.WithoutCancel(ctx), subject, ip); rerr != nil {
++ 		uc.d.Log.Error(ctx, "guard refund", "error", rerr)
++ 	}
++ 	if !errors.Is(err, ErrBusy) {
++ 		return outcome.Error, err
++ 	}
+
+## A41 usecase/auth — unchecked: на ErrBusy попытка не возвращается (повторы 503 блокируют честного)
+internal/domain/auth/usecase.go
+- 	if rerr := uc.d.Guard.Refund(context.WithoutCancel(ctx), subject, ip); rerr != nil {
+- 		uc.d.Log.Error(ctx, "guard refund", "error", rerr)
+- 	}
+- 	return resultBusy, err
++ 	return resultBusy, err
+
+## A42 usecase/auth — unchecked: возврат с ctx запроса — клиент, оборвавший запрос, теряет попытку
+internal/domain/auth/usecase.go
+- uc.d.Guard.Refund(context.WithoutCancel(ctx), subject, ip)
++ uc.d.Guard.Refund(ctx, subject, ip)
+
+## A43 usecase/auth — unchecked: у возврата перепутаны subject и IP
+internal/domain/auth/usecase.go
+- uc.d.Guard.Refund(context.WithoutCancel(ctx), subject, ip)
++ uc.d.Guard.Refund(context.WithoutCancel(ctx), ip, subject)
+
+## A44 usecase/auth — unchecked: перегрузка хэшера — исход error, а не busy (алерт сбоев на перегрузку)
+internal/domain/auth/usecase.go
+- 	return resultBusy, err
++ 	return outcome.Error, err
+
+## A45 usecase/auth — passwordCheckErr: полная очередь хэшера — сбой (500), а не ErrBusy (503)
+internal/domain/auth/usecase.go
+- 	if errors.Is(err, authnkit.ErrBusy) {
+- 		return fmt.Errorf("%w: %w", ErrBusy, err)
+- 	}
+- 	return fmt.Errorf("verify password: %w", err)
++ 	return fmt.Errorf("verify password: %w", err)
+
+## A46 usecase/auth — passwordCheckErr: ErrBusy без ошибки кита — 503 без Retry-After
+internal/domain/auth/usecase.go
+- 		return fmt.Errorf("%w: %w", ErrBusy, err)
++ 		return ErrBusy
+
+## A47 usecase/auth — ChangePassword: перегрузка хэшера на старом пароле — без возврата попытки
+internal/domain/auth/usecase.go
+- 		_, err = uc.unchecked(ctx, current.Email, ip, err)
+- 		return err
++ 		return err
+
 ## M09b infra — адаптер guard: попытка не уходит в bruteforcekit
 internal/domain/auth/infra/bruteforce/guard.go
 - lock, err := g.guard.Attempt(ctx, subject, ip)
@@ -1012,6 +1111,11 @@ internal/domain/auth/infra/jwt/jwt.go
 internal/domain/auth/infra/bruteforce/guard.go
 - return &auth.LockState{RetryAfter: lock.RetryAfter}, nil
 + return &auth.LockState{}, nil
+
+## AI7 infra — guard: возврат попытки не доходит до bruteforcekit
+internal/domain/auth/infra/bruteforce/guard.go
+- 	return g.guard.Refund(ctx, subject, ip)
++ 	return nil
 
 ## VI1 sql — UpsertPasswordReset: пауза писем сброса не действует
 internal/domain/verification/infra/postgres/queries/password_resets.sql
@@ -1132,6 +1236,16 @@ internal/domain/auth/module/adapters.go
 - 		Role:         u.Role,
 + 		Role:         "",
 
+## AD8 adapter — auth-адаптер HashPassword: перегрузка хэшера user не переводится (sentinel user, 500 вместо 503)
+internal/domain/auth/module/adapters.go
+- 	case errors.Is(err, user.ErrBusy):
++ 	case errors.Is(err, auth.ErrBusy):
+
+## AD9 adapter — auth-адаптер: вместо ошибки кита — её текст (Retry-After у 503 пропал)
+internal/domain/auth/module/adapters.go
+- return fmt.Errorf("%w: %w", auth.ErrBusy, authnkit.ErrBusy)
++ return fmt.Errorf("%w: %w", auth.ErrBusy, errors.New(authnkit.ErrBusy.Error()))
+
 ## VAD1 adapter — verification-адаптер: CanLogin = true (сброс пароля заблокированному)
 internal/domain/verification/module/adapters.go
 - 		CanLogin: u.CanLogin(),
@@ -1164,6 +1278,16 @@ internal/domain/verification/module/adapters.go
 + 	case errors.Is(err, user.ErrNotFound):
 + 		return verification.ErrConcurrentUpdate
 
+## VAD7 adapter — verification-адаптер HashPassword: перегрузка хэшера user не переводится (sentinel user, 500 вместо 503)
+internal/domain/verification/module/adapters.go
+- 	case errors.Is(err, user.ErrBusy):
++ 	case errors.Is(err, verification.ErrBusy):
+
+## VAD8 adapter — verification-адаптер: вместо ошибки кита — её текст (Retry-After у 503 пропал)
+internal/domain/verification/module/adapters.go
+- return fmt.Errorf("%w: %w", verification.ErrBusy, authnkit.ErrBusy)
++ return fmt.Errorf("%w: %w", verification.ErrBusy, errors.New(authnkit.ErrBusy.Error()))
+
 ## M19 handler — user: USER_NOT_FOUND 404 → 400
 internal/domain/user/delivery/http/handler.go
 - Err: user.ErrNotFound, Status: http.StatusNotFound,
@@ -1171,12 +1295,10 @@ internal/domain/user/delivery/http/handler.go
 
 ## M20 handler — auth: отказ policy 403 → 401
 internal/domain/auth/delivery/http/handler.go
-- concurrentUpdateRule,
-- 		authgate.ForbiddenRule)
+- 		busyRule, authgate.ForbiddenRule)
 -
 - 	loginErrors
-+ concurrentUpdateRule,
-+ 		httpkit.ErrorRule{Match: authgate.ForbiddenRule.Match, Status: http.StatusUnauthorized, Code: "UNAUTHORIZED", Detail: "unauthorized"})
++ 		busyRule, httpkit.ErrorRule{Match: authgate.ForbiddenRule.Match, Status: http.StatusUnauthorized, Code: "UNAUTHORIZED", Detail: "unauthorized"})
 +
 + 	loginErrors
 
@@ -1244,8 +1366,8 @@ internal/domain/auth/delivery/http/handler.go
 
 ## AH10 handler — login: 429 блокировки не объявлен в OpenAPI
 internal/domain/auth/delivery/http/handler.go
-- loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, authlimit.Rule)
-+ loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, authlimit.Rule)
+- loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, busyRule, authlimit.Rule)
++ loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, busyRule, authlimit.Rule)
 
 ## AH11 handler — change-password: схема пускает новый пароль короче 8
 internal/domain/auth/delivery/http/dto.go
@@ -1296,6 +1418,16 @@ internal/domain/auth/delivery/http/handler.go
 + 	}
 + 	return &AuthRefreshOutput{
 + 		SetCookie: authgate.BuildAuthCookies(result.AccessToken, in.RefreshToken, h.cookieCfg),
+
+## AH18 handler — login: 503 перегрузки хэшера не объявлен в OpenAPI
+internal/domain/auth/delivery/http/handler.go
+- loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, busyRule, authlimit.Rule)
++ loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, authlimit.Rule)
+
+## AH19 handler — перегрузка хэшера: 429 вместо 503 (клиент считает себя превысившим лимит)
+internal/domain/auth/delivery/http/handler.go
+- Err: auth.ErrBusy, Status: http.StatusServiceUnavailable,
++ Err: auth.ErrBusy, Status: http.StatusTooManyRequests,
 
 ## UH1 handler — list: в page — размер страницы
 internal/domain/user/delivery/http/handler.go
@@ -1394,6 +1526,16 @@ internal/domain/user/delivery/http/handler.go
 + 	out.Body.Data.Email = ""
 + 	return out, nil
 
+## UH17 handler — register: 503 перегрузки хэшера не объявлен в OpenAPI
+internal/domain/user/delivery/http/handler.go
+- alreadyExistsRule, busyRule, authlimit.Rule)
++ alreadyExistsRule, authlimit.Rule)
+
+## UH18 handler — register: перегрузка хэшера — 500 вместо 503
+internal/domain/user/delivery/http/handler.go
+- Err: user.ErrBusy, Status: http.StatusServiceUnavailable,
++ Err: user.ErrBusy, Status: http.StatusInternalServerError,
+
 ## VH1 handler — confirm сброса: перепутаны токен и пароль
 internal/domain/verification/delivery/http/handler.go
 - h.uc.ConfirmPasswordReset(ctx, in.Body.Token, in.Body.Password)
@@ -1448,6 +1590,16 @@ internal/domain/verification/delivery/http/handler.go
 - 		return nil, verificationErrors.Map(err)
 + h.uc.ConfirmEmail(ctx, in.Body.Token); err != nil && ctx.Err() != nil {
 + 		return nil, verificationErrors.Map(err)
+
+## VH10 handler — подтверждение сброса: 503 перегрузки хэшера не объявлен в OpenAPI
+internal/domain/verification/delivery/http/handler.go
+- tokenUsedRule, busyRule, authlimit.Rule)
++ tokenUsedRule, authlimit.Rule)
+
+## VH11 handler — подтверждение сброса: перегрузка хэшера — 500 вместо 503
+internal/domain/verification/delivery/http/handler.go
+- Err: verification.ErrBusy, Status: http.StatusServiceUnavailable,
++ Err: verification.ErrBusy, Status: http.StatusInternalServerError,
 
 ## M04s usecase/verification — confirm сброса: отказ правила пароля не останавливает сброс
 internal/domain/verification/usecase.go

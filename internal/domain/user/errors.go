@@ -13,4 +13,5 @@ var (
 	ErrConcurrentUpdate        = errors.New("user: concurrent update")
 	ErrNoUpdateFields          = errors.New("user: no update fields")
 	ErrInvalidStatusTransition = errors.New("user: invalid status transition")
+	ErrBusy                    = errors.New("user: password hasher busy")
 )

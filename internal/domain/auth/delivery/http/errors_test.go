@@ -20,11 +20,11 @@ func TestErrorMaps(t *testing.T) {
 		m    httpkit.ErrorMap
 		errs []error
 	}{
-		{"loginUser", loginErrors, []error{auth.ErrInvalidCredentials, &auth.LockedError{}}},
+		{"loginUser", loginErrors, []error{auth.ErrInvalidCredentials, &auth.LockedError{}, auth.ErrBusy}},
 		{"refreshToken", refreshErrors, []error{auth.ErrRefreshExpired, auth.ErrRefreshReused, auth.ErrRefreshInvalid}},
 		{"changePassword", changePasswordErrors, []error{
 			auth.ErrWeakPassword, auth.ErrPasswordTooLong, auth.ErrWrongOldPassword, &auth.LockedError{}, auth.ErrUserNotFound,
-			auth.ErrConcurrentUpdate, &policy.ForbiddenError{Reason: "test"},
+			auth.ErrConcurrentUpdate, auth.ErrBusy, &policy.ForbiddenError{Reason: "test"},
 		}},
 	}
 	for _, tc := range tests {

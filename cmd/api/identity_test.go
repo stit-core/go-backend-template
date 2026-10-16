@@ -28,6 +28,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/natskit"
 	"git.stit.tech/stit-core/golibinfra/telemetry"
@@ -465,29 +466,35 @@ func (a sessionAPI) refresh(cookies map[string]string) (int, map[string]string) 
 	return status, got
 }
 
-// refreshCode — refresh одним cookie из своей горутины (без require): "" — 204, иначе code ответа-ошибки.
-func refreshCode(t *testing.T, api sessionAPI, refresh string) (string, error) {
+// refreshCode — refresh одним cookie из своей горутины (без require): "" и выданный refresh-cookie — 204, иначе code
+// ответа-ошибки.
+func refreshCode(t *testing.T, api sessionAPI, refresh string) (string, string, error) {
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, api.base+"/api/auth/refresh", http.NoBody)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	req.AddCookie(&http.Cookie{Name: authgate.CookieRefresh, Value: refresh})
 	resp, err := api.client.Do(req)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err := errors.Join(err, resp.Body.Close()); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if resp.StatusCode == http.StatusNoContent {
-		return "", nil
+		for _, c := range resp.Cookies() {
+			if c.Name == authgate.CookieRefresh {
+				return "", c.Value, nil
+			}
+		}
+		return "", "", errors.New("refresh answered 204 without a refresh cookie")
 	}
 	var apiErr httpkit.APIError
 	if err := json.Unmarshal(body, &apiErr); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return apiErr.Code, nil
+	return apiErr.Code, "", nil
 }
 
 const sessionPassword = "password123"
@@ -508,9 +515,28 @@ func openSessions(t *testing.T, db *pgxpool.Pool, userID string) int {
 	return n
 }
 
-// TestSessions — сессии refresh сквозь HTTP на графе сервиса и хранилище кита: ротация, повтор токена
-// закрывает сессию, выход закрывает свою, а смена и сброс пароля, блокировка и удаление — все сессии
-// пользователя.
+// liveTokens — хэши непогашенных refresh-токенов незакрытых сессий пользователя.
+func liveTokens(t *testing.T, db *pgxpool.Pool, userID string) []string {
+	t.Helper()
+	rows, err := db.Query(t.Context(), `SELECT t.token_hash FROM authn_session_tokens t JOIN authn_sessions s ON s.id = t.session_id
+		WHERE s.subject = $1 AND s.revoked_at IS NULL AND t.used_at IS NULL`, userID)
+	require.NoError(t, err)
+	hashes, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+	return hashes
+}
+
+// refreshReused — записи аудита о повторе refresh-токена учётной записи.
+func refreshReused(t *testing.T, db *pgxpool.Pool, userID string) int {
+	t.Helper()
+	var n int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE action = 'refresh_reused' AND actor_id = $1`, userID).Scan(&n))
+	return n
+}
+
+// TestSessions — сессии refresh сквозь HTTP на графе сервиса и хранилище кита: ротация, повтор в окне
+// SESSION_RETRY_WINDOW выдаёт новый токен, прочий повтор закрывает сессию, выход закрывает свою, а смена и сброс
+// пароля, блокировка и удаление — все сессии пользователя.
 func TestSessions(t *testing.T) {
 	pg := serviceEnv(t)
 	noAuthRateLimit(t)
@@ -527,19 +553,45 @@ func TestSessions(t *testing.T) {
 	const alice = "alice@example.com"
 	aliceID := api.register(alice)
 
-	t.Run("refresh rotates the token, a reuse closes the session", func(t *testing.T) {
+	// Повтор погашенного токена, когда следующий уже обновил сессию, — не потерянный ответ: сессия закрыта целиком,
+	// повтор — в аудите учётной записи.
+	t.Run("refresh rotates the token, a reuse after the next refresh closes the session", func(t *testing.T) {
 		first := api.login(alice, sessionPassword)
 		status, rotated := api.refresh(first)
 		require.Equal(t, http.StatusNoContent, status)
 		require.NotEqual(t, first[authgate.CookieRefresh], rotated[authgate.CookieRefresh])
+		status, next := api.refresh(rotated)
+		require.Equal(t, http.StatusNoContent, status, "the next token rotates in its turn")
 
 		status, _ = api.refresh(first)
 		require.Equal(t, http.StatusUnauthorized, status, "a reused token")
-		status, _ = api.refresh(rotated)
-		require.Equal(t, http.StatusUnauthorized, status, "the reuse closed the session with its next token")
-		var reused int
-		require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE action = 'refresh_reused' AND actor_id = $1`, aliceID).Scan(&reused))
-		require.Equal(t, 1, reused, "the reuse is in the audit of the account")
+		status, _ = api.refresh(next)
+		require.Equal(t, http.StatusUnauthorized, status, "the reuse closed the session with its last token")
+		require.Equal(t, 1, refreshReused(t, db, aliceID), "the reuse is in the audit of the account")
+	})
+
+	// Ответ обновления потерян (обрыв, 5xx после ротации): повтор тем же cookie в окне SESSION_RETRY_WINDOW выдаёт новый
+	// токен, и сессия живёт им; токен потерянного ответа погашен — предъявленный, он закрывает сессию как повтор.
+	t.Run("a retry in the window renews the session, the token of the lost answer is a reuse", func(t *testing.T) {
+		const henry = "henry@example.com"
+		henryID := api.register(henry)
+		c := api.login(henry, sessionPassword)
+		status, lost := api.refresh(c)
+		require.Equal(t, http.StatusNoContent, status)
+		status, retried := api.refresh(c)
+		require.Equal(t, http.StatusNoContent, status, "the retry of a client whose answer was lost")
+		require.NotEqual(t, lost[authgate.CookieRefresh], retried[authgate.CookieRefresh])
+		status, next := api.refresh(retried)
+		require.Equal(t, http.StatusNoContent, status, "the session lives on with the token of the retry")
+		require.Zero(t, refreshReused(t, db, henryID), "a retry in the window is not a reuse")
+
+		code, _, err := refreshCode(t, api, lost[authgate.CookieRefresh])
+		require.NoError(t, err)
+		require.Equal(t, "AUTH_REFRESH_REUSED", code, "the retry killed the token of the lost answer")
+		require.Zero(t, openSessions(t, db, henryID), "the dead token closed the session")
+		status, _ = api.refresh(next)
+		require.Equal(t, http.StatusUnauthorized, status)
+		require.Equal(t, 1, refreshReused(t, db, henryID))
 	})
 
 	// Один ящик — одна учётная запись: адрес с пробелом по краям регистрация отвергает (схемой, как любую форму не
@@ -598,37 +650,34 @@ func TestSessions(t *testing.T) {
 		require.Equal(t, 1, owned, "the audit names the owner of the session the logout closed")
 	})
 
-	// Погашение токена атомарно: из параллельных обновлений одним cookie успешно одно, остальные — повтор, и
-	// сессия закрыта (поэтому клиент обновляет сессию последовательно).
-	t.Run("parallel refreshes with one token: one wins, the rest are reuse", func(t *testing.T) {
+	// Параллельные обновления одним cookie (вкладки) — повторы в окне: проходят все, по очереди, сессия жива, а живым
+	// остаётся один токен — выданный последним; клиент, сохранивший другой, закроет сессию следующим обновлением.
+	t.Run("parallel refreshes with one token all pass, one token stays live", func(t *testing.T) {
 		const erin = "erin@example.com"
 		erinID := api.register(erin)
 		c := api.login(erin, sessionPassword)
 		const n = 8
-		codes, errs := make([]string, n), make([]error, n)
+		codes, issued, errs := make([]string, n), make([]string, n), make([]error, n)
 		start := make(chan struct{})
 		var wg sync.WaitGroup
 		for i := range n {
 			wg.Go(func() {
 				<-start
-				codes[i], errs[i] = refreshCode(t, api, c[authgate.CookieRefresh])
+				codes[i], issued[i], errs[i] = refreshCode(t, api, c[authgate.CookieRefresh])
 			})
 		}
 		close(start)
 		wg.Wait()
 		require.NoError(t, errors.Join(errs...))
-		won, reused := 0, 0
-		for _, code := range codes {
-			switch code {
-			case "":
-				won++
-			case "AUTH_REFRESH_REUSED":
-				reused++
-			}
-		}
-		require.Equal(t, 1, won, "codes: %v", codes)
-		require.Equal(t, n-1, reused, "codes: %v", codes)
-		require.Zero(t, openSessions(t, db, erinID), "the reuse closed the session, the winner's token included")
+		require.Equal(t, slices.Repeat([]string{""}, n), codes, "every refresh of the token passes")
+		require.Equal(t, 1, openSessions(t, db, erinID))
+		live := liveTokens(t, db, erinID)
+		require.Len(t, live, 1, "one token of the session stays live")
+		last := slices.IndexFunc(issued, func(token string) bool { return authnkit.HashToken(token) == live[0] })
+		require.NotEqual(t, -1, last, "the live token is one of the issued")
+		code, _, err := refreshCode(t, api, issued[last])
+		require.NoError(t, err)
+		require.Empty(t, code, "the live token refreshes the session")
 	})
 
 	// Пароль и закрытие сессий — одна транзакция: user закрывает их своим портом Sessions на хранилище кита,
@@ -868,7 +917,7 @@ func TestSessions_LoginDuringPasswordChange(t *testing.T) {
 	require.Positive(t, straddled.Load(), "the race happened: old-password logins in flight across the change")
 	require.Zero(t, openSessions(t, pg.Pool(t), id), "no session of the old password outlives the change")
 	for _, refresh := range late {
-		code, err := refreshCode(t, api, refresh)
+		code, _, err := refreshCode(t, api, refresh)
 		require.NoError(t, err)
 		require.NotEmpty(t, code, "an old-password login in flight during the change keeps a live session")
 	}

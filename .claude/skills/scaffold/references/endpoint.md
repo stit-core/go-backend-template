@@ -145,11 +145,15 @@ var (
   `huma.Error…` (archtest `TestDomainErrorTables`).
 - Код — `<DOMAIN>_<WHAT>`; разный смысл — разная ошибка домена; ошибка поля запроса — 422 с
   `Field: "body.<field>"`.
-- 429 — `Retry-After` из метода `RetryAfter() time.Duration` ошибки в цепочке (`auth.LockedError`).
+- 429 и 503 — `Retry-After` из метода `RetryAfter() time.Duration` ошибки в цепочке (`auth.LockedError`;
+  `authnkit.ErrBusy` под `ErrBusy` домена — путь пароля).
 - Первое совпавшее правило выигрывает; правило, которое затеняет правило выше, — panic при сборке.
 - Операция без доменных ошибок таблицы операции не заводит, кроме операции под `authlimit.Prefix` (`/api/auth/*`):
-  её таблица объявляет `authlimit.Rule` (429 строгого лимита, иначе красный `TestHTTPOperations`). Заведённая
-  таблица без `Declare` в `huma.Register` — archtest красный: её коды не попали бы в OpenAPI.
+  её таблица объявляет `authlimit.Rule` (429 строгого лимита: при выключенном общем лимитере контракт иначе его не
+  знает; `TestHTTPOperations` собирает API без общего лимитера и без правила красный). Заведённая таблица без
+  `Declare` в `huma.Register` — archtest красный: её коды не попали бы в OpenAPI.
+- Ответы самого кита — 429 общего лимитера, 503 дедлайна, 413 тела, `WWW-Authenticate` у 401 — кит объявляет сам:
+  правил для них в таблице нет, `make gen` переносит их в `openapi.json`.
 
 Контракт ошибок целиком — `docs/reference/architecture.md` § Контракт ошибок API.
 

@@ -172,11 +172,13 @@ var (
 	concurrentUpdateRule = httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"}
 	noUpdateFieldsRule   = httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"}
 	statusTransitionRule = httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "status transition is not allowed"}
+	busyRule             = httpkit.ErrorRule{Err: user.ErrBusy, Status: http.StatusServiceUnavailable, Code: "USER_BUSY", Detail: "password hasher busy, retry later"}
 
 	userErrors = httpkit.NewErrorMap(notFoundRule, alreadyExistsRule, invalidEmailRule, invalidNameRule, invalidRoleRule,
-		weakPasswordRule, passwordTooLongRule, concurrentUpdateRule, noUpdateFieldsRule, statusTransitionRule, authgate.ForbiddenRule)
+		weakPasswordRule, passwordTooLongRule, concurrentUpdateRule, noUpdateFieldsRule, statusTransitionRule, busyRule,
+		authgate.ForbiddenRule)
 
-	registerErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidEmailRule, invalidNameRule, alreadyExistsRule, authlimit.Rule)
+	registerErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidEmailRule, invalidNameRule, alreadyExistsRule, busyRule, authlimit.Rule)
 	meErrors       = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
 	listErrors     = httpkit.NewErrorMap(authgate.ForbiddenRule)
 	getErrors      = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)

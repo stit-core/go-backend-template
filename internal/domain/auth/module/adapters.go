@@ -3,9 +3,11 @@ package module
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/user"
+	"git.stit.tech/stit-core/golibinfra/authnkit"
 )
 
 // userAdapter — порты auth к домену user (UserReader, PasswordSetter).
@@ -59,6 +61,9 @@ func mapUserErr(err error) error {
 		return auth.ErrWeakPassword
 	case errors.Is(err, user.ErrPasswordTooLong):
 		return auth.ErrPasswordTooLong
+	case errors.Is(err, user.ErrBusy):
+		// Ошибка кита — в цепочке: Retry-After ответа 503 берётся из неё.
+		return fmt.Errorf("%w: %w", auth.ErrBusy, authnkit.ErrBusy)
 	}
 	return err
 }

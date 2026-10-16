@@ -10,4 +10,5 @@ var (
 	ErrPasswordTooLong          = errors.New("verification: password too long")
 	ErrUserNotFound             = errors.New("verification: user not found")
 	ErrConcurrentUpdate         = errors.New("verification: concurrent update")
+	ErrBusy                     = errors.New("verification: password hasher busy")
 )

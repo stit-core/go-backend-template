@@ -132,6 +132,18 @@ func TestEmailVerify_InvalidToken(t *testing.T) {
 	handlertest.AssertAPIError(t, resp, http.StatusBadRequest, "VERIFICATION_INVALID_VERIFICATION_TOKEN")
 }
 
+// Перегрузка хэшера — 503 с Retry-After из ошибки кита в цепочке: ссылка цела, подтверждение повторяют.
+func TestPasswordResetConfirm_Busy(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().ConfirmPasswordReset(mock.Anything, "x", mock.Anything).Return(fmt.Errorf("%w: %w", verification.ErrBusy, authnkit.ErrBusy)).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/password-reset/confirm", strings.NewReader(resetConfirmBody(strings.Repeat("p", policy.MinPasswordLen))))
+	handlertest.AssertAPIError(t, resp, http.StatusServiceUnavailable, "VERIFICATION_BUSY")
+	require.Equal(t, "1", resp.Header().Get("Retry-After"))
+}
+
 func TestPasswordResetConfirm_WeakPassword(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)

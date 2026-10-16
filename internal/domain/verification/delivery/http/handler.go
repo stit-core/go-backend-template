@@ -85,11 +85,12 @@ var (
 	tokenUsedRule        = httpkit.ErrorRule{Err: verification.ErrTokenUsed, Status: http.StatusConflict, Code: "VERIFICATION_TOKEN_USED", Detail: "token already used"}
 	concurrentUpdateRule = httpkit.ErrorRule{Err: verification.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "VERIFICATION_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"}
 	userNotFoundRule     = httpkit.ErrorRule{Err: verification.ErrUserNotFound, Status: http.StatusNotFound, Code: "VERIFICATION_USER_NOT_FOUND", Detail: "user not found"}
+	busyRule             = httpkit.ErrorRule{Err: verification.ErrBusy, Status: http.StatusServiceUnavailable, Code: "VERIFICATION_BUSY", Detail: "password hasher busy, retry later"}
 
 	verificationErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidResetRule, invalidVerifyRule, tokenUsedRule,
-		concurrentUpdateRule, userNotFoundRule)
+		concurrentUpdateRule, userNotFoundRule, busyRule)
 
 	requestPasswordResetErrors = httpkit.NewErrorMap(authlimit.Rule)
-	confirmPasswordResetErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidResetRule, tokenUsedRule, authlimit.Rule)
+	confirmPasswordResetErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidResetRule, tokenUsedRule, busyRule, authlimit.Rule)
 	confirmEmailErrors         = httpkit.NewErrorMap(invalidVerifyRule, tokenUsedRule, authlimit.Rule)
 )

@@ -30,7 +30,7 @@ var TrustedErrors = map[string][]error{
 	"LookupByID":        {ErrNotFound},
 	"LockByID":          {ErrNotFound},
 	"LookupByEmail":     {ErrNotFound},
-	"HashPassword":      {ErrWeakPassword, ErrPasswordTooLong},
+	"HashPassword":      {ErrWeakPassword, ErrPasswordTooLong, ErrBusy},
 	"UpdatePassword":    {ErrNotFound, ErrConcurrentUpdate},
 	"MarkEmailVerified": {ErrNotFound},
 }

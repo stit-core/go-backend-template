@@ -189,6 +189,11 @@ func TestRegister_Rejected(t *testing.T) {
 			name: "password not hashed", in: user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
 			hasher: &authntest.DeterministicHasher{HashErr: errHashing}, want: errHashing,
 		},
+		{
+			// Полная очередь хэшера — перегрузка (503 с Retry-After), а не сбой: до записи не доходит.
+			name: "hasher busy", in: user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "Alice"},
+			hasher: &authntest.DeterministicHasher{Busy: true}, want: user.ErrBusy,
+		},
 		{name: "invalid email", in: user.RegisterInput{Email: "a.b.com", Password: "longenough", Name: "Alice"}, want: user.ErrInvalidEmail},
 		{name: "name with NUL", in: user.RegisterInput{Email: "a@b.com", Password: "longenough", Name: "A\x00B"}, want: user.ErrInvalidName},
 		{
@@ -609,6 +614,7 @@ func TestEnsureAdmin_Rejected(t *testing.T) {
 			Email: "admin@b.com", Password: strings.Repeat("я", authnkit.MaxPasswordLen), Name: "Admin",
 		}, want: user.ErrPasswordTooLong},
 		{name: "password not hashed", in: seedInput, hasher: &authntest.DeterministicHasher{HashErr: errHashing}, want: errHashing},
+		{name: "hasher busy", in: seedInput, hasher: &authntest.DeterministicHasher{Busy: true}, want: user.ErrBusy},
 		{name: "not an address", in: user.EnsureAdminInput{Email: "not an address", Password: "longenough", Name: "Admin"}, want: user.ErrInvalidEmail},
 		{name: "blank name", in: user.EnsureAdminInput{Email: "admin@b.com", Password: "longenough", Name: " "}, want: user.ErrInvalidName},
 		{name: "lookup fails", in: seedInput, repo: lookup(nil, errDB), want: errDB},

@@ -42,7 +42,9 @@ description: Обновить сервис по двум каналам — goli
    мигрировать; `Поведение` — дефолты и исходы без правок кода; `Изменения` — новое.
 3. `go get git.stit.tech/stit-core/golibinfra@vX.Y.Z && go mod tidy`.
 4. Правки по каждому пункту `Breaking`; пункты `Поведение` сверь с env и конфигом сервиса
-   (`.env.example`, `internal/platform/config`).
+   (`.env.example`, `internal/platform/config`). Golibinfra с `archkit.WithPkgPackages` (`v1.6.0` и новее) требует
+   перечень пакетов `pkg/` форка — `pkgPackages` в `internal/archtest/layout_settings_test.go`, каждый подпакет своей
+   строкой: без него `TestLayout` красный строками `pkg/<p>`.
 5. `make gen` (схемы операций и ошибок — в `openapi.json`), затем готово по CLAUDE.md § Готово.
 6. Handoff: новый или изменённый env, дефолт, таблица или требование к окружению из аннотаций —
    блок `/infra-handoff` тем же коммитом; ничего такого нет — блок не нужен.
@@ -77,10 +79,10 @@ git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-templat
    - **нет в форке — не тронуты**: файл, который форк удалил, а шаблон правил; правка нужна — верни
      файл (`git show template/vX.Y.Z:<путь>`, в Go-файле — module path форка);
    - **шаблон удалил, форк менял**: `git rm` или оставь как файл форка;
-   - **`internal/archtest/layout_settings_test.go`** — настройки archtest форка (`layout` — `archkit`, `rootLibs` и
-     `uncheckedPackages` — что видят корень домена и адаптер `module/`, `releasedSubjects` — выпущенные `.v1`,
-     `deliveryKits` — киты входа), перенос его не трогает: без него или без новой настройки пакет `internal/archtest`
-     не собирается — возьми образец
+   - **`internal/archtest/layout_settings_test.go`** — настройки archtest форка (`layout` — `archkit`, `pkgPackages` —
+     пакеты `pkg/`, `rootLibs` и `uncheckedPackages` — что видят корень домена и адаптер `module/`, `releasedSubjects` —
+     выпущенные `.v1`, `deliveryKits` — киты входа), перенос его не трогает: без него или без новой настройки пакет
+     `internal/archtest` не собирается — возьми образец
      (`git show template/vX.Y.Z:internal/archtest/layout_settings_test.go`) и сведи со своей раскладкой.
      Нарушения, которые `TestLayout` нашёл в коде форка, — правкой кода или записью
      `archkit.WithKnownViolations` с ID находки (перечень проверок — README `archkit`);

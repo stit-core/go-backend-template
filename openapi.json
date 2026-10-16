@@ -474,7 +474,16 @@
                 }
               }
             },
-            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED"
+            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Challenge of the operation's security schemes, sent with the 401 of the server authentication",
+                "example": "Cookie",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "403": {
             "content": {
@@ -506,6 +515,16 @@
             },
             "description": "Conflict: AUTH_CONCURRENT_UPDATE"
           },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Request Entity Too Large: BODY_TOO_LARGE"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -524,7 +543,17 @@
                 }
               }
             },
-            "description": "Too Many Requests: AUTH_ACCOUNT_LOCKED, RATE_LIMITED"
+            "description": "Too Many Requests: AUTH_ACCOUNT_LOCKED, RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
           },
           "500": {
             "content": {
@@ -535,6 +564,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: AUTH_BUSY, REQUEST_TIMEOUT"
           }
         },
         "security": [
@@ -585,6 +624,16 @@
             },
             "description": "Conflict: VERIFICATION_TOKEN_USED"
           },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Request Entity Too Large: BODY_TOO_LARGE"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -603,7 +652,17 @@
                 }
               }
             },
-            "description": "Too Many Requests: RATE_LIMITED"
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
           },
           "500": {
             "content": {
@@ -614,6 +673,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           }
         },
         "summary": "Подтверждение email",
@@ -663,6 +732,16 @@
             },
             "description": "Unauthorized: AUTH_INVALID_CREDENTIALS"
           },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Request Entity Too Large: BODY_TOO_LARGE"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -681,7 +760,17 @@
                 }
               }
             },
-            "description": "Too Many Requests: AUTH_ACCOUNT_LOCKED, RATE_LIMITED"
+            "description": "Too Many Requests: AUTH_ACCOUNT_LOCKED, RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
           },
           "500": {
             "content": {
@@ -692,6 +781,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: AUTH_BUSY, REQUEST_TIMEOUT"
           }
         },
         "summary": "Аутентификация пользователя (cookie-сессия)",
@@ -741,7 +840,17 @@
                 }
               }
             },
-            "description": "Too Many Requests: RATE_LIMITED"
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
           },
           "500": {
             "content": {
@@ -752,6 +861,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           }
         },
         "summary": "Завершение сессии",
@@ -797,6 +916,16 @@
             },
             "description": "Conflict: VERIFICATION_TOKEN_USED"
           },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Request Entity Too Large: BODY_TOO_LARGE"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -815,7 +944,17 @@
                 }
               }
             },
-            "description": "Too Many Requests: RATE_LIMITED"
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
           },
           "500": {
             "content": {
@@ -826,6 +965,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: VERIFICATION_BUSY, REQUEST_TIMEOUT"
           }
         },
         "summary": "Подтверждение сброса пароля",
@@ -851,6 +1000,16 @@
           "204": {
             "description": "No Content"
           },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Request Entity Too Large: BODY_TOO_LARGE"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -869,7 +1028,17 @@
                 }
               }
             },
-            "description": "Too Many Requests: RATE_LIMITED"
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
           },
           "500": {
             "content": {
@@ -880,6 +1049,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           }
         },
         "summary": "Запрос сброса пароля",
@@ -890,7 +1069,7 @@
     },
     "/api/auth/refresh": {
       "post": {
-        "description": "Refresh-токен одноразовый: обновление гасит его и выдаёт следующий. Повтор погашенного токена — в том числе параллельный запрос с тем же cookie — закрывает сессию целиком (AUTH_REFRESH_REUSED, вход заново), поэтому клиент обновляет сессию последовательно.",
+        "description": "Refresh-токен одноразовый: обновление гасит его и выдаёт следующий. Повтор того же cookie не позже окна повтора (SESSION_RETRY_WINDOW, по умолчанию 30 с) после обновления, пока следующий токен не использован, — повтор клиента, чей ответ потерян: он получает новый токен, а выданный прежде гаснет. Прочий повтор погашенного токена — после обновления следующим, вне окна или погашенным повтором — закрывает сессию целиком (AUTH_REFRESH_REUSED, вход заново), поэтому клиент обновляет сессию последовательно и хранит токен последнего ответа.",
         "operationId": "refreshToken",
         "parameters": [
           {
@@ -940,7 +1119,17 @@
                 }
               }
             },
-            "description": "Too Many Requests: RATE_LIMITED"
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
           },
           "500": {
             "content": {
@@ -951,6 +1140,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           }
         },
         "summary": "Ротация access + refresh cookie",
@@ -993,6 +1192,16 @@
             },
             "description": "Conflict: USER_ALREADY_EXISTS"
           },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Request Entity Too Large: BODY_TOO_LARGE"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -1011,7 +1220,17 @@
                 }
               }
             },
-            "description": "Too Many Requests: RATE_LIMITED"
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
           },
           "500": {
             "content": {
@@ -1022,6 +1241,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: USER_BUSY, REQUEST_TIMEOUT"
           }
         },
         "summary": "Регистрация нового пользователя",
@@ -1090,7 +1319,16 @@
                 }
               }
             },
-            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED"
+            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Challenge of the operation's security schemes, sent with the 401 of the server authentication",
+                "example": "Cookie",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "403": {
             "content": {
@@ -1112,6 +1350,26 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1121,6 +1379,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           }
         },
         "security": [
@@ -1156,7 +1424,16 @@
                 }
               }
             },
-            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED"
+            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Challenge of the operation's security schemes, sent with the 401 of the server authentication",
+                "example": "Cookie",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "403": {
             "content": {
@@ -1178,6 +1455,26 @@
             },
             "description": "Not Found: USER_NOT_FOUND"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1187,6 +1484,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           }
         },
         "security": [
@@ -1225,7 +1532,16 @@
                 }
               }
             },
-            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED"
+            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Challenge of the operation's security schemes, sent with the 401 of the server authentication",
+                "example": "Cookie",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "403": {
             "content": {
@@ -1257,6 +1573,26 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1266,6 +1602,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           }
         },
         "security": [
@@ -1309,7 +1655,16 @@
                 }
               }
             },
-            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED"
+            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Challenge of the operation's security schemes, sent with the 401 of the server authentication",
+                "example": "Cookie",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "403": {
             "content": {
@@ -1341,6 +1696,26 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1350,6 +1725,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           }
         },
         "security": [
@@ -1413,7 +1798,16 @@
                 }
               }
             },
-            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED"
+            "description": "Unauthorized: AUTH_ACCESS_EXPIRED, UNAUTHORIZED",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Challenge of the operation's security schemes, sent with the 401 of the server authentication",
+                "example": "Cookie",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "403": {
             "content": {
@@ -1445,6 +1839,16 @@
             },
             "description": "Conflict: USER_CONCURRENT_UPDATE, USER_INVALID_STATUS_TRANSITION"
           },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Request Entity Too Large: BODY_TOO_LARGE"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -1455,6 +1859,26 @@
             },
             "description": "Unprocessable Entity: USER_INVALID_NAME"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1464,6 +1888,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           }
         },
         "security": [
@@ -1490,6 +1924,36 @@
               }
             },
             "description": "OK"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: REQUEST_TIMEOUT"
           },
           "default": {
             "content": {
@@ -1519,7 +1983,7 @@
             },
             "description": "OK"
           },
-          "default": {
+          "429": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1527,7 +1991,32 @@
                 }
               }
             },
-            "description": "Error"
+            "description": "Too Many Requests: RATE_LIMITED",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before repeating the request",
+                "required": true,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyBody"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Service Unavailable: draining, unhealthy, REQUEST_TIMEOUT"
           }
         },
         "summary": "Readiness check"

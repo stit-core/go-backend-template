@@ -2,10 +2,10 @@
 // каталога internal/domain/*; на archtest и archkit //nolint не действует. Правила кода (rules) читают дерево с
 // корнем: репо или пример testdata/rules/*.txtar — у каждого есть нарушение и законная форма. Тесты по файлам:
 //
-//   - layout_test.go — TestLayout: раскладку держит archkit (golibinfra) — каталоги internal/, импорты между
-//     доменами и слоями, чистоту корня и чистых слоёв, настенные часы, порты между доменами без
-//     identity-closure, свои таблицы; правила едут версией кита, настройки сервиса (layout и киты входа
-//     deliveryKits) — layout_settings_test.go;
+//   - layout_test.go — TestLayout: раскладку держит archkit (golibinfra) — каталоги internal/, пакеты pkg/ по
+//     перечню pkgPackages (новый пакет — строкой в нём), импорты между доменами и слоями, чистоту корня и чистых
+//     слоёв, настенные часы, порты между доменами без identity-closure, свои таблицы; правила едут версией кита,
+//     настройки сервиса (layout и киты входа deliveryKits) — layout_settings_test.go;
 //   - archtest_test.go — TestHTTPTypes (префикс, уникальность и envelope HTTP-типов), TestDomainErrorTables
 //     (таблица ошибок домена и ответ хендлера — nil или она), TestDomainErrorsInErrorsGo (ошибки корня — только
 //     в errors.go), TestSubjectLiteralOwnership и TestNoExportedSubjectInDomainRoot (владение subject'ами),

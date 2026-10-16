@@ -21,6 +21,7 @@ func TestErrorMaps(t *testing.T) {
 	}{
 		{"confirmPasswordReset", confirmPasswordResetErrors, []error{
 			verification.ErrWeakPassword, verification.ErrPasswordTooLong, verification.ErrInvalidResetToken, verification.ErrTokenUsed,
+			verification.ErrBusy,
 		}},
 		{"confirmEmail", confirmEmailErrors, []error{verification.ErrInvalidVerificationToken, verification.ErrTokenUsed}},
 	}

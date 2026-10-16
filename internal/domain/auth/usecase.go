@@ -37,11 +37,12 @@ type Tokens interface {
 	IssueAccess(ctx context.Context, u *User) (string, error)
 }
 
-// LoginGuard: Attempt учитывает попытку до проверки пароля — неудача отдельной записи не требует;
-// ключ, который guard не учитывает (пустой, с NUL или не в UTF-8), — ErrInvalidCredentials.
+// LoginGuard: Attempt учитывает попытку до проверки пароля (неудача отдельной записи не требует), Refund возвращает
+// только не проверенную хэшером (ErrBusy); ключ, который guard не учитывает (пустой, с NUL, не UTF-8), — ErrInvalidCredentials.
 type LoginGuard interface {
 	Attempt(ctx context.Context, subject, ip string) (*LockState, error)
 	RecordSuccess(ctx context.Context, subject, ip string) error
+	Refund(ctx context.Context, subject, ip string) error
 }
 
 type UsecaseDeps struct {
@@ -93,21 +94,28 @@ func (uc *Usecase) login(ctx context.Context, in LoginInput) (*Session, outcome.
 	u, err := uc.d.Users.GetByEmail(ctx, in.Email)
 	switch {
 	case errors.Is(err, ErrUserNotFound):
-		// Холостая проверка: ответ на неизвестный email стоит столько же, сколько проверка пароля, —
-		// наличие учётной записи не выдаётся таймингом.
-		uc.d.Hasher.VerifyDummy(ctx)
+		// Холостая проверка: ответ на неизвестный email стоит столько же, сколько проверка пароля, и отказ хэшера
+		// у неё тот же — наличие учётной записи не выдаётся ни таймингом, ни кодом.
+		if err := uc.d.Hasher.VerifyDummy(ctx); err != nil {
+			result, err := uc.unchecked(ctx, in.Email, ip, passwordCheckErr(err))
+			return nil, result, err
+		}
 		return nil, resultInvalidLogin, ErrInvalidCredentials
 	case err != nil:
 		return nil, outcome.Error, fmt.Errorf("lookup user: %w", err)
 	case !u.CanLogin:
-		uc.d.Hasher.VerifyDummy(ctx)
+		if err := uc.d.Hasher.VerifyDummy(ctx); err != nil {
+			result, err := uc.unchecked(ctx, in.Email, ip, passwordCheckErr(err))
+			return nil, result, err
+		}
 		uc.auditLoginFailed(ctx, u.ID, resultBlocked)
 		return nil, resultBlocked, ErrInvalidCredentials
 	}
 	ok, err := uc.passwordMatches(ctx, in.Password, u.PasswordHash)
 	switch {
 	case err != nil:
-		return nil, outcome.Error, err
+		result, err := uc.unchecked(ctx, in.Email, ip, err)
+		return nil, result, err
 	case !ok:
 		uc.auditLoginFailed(ctx, u.ID, resultInvalidLogin)
 		return nil, resultInvalidLogin, ErrInvalidCredentials
@@ -240,6 +248,7 @@ func (uc *Usecase) ChangePassword(ctx context.Context, oldPassword, newPassword 
 	matches, err := uc.passwordMatches(ctx, oldPassword, current.PasswordHash)
 	switch {
 	case err != nil:
+		_, err = uc.unchecked(ctx, current.Email, ip, err)
 		return err
 	case !matches:
 		return ErrWrongOldPassword
@@ -265,9 +274,29 @@ func (uc *Usecase) ChangePassword(ctx context.Context, oldPassword, newPassword 
 func (uc *Usecase) passwordMatches(ctx context.Context, plain, hash string) (bool, error) {
 	ok, err := uc.d.Hasher.Verify(ctx, plain, hash)
 	if err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong) {
-		return false, fmt.Errorf("verify password: %w", err)
+		return false, passwordCheckErr(err)
 	}
 	return ok && err == nil, nil
+}
+
+// passwordCheckErr: полная очередь хэшера — ErrBusy (503, Retry-After — из ошибки кита в цепочке), прочее — сбой.
+func passwordCheckErr(err error) error {
+	if errors.Is(err, authnkit.ErrBusy) {
+		return fmt.Errorf("%w: %w", ErrBusy, err)
+	}
+	return fmt.Errorf("verify password: %w", err)
+}
+
+// unchecked — пароль не проверен: на ErrBusy попытка guard'а возвращается и при отмене запроса — повторы 503 иначе
+// блокировали бы честного пользователя; прочий сбой попытку оставляет.
+func (uc *Usecase) unchecked(ctx context.Context, subject, ip string, err error) (outcome.Result, error) {
+	if !errors.Is(err, ErrBusy) {
+		return outcome.Error, err
+	}
+	if rerr := uc.d.Guard.Refund(context.WithoutCancel(ctx), subject, ip); rerr != nil {
+		uc.d.Log.Error(ctx, "guard refund", "error", rerr)
+	}
+	return resultBusy, err
 }
 
 // audit дописывает время (IP клиента и ID запроса auditkit берёт из ctx); сбой записи аудита операцию не

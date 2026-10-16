@@ -32,3 +32,7 @@ func (g *loginGuard) Attempt(ctx context.Context, subject, ip string) (*auth.Loc
 func (g *loginGuard) RecordSuccess(ctx context.Context, subject, ip string) error {
 	return g.guard.RecordSuccess(ctx, subject, ip)
 }
+
+func (g *loginGuard) Refund(ctx context.Context, subject, ip string) error {
+	return g.guard.Refund(ctx, subject, ip)
+}

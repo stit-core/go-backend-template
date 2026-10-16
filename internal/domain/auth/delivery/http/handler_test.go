@@ -122,6 +122,18 @@ func TestLogin_AccountLocked(t *testing.T) {
 	require.Equal(t, "90", resp.Header().Get("Retry-After"))
 }
 
+// Перегрузка хэшера — 503 с Retry-After из ошибки кита в цепочке: клиент повторяет вход, а не считает пароль неверным.
+func TestLogin_Busy(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().Login(mock.Anything, mock.Anything).Return(nil, fmt.Errorf("%w: %w", auth.ErrBusy, authnkit.ErrBusy)).Once()
+	api := setup(t, uc)
+
+	resp := api.Post("/api/auth/login", strings.NewReader(`{"email":"a@b.com","password":"x"}`))
+	handlertest.AssertAPIError(t, resp, http.StatusServiceUnavailable, "AUTH_BUSY")
+	require.Equal(t, "1", resp.Header().Get("Retry-After"))
+}
+
 func TestRefresh_HappyPath(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
@@ -271,6 +283,19 @@ func TestChangePassword_Errors(t *testing.T) {
 			handlertest.AssertAPIError(t, resp, tc.status, tc.code)
 		})
 	}
+}
+
+// Перегрузка хэшера на старом или новом пароле — 503 с Retry-After из ошибки кита: смену повторяют.
+func TestChangePassword_Busy(t *testing.T) {
+	t.Parallel()
+	uc := mocks.NewMockUsecase(t)
+	uc.EXPECT().ChangePassword(callerIs("u1"), "old-password", mock.Anything).Return(fmt.Errorf("%w: %w", auth.ErrBusy, authnkit.ErrBusy)).Once()
+	api := setup(t, uc)
+
+	resp := api.PostCtx(identitytest.Client("u1"), "/api/auth/change-password",
+		strings.NewReader(changePasswordBody(strings.Repeat("p", policy.MinPasswordLen))))
+	handlertest.AssertAPIError(t, resp, http.StatusServiceUnavailable, "AUTH_BUSY")
+	require.Equal(t, "1", resp.Header().Get("Retry-After"))
 }
 
 // Неверный старый пароль — ошибка поля, а не 401: сессия цела, входить заново не нужно.

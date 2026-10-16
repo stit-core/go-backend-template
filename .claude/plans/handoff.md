@@ -386,3 +386,36 @@ WHO    потребители API
 DECIDE —
 RISK   клиент, который шлёт user_id, до обновления получает 422 на смене пароля
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   golibinfra v1.6.0: optional env SESSION_RETRY_WINDOW (default 30s; 0 — без окна; больше 5m или не меньше
+       SESSION_IDLE_TTL — отказ старта): повтор refresh тем же cookie в окне выдаёт новый токен, а не закрывает сессию;
+       полная очередь Argon2id — сразу 503 *_BUSY с Retry-After, а не ожидание до дедлайна (метрика
+       authn_password_busy_total, исходы biz_auth_login_attempts_total{result="busy"} и
+       authn_session_rotations_total{result="retry"}); миграция кита authnkit_session 0002 (ADD COLUMN successor_hash,
+       без эффекта)
+WHY    g-upgrade (reaudit-to-nine S9) — RSECT-01: под потоком входов проверка пароля ждала очередь хэшера до дедлайна;
+       RCOD-16: повтор refresh после потерянного ответа закрывал сессию
+ACTION ничего, если окно 30s подходит, иначе — SESSION_RETRY_WINDOW в compose `environment:` (секунды); migrate — до
+       api, как прежде; алерт на устойчивый темп authn_password_busy_total (ёмкость хэшера кончилась: поток или мало
+       ядер на ARGON2_THREADS)
+WHO    проект (compose env, мониторинг)
+DECIDE окно повтора refresh: 30s ок?
+RISK   api без миграции 0002 не стартует (pgkit.ErrSchema); без алерта перегрузку хэшера видно только по 503 входа
+===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   контракт API (openapi.json): у каждой операции — 429 RATE_LIMITED общего лимитера с обязательным Retry-After и
+       503 REQUEST_TIMEOUT, у операций с телом — 413 BODY_TOO_LARGE, у 401 операций под Security — WWW-Authenticate,
+       у /ready — 503 с телом готовности, без default; вход, смена пароля, регистрация и подтверждение сброса — 503
+       AUTH_BUSY, USER_BUSY, VERIFICATION_BUSY с Retry-After при перегрузке хэшера; повтор refresh тем же cookie в окне
+       SESSION_RETRY_WINDOW — 204 с новым токеном (выданный прежде гаснет), а не 401 AUTH_REFRESH_REUSED
+WHY    g-upgrade (reaudit-to-nine S9) — golibinfra v1.6.0: ответы кита — в контракте, перегрузка хэшера — 503 сразу,
+       потерянный ответ refresh не закрывает сессию
+ACTION клиентам API (SPA, мобильные) — перегенерировать клиент по openapi.json; на 503 *_BUSY — повтор после
+       Retry-After, не «неверный пароль»; refresh — последовательно, храня токен последнего ответа
+WHO    потребители API
+DECIDE —
+RISK   клиент, который на 503 входа не повторяет или пишет «неверный пароль», теряет вход под нагрузкой; клиент, который
+       хранит не последний токен параллельных обновлений, закрывает сессию следующим обновлением
+===

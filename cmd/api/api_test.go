@@ -96,7 +96,13 @@ func TestHTTPOperations(t *testing.T) {
 	record := func(c *huma.Config) {
 		c.OnAddOperation = append(c.OnAddOperation, func(_ *huma.OpenAPI, op *huma.Operation) { ops = append(ops, op) })
 	}
-	buildAPI(t, fx.Supply(httpkit.HumaConfigs{record}), fx.Populate(&srv))
+	// Общий лимитер выключен: его 429 кит объявляет у каждой операции, и он скрыл бы, чья таблица объявляет 429
+	// строгого лимита.
+	generalLimiterOff := fx.Decorate(func(c httpkit.Config) httpkit.Config {
+		c.RateLimit.RPS = 0
+		return c
+	})
+	buildAPI(t, generalLimiterOff, fx.Supply(httpkit.HumaConfigs{record}), fx.Populate(&srv))
 	require.NoError(t, srv.CheckRoutes())
 
 	secured := 0

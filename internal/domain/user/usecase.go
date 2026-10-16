@@ -257,7 +257,8 @@ func (uc *Usecase) EnsureAdmin(ctx context.Context, in EnsureAdminInput) (*User,
 	return admin, nil
 }
 
-// hashPassword — правило пароля продукта и хэш: пароль длиннее предела хэшера — ошибка поля, а не сбой.
+// hashPassword — правило пароля продукта и хэш: пароль длиннее предела хэшера — ошибка поля, полная очередь хэшера —
+// ErrBusy (503, Retry-After — из ошибки кита в цепочке), а не сбой.
 func hashPassword(ctx context.Context, h authnkit.Hasher, plain string) (string, error) {
 	if !policy.PasswordStrong(plain) {
 		return "", ErrWeakPassword
@@ -266,6 +267,8 @@ func hashPassword(ctx context.Context, h authnkit.Hasher, plain string) (string,
 	switch {
 	case errors.Is(err, authnkit.ErrPasswordTooLong):
 		return "", ErrPasswordTooLong
+	case errors.Is(err, authnkit.ErrBusy):
+		return "", fmt.Errorf("%w: %w", ErrBusy, err)
 	case err != nil:
 		return "", fmt.Errorf("hash password: %w", err)
 	}

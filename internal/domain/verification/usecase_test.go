@@ -630,6 +630,8 @@ func TestConfirmPasswordReset_Rejected(t *testing.T) {
 			return []ucOption{withRepo(resetToken(t, pendingReset(fixedNow.Add(-time.Nanosecond)), nil))}
 		}, verification.ErrInvalidResetToken},
 		{"new password not hashed", "newpassword123", refused("newpassword123", errHashing), errHashing},
+		// Перегрузка хэшера — до погашения: ссылка цела, подтверждение повторяют после Retry-After.
+		{"hasher busy", "newpassword123", refused("newpassword123", verification.ErrBusy), verification.ErrBusy},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -16,6 +16,7 @@ var (
 	ErrConcurrentUpdate   = errors.New("auth: concurrent update")
 	ErrWrongOldPassword   = errors.New("auth: old password does not match")
 	ErrRefreshInvalid     = errors.New("auth: refresh token invalid")
+	ErrBusy               = errors.New("auth: password hasher busy")
 )
 
 // LockedError — вход заблокирован guard'ом (errors.Is — ErrAccountLocked); Wait — до снятия

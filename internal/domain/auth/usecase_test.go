@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
+	authbruteforce "git.stit.tech/stit-core/go-backend-template/internal/domain/auth/infra/bruteforce"
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth/mocks"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/identity"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
@@ -20,10 +21,12 @@ import (
 	"git.stit.tech/stit-core/golibinfra/auditkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
 	"git.stit.tech/stit-core/golibinfra/authnkit/session"
+	"git.stit.tech/stit-core/golibinfra/bruteforcekit"
 	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/pgkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/audittest"
 	"git.stit.tech/stit-core/golibinfra/testkit/authntest"
+	"git.stit.tech/stit-core/golibinfra/testkit/bruteforcetest"
 	"git.stit.tech/stit-core/golibinfra/testkit/logtest"
 	"git.stit.tech/stit-core/golibinfra/testkit/metrictest"
 	"git.stit.tech/stit-core/golibinfra/testkit/pgtest"
@@ -55,6 +58,24 @@ func loginGuard(t *testing.T, subject string, succeeded bool) *mocks.MockLoginGu
 	return g
 }
 
+// busyLoginGuard ждёт попытку входа subject с IP запроса и после неё ровно один возврат: пароль хэшер не проверил.
+// Возврат идёт и после отмены запроса — его ctx не отменён.
+func busyLoginGuard(t *testing.T, subject string) *mocks.MockLoginGuard {
+	t.Helper()
+	g := mocks.NewMockLoginGuard(t)
+	attempt := g.EXPECT().Attempt(mock.Anything, subject, identitytest.IP).Return(nil, nil).Once()
+	live := mock.MatchedBy(func(ctx context.Context) bool { return ctx.Err() == nil })
+	g.EXPECT().Refund(live, subject, identitytest.IP).Return(nil).Once().NotBefore(attempt)
+	return g
+}
+
+// canceled — ctx запроса ctx, который клиент уже оборвал.
+func canceled(ctx context.Context) context.Context {
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	return ctx
+}
+
 // sessionConfig — сроки сессий тестов: токен живёт час, сессия — три.
 var sessionConfig = session.Config{IdleTTL: time.Hour, AbsoluteTTL: 3 * time.Hour, CleanupInterval: time.Hour}
 
@@ -69,7 +90,7 @@ type ucFixture struct {
 type ucOpts struct {
 	users    *mocks.MockUserReader
 	setpw    *mocks.MockPasswordSetter
-	guard    *mocks.MockLoginGuard
+	guard    auth.LoginGuard
 	tokens   auth.Tokens
 	hasher   authnkit.Hasher
 	audit    auditkit.Logger
@@ -81,7 +102,7 @@ type ucOption func(*ucOpts)
 
 func withUsers(u *mocks.MockUserReader) ucOption      { return func(o *ucOpts) { o.users = u } }
 func withSetter(s *mocks.MockPasswordSetter) ucOption { return func(o *ucOpts) { o.setpw = s } }
-func withGuard(g *mocks.MockLoginGuard) ucOption      { return func(o *ucOpts) { o.guard = g } }
+func withGuard(g auth.LoginGuard) ucOption            { return func(o *ucOpts) { o.guard = g } }
 
 func withTokens(tk auth.Tokens) ucOption    { return func(o *ucOpts) { o.tokens = tk } }
 func withHasher(h authnkit.Hasher) ucOption { return func(o *ucOpts) { o.hasher = h } }
@@ -446,6 +467,139 @@ func TestLogin_HasherFailure(t *testing.T) {
 			requireOutcome(t, p, "biz_auth_login_attempts_total", "error")
 		})
 	}
+}
+
+// dummyFails — хэшер, у которого холостая проверка сбоит (отмена ctx в очереди), а не проходит.
+type dummyFails struct {
+	authntest.DeterministicHasher
+	err error
+}
+
+func (h *dummyFails) VerifyDummy(context.Context) error { return h.err }
+
+// Сбой холостой проверки — как сбой проверки пароля: ошибка сервиса, а не «неверный пароль»; попытка остаётся
+// учтённой (возврат — только на ErrBusy), аудита нет, исход — error.
+func TestLogin_DummyCheckFailure(t *testing.T) {
+	t.Parallel()
+	blocked := alice()
+	blocked.CanLogin = false
+	unknown := func(t *testing.T) *mocks.MockUserReader {
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(nil, auth.ErrUserNotFound).Once()
+		return users
+	}
+	tests := []struct {
+		name  string
+		users func(t *testing.T) *mocks.MockUserReader
+	}{
+		{"unknown address", unknown},
+		{"blocked account", func(t *testing.T) *mocks.MockUserReader { return found(t, blocked) }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p := metrictest.NewProvider()
+			f := newUC(t, withUsers(tc.users(t)), withGuard(loginGuard(t, "a@b.com", false)),
+				withHasher(&dummyFails{err: context.Canceled}), withMetrics(auth.NewMetrics(p.Meter("test"))))
+
+			out, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+			require.ErrorIs(t, err, context.Canceled)
+			require.NotErrorIs(t, err, auth.ErrInvalidCredentials, "a failed dummy check is not a wrong password")
+			require.NotErrorIs(t, err, auth.ErrBusy)
+			require.Nil(t, out)
+			require.Empty(t, f.audit.Entries())
+			requireOutcome(t, p, "biz_auth_login_attempts_total", "error")
+		})
+	}
+}
+
+// Полная очередь хэшера (ErrBusy) на любом пути проверки — один ответ: ErrBusy с ошибкой кита в цепочке (503 с её
+// Retry-After), по коду и времени учётную запись не различить. Попытка, учтённая guard'ом, возвращается ровно раз — и
+// у клиента, оборвавшего запрос; аудита нет, исход — busy.
+func TestLogin_HasherBusy(t *testing.T) {
+	t.Parallel()
+	blocked := alice()
+	blocked.CanLogin = false
+	unknown := func(t *testing.T) *mocks.MockUserReader {
+		users := mocks.NewMockUserReader(t)
+		users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(nil, auth.ErrUserNotFound).Once()
+		return users
+	}
+	tests := []struct {
+		name     string
+		users    func(t *testing.T) *mocks.MockUserReader
+		password string
+	}{
+		{"known address", func(t *testing.T) *mocks.MockUserReader { return found(t, alice()) }, "pass1234"},
+		{"password over the hasher limit", func(t *testing.T) *mocks.MockUserReader { return found(t, alice()) }, strings.Repeat("я", authnkit.MaxPasswordLen)},
+		{"unknown address", unknown, "pass1234"},
+		{"blocked account", func(t *testing.T) *mocks.MockUserReader { return found(t, blocked) }, "pass1234"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p := metrictest.NewProvider()
+			f := newUC(t, withUsers(tc.users(t)), withGuard(busyLoginGuard(t, "a@b.com")),
+				withHasher(&authntest.DeterministicHasher{Busy: true}), withMetrics(auth.NewMetrics(p.Meter("test"))))
+
+			out, err := f.uc.Login(canceled(identitytest.Anon()), auth.LoginInput{Email: "a@b.com", Password: tc.password})
+			require.ErrorIs(t, err, auth.ErrBusy)
+			require.ErrorIs(t, err, authnkit.ErrBusy, "the kit's error carries the Retry-After of the 503")
+			require.Nil(t, out)
+			require.Zero(t, f.sessions.Active("u1"))
+			require.Empty(t, f.audit.Entries(), "an unchecked password writes no login_failed")
+			requireOutcome(t, p, "biz_auth_login_attempts_total", "busy")
+		})
+	}
+}
+
+// Сбой возврата ответ не меняет — ErrBusy, причина в логе: попытка осталась учтённой, как без возврата.
+func TestLogin_RefundFailure(t *testing.T) {
+	t.Parallel()
+	g := mocks.NewMockLoginGuard(t)
+	g.EXPECT().Attempt(mock.Anything, "a@b.com", identitytest.IP).Return(nil, nil).Once()
+	g.EXPECT().Refund(mock.Anything, "a@b.com", identitytest.IP).Return(errors.New("guard store down")).Once()
+	f := newUC(t, withUsers(found(t, alice())), withGuard(g), withHasher(&authntest.DeterministicHasher{Busy: true}))
+
+	_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: "pass1234"})
+	require.ErrorIs(t, err, auth.ErrBusy)
+	require.NotContains(t, err.Error(), "guard store down", "the answer is the 503 of the busy hasher")
+	e, logged := f.log.Find(slog.LevelError, "guard refund")
+	require.True(t, logged)
+	require.Contains(t, e.Str("error"), "guard store down")
+}
+
+// Возврат на guard'е с политикой pgstore (bruteforcetest.Counting): отказы ErrBusy подряд, сколько бы их ни было, пару
+// не блокируют — клиент, повторяющий 503, входит, как только хэшер освободился; неверные пароли блокируют её после
+// MaxFailures, как прежде.
+func TestLogin_BusyDoesNotLockThePair(t *testing.T) {
+	t.Parallel()
+	cfg := bruteforcekit.Config{
+		MaxFailures: 5, LockDuration: 15 * time.Minute, SubjectMaxFailures: 20, SubjectLockDuration: time.Minute,
+		CleanupRetention: 24 * time.Hour, CleanupInterval: 5 * time.Minute, IPv6Prefix: 64,
+	}
+	guard, err := bruteforcetest.NewCounting(cfg, clockkit.NewFixed(fixedNow))
+	require.NoError(t, err)
+	hasher := &authntest.DeterministicHasher{Busy: true}
+	users := mocks.NewMockUserReader(t)
+	users.EXPECT().GetByEmail(mock.Anything, "a@b.com").Return(alice(), nil).Times(3*cfg.MaxFailures + 1)
+	users.EXPECT().LockByID(mock.MatchedBy(pgkit.InTx), "u1").Return(alice(), nil).Once()
+	f := newUC(t, withUsers(users), withGuard(authbruteforce.NewLoginGuard(guard)), withHasher(hasher))
+	login := func(password string) error {
+		_, err := f.uc.Login(identitytest.Anon(), auth.LoginInput{Email: "a@b.com", Password: password})
+		return err
+	}
+
+	for range 2 * cfg.MaxFailures {
+		require.ErrorIs(t, login("pass1234"), auth.ErrBusy)
+	}
+	hasher.Busy = false
+	require.NoError(t, login("pass1234"), "refusals of a busy hasher leave the pair open")
+
+	for range cfg.MaxFailures {
+		require.ErrorIs(t, login("wrong"), auth.ErrInvalidCredentials)
+	}
+	require.ErrorIs(t, login("pass1234"), auth.ErrAccountLocked, "checked wrong passwords lock the pair")
 }
 
 // Пароль длиннее предела хэшера ни с одним хэшем не совпадает: это неверный пароль — с записью аудита, а
@@ -834,6 +988,30 @@ func TestChangePassword_Failure(t *testing.T) {
 		err := f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123")
 		require.ErrorContains(t, err, "db down")
 		require.NotErrorIs(t, err, auth.ErrUserNotFound)
+	})
+}
+
+// Полная очередь хэшера на старом пароле — ErrBusy (503 с Retry-After ошибки кита), попытка guard'а возвращается ровно
+// раз — и у клиента, оборвавшего запрос; на новом пароле — ErrBusy после проверенного старого, возврата нет.
+func TestChangePassword_HasherBusy(t *testing.T) {
+	t.Parallel()
+	t.Run("old password check", func(t *testing.T) {
+		t.Parallel()
+		f := newUC(t, withUsers(pwUser(t)), withGuard(busyLoginGuard(t, "a@b.com")), withHasher(&authntest.DeterministicHasher{Busy: true}))
+
+		err := f.uc.ChangePassword(canceled(identitytest.Client("u1")), "old", "newpassword123")
+		require.ErrorIs(t, err, auth.ErrBusy)
+		require.ErrorIs(t, err, authnkit.ErrBusy, "the kit's error carries the Retry-After of the 503")
+		require.False(t, f.audit.Has("change_password"))
+	})
+	t.Run("new password hashing", func(t *testing.T) {
+		t.Parallel()
+		busy := fmt.Errorf("%w: %w", auth.ErrBusy, authnkit.ErrBusy)
+		f := newUC(t, withUsers(pwUser(t)), withGuard(loginGuard(t, "a@b.com", true)), withSetter(newPassword(t, "newpassword123", busy, nil)))
+
+		err := f.uc.ChangePassword(identitytest.Client("u1"), "old", "newpassword123")
+		require.ErrorIs(t, err, auth.ErrBusy)
+		require.False(t, f.audit.Has("change_password"))
 	})
 }
 

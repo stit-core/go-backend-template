@@ -90,6 +90,7 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 		user.ErrConcurrentUpdate: verification.ErrConcurrentUpdate,
 		user.ErrWeakPassword:     verification.ErrWeakPassword,
 		user.ErrPasswordTooLong:  verification.ErrPasswordTooLong,
+		user.ErrBusy:             verification.ErrBusy,
 	}
 	infra := errors.New("db down")
 	type call func(a *userAdapter, repo *usermocks.MockRepository, err error) error
@@ -108,10 +109,14 @@ func TestUserAdapter_MapsUserErrors(t *testing.T) {
 			_, got := a.GetByEmail(context.Background(), "a@b.com")
 			return got
 		}},
-		// Исходы HashPassword — от пароля и хэшера: сбой (infra) — у адаптера с отказом хэшера.
+		// Исходы HashPassword — от пароля и хэшера: перегрузка — у адаптера с полной очередью хэшера, сбой (infra) — с
+		// отказом хэшера.
 		"HashPassword": {"HashPassword", func(a *userAdapter, _ *usermocks.MockRepository, err error) error {
 			plain := map[error]string{user.ErrWeakPassword: "short", user.ErrPasswordTooLong: strings.Repeat("я", authnkit.MaxPasswordLen)}
-			if _, input := plain[err]; !input {
+			switch _, input := plain[err]; {
+			case errors.Is(err, user.ErrBusy):
+				a = newUserAdapter(user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{Busy: true}}))
+			case !input:
 				a = newUserAdapter(user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{HashErr: err}}))
 			}
 			_, got := a.HashPassword(context.Background(), cmp.Or(plain[err], "longenough"))
@@ -157,4 +162,14 @@ func TestUserAdapter_HashPassword(t *testing.T) {
 	hash, err := a.HashPassword(context.Background(), "longenough")
 	require.NoError(t, err)
 	require.Equal(t, "hash:longenough", hash)
+}
+
+// Перегрузка хэшера доходит до verification его ErrBusy, а ошибка кита остаётся в цепочке: из неё Retry-After ответа 503.
+func TestUserAdapter_HashPasswordBusy(t *testing.T) {
+	t.Parallel()
+	a := newUserAdapter(user.NewTrusted(user.TrustedDeps{Hasher: &authntest.DeterministicHasher{Busy: true}}))
+
+	_, err := a.HashPassword(context.Background(), "longenough")
+	require.ErrorIs(t, err, verification.ErrBusy)
+	require.ErrorIs(t, err, authnkit.ErrBusy, "the kit's error carries the Retry-After of the answer")
 }

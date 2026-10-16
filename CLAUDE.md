@@ -99,14 +99,14 @@ mockery — закреплённые в `scripts/tools/versions.sh`: их ста
   клей платформы — `internal/platform/`; `pkg/` — правила и типы этого сервиса (`policy`, `paging`,
   `outcome`) и сгенерированные клиенты (gRPC, OpenAPI: генератор — правка гейта; зовёт `infra/` домена,
   не корень); входы — `cmd/`; тестовая обвязка — `internal/testkit/` и `internal/archtest/`. Других
-  каталогов в `internal/` нет; generic-примитив — golibinfra (ниже). Хартия —
-  `docs/reference/architecture.md` § Каталоги.
+  каталогов в `internal/` нет, пакет `pkg/` — строкой перечня `pkgPackages` (`layout_settings_test.go`);
+  generic-примитив — golibinfra (ниже). Хартия — `docs/reference/architecture.md` § Каталоги.
 - **archtest** (`internal/archtest`, шаг тестов; `//nolint` на него не действует) — раскладка и
   границы любого домена: чужой домен — только через порт и адаптер в `<domain>/module/adapters.go`,
   моки — только из тестов, `platform` и `pkg` доменов не знают. Раскладку держит `archkit` golibinfra
-  (`TestLayout`, настройки сервиса — `layout_settings_test.go`), правила шаблона — остальные тесты
-  пакета. Перечень — комментарий пакета в `internal/archtest/archtest_test.go`, в правилах — пометка
-  archtest у инварианта.
+  (`TestLayout`: каталоги `internal/` и пакеты `pkg/` по перечню, настройки сервиса —
+  `layout_settings_test.go`), правила шаблона — остальные тесты пакета. Перечень — комментарий пакета в
+  `internal/archtest/archtest_test.go`, в правилах — пометка archtest у инварианта.
 - Ошибки — `%w` + `errors.Is/As`; sentinel в `errors.go` корня домена.
 - Комментарии — только WHY (rule `comments`).
 - **Не городить велосипеды**: нужен примитив — сначала `README.md` golibinfra § Пакеты версии из

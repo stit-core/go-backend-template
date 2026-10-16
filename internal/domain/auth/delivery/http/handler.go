@@ -44,9 +44,11 @@ func Register(api huma.API, h *Handler) {
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Summary:       "Ротация access + refresh cookie",
-		Description: "Refresh-токен одноразовый: обновление гасит его и выдаёт следующий. Повтор погашенного " +
-			"токена — в том числе параллельный запрос с тем же cookie — закрывает сессию целиком " +
-			"(AUTH_REFRESH_REUSED, вход заново), поэтому клиент обновляет сессию последовательно.",
+		Description: "Refresh-токен одноразовый: обновление гасит его и выдаёт следующий. Повтор того же cookie не позже " +
+			"окна повтора (SESSION_RETRY_WINDOW, по умолчанию 30 с) после обновления, пока следующий токен не использован, — " +
+			"повтор клиента, чей ответ потерян: он получает новый токен, а выданный прежде гаснет. Прочий повтор погашенного " +
+			"токена — после обновления следующим, вне окна или погашенным повтором — закрывает сессию целиком " +
+			"(AUTH_REFRESH_REUSED, вход заново), поэтому клиент обновляет сессию последовательно и хранит токен последнего ответа.",
 	})), h.refresh)
 
 	huma.Register(api, logoutErrors.Declare(httpkit.Public(huma.Operation{
@@ -123,14 +125,15 @@ var (
 	wrongOldPasswordRule   = httpkit.ErrorRule{Err: auth.ErrWrongOldPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_INVALID_OLD_PASSWORD", Detail: "old password does not match", Field: "body.old_password"}
 	userNotFoundRule       = httpkit.ErrorRule{Err: auth.ErrUserNotFound, Status: http.StatusNotFound, Code: "AUTH_USER_NOT_FOUND", Detail: "user not found"}
 	concurrentUpdateRule   = httpkit.ErrorRule{Err: auth.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "AUTH_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"}
+	busyRule               = httpkit.ErrorRule{Err: auth.ErrBusy, Status: http.StatusServiceUnavailable, Code: "AUTH_BUSY", Detail: "password hasher busy, retry later"}
 
 	authErrors = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, refreshExpiredRule, refreshReusedRule,
 		refreshInvalidRule, weakPasswordRule, passwordTooLongRule, wrongOldPasswordRule, userNotFoundRule, concurrentUpdateRule,
-		authgate.ForbiddenRule)
+		busyRule, authgate.ForbiddenRule)
 
-	loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, authlimit.Rule)
+	loginErrors          = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, busyRule, authlimit.Rule)
 	refreshErrors        = httpkit.NewErrorMap(refreshExpiredRule, refreshReusedRule, refreshInvalidRule, authlimit.Rule)
 	logoutErrors         = httpkit.NewErrorMap(authlimit.Rule)
 	changePasswordErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, wrongOldPasswordRule, accountLockedRule,
-		userNotFoundRule, concurrentUpdateRule, authgate.ForbiddenRule, authlimit.Rule)
+		userNotFoundRule, concurrentUpdateRule, busyRule, authgate.ForbiddenRule, authlimit.Rule)
 )
