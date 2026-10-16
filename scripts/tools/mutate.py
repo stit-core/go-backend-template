@@ -169,12 +169,24 @@ def apply(m):
 
 
 def reset(head):
-    """Worktree раннера — ровно HEAD разработчика: правка прошлой мутации, и оборванной, уходит."""
-    if not (WT / ".git").exists():
+    """Worktree раннера — ровно HEAD разработчика: правка прошлой мутации, и оборванной, уходит. Каталог, который не
+    worktree этого репо (репо перенесли или скопировали — он ведёт в прежний; первое создание оборвалось — он без
+    .git), раннер создаёт заново."""
+    if not own_worktree():
+        shutil.rmtree(WT, ignore_errors=True)
         git("worktree", "prune")
         git("worktree", "add", "-q", "--detach", str(WT), head)
     git("checkout", "-q", "-f", "--detach", head, cwd=WT)
     git("clean", "-q", "-fd", cwd=WT)
+
+
+def own_worktree():
+    if not WT.is_dir():
+        return False
+    p = subprocess.run(["git", "rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir"], cwd=WT,
+                       capture_output=True, text=True, env=ENV)
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    return p.returncode == 0 and p.stdout.splitlines() == [str(WT), common]
 
 
 def failed(out):
