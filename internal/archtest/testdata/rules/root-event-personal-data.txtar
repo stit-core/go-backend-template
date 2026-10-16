@@ -1,8 +1,10 @@
-# Payload события несёт имя: стрим читают многие и хранят долго.
+# Payload события несёт имя, адрес, IP и телефон: стрим читают многие и хранят долго.
 rule: TestRootTypes
 base: canon
 want: internal/domain/shop/events.go: event ItemCreated carries OwnerName
 want: internal/domain/shop/events.go: event ItemCreated carries OwnerEmail
+want: internal/domain/shop/events.go: event ItemCreated carries ClientIP
+want: internal/domain/shop/events.go: event ItemCreated carries PhoneNumber
 -- internal/domain/shop/events.go --
 package shop
 
@@ -11,8 +13,10 @@ import "time"
 const subjectItemCreated = "shop.events.item_created"
 
 type ItemCreated struct {
-	ID         string
-	OwnerName  string
-	OwnerEmail string
-	At         time.Time
+	ID          string
+	OwnerName   string
+	OwnerEmail  string
+	ClientIP    string
+	PhoneNumber string
+	At          time.Time
 }

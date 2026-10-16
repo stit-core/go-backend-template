@@ -1,0 +1,86 @@
+# Законно: теги fx (name, group, optional) у зависимостей usecase — способ fx, а не форма провода.
+rule: *
+base: canon
+-- internal/domain/shop/usecase.go --
+package shop
+
+import (
+	"context"
+	"fmt"
+
+	"go.uber.org/fx"
+
+	"{module}/internal/platform/identity"
+	"{module}/pkg/policy"
+	"git.stit.tech/stit-core/golibinfra/clockkit"
+	"git.stit.tech/stit-core/golibinfra/outboxkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
+)
+
+type Repository interface {
+	Insert(ctx context.Context, it *Item) error
+	// Get — товар id владельца ownerID; "" — любого владельца.
+	Get(ctx context.Context, id, ownerID string) (*Item, error)
+	ListOwn(ctx context.Context, ownerID string) ([]*Item, error)
+}
+
+type Authorizer interface {
+	CanCreate(ctx context.Context, caller identity.Identity) policy.Decision
+	CanSeeAll(ctx context.Context, caller identity.Identity) policy.Decision
+}
+
+type UsecaseDeps struct {
+	fx.In
+
+	Repo   Repository
+	Policy Authorizer
+	Tx     pgkit.Transactor
+	Events outboxkit.Publisher `name:"shop"`
+	Clock  clockkit.Clock      `optional:"true"`
+}
+
+type Usecase struct {
+	d UsecaseDeps
+}
+
+func NewUsecase(d UsecaseDeps) *Usecase { return &Usecase{d: d} }
+
+func (uc *Usecase) Create(ctx context.Context, in CreateInput) (*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	if d := uc.d.Policy.CanCreate(ctx, caller); !d.IsAllowed {
+		return nil, &policy.ForbiddenError{Reason: d.Reason}
+	}
+	it := &Item{OwnerID: caller.UserID, Name: in.Name}
+	err := uc.d.Tx.WithTx(ctx, func(txCtx context.Context) error {
+		if err := uc.d.Repo.Insert(txCtx, it); err != nil {
+			return fmt.Errorf("insert item: %w", err)
+		}
+		return uc.d.Events.Publish(txCtx, subjectItemCreated, ItemCreated{ID: it.ID, At: uc.d.Clock.Now()})
+	})
+	return it, err
+}
+
+// Get — свой товар или, у кого есть право видеть все, любой; чужой без права — ErrNotFound, как несуществующий.
+func (uc *Usecase) Get(ctx context.Context, id string) (*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	owner := caller.UserID
+	if uc.d.Policy.CanSeeAll(ctx, caller).IsAllowed {
+		owner = ""
+	}
+	return uc.d.Repo.Get(ctx, id, owner)
+}
+
+// Mine — товары вызывающего: читает только своё.
+func (uc *Usecase) Mine(ctx context.Context) ([]*Item, error) {
+	caller, ok := identity.From(ctx)
+	if !ok {
+		return nil, &policy.ForbiddenError{Reason: "no identity"}
+	}
+	return uc.d.Repo.ListOwn(ctx, caller.UserID)
+}

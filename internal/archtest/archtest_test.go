@@ -73,6 +73,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/stretchr/testify/require"
 )
@@ -1088,25 +1089,68 @@ func packageWrites(fn *ast.FuncDecl) []string {
 	return out
 }
 
-// piiField — имя поля payload, которому место в данных поставщика, а не в событии: адрес, телефон, имя, IP, пароль,
-// токен, секрет; …ID — идентификатор (TokenID — ID записи токена).
-var piiField = regexp.MustCompile(`(?i)(email|phone|password|token|secret)|(name|address)$|IP$`)
+// piiWords — последнее слово имени поля payload, которому место в данных поставщика, а не в событии. Слово — целиком:
+// EmailVerified и TokenID — факт и ID, Zip — не IP; Number и Hash отсылают к слову перед ними (PhoneNumber).
+var piiWords = []string{"Email", "Phone", "Password", "Token", "Secret", "Name", "Address", "Addr", "IP"}
+
+// fxTagKeys — теги полей зависимостей fx (структура с fx.In или fx.Out); tagKey — ключ тега поля.
+var (
+	fxTagKeys = []string{"name", "group", "optional"}
+	tagKey    = regexp.MustCompile(`(\w+):"`)
+)
 
 // TestRootTypes: типы корня — без тегов транспорта: форму провода задают DTO delivery, у payload событий тегов нет
-// (провод — Go-имена). Payload события — ID и факты: адрес, имя, телефон, IP и секреты потребитель берёт по ID
-// портом, а стрим читают многие и хранят долго.
+// (провод — Go-имена); теги fx у зависимостей — способ fx. Payload — тип, который корень публикует (….Publish(…,
+// T{…})), и типы events*.go: ID и факты, а адрес, имя, телефон, IP и секреты потребитель берёт по ID портом.
 func TestRootTypes(t *testing.T) {
 	t.Parallel()
 	runRule(t)
 }
 
 func rootTypes(c *check) {
+	type rootFile struct {
+		path, domain string
+		file         *ast.File
+	}
+	var root []rootFile
+	payloads := map[string]map[string]bool{} // домен → типы payload
 	for _, f := range c.files {
-		if _, sub, ok := splitDomain(f.pkg); !ok || sub != "" || f.test {
+		domain, sub, ok := splitDomain(f.pkg)
+		if !ok || sub != "" || f.test {
 			continue
 		}
-		events := path.Base(f.path) == "events.go"
-		ast.Inspect(c.parse(f.path), func(n ast.Node) bool {
+		file := c.parse(f.path)
+		root = append(root, rootFile{f.path, domain, file})
+		if payloads[domain] == nil {
+			payloads[domain] = map[string]bool{}
+		}
+		events := strings.HasPrefix(path.Base(f.path), "events")
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.TypeSpec:
+				if _, ok := n.Type.(*ast.StructType); ok && events {
+					payloads[domain][n.Name.Name] = true
+				}
+			case *ast.CallExpr:
+				if sel, ok := n.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Publish" {
+					for _, arg := range n.Args {
+						if name := literalType(arg); name != "" {
+							payloads[domain][name] = true
+						}
+					}
+				}
+			}
+			return true
+		})
+	}
+	for _, rf := range root {
+		fxName := ""
+		for name, p := range importsByName(rf.file) {
+			if p == "go.uber.org/fx" {
+				fxName = name
+			}
+		}
+		ast.Inspect(rf.file, func(n ast.Node) bool {
 			ts, ok := n.(*ast.TypeSpec)
 			if !ok {
 				return true
@@ -1115,19 +1159,88 @@ func rootTypes(c *check) {
 			if !ok {
 				return true
 			}
+			fxDeps := embedsFx(st, fxName)
 			for _, field := range st.Fields.List {
-				if field.Tag != nil {
-					c.Errorf("%s: %s has a field tag %s: the wire form lives in DTOs of delivery, an event payload has none", f.path, ts.Name.Name, field.Tag.Value)
+				if field.Tag != nil && (!fxDeps || !fxTag(field.Tag.Value)) {
+					c.Errorf("%s: %s has a field tag %s: the wire form lives in DTOs of delivery, an event payload has none", rf.path, ts.Name.Name, field.Tag.Value)
 				}
 				for _, name := range field.Names {
-					if events && piiField.MatchString(name.Name) && !strings.HasSuffix(name.Name, "ID") {
-						c.Errorf("%s: event %s carries %s: a payload holds IDs and facts — the consumer reads personal data and secrets by ID through a port", f.path, ts.Name.Name, name.Name)
+					if payloads[rf.domain][ts.Name.Name] && personalData(name.Name) {
+						c.Errorf("%s: event %s carries %s: a payload holds IDs and facts — the consumer reads personal data and secrets by ID through a port", rf.path, ts.Name.Name, name.Name)
 					}
 				}
 			}
 			return true
 		})
 	}
+}
+
+// literalType — имя типа литерала T{…} или &T{…}; "" — не литерал типа пакета.
+func literalType(expr ast.Expr) string {
+	if u, ok := expr.(*ast.UnaryExpr); ok && u.Op == token.AND {
+		expr = u.X
+	}
+	if lit, ok := expr.(*ast.CompositeLit); ok {
+		if id, ok := lit.Type.(*ast.Ident); ok {
+			return id.Name
+		}
+	}
+	return ""
+}
+
+// embedsFx — структура зависимостей fx: встраивает fx.In или fx.Out пакета, импортированного как fxName.
+func embedsFx(st *ast.StructType, fxName string) bool {
+	for _, field := range st.Fields.List {
+		if sel, ok := field.Type.(*ast.SelectorExpr); ok && len(field.Names) == 0 && isIdent(sel.X, fxName) &&
+			(sel.Sel.Name == "In" || sel.Sel.Name == "Out") {
+			return true
+		}
+	}
+	return false
+}
+
+// fxTag — тег поля, все ключи которого — теги fx.
+func fxTag(lit string) bool {
+	tag, err := strconv.Unquote(lit)
+	if err != nil {
+		return false
+	}
+	keys := tagKey.FindAllStringSubmatch(tag, -1)
+	for _, k := range keys {
+		if !slices.Contains(fxTagKeys, k[1]) {
+			return false
+		}
+	}
+	return len(keys) > 0
+}
+
+// personalData — последнее слово имени (перед Number и Hash — предпоследнее) — из piiWords, и во множественном числе.
+func personalData(name string) bool {
+	words := camelWords(name)
+	last := words[len(words)-1]
+	if len(words) > 1 && (last == "Number" || last == "Hash") {
+		last = words[len(words)-2]
+	}
+	return slices.ContainsFunc(piiWords, func(w string) bool {
+		return strings.EqualFold(last, w) || strings.EqualFold(last, w+"s") || strings.EqualFold(last, w+"es")
+	})
+}
+
+// camelWords — слова имени CamelCase: ClientIP → Client IP, IPAddress → IP Address, UserIPs → User IPs.
+func camelWords(name string) []string {
+	r := []rune(name)
+	var words []string
+	start := 0
+	for i := 1; i < len(r); i++ {
+		lowerUpper := !unicode.IsUpper(r[i-1]) && unicode.IsUpper(r[i])
+		acronymEnd := unicode.IsUpper(r[i-1]) && unicode.IsUpper(r[i]) && i+1 < len(r) && unicode.IsLower(r[i+1]) &&
+			(i+2 != len(r) || r[i+1] != 's')
+		if lowerUpper || acronymEnd {
+			words = append(words, string(r[start:i]))
+			start = i
+		}
+	}
+	return append(words, string(r[start:]))
 }
 
 // TestTestsAssert: покрытие считает исполненный код, поэтому тест без единого утверждения поднимает его,

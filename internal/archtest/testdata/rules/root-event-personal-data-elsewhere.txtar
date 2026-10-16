@@ -1,0 +1,28 @@
+# Payload события — тип, который корень публикует, и тип файла events*.go, в каком бы файле корня он ни был.
+rule: TestRootTypes
+base: canon
+drop: internal/domain/shop/events.go
+want: internal/domain/shop/created.go: event ItemCreated carries OwnerPhone
+want: internal/domain/shop/events_profile.go: event ProfileChanged carries Email
+-- internal/domain/shop/created.go --
+package shop
+
+import "time"
+
+const subjectItemCreated = "shop.events.item_created"
+
+type ItemCreated struct {
+	ID         string
+	OwnerPhone string
+	At         time.Time
+}
+-- internal/domain/shop/events_profile.go --
+package shop
+
+import "time"
+
+type ProfileChanged struct {
+	ID    string
+	Email string
+	At    time.Time
+}

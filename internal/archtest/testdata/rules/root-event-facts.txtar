@@ -1,0 +1,22 @@
+# Законно: payload — ID и факты, слово имени поля — целиком: EmailVerified, PasswordChangedAt и TokenCount — факты,
+# Membership, Ownership, Trip и Zip — не IP.
+rule: *
+base: canon
+-- internal/domain/shop/events.go --
+package shop
+
+import "time"
+
+const subjectItemCreated = "shop.events.item_created"
+
+type ItemCreated struct {
+	ID                string
+	Membership        string
+	Ownership         string
+	Trip              string
+	Zip               string
+	EmailVerified     bool
+	PasswordChangedAt time.Time
+	TokenCount        int
+	At                time.Time
+}
