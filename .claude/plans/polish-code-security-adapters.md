@@ -129,9 +129,10 @@ blocked-by: —
 - [x] **S6** — Срок хранения аудита (job кита) и `Cache-Control: no-store` у ответов `/api/*`
   - Проверка: D14; `TestBoot`; `make check` → ✓ · Закрывает: AC4 · Зависит от: —
   - Сделано: `auditpg.RetentionModule` и `NewRetentionConfig` в графе, `AUDIT_RETENTION_DAYS` — required (в
-    `.env.example` — 30); middleware `noStore` в `cmd/api/http.go`; `TestBoot` видит job'ы `auditkit.retention` и
-    `verification.purge_links` и `no-store` у ответа `/api/users/me`, `TestMiddlewares_NoStore` — и у отказа лимита;
-    handoff-блок; `make check` → ✓
+    `.env.example` — 30); middleware `noStore` в `cmd/api/http.go`; `TestBoot` видит job `auditkit.retention` и
+    `no-store` у операций под Security, job `verification.purge_links` — `TestIdentity` (S15), `TestNoStore`
+    (`cmd/api/http_test.go`) — `no-store` у ответа, `TestBoot_AuthRateLimit` — и у 429 лимита; handoff-блок;
+    `make check` → ✓
 - [x] **S7** — Контракт API: 429 строгого лимита, таблицы logout и запроса сброса, адрес регистрации, cookie
   строкой, `changePassword`, поля и форматы ответов, ветки пустого cookie
   - Проверка: сводка `openapi.json`; E2; `make check` → ✓ · Закрывает: AC5 · Зависит от: S6
@@ -257,6 +258,8 @@ blocked-by: —
 - N8 (валидация, миграция `0007`): комментарий называет то, что гасит ссылку, — любую запись учётной записи с ростом
   версии (имя, статус, роль, пароль, удаление); следствие для пользователя (переименовался — новая ссылка после паузы)
   — компромиссом в `SECURITY.md`. Миграция не выпущена — правка комментария до релиза.
+- N9 (валидация, текст плана): «Сделано» S6 называет тесты по именам кода (`TestNoStore`, `TestBoot_AuthRateLimit`,
+  job чистки ссылок — в `TestIdentity` после S15); «Сделано» прочих шагов — история шага, его не переписываю.
 - RCOD-17: образец конфига домена — `verification.Config` (пауза писем, `config.go` корня), образец job'а —
   `verification.purge_links`: оба — с настоящей нуждой, а не ради образца.
 - RCOD-12, RSECT-08: `seed-admin` — метод `user.Usecase.EnsureAdmin` без policy (вход оператора: решает доступ к
@@ -375,5 +378,5 @@ blocked-by: —
 
 ## Где мы сейчас
 S1–S13, S15, S16 закрыты; ветка — на `main` с треком gate+tests, RA-блоки и блоки скелета `-02`, `-09` — под код
-трека. Идёт S17 (валидация трека): B1, B2, N1–N8 закрыты, дальше N9–N14 по коммиту; затем strict-прогоны мутаций
+трека. Идёт S17 (валидация трека): B1, B2, N1–N9 закрыты, дальше N10–N14 по коммиту; затем strict-прогоны мутаций
 (RA, скелет, новые блоки) и S14 (приёмка: «Сделано», критерии, гейт).
