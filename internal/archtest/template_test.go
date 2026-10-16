@@ -438,6 +438,39 @@ func TestTemplateUpdateRemote(t *testing.T) {
 	require.Equal(t, "template/v1.1.0 — канон шаблона\n", out)
 }
 
+// TestTemplateAnnotation: раздел аннотации тега шаблона перенос узнаёт по строке ровно в своём формате — заголовок с
+// опечаткой он пропустил бы вместе с пунктами. Строку, похожую на заголовок раздела, но не в формате, --annotation
+// (pre-push тега выпуска) называет с образцом; вступление, пункты, их продолжение и шаги — не заголовки.
+func TestTemplateAnnotation(t *testing.T) {
+	t.Parallel()
+	script := templateScript(t)
+	repo := t.TempDir()
+	git(t, repo, "init", "-q", "-b", "main")
+	git(t, repo, "commit", "-q", "--allow-empty", "-m", "commit")
+	const intro = "Обвязка под golibinfra v1.5.0. Что нового — по углам:\n- гейт: секрет промежуточного коммита — отказ;\n\n"
+	for annotation, bad := range map[string]string{
+		intro + "Безопасность:\n- auth: фикс → PATHS='internal/domain/auth'\n  продолжение пункта:\n\nКак обновиться:\n1. make check\n": "",
+		"Безопасноть:\n- фикс → PATHS='cmd/api'\n":   "Безопасноть:",
+		"Безопасность :\n- фикс → PATHS='cmd/api'\n": "Безопасность :",
+		"безопасность:\n- фикс → PATHS='cmd/api'\n":  "безопасность:",
+		"**Платформа:**\n- правка → PATHS='cmd'\n":   "**Платформа:**",
+		"Платформа\n- правка → PATHS='cmd'\n":        "Платформа",
+		"Платформа: правка → PATHS='cmd'\n":          "Платформа: правка",
+		"Security:\n- fix → PATHS='cmd'\n":           "Security:",
+	} {
+		git(t, repo, "tag", "-f", "-a", "template/v1.0.0", "-m", "template/v1.0.0\n\n"+annotation)
+		out, err := runIn(t, repo, "bash", script, "--annotation", "template/v1.0.0")
+		if bad == "" {
+			require.NoError(t, err, "%s\n%s", annotation, out)
+			require.Empty(t, out)
+			continue
+		}
+		require.Error(t, err, "%s\n%s", annotation, out)
+		require.Contains(t, out, "\n  3: "+bad, "the refusal names the line:\n%s", out)
+		require.Contains(t, out, "\n  Безопасность:\n  - ", "the refusal shows a sample:\n%s", out)
+	}
+}
+
 func templateScript(t *testing.T) string {
 	t.Helper()
 	script := filepath.Join(repoRoot(t), "scripts", "tools", "template-update.sh")

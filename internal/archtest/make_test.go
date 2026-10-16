@@ -203,9 +203,9 @@ func TestCheckCoversItsOwnRun(t *testing.T) {
 // уже в ветках remote'ов или — при push'е в пустой remote, пустоту хук узнаёт git ls-remote, — под тегами шаблона
 // template/*): секрет в его дереве — отказ, а сообщение судит хук commit-msg из дерева его родителя: коммит
 // cherry-pick, rebase или клона без хуков его не проходил, а старый коммит правилом, которого тогда не было, не
-// судится. Гейт здесь игрушечный: Makefile коммита печатает вердикт (файл verdict) и то, что дошло до него из
-// окружения, а окружение оболочки снимает строкой unexport Makefile репо; правило commit-msg — сначала старое, только
-// Conventional Commits, затем хук репо.
+// судится; аннотация тега выпуска шаблона не в формате разделов переноса обвязки — отказ. Гейт здесь игрушечный:
+// Makefile коммита печатает вердикт (файл verdict) и то, что дошло до него из окружения, а окружение оболочки снимает
+// строкой unexport Makefile репо; правило commit-msg — сначала старое, только Conventional Commits, затем хук репо.
 func TestPrePushGatesPushedCommit(t *testing.T) {
 	t.Parallel()
 	hook := filepath.Join(repoRoot(t), "scripts", "git-hooks", "pre-push")
@@ -325,6 +325,22 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err = push("refs/heads/main " + ruled + " refs/heads/main " + stuff + "\n")
 	require.NoError(t, err, "the chain before the rule of Review is pushed:\n%s", out)
 	require.Contains(t, out, "toy gate: green")
+	// Аннотацию тега выпуска перенос обвязки форков читает по разделам: строка раздела не в его формате — отказ до гейта.
+	writeFiles(t, repo, readFiles(t, repoRoot(t), "scripts/tools/template-update.sh"))
+	release := func(header string) string {
+		t.Helper()
+		git(t, repo, "tag", "-f", "-a", "template/v9.9.8", "-m", "template/v9.9.8\n\n"+header+"\n- auth: фикс → PATHS='internal/domain/auth'", ruled)
+		return "refs/heads/main " + ruled + " refs/heads/main " + stuff + "\nrefs/tags/template/v9.9.8 " +
+			strings.TrimSpace(git(t, repo, "rev-parse", "template/v9.9.8")) + " refs/tags/template/v9.9.8 " + zero + "\n"
+	}
+	out, err = push(release("Безопасноть:"))
+	require.Error(t, err, "a release tag with a section out of the format of the transfer must not be pushed:\n%s", out)
+	require.Contains(t, out, "3: Безопасноть:")
+	require.NotContains(t, out, "toy gate", "the annotation is checked before the gate")
+	out, err = push(release("Безопасность:"))
+	require.NoError(t, err, "a release tag in the format of the transfer is pushed:\n%s", out)
+	require.Contains(t, out, "toy gate: green")
+	git(t, repo, "tag", "-d", "template/v9.9.8")
 
 	out, err = push("refs/heads/old " + zero + " refs/heads/old " + red + "\n")
 	require.NoError(t, err, "a deleted ref has nothing to check:\n%s", out)

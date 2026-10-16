@@ -7,7 +7,8 @@
 # шаблона, и с тегами; в непустой remote тег шаблона — выпуск): секрет в его дереве — отказ (remote получает и
 # промежуточный коммит, чей секрет убрал следующий), а сообщение судит хук commit-msg из дерева его родителя: коммит
 # cherry-pick, rebase (git rebase --continue хук не зовёт) или клона без хуков commit-msg не проходил, а правило — то,
-# что действовало, когда коммит делали: старые коммиты правилом, которого тогда не было, не судятся.
+# что действовало, когда коммит делали: старые коммиты правилом, которого тогда не было, не судятся. Тег выпуска
+# шаблона — и его аннотация: строка, похожая на заголовок раздела, — ровно в формате переноса обвязки.
 #
 # Строка интерпретатора — `bash -p`: файл автозапуска (BASH_ENV), экспортированные функции и SHELLOPTS
 # из окружения пушащего хук не читает — иначе `exit 0` в них пропускал бы push без гейта.
@@ -58,8 +59,17 @@ if [ -z "$(git -C "$root" for-each-ref --count=1 "refs/remotes/$1/")" ] &&
     mapfile -t released < <(git -C "$root" for-each-ref --format='%(refname)' 'refs/tags/template/*')
 fi
 judged=" "
-while read -r _ local_sha _ remote_sha; do
+while read -r _ local_sha remote_ref remote_sha; do
     [[ -n $local_sha && ! $local_sha =~ ^0+$ ]] || continue
+    # Аннотацию тега выпуска шаблона перенос обвязки форков читает по разделам (template-update.sh --annotation).
+    if [[ $remote_ref == refs/tags/template/* && " ${released[*]-} " != *" $remote_ref "* ]] &&
+        [ "$(git -C "$root" cat-file -t "$local_sha")" = tag ] &&
+        ! out=$(bash -p "$root/scripts/tools/template-update.sh" --annotation "$local_sha" 2>&1); then
+        echo "pre-push: ${remote_ref#refs/tags/} — аннотация не в формате разделов, который читает make template-update:"
+        sed 's/^/  /' <<<"$out"
+        echo "pre-push: поправь аннотацию (git tag -a -f ${remote_ref#refs/tags/} -F <аннотация>) и пушь снова"
+        exit 1
+    fi
     known=(--remotes ${released[@]+"${released[@]}"})
     if [[ ! $remote_sha =~ ^0+$ ]] && git -C "$root" cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
         known+=("$remote_sha")
