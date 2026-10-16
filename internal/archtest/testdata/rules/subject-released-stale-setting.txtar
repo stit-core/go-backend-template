@@ -1,0 +1,9 @@
+# Строка releasedSubjects в файле настроек — не subject кода: без него в коде строка устарела и получает отказ.
+rule: TestSubjectVersions
+base: canon
+released: shop.events.item_removed.v1
+want: releasedSubjects lists "shop.events.item_removed.v1", and no file of the service names it
+-- internal/archtest/layout_settings_test.go --
+package archtest
+
+var releasedSubjects = []string{"shop.events.item_removed.v1"}

@@ -888,7 +888,7 @@ func subjectVersions(c *check) {
 	names := c.domains()
 	named := map[string]bool{}
 	for _, f := range c.files {
-		if !under(f.pkg, "internal") {
+		if !under(f.pkg, "internal") || under(f.pkg, "internal/archtest") { // настройки и примеры — не subject кода
 			continue
 		}
 		ast.Inspect(c.parse(f.path), func(n ast.Node) bool {
