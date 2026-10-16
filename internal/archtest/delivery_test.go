@@ -1108,8 +1108,8 @@ func (w policyWalk) params(fn *ast.FuncDecl) map[string]string {
 }
 
 // TestIdentityWithOnlyInAuthgate: личность вызывающего кладёт в ctx только authgate после проверки токена; identity.With
-// в коде домена, входа или cmd/ подставил бы чужую личность мимо cookie, и policy решала бы за неё. Тесты и
-// internal/testkit (identitytest) — можно.
+// в коде домена, входа или cmd/ — и помощник над ним в самом пакете identity, и вызов под dot-импортом — подставил бы
+// чужую личность мимо cookie, и policy решала бы за неё. Тесты и internal/testkit (identitytest) — можно.
 func TestIdentityWithOnlyInAuthgate(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -1117,14 +1117,37 @@ func TestIdentityWithOnlyInAuthgate(t *testing.T) {
 
 func identityWithOnlyInAuthgate(c *check) {
 	for _, f := range c.files {
-		if f.test || under(f.pkg, "internal/platform/authgate") || under(f.pkg, "internal/testkit") || !slices.Contains(f.imports, identityPath) {
+		own := f.pkg == strings.TrimPrefix(identityPath, module+"/")
+		if f.test || under(f.pkg, "internal/platform/authgate") || under(f.pkg, "internal/testkit") ||
+			!own && !slices.Contains(f.imports, identityPath) {
 			continue
 		}
 		file := c.parse(f.path)
 		byName := importsByName(file)
+		bare := own || byName["."] == identityPath // With без селектора — identity.With
+		named := map[*ast.Ident]bool{}             // имена объявлений, полей и селекторов: не вызов identity.With
 		ast.Inspect(file, func(n ast.Node) bool {
-			if e, ok := n.(ast.Expr); ok && isSelector(e, byName, identityPath, "With") {
-				c.Errorf("%s calls identity.With: only authgate puts the caller into ctx, after it checks the token", f.path)
+			var with bool
+			switch n := n.(type) {
+			case *ast.FuncDecl:
+				named[n.Name] = true
+			case *ast.Field:
+				for _, name := range n.Names {
+					named[name] = true
+				}
+			case *ast.KeyValueExpr:
+				if id, ok := n.Key.(*ast.Ident); ok {
+					named[id] = true
+				}
+			case *ast.SelectorExpr:
+				named[n.Sel] = true
+				with = isSelector(n, byName, identityPath, "With")
+			case *ast.Ident:
+				with = bare && n.Name == "With" && !named[n]
+			}
+			if with {
+				c.Errorf("%s calls identity.With: only authgate puts the caller into ctx, after it checks the token; "+
+					"service work is a usecase method without policy (PurgeLinks) or Trusted", f.path)
 			}
 			return true
 		})

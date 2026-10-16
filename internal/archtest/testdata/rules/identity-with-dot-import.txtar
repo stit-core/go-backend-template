@@ -1,0 +1,16 @@
+# identity.With под dot-импортом — тот же вызов без селектора.
+rule: TestIdentityWithOnlyInAuthgate
+base: canon
+want: internal/domain/shop/system.go calls identity.With
+-- internal/domain/shop/system.go --
+package shop
+
+import (
+	"context"
+
+	. "{module}/internal/platform/identity"
+)
+
+func asSystem(ctx context.Context) context.Context {
+	return With(ctx, Identity{UserID: "system", Role: RoleAdmin})
+}

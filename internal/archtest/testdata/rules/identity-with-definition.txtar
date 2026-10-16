@@ -1,0 +1,41 @@
+# Законно: пакет identity объявляет With, а вызов With чужого значения (log.With) — не identity.With.
+rule: TestIdentityWithOnlyInAuthgate
+base: canon
+-- internal/platform/identity/identity.go --
+package identity
+
+import "context"
+
+type Role string
+
+const RoleAdmin Role = "admin"
+
+type Identity struct {
+	UserID string
+	Role   Role
+}
+
+type ctxKey struct{}
+
+func With(ctx context.Context, id Identity) context.Context {
+	return context.WithValue(ctx, ctxKey{}, id)
+}
+
+func From(ctx context.Context) (Identity, bool) {
+	id, ok := ctx.Value(ctxKey{}).(Identity)
+	return id, ok
+}
+-- internal/domain/shop/caller.go --
+package shop
+
+import (
+	"context"
+
+	. "{module}/internal/platform/identity"
+	"git.stit.tech/stit-core/golibinfra/logkit"
+)
+
+func callerLog(ctx context.Context, log logkit.Logger) logkit.Logger {
+	caller, _ := From(ctx)
+	return log.With("user_id", caller.UserID)
+}

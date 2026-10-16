@@ -110,7 +110,8 @@ paths:
   которые создаёт код, — `idkit.NewV7()`, страница списка — `paging.Page`.
 - **Usecase не знает транспорта.** `httpkit`/`natskit`/huma в usecase запрещены; IP клиента —
   `identity.IPFrom` (ctx-геттер — только `internal/platform/identity`), личность в ctx кладёт только `authgate`
-  (`identity.With` — archtest `TestIdentityWithOnlyInAuthgate`), IP и ID запроса в аудит
+  (`identity.With`, и помощником в пакете `identity`, — archtest `TestIdentityWithOnlyInAuthgate`); служебной работе
+  личность не нужна — она метод usecase без policy (`PurgeLinks`) или `Trusted`. IP и ID запроса в аудит
   auditkit берёт из ctx сам. Named returns не используем (линтер `nonamedreturns`).
   Метрика — только под алерт; у метода с метрикой исход пишется ровно раз на любом пути, запись
   проверяет тест. Security-операции пишут audit из usecase (`uc.audit`, в записи — ID, не адрес).

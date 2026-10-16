@@ -1,0 +1,13 @@
+# Помощник в самом пакете identity кладёт личность в ctx: домен звал бы его мимо cookie, как identity.With.
+rule: TestIdentityWithOnlyInAuthgate
+base: canon
+want: internal/platform/identity/system.go calls identity.With
+-- internal/platform/identity/system.go --
+package identity
+
+import "context"
+
+// System — личность служебной работы.
+func System(ctx context.Context) context.Context {
+	return With(ctx, Identity{UserID: "system", Role: RoleAdmin})
+}
