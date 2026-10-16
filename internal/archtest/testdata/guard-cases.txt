@@ -459,6 +459,13 @@ B git difftool --extcmd='git commit -n -m x' HEAD~1
 B git --exec-path=/usr/lib/git-core commit -n -m x
 B $(ls /usr/lib/git-core/git-send-pack) origin main
 B sed -i d .git/hooks/../config
+B man -P 'git commit -n -m x' ls
+B man --pager='git commit -n -m x' ls
+B man -H'git commit -n -m x' ls
+B man -aP 'git commit -n -m x' ls
+B MANPAGER='git commit -n -m x' man ls
+B man -P 'chmod -x scripts/git-hooks/pre-push' ls
+B man -P git\ commit\ -n ls
 
 # --- отказ по замыслу, цена правил: интерпретатор в команде снимает кавычки со всей строки
 B git commit -m "fix: -n flag" && bash -c 'make check'
@@ -617,6 +624,8 @@ A git commit -m "fix: git commit -n больше не проходит"
 A git commit -m 'docs: git rebase --exec=git описан'
 A git rebase --exec='make check' HEAD~3
 A man git-send-pack
+A man -k commit
+A man 5 gitignore
 A ls -l /usr/lib/git-core/git-send-pack
 A git -c user.email=git@example.org log -1
 A git log --format='%h git %s' -3

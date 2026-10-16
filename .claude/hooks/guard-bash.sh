@@ -4,7 +4,7 @@
 #
 # Блокирует: git commit с -n; git с --no-veri… (любая подкоманда); git send-pack и http-push (push без
 # pre-push) — и бинарём подкоманды (git-commit, /usr/lib/git-core/git-send-pack; у «читателя» без подстановки,
-# man или ls, — это данные); алиасы и include конфига git в команде (-c alias.…, git config include.path …, и
+# man или ls, — это данные, а пейджер и браузер man — код); алиасы и include конфига git в команде (-c alias.…, git config include.path …, и
 # значением в кавычках: -c 'alias.c=commit -n'); снятие секции core (git config --remove-section или
 # --rename-section core — с ней уходит hooksPath); SKIP_PREPUSH и ключ hooksPath в любой команде (прочитать — git
 # config --list, поиск — инструментом Grep, сообщение коммита — heredoc); команду с путём scripts/git-hooks, хука
@@ -57,6 +57,8 @@ re_interp="${before}(${shell})${rest}[[:space:]]+-[[:alnum:]]*[cs][[:alnum:]]*([
 re_interp+="|${start}eval([[:space:]]|\$)"
 re_interp+="|\\|&?([^;&|)${nl}]*[[:space:]/(])?(${shell})([[:space:];&|)<>]|\$)"
 re_interp+="|${before}(${shell})${rest}[[:space:]]*<<"
+# man исполняет пейджер (-P, --pager, MANPAGER, PAGER) и браузер (-H, --html): их значение — код.
+re_interp+="|${before}man${rest}[[:space:]](-[[:alpha:]]*[PH]|--(pager|html))|${start}(MAN)?PAGER="
 # Git исполняет и строку из значения — опции (git rebase -x и --exec=…, submodule foreach, bisect run, filter-branch,
 # difftool --extcmd), конфига (-c core.editor=…) или переменной (GIT_SEQUENCE_EDITOR=…): вложенный git в кавычках или
 # после «=» команды с git делает её кодом, как у интерпретатора; текст сообщения (-m, --message) — данные.
@@ -128,7 +130,7 @@ split_words() {
 # дальше путь в команде не виден.
 hook='((^|[[:space:]/"'\''=])(git-hooks|pre-push|pre-commit|commit-msg)|\.git/config)([[:space:]/"'\''},]|$)'
 run_hook='^([.[:alnum:]_~-]*/)*(pre-push|pre-commit|commit-msg)$'
-readers='cat|head|tail|less|more|grep|egrep|fgrep|ls|stat|file|wc|diff|cmp|md5sum|sha256sum|shellcheck|test|\[|echo|printf|man|which|whereis|type|readlink|realpath|strings'
+readers='cat|head|tail|less|more|grep|egrep|fgrep|ls|stat|file|wc|diff|cmp|md5sum|sha256sum|shellcheck|test|\[|echo|printf|which|whereis|type|readlink|realpath|strings'
 git_readers='add|blame|cat-file|commit|diff|grep|log|ls-files|ls-tree|push|rev-parse|show|status|tag'
 bel=$'\007'
 re_redirect='^[0-9]*[<>]'
@@ -253,6 +255,10 @@ while IFS= read -r seg; do
             parse ''
             has '^--pre(=|$)' || continue # --pre запускает команду на каждом файле (--pretty — нет)
             ;;
+        man)
+            parse ''
+            has '^(-[a-zA-Z]*[PH]|--(pager|html))' || continue # -P, --pager — пейджер, -H, --html — браузер
+            ;;
         cp)
             # Копия из хука — чтение. Назначение — последний операнд; опции — только без аргумента:
             # иначе последним словом встал бы аргумент опции (-S x, -t каталог).
@@ -301,7 +307,7 @@ while read -r -a words; do
     while ((j < ${#words[@]})) && [[ ${words[j]} == *=* || ${words[j]} =~ ^(sudo|env|command)$ ]]; do j=$((j + 1)); done
     name=${words[j]-}
     name=${name##*/}
-    ((!interp && !substituted)) && [[ $name =~ ^($readers)$ && ! $name =~ ^(echo|printf)$ ]] && continue
+    ((!interp && !substituted)) && [[ $name =~ ^($readers|man)$ && ! $name =~ ^(echo|printf)$ ]] && continue
     for w in ${words[@]+"${words[@]}"}; do
         w=${w%\\}
         # git, по пути или бинарём подкоманды (git-commit), — и вложенный в строку git bisect run, git

@@ -51,7 +51,8 @@ Push в `main` разрешён (прямой или через PR); gate — `p
 
 Блокирует:
 - `git commit -n`, `--no-veri…`, `send-pack` — и со словом в кавычках (`$'…'` тоже), бинарём подкоманды
-  (`git-commit`, `/usr/lib/git-core/git-send-pack`; у «читателя» без подстановки — `man`, `ls` — это данные) или
+  (`git-commit`, `/usr/lib/git-core/git-send-pack`; у «читателя» без подстановки — `man`, `ls` — это данные; пейджер
+  и браузер `man` — `-P`, `--pager`, `-H`, `--html`, `MANPAGER`, `PAGER` — код) или
   кодом для оболочки: `eval` и оболочка (`sh`, `bash`, `dash`, `zsh`, `ksh`, `ash`, `mksh`, `csh`, `tcsh`, `fish` — и с
   каталогом, обёрткой и опциями) с `-c` или `-s`, справа от `|`, с heredoc или here-string (`bash -e -c`,
   `| sudo bash -x`, `sh<<<'…'`), и git, исполняющий строку из значения: вложенный git в кавычках или после «=» команды
