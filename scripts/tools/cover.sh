@@ -41,7 +41,8 @@ if [ ! -s "$profile" ]; then
     exit 1
 fi
 
-module=$(go list -m) || { echo "FAIL: go list -m"; exit 1; }
+# Модуль сервиса — по его go.mod: с go.work в корне go list -m назвал бы все модули workspace.
+module=$(GOWORK=off go list -m) || { echo "FAIL: GOWORK=off go list -m"; exit 1; }
 generated=$(grep -rlE --include='*.go' '^// Code generated .* DO NOT EDIT\.$' internal pkg cmd 2>/dev/null | sed "s|^|$module/|")
 scoped=$(mktemp) || exit 1
 trap 'rm -f "$scoped"' EXIT
