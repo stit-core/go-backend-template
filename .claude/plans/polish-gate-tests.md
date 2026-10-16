@@ -142,7 +142,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     (`N/s7g/b2/pilot-status`): `TestNewDomainRefusesOrRollsBack` — было FAIL «алиас statusmod … занят», стало PASS, и
     с занятыми `probe_item`, `probe`, `code` (`field`, `probe_item2`, `probe2`); B3 — `TestPreCommitChecksIndex`: со
     старой логикой снимка копия репо — «fatal: не удалось прочитать дерево», с новой копия (снимок оригинала не
-    тронут), перенос и каталог без `.git` — проходят; через симлинк на репо снимок и кеш lint переиспользуются
+    тронут), перенос и каталог без `.git` — проходят; через симлинк на репо снимок и кеш lint переиспользуются;
+    `REBASE_HEAD` — в `TestCommitMsgHook` законченный rebase давал подсказку переноса, а прежняя таблица при идущем
+    rebase в репо разработчика — 39 строк FAIL; теперь — ok
 
 ## Решения
 - `internal/archtest/steps_test.go` (тесты шагов гейта, завёл трек gate волны 1) в таблице владения не назван —
@@ -229,6 +231,10 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
   `make e2e` — инструмент разработчика, его потоки держат и Go-тесты.
 - RENF-16: подсказка scope в `commit-msg` и пример `triage-failure` с настоящими именами — по строке в файлах трека
   harness (уже в `main`).
+- `TestCommitMsgHook` (трек harness) гонит хук в своём git-репо без переменных git вызывающего: перенос в репо
+  разработчика, идущий или законченный, вердикт не меняет; хук `commit-msg` узнаёт идущий rebase по
+  `rebase-merge`/`rebase-apply`, а не по `REBASE_HEAD` — его git 2.47 оставляет и после законченного, и подсказка
+  переноса шла без переноса (и в отказ pre-push). Правка файлов трека harness — таблица теста и строка хука.
 - RHAR-10 (дополнение дирижёра): строки `tests-pipeline` о `TestBoot`, `TestRun` и `TestIdentity` — по инварианту
   слоя, перечень проверок — в комментариях самих тестов.
 - pre-push судит всё сообщение пушимого коммита хуком `commit-msg` из дерева его родителя (дополнение дирижёра,
@@ -245,4 +251,4 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 
 ## Где мы сейчас
 S10 — круг по валидатору: блокирующие закрыты — B1 (`make gen` без моков), B2 (тест new-domain не занимает имён
-форка), B3 (снимок pre-commit чинит себя). Дальше — неблокирующие: `REBASE_HEAD`, python3, RADP-10, доки, handoff.
+форка), B3 (снимок pre-commit чинит себя). Неблокирующие: `REBASE_HEAD` закрыт; дальше — python3, RADP-10, доки, handoff.

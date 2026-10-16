@@ -15,7 +15,8 @@ import (
 // список, что TYPES хука) или сообщение самого git; предел subject — 72 символа, а не байта, при любой локали
 // коммитящего (под LC_ALL=C русская буква — два байта); у feat, fix и переноса обвязки chore(template) в теле —
 // строка Review: (CLAUDE.md § Готово). Отказ переносу чужого коммита (cherry-pick --continue, git commit посреди
-// rebase) говорит, как его дописать и закончить перенос.
+// rebase) говорит, как его дописать и закончить перенос; законченный rebase — не перенос. Хук идёт в своём репо, а не
+// в репо разработчика: его перенос и следы законченного не меняют вердикт.
 func TestCommitMsgHook(t *testing.T) {
 	t.Parallel()
 	hook := filepath.Join(repoRoot(t), "scripts", "git-hooks", "commit-msg")
@@ -26,6 +27,8 @@ func TestCommitMsgHook(t *testing.T) {
 	prose := regexp.MustCompile("типы `([a-z|]+)`").FindStringSubmatch(files["CLAUDE.md"])
 	require.NotNil(t, prose, "CLAUDE.md § Git workflow: no «типы `a|b|…`»")
 	require.Equal(t, types[1], prose[1], "the commit types of CLAUDE.md § Git workflow are not the types of the commit-msg hook")
+	clean := t.TempDir()
+	git(t, clean, "init", "-q")
 	long := strings.Repeat("я", 72)
 	const review = "\n\nReview: /code-review — находок нет\n"
 	const (
@@ -81,7 +84,8 @@ func TestCommitMsgHook(t *testing.T) {
 				file := filepath.Join(t.TempDir(), "COMMIT_EDITMSG")
 				require.NoError(t, os.WriteFile(file, []byte(tc.msg), 0o600))
 				cmd := exec.CommandContext(t.Context(), "bash", hook, file)
-				cmd.Env = append(os.Environ(), "LC_ALL="+locale)
+				cmd.Dir = clean
+				cmd.Env = callerEnv("PATH="+os.Getenv("PATH"), "LC_ALL="+locale)
 				out, err := cmd.CombinedOutput()
 				if tc.why == "" {
 					require.NoError(t, err, "commit-msg refuses a valid message: %s", out)
@@ -148,5 +152,13 @@ func TestCommitMsgHook(t *testing.T) {
 		git(t, repo, "rebase", "--continue")
 		require.NoDirExists(t, filepath.Join(repo, rebase))
 		require.Equal(t, git(t, repo, "rev-parse", "HEAD"), git(t, repo, "rev-parse", "side2"))
+
+		// Законченный rebase с конфликтом git оставляет REBASE_HEAD: отказ после него — без подсказки переноса.
+		writeFiles(t, repo, map[string]string{"h.txt": "h\n"})
+		git(t, repo, "add", "h.txt")
+		out, err = runIn(t, repo, "git", "commit", "-qm", "feat(z): после переноса")
+		require.Error(t, err, out)
+		require.Contains(t, out, noReview)
+		require.NotContains(t, out, "Перенос коммита", "a finished rebase is no carry")
 	})
 }

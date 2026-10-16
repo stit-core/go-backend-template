@@ -39,8 +39,9 @@ echo
 echo "        Review: /code-review — находок нет"
 echo "Агент без собеседника: Review: принимает хаб (infra:<slug>) — дифф отдан, ревью не проводилось"
 # cherry-pick после конфликта и git commit посреди rebase приносят сообщение чужого коммита — его дописывают, а не
-# обходят (git rebase --continue хук не зовёт).
-for state in CHERRY_PICK_HEAD REBASE_HEAD; do
+# обходят (git rebase --continue хук не зовёт). Идущий rebase — каталог rebase-merge или rebase-apply: REBASE_HEAD
+# git оставляет и после законченного.
+for state in CHERRY_PICK_HEAD rebase-merge rebase-apply; do
   if [ -e "$(git rev-parse --git-path "$state" 2>/dev/null)" ]; then
     echo "Перенос коммита ($state): сообщение — его, допиши subject и строку Review: — ревью переноса"
     echo "  (Review: <кто или чем> — перенос <коммит>, <итог>) и закончи коммит: git commit -e (или -F <файл>);"
