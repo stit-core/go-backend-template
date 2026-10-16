@@ -21,11 +21,7 @@ var (
 func main() {
 	ctx := context.Background()
 
-	cfg, err := logkit.NewConfig()
-	var log logkit.Logger
-	if err == nil {
-		log, err = logkit.New(cfg)
-	}
+	log, err := newLog()
 	if err != nil {
 		_, _ = os.Stderr.WriteString("migrate: logger: " + err.Error() + "\n") //nolint:errcheck,forbidigo // логгера нет: stderr — последний канал
 		os.Exit(1)
@@ -33,6 +29,15 @@ func main() {
 	log.Info(ctx, "starting", "component", "migrate", "version", version, "commit", commit)
 
 	os.Exit(run(ctx, log))
+}
+
+// newLog — логгер бинаря из LOG_*, как у api: формат и уровень задаёт окружение выкатки.
+func newLog() (logkit.Logger, error) {
+	cfg, err := logkit.NewConfig()
+	if err != nil {
+		return nil, err
+	}
+	return logkit.New(cfg)
 }
 
 func run(ctx context.Context, log logkit.Logger) int {

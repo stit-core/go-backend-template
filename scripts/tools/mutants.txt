@@ -2180,18 +2180,18 @@ migrations/0001_users.up.sql
 
 ## RA01 usecase/verification — IssuePasswordReset: событие без учётной записи доходит до поиска пользователя
 internal/domain/verification/usecase.go
-- if userID == "" || uc.d.Clock.Now().After(expiresAt) {
-+ if uc.d.Clock.Now().After(expiresAt) {
+- if userID == "" || now.After(expiresAt) {
++ if now.After(expiresAt) {
 
 ## RA02 usecase/verification — IssuePasswordReset: истёкший запрос всё равно выпускает ссылку
 internal/domain/verification/usecase.go
-- if userID == "" || uc.d.Clock.Now().After(expiresAt) {
+- if userID == "" || now.After(expiresAt) {
 + if userID == "" {
 
 ## RA03 usecase/verification — IssuePasswordReset: запрос в последний миг срока — без ссылки (граница)
 internal/domain/verification/usecase.go
-- if userID == "" || uc.d.Clock.Now().After(expiresAt) {
-+ if userID == "" || !uc.d.Clock.Now().Before(expiresAt) {
+- if userID == "" || now.After(expiresAt) {
++ if userID == "" || !now.Before(expiresAt) {
 
 ## RA04 usecase/verification — IssuePasswordReset: срок ссылки — от обработки события, а не от запроса
 internal/domain/verification/usecase.go
@@ -2206,13 +2206,11 @@ internal/domain/verification/usecase.go
 + 	case errors.Is(err, ErrUserNotFound):
 + 		return fmt.Errorf("load user: %w", err)
 
-## RA07 usecase/verification — IssuePasswordReset: не выпущенная ссылка (отправлена или погашена) всё равно уходит письмом
+## RA07 usecase/verification — IssuePasswordReset: не выпущенная ссылка (отправлена, погашена, пауза) всё равно уходит письмом
 internal/domain/verification/usecase.go
-- 	case !issued:
-- 		uc.d.Log.Info(ctx, "password reset not issued: sent or redeemed, skip", "user_id", userID)
+- 		uc.d.Log.Info(ctx, "password reset not issued: sent, redeemed or paused, skip", "user_id", userID)
 - 		return nil
-+ 	case !issued:
-+ 		uc.d.Log.Info(ctx, "password reset not issued: sent or redeemed, skip", "user_id", userID)
++ 		uc.d.Log.Info(ctx, "password reset not issued: sent, redeemed or paused, skip", "user_id", userID)
 
 ## RA08 usecase/verification — IssuePasswordReset: «отправлено» не отмечается (повтор доставки шлёт письмо снова)
 internal/domain/verification/usecase.go
@@ -2243,8 +2241,8 @@ internal/domain/verification/usecase.go
 
 ## RA11 usecase/verification — IssuePasswordReset: время запроса — время обработки (погашение до запроса не отличить)
 internal/domain/verification/usecase.go
-- authnkit.HashToken(token), requestedAt, expiresAt)
-+ authnkit.HashToken(token), uc.d.Clock.Now(), expiresAt)
+- RequestedAt: requestedAt, ExpiresAt: expiresAt,
++ RequestedAt: uc.d.Clock.Now(), ExpiresAt: expiresAt,
 
 ## RA12 usecase/verification — IssuePasswordReset: письмо уходит не на адрес учётной записи (на ID)
 internal/domain/verification/usecase.go
@@ -2287,18 +2285,20 @@ internal/domain/verification/usecase.go
 - 		userID, result = u.ID, resultInactive
 + 		userID, result = u.ID, outcome.OK
 
-## RA20 sql — UpsertPasswordReset: запрос до погашения ссылки получает рабочую ссылку
+## RA20 sql — UpsertPasswordReset: запрос до погашения ссылки и в паузу писем получает рабочую ссылку
 internal/domain/verification/infra/postgres/queries/password_resets.sql
 - WHERE NOT EXISTS (
 -     SELECT 1 FROM password_resets
--     WHERE user_id = sqlc.arg('user_id')::uuid AND used_at > sqlc.arg('requested_at')::timestamptz
+-     WHERE user_id = sqlc.arg('user_id')::uuid
+-       AND (used_at > sqlc.arg('requested_at')::timestamptz
+-            OR id <> sqlc.arg('id')::uuid AND created_at > NOW() - sqlc.arg('mail_pause')::interval)
 - )
-+ WHERE sqlc.arg('requested_at')::timestamptz IS NOT NULL AND sqlc.arg('user_id')::uuid IS NOT NULL
++ WHERE sqlc.arg('requested_at')::timestamptz IS NOT NULL AND sqlc.arg('mail_pause')::interval IS NOT NULL
 
 ## RA21 sql — UpsertPasswordReset: условие погашения перевёрнуто (used_at < requested_at)
 internal/domain/verification/infra/postgres/queries/password_resets.sql
-- AND used_at > sqlc.arg('requested_at')::timestamptz
-+ AND used_at < sqlc.arg('requested_at')::timestamptz
+- AND (used_at > sqlc.arg('requested_at')::timestamptz
++ AND (used_at < sqlc.arg('requested_at')::timestamptz
 
 ## RA22 sql — UpsertPasswordReset: конфликт id перевыпускает токен чужой строки
 internal/domain/verification/infra/postgres/queries/password_resets.sql
@@ -2319,7 +2319,6 @@ internal/domain/verification/infra/postgres/queries/password_resets.sql
 + AND password_resets.sent_at IS NULL
 
 ## RA25 sql — MarkPasswordResetSent: отмечает все ссылки таблицы
-= тесты не видят: репозиторный тест отмечает «отправлено» у одной ссылки из одной — соседнюю никто не проверяет (NTST-01)
 internal/domain/verification/infra/postgres/queries/password_resets.sql
 - UPDATE password_resets SET sent_at = NOW() WHERE id = $1;
 + UPDATE password_resets SET sent_at = NOW() WHERE id = $1 OR TRUE;
@@ -2364,43 +2363,33 @@ internal/domain/user/delivery/http/dto.go
 - Name    *string      `json:"name,omitempty"   maxLength:"200"       minLength:"1"`
 + Name    *string      `json:"name,omitempty"   minLength:"1"`
 
-## RA40 usecase/auth — Login: пароль длиннее предела хэшера — 500, а не неверные учётные данные
+## RA40 usecase/auth — passwordMatches: пароль длиннее предела хэшера — 500, а не неверные учётные данные
 internal/domain/auth/usecase.go
-- case err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong):
-+ case err != nil:
+- if err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong) {
++ if err != nil {
 
-## RA41 usecase/auth — Login: сбой хэшера — «неверный пароль» (ошибка сервиса молча становится 401)
+## RA41 usecase/auth — passwordMatches: сбой хэшера — «неверный пароль» (ошибка сервиса молча становится 401)
 internal/domain/auth/usecase.go
-- case err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong):
-+ case err != nil && false:
+- if err != nil && !errors.Is(err, authnkit.ErrPasswordTooLong) {
++ if err != nil && false {
 
-## RA42b infra — лимитер сброса: адрес с пробелом впереди — свой счётчик
-internal/domain/verification/infra/bruteforce/limiter.go
-- l.guard.Attempt(ctx, subjectPrefix+strings.TrimSpace(email), ip)
-+ l.guard.Attempt(ctx, subjectPrefix+email+strings.TrimSpace(""), ip)
+## RA44 platform/authlimit — лимит /api/auth/* действует на всё, кроме /api/auth/*
+internal/platform/authlimit/authlimit.go
+- if strings.HasPrefix(r.URL.Path, Prefix) {
++ if !strings.HasPrefix(r.URL.Path, Prefix) {
 
-## RA43b infra — лимитер сброса: ключ — только IP (общий счётчик всех адресов клиента)
-internal/domain/verification/infra/bruteforce/limiter.go
-- l.guard.Attempt(ctx, subjectPrefix+strings.TrimSpace(email), ip)
-+ l.guard.Attempt(ctx, subjectPrefix+strings.TrimSpace(ip), ip)
+## RA45 platform/authlimit — строгий лимит — только у входа
+internal/platform/authlimit/authlimit.go
+- const Prefix = "/api/auth/"
++ const Prefix = "/api/auth/login"
 
-## RA44 cmd/api — лимит /api/auth/* действует на всё, кроме /api/auth/*
-cmd/api/http.go
-- if strings.HasPrefix(r.URL.Path, authPathPrefix) {
-+ if !strings.HasPrefix(r.URL.Path, authPathPrefix) {
+## RA46 platform/authlimit — строгий лимит: RPS и Burst перепутаны
+internal/platform/authlimit/authlimit.go
+- httpkit.RateLimitConfig{RPS: cfg.RPS, Burst: cfg.Burst}
++ httpkit.RateLimitConfig{RPS: cfg.Burst, Burst: cfg.RPS}
 
-## RA45 cmd/api — строгий лимит — только у входа
-cmd/api/http.go
-- const authPathPrefix = "/api/auth/"
-+ const authPathPrefix = "/api/auth/login"
-
-## RA46 cmd/api — строгий лимит: RPS и Burst перепутаны
-cmd/api/http.go
-- httpkit.RateLimitConfig{RPS: app.AuthRateLimit.RPS, Burst: app.AuthRateLimit.Burst}
-+ httpkit.RateLimitConfig{RPS: app.AuthRateLimit.Burst, Burst: app.AuthRateLimit.RPS}
-
-## RA47b cmd/api — строгий лимит не применяется
-cmd/api/http.go
+## RA47b platform/authlimit — строгий лимит не применяется
+internal/platform/authlimit/authlimit.go
 - 				limited.ServeHTTP(w, r)
 + 				_ = limited
 + 				next.ServeHTTP(w, r)
@@ -2410,21 +2399,17 @@ internal/platform/config/config.go
 - if cfg.AuthRateLimit.RPS < 0 || cfg.AuthRateLimit.Burst < 0 {
 + if cfg.AuthRateLimit.RPS < 0 {
 
-## RA49 platform/config — строгий лимит по умолчанию выключен (RPS 0)
-internal/platform/config/config.go
+## RA49 platform/authlimit — строгий лимит по умолчанию выключен (RPS 0)
+internal/platform/authlimit/authlimit.go
 - RPS   int `default:"5"  envconfig:"HTTP_AUTH_RATE_LIMIT_RPS"`
 + RPS   int `default:"0"  envconfig:"HTTP_AUTH_RATE_LIMIT_RPS"`
 
-## RA50 cmd/seed — seed-admin не проверяет адрес и имя правилами user (недостижимый admin)
-cmd/seed-admin/main.go
-- 	if _, err := user.NewUser(email, "", name, identity.RoleAdmin); err != nil {
-- 		log.Error(ctx, "SEED_ADMIN_EMAIL or SEED_ADMIN_NAME breaks the rules of the user domain", "error", err)
-- 		return 1
-- 	}
-+ 	if _, err := user.NewUser(email, "", name, identity.RoleAdmin); err != nil && false {
-+ 		log.Error(ctx, "SEED_ADMIN_EMAIL or SEED_ADMIN_NAME breaks the rules of the user domain", "error", err)
-+ 		return 1
-+ 	}
+## RA50 usecase/user — EnsureAdmin не проверяет адрес и имя правилами сущности (недостижимый admin)
+internal/domain/user/usecase.go
+- 	admin, err := NewUser(in.Email, hash, in.Name, identity.RoleAdmin)
+- 	if err != nil {
++ 	admin, err := NewUser(in.Email, hash, in.Name, identity.RoleAdmin)
++ 	if err != nil && in.Email == "" {
 
 ## RA51 nats — подписчик сброса: id запроса и ID пользователя перепутаны
 internal/domain/verification/delivery/nats/handler.go

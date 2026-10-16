@@ -961,8 +961,8 @@ $UC
 
 ## ${NAME}-02 usecase — Get: отказ policy не останавливает чтение
 $UC
-- if d := uc.d.Policy.CanGet(ctx, caller, id); !d.IsAllowed {
-+ if d := uc.d.Policy.CanGet(ctx, caller, id); !d.IsAllowed && caller.UserID == "" {
+- if d := uc.d.Policy.CanGet(ctx, caller); !d.IsAllowed {
++ if d := uc.d.Policy.CanGet(ctx, caller); !d.IsAllowed && caller.UserID == "" {
 
 ## ${NAME}-03 usecase — Create: сбой записи глотается
 $UC
@@ -997,9 +997,9 @@ $POL
 
 ## ${NAME}-09 policy — CanGet: читать может любой
 $POL
-- func (p *Policy) CanGet(_ context.Context, caller identity.Identity, _ string) policy.Decision {
+- func (p *Policy) CanGet(_ context.Context, caller identity.Identity) policy.Decision {
 - 	return adminOnly(caller)
-+ func (p *Policy) CanGet(_ context.Context, _ identity.Identity, _ string) policy.Decision {
++ func (p *Policy) CanGet(_ context.Context, _ identity.Identity) policy.Decision {
 + 	return policy.Allow()
 
 ## ${NAME}-10 repository — GetByID: имя не читается
