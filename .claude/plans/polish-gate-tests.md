@@ -348,8 +348,8 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
     `TestTestsAssert`: утверждения и точное число вызовов, ожидание — одной цепочкой; `t.Skip` в тесте archtest —
     отказ `TestMain` archtest;
   - в индексе `.env` или `.env.<имя>` (кроме `*.example`), `*.pem`, `*.key` — `TestNoSecretFiles`: секрет — из
-    индекса и истории; базовый образ Dockerfile без digest в самой строке `FROM` (образ через `ARG` — тоже отказ),
-    образ compose без тега, с `:latest` или `:edge` — `TestImagesPinned`;
+    индекса и истории; базовый образ Dockerfile без digest (образ через `ARG` до первого `FROM` — по его значению: без
+    значения или с тегом — отказ), образ compose без тега, с `:latest` или `:edge` — `TestImagesPinned`;
   - migrations-check: `INSERT` в таблицу не из своего файла — миграция с эффектом; своя или правленая `0001_users`
     форка проверяется целиком (выпущенные шаблона узнаются по содержимому);
   - gofumpt, golangci-lint, sqlc или mockery не закреплённой версии — шаг отказывает: `make setup`; нет python3 —
@@ -361,7 +361,9 @@ minor бэклога `minor-enforcement` (кроме RENF-12), `minor-tests`, RA
 - Хуки: pre-commit судит снимок индекса в worktree `.cache/index-snapshot/wt` (`.cache/` — в `.gitignore`); pre-push
   судит сообщение каждого пушимого коммита правилом `commit-msg` его родителя — `feat`/`fix` без `Review:` (и
   перенесённые `git rebase --continue` или cherry-pick без конфликта) отвергаются до гейта: дописать
-  (`git rebase -i`, reword); push из клона без веток remote'а судит и историю шаблона — такой push делает человек.
+  (`git rebase -i`, reword); история под тегами шаблона `template/*` не судится, кроме тега, который выпускает этот
+  же push: первый push клона форка без веток remote'а в пустой remote проходит, а клону без тегов шаблона отказ
+  советует их `git fetch`.
 - `make mutate A=--strict` (шаг `/release`) отказывает и за эквивалентную («=»), которую тесты убили, и за файл кода
   без мутаций — блоки в `scripts/tools/mutants.txt`; `make new-domain` дописывает блоки среза сам. `make e2e` гоняет
   ruff и mypy харнеса до стека и ставит venv заново при смене `requirements.txt` (первый запуск — сеть).
