@@ -2,7 +2,7 @@ module git.stit.tech/stit-core/go-backend-template
 
 go 1.26.6
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	git.stit.tech/stit-core/golibinfra v1.6.0
