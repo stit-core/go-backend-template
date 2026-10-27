@@ -5,17 +5,19 @@
 ### Go HTTP-бэкенд со стандартами из коробки
 
 Шаблон Go-бэкенда экосистемы stit: huma/v2 + chi + pgx/v5 + sqlc + uber/fx,
-поверх китов [`golibinfra`](https://git.stit.tech/stit-core/golibinfra). Структурные логи,
+поверх китов [`golibinfra`](https://github.com/stit-core/golibinfra). Структурные логи,
 тесты и релиз — встроены; вы пишете домены, не обвязку.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2563eb)](LICENSE)
-[![Часть stit](https://img.shields.io/badge/stit-открытые_шаблоны-6366f1)](https://git.stit.tech/stit-core/stit-public)
+[![Часть stit](https://img.shields.io/badge/stit-открытые_шаблоны-6366f1)](https://github.com/stit-core)
 [![Go](https://img.shields.io/badge/Go-00ADD8)](#что-внутри)
 [![API](https://img.shields.io/badge/API-huma%2Fv2_%2B_OpenAPI_3.1-0ea5e9)](#что-внутри)
 [![DB](https://img.shields.io/badge/DB-pgx_%2B_sqlc-22c55e)](#что-внутри)
 [![Logging](https://img.shields.io/badge/logging-structured_slog-8b5cf6)](#что-внутри)
 
 </div>
+
+> Разработка идёт в приватном Gitea (`git.stit.tech/stit-core/go-backend-template`), публичное зеркало — [github.com/stit-core/go-backend-template](https://github.com/stit-core/go-backend-template). Как с ним работать вне инфраструктуры stit — в [профиле stit-core](https://github.com/stit-core).
 
 ---
 
@@ -63,7 +65,7 @@ claude                 # → /init-service
 - **БД** — pgx/v5 + sqlc (typed queries), golang-migrate.
 - **DI** — uber/fx. Один runtime-бинарь `cmd/api` (HTTP + outbox-drain + NATS-subs
   + jobs); `cmd/migrate` — отдельный image, init-контейнер.
-- **Платформа** — [`golibinfra`](https://git.stit.tech/stit-core/golibinfra): HTTP и контракт
+- **Платформа** — [`golibinfra`](https://github.com/stit-core/golibinfra): HTTP и контракт
   ошибок, Postgres и миграции, структурные логи, JWT и сессии, outbox и NATS JetStream, аудит,
   brute-force, метрики и трейсы (OTLP), health-пробы, jobs, часы.
 - **DDD** — артефакты доменов в соседнем strategy-репо; маппинг в Go —
@@ -113,7 +115,7 @@ make e2e-smoke    # только -m smoke (шаг make release)
 
 Это один из открытых шаблонов stit (Apache-2.0) — фундамент «-1 уровня»,
 берите бесплатно и владейте. Карта всех шаблонов и точка входа —
-**[витрина stit](https://git.stit.tech/stit-core/stit-public)**. Нужна
+**[витрина stit](https://github.com/stit-core)**. Нужна
 команда, стандарт или поддержка — **[наш подход и контакты (vision)](https://git.stit.tech/stit/vision)**.
 
 ## Лицензия
