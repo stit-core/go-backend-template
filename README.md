@@ -30,8 +30,11 @@ business-strategy-template (<org>/strategy)   ← проектирование: 
 go-backend-template (<org>/backend)  ← вы здесь   ──► stit-core/golibinfra
         │  make release → образы в registry
         ▼
-project-infra-template-compose (<org>/infra)   ← хаб проекта: план, агенты, выкатка (make bump)
+project-infra-template-compose (<org>/infra)   ← хаб: программы сквозных задач, выкатка (make bump)
 ```
+
+Репо проекта лежат папками в его корне `~/git/<org>/`, и вся работа ведётся из корня —
+[устройство корня](https://github.com/stit-core/project-infra-template-compose/blob/main/docs/reference/project-root.md).
 
 Образы уходят в container registry Gitea (`git.stit.tech`): путь `<host>/<org>/<репо>` выводится из
 `git remote get-url origin`, в коде не зашит. Конфиг и секреты — обычные env, их задаёт

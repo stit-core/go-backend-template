@@ -2,7 +2,9 @@
 
 Короткая карта для этого репо: роль, соседи, как сюда приходят агенты, что репо отдаёт и
 берёт. Канон карты и операционного флоу — `docs/reference/ecosystem.md` инфра-репо `<org>/infra`
-(форк `project-infra-template-compose`; sibling-checkout — `../infra`).
+(форк `project-infra-template-compose`; sibling-checkout — `../infra`), устройство корня проекта —
+[project-root.md](https://github.com/stit-core/project-infra-template-compose/blob/main/docs/reference/project-root.md)
+там же.
 
 ## Роль
 
@@ -18,18 +20,19 @@
                                    registry Gitea: <host>/<org>/<репо>{,-migrate}:vX.Y.Z
                                                          │ make bump SVC=<репо> TAG=vX.Y.Z
                                                          ▼
-                                   <org>/infra — хаб проекта, docker-compose на VPS
+                                   <org>/infra — runtime проекта (docker-compose на VPS) и хаб
 ```
 
 ## Соседи
 
-Шаблоны `stit-core/*` форкаются в репо клиентской орги `<org>/*`; форки одной орги лежат рядом
+Шаблоны `stit-core/*` форкаются в репо клиентской орги `<org>/*`. Проект — папка `~/git/<org>/`: в
+её корне — карта проекта `CLAUDE.md` и общие настройки сессии, в папках корня — форки орги
 sibling-checkout'ами (`../<name>`).
 
 | Форк (шаблон) | Роль |
 |---|---|
 | `<org>/strategy` (`business-strategy-template`) | design-time source of truth: бизнес, продукты, сервисы и их домены |
-| `<org>/infra` (`project-infra-template-compose`) | runtime проекта (docker-compose на VPS) и операционный хаб: общий план, рассылка агентов по сиблингам, выкатка тегов (`make bump`) |
+| `<org>/infra` (`project-infra-template-compose`) | runtime проекта (docker-compose на VPS) и хаб: программы сквозных задач, выкатка тегов (`make bump`) |
 | `<org>/backend` (`go-backend-template`) | этот репо — Go-сервис |
 | `<org>/frontend` (`spa-frontend-template`) | React SPA (кабинет, всё за логином) |
 | `<org>/site` (`seo-frontend-template`) | Astro SEO-сайт (индексируемый контент) |
@@ -40,13 +43,17 @@ sibling-checkout'ами (`../<name>`).
 
 ## Как сюда приходят агенты
 
-- **Из хаба `<org>/infra`** — обычный путь. Проект стартует в `<org>/strategy`, дальше работу ведёт
-  хаб: сквозная задача — план-программа в его `.claude/plans/`, оттуда агент уходит в `../<репо>`
-  (первый сервис орги — `../backend`) с фазой, ведёт её планом здесь (`/plan`, `parent: infra:<slug>`) и работает обвязкой этого репо (`CLAUDE.md`, скиллы, гейт `make check`). В хаб возвращаются образ в registry
-  (`/release`), INFRA-HANDOFF-блок и дифф на ревью: ревью проводит принимающая сторона, строка `Review:`
-  коммитов называет её (CLAUDE.md § Готово).
-- **Прямой заход** — тоже нормальный режим: та же обвязка. Последствия для соседей (инфра-поверхность —
-  таблица rule `infra-impact`) оформляются INFRA-HANDOFF-блоком для хаба — skill `/infra-handoff`.
+- **Из корня проекта** — обычный путь. Проект стартует в `<org>/strategy`: код начинается, когда
+  проект продуман. Работу ведёт сессия корня `~/git/<org>/` — сама или фоновым агентом в папке этого
+  репо (первый сервис орги — `backend/`). Сквозная задача — программа в `.claude/plans/` хаба: её фаза
+  приходит сюда и ведётся планом здесь (`/plan`, `parent: infra:<slug>`). Работа идёт обвязкой этого
+  репо: сначала `CLAUDE.md` через Read (с ним подхватываются правила и скиллы репо), дальше — скиллы и
+  гейт `make check`. В хаб возвращаются образ в registry (`/release`), INFRA-HANDOFF-блок и дифф на
+  ревью: ревью проводит принимающая сторона, строка `Review:` коммитов называет её
+  (CLAUDE.md § Готово).
+- **Прямой заход** (сессия в папке репо) — тоже нормальный режим: та же обвязка. Последствия для
+  соседей (инфра-поверхность — таблица rule `infra-impact`) оформляются INFRA-HANDOFF-блоком для
+  хаба — skill `/infra-handoff`.
 
 ## Что репо отдаёт
 
@@ -78,7 +85,7 @@ sibling-checkout'ами (`../<name>`).
   запросу тем же переносом (`PATHS=`, разделы `Безопасность` и `Платформа` аннотации). Версия обвязки
   форка — `.template/version`, новые — теги шаблона `template/vX.Y.Z` у remote `template` (его заводит
   финал `/init-service`); новый тег называет `make doctor`, перенос — `make template-update` (skill
-  `/upgrade`). Периодический `/upgrade` по сервисам проекта — зона хаба.
+  `/upgrade`). Периодический `/upgrade` по сервисам проекта — программа хаба.
 - **Конфиг и секреты — из окружения контейнера.** В проде их задаёт `<org>/infra`: `.env` на VPS по
   контракту его `.env.example`, интерполяция в compose `environment:`. Схема ключей — артефакт
   `docs/stack/config.md`; значения в этот репо не попадают.

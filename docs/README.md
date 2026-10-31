@@ -12,7 +12,7 @@
 - [reference/architecture.md](reference/architecture.md) — слои домена, ports/adapters, fx, контракт ошибок API, outbox, non-goals, граница с golibinfra.
 - [reference/domain-mapping.md](reference/domain-mapping.md) — как DDD-артефакт (из соседнего strategy-репо) ложится в Go-код этого репо; потребляет `scaffold`.
 - [reference/release.md](reference/release.md) — релиз образов, handoff в infra, откат, версионирование.
-- [reference/ecosystem.md](reference/ecosystem.md) — роль репо и соседи, как сюда приходят агенты (из хаба `<org>/infra` или прямым заходом), что репо отдаёт и берёт, контракт с `<org>/infra`.
+- [reference/ecosystem.md](reference/ecosystem.md) — роль репо и соседи, как сюда приходят агенты (из корня проекта или прямым заходом), что репо отдаёт и берёт, контракт с `<org>/infra`.
 
 ## Design source-of-truth
 - **Домены** — в соседнем strategy-репо орга (`../strategy`, форк `business-strategy-template`): `docs/projects/<slug>/services/<svc>/domains/`, внутри сервиса, который реализует этот репо. Проектирование — скиллом `/domain-deep-dive` там; маппинг в Go-код — [reference/domain-mapping.md](reference/domain-mapping.md).
