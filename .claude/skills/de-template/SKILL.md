@@ -1,6 +1,6 @@
 ---
 name: de-template
-description: Развернуть платформу форка go-backend-template по stable-артефактам docs/stack — module path, README, .env.example, план и handoff с чистого листа, wiring platform и cmd. Используй, когда init-service дошёл до развёртывания (стек спроектирован и stable) или юзер просит превратить форк в свой проект и убрать шаблонную мету. Домены не трогает: свои — scaffold, домены идентичности — prune init-service. Движок skill-only: и механика, и wiring — reviewable edits под этой процедурой. На каноническом репозитории шаблона не запускать — это его уничтожит.
+description: Развернуть платформу форка go-backend-template по stable-артефактам docs/stack — module path, README, .env.example, план и handoff с чистого листа, wiring platform и cmd. Используй, когда init-service дошёл до развёртывания (стек спроектирован и stable) или юзер просит превратить форк в свой проект и убрать шаблонную мету. Домены не трогает (свои — scaffold, домены идентичности — prune init-service). Движок skill-only — и механика, и wiring идут reviewable-правками под этой процедурой. На каноническом репозитории шаблона не запускать — это его уничтожит.
 ---
 
 # Skill: de-template (движок развёртывания)

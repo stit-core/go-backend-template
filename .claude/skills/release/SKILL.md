@@ -1,6 +1,6 @@
 ---
 name: release
-description: Выпустить версию бэкенда одной командой — `make release VERSION=vX.Y.Z`: annotated tag, образы api+migrate одним тегом в registry, агрегированный INFRA-HANDOFF для хаба `<org>/infra`, затем STOP (выкатка — `make bump` в infra). Используй, когда юзер просит релиз, новый тег или образ в registry.
+description: Выпустить версию бэкенда одной командой `make release VERSION=vX.Y.Z` — annotated tag, образы api+migrate одним тегом в registry, агрегированный INFRA-HANDOFF для хаба `<org>/infra`, затем STOP (выкатка — `make bump` в infra). Используй, когда юзер просит релиз, новый тег или образ в registry.
 ---
 
 # Skill: release

@@ -1,6 +1,6 @@
 ---
 name: triage-failure
-description: Разбор падения — красный тест, lint, build, drift sqlc/моков, panic или stack trace: найти корневую причину и закрепить её тестом (багфикс — строго RED→GREEN). smartdev чейнит сюда на ATTENTION; любой багфикс идёт сюда, а не в plan. Используй, когда что-то упало или юзер приносит ошибку, трейс или баг.
+description: Разбор падения (красный тест, lint, build, drift sqlc/моков, panic или stack trace) — найти корневую причину и закрепить её тестом (багфикс — строго RED→GREEN). smartdev чейнит сюда на ATTENTION; любой багфикс идёт сюда, а не в plan. Используй, когда что-то упало или юзер приносит ошибку, трейс или баг.
 ---
 
 # Skill: triage-failure
