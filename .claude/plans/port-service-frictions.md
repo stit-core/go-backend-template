@@ -36,8 +36,9 @@ blocked-by: —
 - [x] **AC2** — отказ pre-push по сообщению коммита называет ветку шаблона (`git fetch --no-tags template main`), этап 0
   `/init-service` — ветку и теги `template/*` форка со слитой историей. Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS; этап 0 SKILL.md
   - Подтверждено: `TestPrePushGatesPushedCommit` → PASS; этап 0 — remote, ветка и теги; этап 5 ссылается на него
-- [ ] **AC3** — проза о DLQ верна поведению natskit (без `NATS_JS_DLQ_SUBJECT` — Term и «jetstream message dead»), тесты
+- [x] **AC3** — проза о DLQ верна поведению natskit (без `NATS_JS_DLQ_SUBJECT` — Term и «jetstream message dead»), тесты
   с горутинами и временем — строкой rule `tests-pipeline`. Проверка: `git grep -n 'MAX_DELIVER.→DLQ'` → пусто
+  - Подтверждено: `git grep` → пусто (rule, architecture, domain-mapping, шаблон messaging, накопитель handoff)
 - [ ] **AC4** — подсказки домена — в references `/scaffold`, в правилах не больше строки на правило. Проверка: ручная —
   endpoint, field, migration, job, event references; `git diff template/v1.3.0 -- .claude/rules/` — по строке
 - [ ] **AC5** — онбординг: гейт этапа по коду выхода, скоуп `SECURITY.md` — после своих доменов, пути strategy в
@@ -68,8 +69,10 @@ blocked-by: —
   - Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS · Закрывает: AC2
   - Сделано: подсказка — `git fetch --no-tags template main`; суд тегов при push в пустой remote не тронут; PASS;
     Review: принимает сессия корня — дифф отдан, ревью не проводилось
-- [ ] **S3** — T3+T5: DLQ и повтор подписчика в прозе; строка о тестах с горутинами и временем
+- [x] **S3** — T3+T5: DLQ и повтор подписчика в прозе; строка о тестах с горутинами и временем
   - Проверка: `go test ./internal/archtest -run 'TestProse|TestRule'` → PASS · Закрывает: AC3
+  - Сделано: natskit сверен (`NATS_JS_DLQ_SUBJECT` по умолчанию пуст, Term после всех доставок); строка rule
+    `tests-pipeline` § Структура и стиль; PASS
 - [ ] **S4** — T4: подсказки домена в references `/scaffold`, по строке в `sqlc-and-migrations` и `domain-architecture`
   - Проверка: `go test ./internal/archtest -run TestProse` → PASS · Закрывает: AC4
 - [ ] **S5** — T6: онбординг — код выхода гейта, скоуп `SECURITY.md`, пути strategy в README
@@ -104,4 +107,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S2 (T1, T2) закрыты; следующий шаг — S3 (T3+T5).
+S1–S3 (T1, T2, T3+T5) закрыты; следующий шаг — S4 (T4).

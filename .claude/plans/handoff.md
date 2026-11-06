@@ -102,7 +102,8 @@ RISK   без HTTP_TRUST_PROXY_HOPS за прокси у всех клиенто
 WHAT   поведение golibinfra v1.3.0 без новых обязательных env: OUTBOX_MAX_ATTEMPTS default 25 (0 —
        ошибка старта, -1 — без предела), событие после 25 неудачных публикаций — dead (ERROR
        `outboxkit: event dead`); ретраи консьюмеров JetStream — NAK от NATS_JS_NAK_BACKOFF вдвое до
-       NATS_JS_NAK_MAX_BACKOFF (default 1m), NATS_JS_MAX_DELIVER default 21: ≈15 минут, затем DLQ
+       NATS_JS_NAK_MAX_BACKOFF (default 1m), NATS_JS_MAX_DELIVER default 21: ≈15 минут, затем Term — событие
+       снято с доставки, ERROR `jetstream message dead` (копия в DLQ — только с NATS_JS_DLQ_SUBJECT)
 WHY    fix-reference-code S9 — bump golibinfra v1.3.0
 ACTION убрать OUTBOX_MAX_ATTEMPTS=0 из compose, если задан; алерты на ERROR `outboxkit: event dead` и
        `jetstream message dead`
@@ -302,7 +303,8 @@ ACTION образ migrate (`migrate up`) до замены api; внешних �
 WHO    проект + потребители событий
 DECIDE —
 RISK   api этого релиза без колонки sent_at — подписчик сброса падает на записи, письмо ждёт повтора доставки;
-       сбой Mailer'а — повтор до NATS_JS_MAX_DELIVER, затем DLQ: письмо уходит позже, а не теряется молча;
+       сбой Mailer'а — повтор до NATS_JS_MAX_DELIVER: письмо уходит позже; после всех доставок событие снято с
+       доставки — ERROR `jetstream message dead`, не молча;
        откат на релиз до .v3 теряет запросы сброса, которые подписчик не дочитал (прежний api .v3 не читает) —
        их авторы запрашивают сброс снова; событие пишется на каждый запрос, и на адрес без учётной записи, —
        стрим verification растёт с анонимным трафиком: его держат лимиты /api/auth/* и NATS_JS_MAX_AGE

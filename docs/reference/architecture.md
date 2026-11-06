@@ -384,7 +384,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   Внешний эффект не теряется: схема помнит, выполнен ли он (`sent_at`), повтор выполненный
   пропускает, невыполненный повторяет; ключ — событие или состояние агрегата, и запись с завершённым
   жизненным циклом повтор эффекта не открывает — канон `verification.IssueEmailVerification`. Poison у
-  consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
+  consumer'а — `NATS_JS_MAX_DELIVER` доставок, затем Term и ERROR «jetstream message dead» (natskit; копия в DLQ —
+  только с `NATS_JS_DLQ_SUBJECT`); ожидаемый повтор пишет ERROR «jetstream handler error» на каждую доставку.
 - **Jobs.** Периодические задачи без события-триггера — `timerkit.Job`, регистрируются
   `timerkit.ProvideJob` в модуле-владельце и гоняются `timerkit.Module` той же fx.Lifecycle; тело job'а — метод
   usecase с тестом. Образец — `verification.purge_links` (`verification/module/module.go`, `Usecase.PurgeLinks`).

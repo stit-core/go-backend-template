@@ -32,8 +32,8 @@ Strategy-репо у проекта нет — вход домена тот же
 | Trigger `topic:<topic>` | подписчик `delivery/nats/` модуля-владельца, `fx.Invoke(Register)` (rule `events-and-messaging`) |
 | Trigger schedule | джоб `timerkit.ProvideJob` в `module/module.go` владельца; интервал — env (runtime) |
 | Handles | вызовы методов `Usecase` из обработчика |
-| Semantics: idempotency, retry, ordering | идемпотентность — схема потребителя (unique-индекс, `ON CONFLICT`); повтор и DLQ — natskit (`NATS_JS_MAX_DELIVER`), порядок — § Events |
-| On failure | DLQ JetStream / dead outbox — сигнал в лог `ERROR` |
+| Semantics: idempotency, retry, ordering | идемпотентность — схема потребителя (unique-индекс, `ON CONFLICT`); повтор и снятие с доставки — natskit (`NATS_JS_MAX_DELIVER`, копия в DLQ — с `NATS_JS_DLQ_SUBJECT`), порядок — § Events |
+| On failure | событие снято с доставки (Term) / dead outbox — сигнал в лог `ERROR` |
 
 ## Integration client
 

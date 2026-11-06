@@ -18,8 +18,8 @@ status: draft
 ## Delivery semantics
 <at-least-once (JetStream PubAck + дедуп по `Nats-Msg-Id`), idempotency-стратегия, ordering
 (per-domain outbox-drain; `OUTBOX_PUBLISH_MODE` batch|ordered), poison-handling
-(`OUTBOX_MAX_ATTEMPTS`→dead; consumer `NATS_JS_MAX_DELIVER`→DLQ), versioning subject'ов при
-breaking-changes.>
+(`OUTBOX_MAX_ATTEMPTS`→dead; consumer `NATS_JS_MAX_DELIVER`→Term, копия в DLQ — с `NATS_JS_DLQ_SUBJECT`), versioning
+subject'ов при breaking-changes.>
 
 ## Generates
 <Что de-template родит:

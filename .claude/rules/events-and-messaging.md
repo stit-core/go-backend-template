@@ -68,7 +68,9 @@ paths:
   `verification.IssuePasswordReset`: письмо запроса сброса шлёт подписчик своего события, ссылка — под
   id запроса из payload; эффект, время которого выдало бы данные, — в подписчике, не в запросе.
   Redelivery (сбой эффекта, повтор после успеха и после погашения) покрыт юнит-тестом (rule `tests-pipeline`).
-  Poison consumer'а — `NATS_JS_MAX_DELIVER`→DLQ/Term (natskit).
+  Poison consumer'а — `NATS_JS_MAX_DELIVER` доставок, затем Term и ERROR «jetstream message dead» (копия в DLQ — только
+  с `NATS_JS_DLQ_SUBJECT`, его платформа не задаёт); ожидаемый повтор (событие раньше записи, которую ждёт) — тоже
+  ошибка обработчика: ERROR «jetstream handler error» на каждую доставку, тревога — по «jetstream message dead».
 - Subscriber — быстрый. Тяжёлое (PDF, batch на 1M) → отдельный job/usecase.
 
 ## Background jobs (timerkit)
