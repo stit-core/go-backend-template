@@ -559,13 +559,15 @@ func runIn(t *testing.T, dir, name string, args ...string) (string, error) {
 	return runEnv(t, dir, nil, name, args...)
 }
 
-// runEnv — runIn с env поверх окружения; переменные make вызывающего не доходят: тест идёт и внутри make check.
+// runEnv — runIn с env поверх окружения; переменные make и аргументы Makefile вызывающего не доходят: тест идёт и
+// внутри make check.
 func runEnv(t *testing.T, dir string, env []string, name string, args ...string) (string, error) {
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), name, args...)
 	cmd.Dir = dir
 	for _, kv := range os.Environ() {
-		if key, _, _ := strings.Cut(kv, "="); !strings.HasPrefix(key, "GIT_") && !strings.HasPrefix(key, "MAKE") && key != "MFLAGS" && key != "GNUMAKEFLAGS" {
+		if key, _, _ := strings.Cut(kv, "="); !strings.HasPrefix(key, "GIT_") && !strings.HasPrefix(key, "MAKE") && key != "MFLAGS" &&
+			key != "GNUMAKEFLAGS" && !slices.Contains(makeArgs, key) {
 			cmd.Env = append(cmd.Env, kv)
 		}
 	}

@@ -45,7 +45,8 @@
 //   - make_test.go — TestMakeCheckCannotBeForged, TestCheckCoversItsOwnRun, TestPrePushGatesPushedCommit,
 //     TestGateStepsIgnoreShellEnvironment, TestHooksIgnoreCallerEnvironment (самозащита make check и pre-push от
 //     флагов, переменных и окружения вызывающего, секреты и сообщения пушимых коммитов), TestPreCommitChecksIndex
-//     (pre-commit судит индекс), TestReleaseGateIgnoresGNUmakefile,
+//     (pre-commit судит индекс), TestCallerEnvDropsMakeArgs (аргументы Makefile вызывающего до make временных репо
+//     тестов не доходят), TestReleaseGateIgnoresGNUmakefile,
 //     TestReleaseStopsWithoutModuleAccess, TestReleasePreflight, TestReleaseBuildForwardsSSHAgent (релиз);
 //   - steps_test.go — TestCoverCheck, TestLintUsesItsConfig, TestGenCheckComparesMocksWithTree,
 //     TestFmtAppliesLintRules, TestMigrationsCheck, TestToolVersions, TestGenBuildsFirst (шаги гейта, версии

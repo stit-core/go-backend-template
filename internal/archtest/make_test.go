@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -12,18 +13,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// makeArgs — переменные, которые Makefile берёт у вызывающего: make test PKG=… отдаёт их и тесту окружением.
+var makeArgs = []string{"A", "FORMAT", "FROM", "NAME", "P", "PATHS", "PKG", "Q", "TO", "VERBOSE", "VERSION"}
+
 // callerEnv — окружение теста без переменных make и git вызывающего (тест идёт и внутри make check, а тот —
-// в хуке git) и без PATH, с конфигом git без глобального и системного; extra — поверх.
+// в хуке git), без аргументов Makefile и PATH, с конфигом git без глобального и системного; extra — поверх.
 func callerEnv(extra ...string) []string {
 	var env []string
 	for _, kv := range os.Environ() {
 		key, _, _ := strings.Cut(kv, "=")
-		if !strings.HasPrefix(key, "MAKE") && !strings.HasPrefix(key, "GIT_") && key != "MFLAGS" && key != "GNUMAKEFLAGS" && key != "PATH" {
+		if !strings.HasPrefix(key, "MAKE") && !strings.HasPrefix(key, "GIT_") && key != "MFLAGS" && key != "GNUMAKEFLAGS" &&
+			key != "PATH" && !slices.Contains(makeArgs, key) {
 			env = append(env, kv)
 		}
 	}
 	env = append(env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
 	return append(env, extra...)
+}
+
+// TestCallerEnvDropsMakeArgs: переменные интерфейса Makefile, которые он берёт у вызывающего (PKG, FORMAT, A, …), до
+// make во временном репо теста не доходят — make test PKG=… передаёт их тесту окружением, и шаг гейта в его репо
+// читал бы чужой PKG. Своя у Makefile — заданная «=», «:=» или «+=»; «?=» вызывающий перекрывает. Без t.Parallel:
+// t.Setenv.
+func TestCallerEnvDropsMakeArgs(t *testing.T) {
+	mk, err := os.ReadFile(filepath.Join(repoRoot(t), "Makefile"))
+	require.NoError(t, err)
+	defined := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^(?:override\s+)?([A-Z][A-Z0-9_]*)\s*[:+]?=`).FindAllSubmatch(mk, -1) {
+		defined[string(m[1])] = true
+	}
+	var args []string
+	for _, m := range regexp.MustCompile(`\$\(([A-Z][A-Z0-9_]*)\)`).FindAllSubmatch(mk, -1) {
+		if name := string(m[1]); !defined[name] && !strings.HasPrefix(name, "MAKE") && !slices.Contains(args, name) {
+			args = append(args, name)
+		}
+	}
+	require.Contains(t, args, "PKG", "the Makefile takes PKG from the caller")
+	for _, name := range args {
+		t.Setenv(name, "./caller/...")
+	}
+	for _, kv := range callerEnv() {
+		key, _, _ := strings.Cut(kv, "=")
+		require.NotContains(t, args, key, "callerEnv passes the caller's make argument %s", key)
+	}
 }
 
 // stubTools — каталог для PATH: названные инструменты — false, а go отвечает только на go env (по нему
@@ -584,7 +616,8 @@ func (s releaseSandbox) release(t *testing.T, env ...string) (string, error) {
 	cmd.Dir = s.repo
 	for _, kv := range os.Environ() {
 		key, _, _ := strings.Cut(kv, "=")
-		if !strings.HasPrefix(key, "GIT_") && !strings.HasPrefix(key, "MAKE") && key != "MFLAGS" && key != "GNUMAKEFLAGS" && key != "PATH" {
+		if !strings.HasPrefix(key, "GIT_") && !strings.HasPrefix(key, "MAKE") && key != "MFLAGS" && key != "GNUMAKEFLAGS" && key != "PATH" &&
+			!slices.Contains(makeArgs, key) {
 			cmd.Env = append(cmd.Env, kv)
 		}
 	}
