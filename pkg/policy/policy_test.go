@@ -14,6 +14,13 @@ func TestForbiddenError(t *testing.T) {
 	require.EqualError(t, &policy.ForbiddenError{Reason: "admin only"}, "forbidden: admin only")
 }
 
+// Решение policy: разрешение без причины, отказ — с причиной для лога, а не для клиента.
+func TestDecision(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, policy.Decision{IsAllowed: true}, policy.Allow())
+	require.Equal(t, policy.Decision{Reason: "admin only"}, policy.Deny("admin only"))
+}
+
 func TestPasswordStrong(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

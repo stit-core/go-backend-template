@@ -46,7 +46,10 @@ blocked-by: —
 - [x] **AC5** — онбординг: гейт этапа по коду выхода, скоуп `SECURITY.md` — после своих доменов, пути strategy в
   README — `../strategy/…`. Проверка: ручная — `init-service` и `de-template` A.2
   - Подтверждено: `init-service` § Этапы, этапы 2–3; `de-template` A.2
-- [ ] **AC6** — без доменов идентичности мутации K10, K11, M29*, OC1 убивают тесты платформы. Проверка: `make mutate A="K10 K11 M29 OC1 …"` на копии после prune → убиты
+- [x] **AC6** — без доменов идентичности мутации K10, K11, M29*, OC1 убивают тесты платформы. Проверка: `make mutate A="K10 K11 M29 OC1 …"` на копии после prune → убиты
+  - Подтверждено: каждая мутация в отдельном worktree против одних тестов платформы (`-run` без тестов идентичности):
+    OC1 — `TestResult_String`, P08 — `TestDecision`, K11 — `TestFxGraphProvidesDomainDeps`, K10 — `TestBoot_Jobs`,
+    M29–M29h4 — `TestBoot_RateLimitKey` → убиты
 - [ ] **AC7** — проверки небезопасных настроек — группа `config.ProvideUnsafe`, проверки шаблона — в `config.Module`.
   Проверка: `make test PKG=./internal/platform/config/...` → PASS; `make mutate A="C01 … C14"` → убиты
 - [ ] **AC8** — archtest пускает таблицу-литерал из констант и тип вне провода без префикса, отказывает правке таблицы
@@ -85,9 +88,11 @@ blocked-by: —
   - Сделано: гейт этапа — `make check > .cache/check.log 2>&1; echo rc=$?`; скоуп `SECURITY.md` — этап 3; пути
     strategy — `../strategy/…` (de-template A.2); `TestProseReferencesExist` → PASS
 ### Код платформы и archtest
-- [ ] **S6** — T7: тесты платформы без доменов идентичности (`TestBoot_Jobs`, `TestFxGraphProvidesDomainDeps`,
+- [x] **S6** — T7: тесты платформы без доменов идентичности (`TestBoot_Jobs`, `TestFxGraphProvidesDomainDeps`,
   `TestBoot_RateLimitKey`, задача outbox на источник, имена исходов, `TestDecision`)
   - Проверка: `make test-int PKG=./cmd/api/...` → PASS; `make mutate A=…` → убиты · Закрывает: AC6
+  - Сделано: `forwardedChain` — из `identity_test.go` в `boot_test.go` (prune удаляет первый); описания K10 и M29 —
+    по новым убийцам; integration `cmd/api` → PASS; Review: принимает сессия корня — дифф отдан, ревью не проводилось
 - [ ] **S7** — T10: группа `config.ProvideUnsafe`, проверки Cookie, Log, Docs, JWT — в `config.Module`
   - Проверка: `make test PKG=./internal/platform/config/...` → PASS; `make mutate A="C01 …"` → убиты · Закрывает: AC7
 - [ ] **S8** — T11: таблица-литерал, тип вне провода, tzkit в `rootLibs`
@@ -114,4 +119,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S5 (T1–T6) закрыты; идёт `make check`; следующий шаг — S6 (T7).
+S1–S6 (T1–T7) закрыты, `make check` после S5 — `✓ check clean` (52 с); следующий шаг — S7 (T10).

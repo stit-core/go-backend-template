@@ -14,10 +14,15 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/fx"
 
+	"git.stit.tech/stit-core/golibinfra/clockkit"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
+	"git.stit.tech/stit-core/golibinfra/logkit"
 	"git.stit.tech/stit-core/golibinfra/natskit"
+	"git.stit.tech/stit-core/golibinfra/outboxkit"
+	"git.stit.tech/stit-core/golibinfra/pgkit"
 
 	appconfig "git.stit.tech/stit-core/go-backend-template/internal/platform/config"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/allowlist"
@@ -70,6 +75,16 @@ func TestMainLogsStartFailure(t *testing.T) {
 // обращения к pg/nats.
 func TestFxGraphValidates(t *testing.T) {
 	require.NoError(t, fx.ValidateApp(service, fx.NopLogger), "fx graph invalid")
+}
+
+// TestFxGraphProvidesDomainDeps: граф даёт доменам то, что берут их модули, — пул и транзакции Postgres, фабрику outbox,
+// шину NATS, часы, логгер и метрики доменов: у сервиса без своих доменов их никто не просит, и потеря провайдера видна
+// только здесь.
+func TestFxGraphProvidesDomainDeps(t *testing.T) {
+	t.Parallel()
+	takes := func(*pgkit.DB, pgkit.Transactor, outboxkit.RepositoryFactory, natskit.StreamBus, clockkit.Clock, logkit.Logger, metric.Meter) {
+	}
+	require.NoError(t, fx.ValidateApp(service, fx.NopLogger, fx.Invoke(takes)), "the service graph provides what domain modules take")
 }
 
 // TestFxGraphHasNoContext: компонент графа живёт дольше любого ctx — свой ctx он получает от хука

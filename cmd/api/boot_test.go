@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -144,6 +146,12 @@ func TestBoot(t *testing.T) {
 		}, fx.ParamTags(`group:"`+timerkit.JobsGroup+`"`))))
 	app.RequireStart()
 	require.Contains(t, jobs, "auditkit.retention", "the service keeps audit_log for a term, not forever")
+	// Outbox домена-публикатора в cmd/migrate — и дренаж outbox в графе: без него события остаются в таблице.
+	for _, src := range sources.Kits {
+		if name, ok := strings.CutPrefix(src.Name, "outbox_"); ok {
+			require.Contains(t, jobs, "outboxkit.publisher."+name, "the outbox %s publishes its events", src.Name)
+		}
+	}
 	require.Equal(t, stopTimeout, app.StopTimeout(), "the stop hooks get the budget checkStopBudget checks the env against, not the fx default")
 	require.Same(t, telemetryMP, otel.GetMeterProvider(),
 		"telemetry.Module sets its meter provider as the global one: without it every metric of the kits is a no-op")
@@ -282,6 +290,61 @@ func TestBoot_AuthRateLimit(t *testing.T) {
 	require.NotEqual(t, http.StatusTooManyRequests, status, "another client has its own bucket: %s", code)
 	status, code, _ = from(http.MethodGet, "/health", "198.51.100.1")
 	require.Equal(t, http.StatusOK, status, "a path outside /api/auth/ is not limited: %s", code)
+}
+
+// Задача домена (timerkit.ProvideJob в модуле-владельце) идёт на графе main: её гоняет timerkit.Module сервиса, а не
+// модуль домена.
+func TestBoot_Jobs(t *testing.T) {
+	serviceEnv(t)
+	var ran atomic.Bool
+	app := fxtest.New(t, service, timerkit.ProvideJob(func() timerkit.Job {
+		return timerkit.Job{Name: "probe.job", Interval: time.Hour, RunOnStart: true, Run: func(context.Context) error {
+			ran.Store(true)
+			return nil
+		}}
+	}))
+	app.RequireStart()
+	defer app.RequireStop()
+	require.Eventually(t, ran.Load, 10*time.Second, 10*time.Millisecond, "the job of a domain module runs on the service graph")
+}
+
+// Ключ лимита клиента httpkit — адрес соединения: без HTTP_TRUST_PROXY_HOPS X-Forwarded-For его не меняет, и
+// клиент, подставляющий в каждый запрос свою цепочку адресов (длиннее любого разумного числа прокси), упирается в
+// лимит, как все.
+func TestBoot_RateLimitKey(t *testing.T) {
+	serviceEnv(t)
+	t.Setenv("HTTP_RATE_LIMIT_RPS", "1")
+	t.Setenv("HTTP_RATE_LIMIT_BURST", "2")
+	var srv *httpkit.Server
+	app := fxtest.New(t, service, fx.Populate(&srv))
+	app.RequireStart()
+	defer app.RequireStop()
+	client := &http.Client{Timeout: 10 * time.Second}
+	limited := 0
+	// Запас 2 и квота в секунду: все десять запросов прошли бы, только растянувшись на восемь секунд.
+	for n := range 10 {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+srv.Addr().String()+"/health", http.NoBody)
+		require.NoError(t, err)
+		req.Header.Set("X-Forwarded-For", forwardedChain(n, 32))
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		if resp.StatusCode == http.StatusTooManyRequests {
+			limited++
+		}
+	}
+	require.Positive(t, limited, "the client limit holds whatever X-Forwarded-For says")
+}
+
+// forwardedChain — цепочка X-Forwarded-For запроса n из hops своих записей IPv4 (IPv6 одной /64 guard входа считает
+// одним адресом): при доверии к любому числу прокси до hops ключ лимита клиента и антибрутфорса менялся бы от запроса
+// к запросу.
+func forwardedChain(n, hops int) string {
+	entries := make([]string, hops)
+	for i := range entries {
+		entries[i] = fmt.Sprintf("198.18.%d.%d", n+1, i+1)
+	}
+	return strings.Join(entries, ", ")
 }
 
 // Метрики доменов — под scope app провайдера telemetry: по нему их отличают от метрик китов.

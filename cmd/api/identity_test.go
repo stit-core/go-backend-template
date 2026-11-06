@@ -291,17 +291,6 @@ func noAuthRateLimit(t *testing.T) {
 	t.Setenv("HTTP_AUTH_RATE_LIMIT_RPS", "0")
 }
 
-// forwardedChain — цепочка X-Forwarded-For запроса n из hops своих записей IPv4 (IPv6 одной /64 guard
-// считает одним адресом): при доверии к любому числу прокси до hops ключ антибрутфорса менялся бы от
-// запроса к запросу.
-func forwardedChain(n, hops int) string {
-	entries := make([]string, hops)
-	for i := range entries {
-		entries[i] = fmt.Sprintf("198.18.%d.%d", n+1, i+1)
-	}
-	return strings.Join(entries, ", ")
-}
-
 // Письма сброса в один ящик — не чаще паузы на учётную запись, с каких бы адресов ни шли запросы: лимит адреса
 // клиента её не заменяет.
 func TestIdentity_ResetMailPause(t *testing.T) {

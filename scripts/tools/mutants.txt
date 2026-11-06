@@ -2135,7 +2135,7 @@ internal/platform/identity/identity.go
 + 	id, ok := ctx.Value(ctxKey{}).(Identity)
 + 	return id, ok || id.UserID == ""
 
-## M29 cmd/api — граф: TrustProxyHops = 1 (XFF клиента — ключ антибрутфорса)
+## M29 cmd/api — граф: TrustProxyHops = 1 (XFF клиента — ключ лимита клиента и антибрутфорса)
 cmd/api/main.go
 - 	httpkit.NewConfig,
 + 	hopsConfig,
@@ -2225,7 +2225,7 @@ cmd/api/main.go
 + 	platformModules,
 + 	domainModules,
 
-## K10 cmd/api — граф без timerkit (фоновые задачи китов)
+## K10 cmd/api — граф без timerkit (задачи китов и доменов не идут)
 cmd/api/main.go
 - 	"git.stit.tech/stit-core/golibinfra/timerkit"
 cmd/api/main.go
