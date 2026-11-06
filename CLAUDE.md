@@ -91,7 +91,7 @@ mockery — закреплённые в `scripts/tools/versions.sh`: их ста
 
 ## Стиль кода (инварианты)
 
-- **gofumpt** обязателен (`make fmt`).
+- **gofumpt** обязателен (`make fmt` — и порядок тегов `tagalign`).
 - **golangci-lint** (`.golangci.yml`): логи — только `logkit.Logger`, не `fmt.Print*`/`log.*`/
   `print(ln)`/`slog.*`/`os.Stdout`/`os.Stderr` (forbidigo); errcheck (и `_ = f()`), gosec и
   остальные — по конфигу. `//nolint` — ослабление гейта (§ Границы): с именем включённого линтера

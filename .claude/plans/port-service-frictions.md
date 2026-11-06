@@ -31,7 +31,8 @@ blocked-by: —
 - Тег `template/v1.4.0`, `.template/version`, push — выпуск сессии корня.
 
 ## Критерии приёмки
-- [ ] **AC1** — `make fmt` правит порядок тегов tagalign, как требует шаг lint. Проверка: `go test ./internal/archtest -run TestFmtAppliesLintRules` → PASS
+- [x] **AC1** — `make fmt` правит порядок тегов tagalign, как требует шаг lint. Проверка: `go test ./internal/archtest -run TestFmtAppliesLintRules` → PASS
+  - Подтверждено: `go test ./internal/archtest -run TestFmtAppliesLintRules` → PASS
 - [ ] **AC2** — отказ pre-push по сообщению коммита называет ветку шаблона (`git fetch --no-tags template main`), этап 0
   `/init-service` — ветку и теги `template/*` форка со слитой историей. Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS; этап 0 SKILL.md
 - [ ] **AC3** — проза о DLQ верна поведению natskit (без `NATS_JS_DLQ_SUBJECT` — Term и «jetstream message dead»), тесты
@@ -58,8 +59,10 @@ blocked-by: —
 
 ## Шаги
 ### Обвязка и тексты
-- [ ] **S1** — T1: `make fmt` правит порядок тегов tagalign (`fmt.sh`, `Makefile`, `CLAUDE.md`, `TestFmtAppliesLintRules`)
+- [x] **S1** — T1: `make fmt` правит порядок тегов tagalign (`fmt.sh`, `Makefile`, `CLAUDE.md`, `TestFmtAppliesLintRules`)
   - Проверка: `go test ./internal/archtest -run TestFmtAppliesLintRules` → PASS · Закрывает: AC1
+  - Сделано: после gofumpt — `golangci-lint run --enable-only tagalign --fix` закреплённой версии; тест — поле с тегами
+    не по порядку; PASS; Review: принимает сессия корня — дифф отдан, ревью не проводилось
 - [ ] **S2** — T2: подсказка pre-push — ветка шаблона; этап 0 `/init-service` — форк со слитой историей
   - Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS · Закрывает: AC2
 - [ ] **S3** — T3+T5: DLQ и повтор подписчика в прозе; строка о тестах с горутинами и временем
@@ -98,4 +101,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-План заведён; следующий шаг — S1.
+S1 (T1) закрыт; следующий шаг — S2 (T2).

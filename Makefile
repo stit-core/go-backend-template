@@ -48,8 +48,9 @@ build: ## Сборка всего дерева без тегов, как обр�
 		  || { echo "$$out" | head -20; echo "FAIL: build"; exit 1; }; \
 	fi
 
-# Правила gofumpt — с -extra, как у шага lint (.golangci.yml: extra-rules): make fmt чинит всё, что требует гейт.
-fmt: ## gofumpt -extra по Go-коду репо
+# Правила gofumpt — с -extra, как у шага lint (.golangci.yml: extra-rules), и порядок тегов tagalign (golangci-lint
+# --fix): make fmt чинит всё, что требует гейт и что можно править машинно.
+fmt: ## gofumpt -extra и порядок тегов tagalign (golangci-lint --fix) по Go-коду репо
 	@bash scripts/tools/fmt.sh
 
 fmt-check: ## Проверка форматирования без мутации дерева (gate)

@@ -210,8 +210,9 @@ func TestGenCheckComparesMocksWithTree(t *testing.T) {
 	}
 }
 
-// TestFmtAppliesLintRules: lint требует правила gofumpt с extra-rules (.golangci.yml), поэтому fmt-check
-// ловит их нарушение, а make fmt его чинит — иначе отказ lint не снять ни make fmt, ни ничем, кроме //nolint.
+// TestFmtAppliesLintRules: lint требует правила gofumpt с extra-rules и порядок тегов tagalign (.golangci.yml), поэтому
+// fmt-check ловит нарушение gofumpt, а make fmt чинит и его, и порядок тегов — иначе отказ lint не снять ни make fmt,
+// ни ничем, кроме //nolint или правки руками.
 // Код репо — его файлы, отслеживаемые и новые: worktree раннера в игнорируемом .cache/ (после обрыва — с
 // правкой мутации) fmt-check не судит, а make fmt не трогает; каталога, удалённого с диска без git rm, в дереве нет.
 func TestFmtAppliesLintRules(t *testing.T) {
@@ -219,10 +220,16 @@ func TestFmtAppliesLintRules(t *testing.T) {
 	root := repoRoot(t)
 	require.Contains(t, readFiles(t, root, ".golangci.yml")[".golangci.yml"], "extra-rules: true")
 	repo := t.TempDir()
-	const unformatted = "package p\n\n// Join joins.\nfunc Join(a string, b string) string { return a + b }\n"
-	writeFiles(t, repo, union(readFiles(t, root, "Makefile", "scripts/tools/fmt.sh", "scripts/tools/versions.sh"), map[string]string{
+	const (
+		unformatted = "package p\n\n// Join joins.\nfunc Join(a string, b string) string { return a + b }\n"
+		// Теги поля не по порядку tagalign: gofumpt их не правит, make fmt — правит, как требует шаг lint.
+		tags = "package p\n\n// T — поле с тегами.\ntype T struct {\n\tName string `required:\"true\" json:\"name\"`\n}\n"
+	)
+	writeFiles(t, repo, union(readFiles(t, root, "Makefile", ".golangci.yml", "scripts/tools/fmt.sh", "scripts/tools/versions.sh"), map[string]string{
 		".gitignore":              "/.cache/\n",
+		"go.mod":                  "module example.com/fmt\n\ngo 1.26\n",
 		"p/p.go":                  unformatted,
+		"p/t.go":                  tags,
 		".cache/mutate/wt/p/p.go": unformatted,
 	}))
 	git(t, repo, "init", "-q", "-b", "main")
@@ -233,6 +240,7 @@ func TestFmtAppliesLintRules(t *testing.T) {
 	out, err = makeIn(t, repo, nil, "fmt")
 	require.NoError(t, err, out)
 	require.Contains(t, readFiles(t, repo, "p/p.go")["p/p.go"], "func Join(a, b string)", "make fmt must apply the rules lint requires")
+	require.Contains(t, readFiles(t, repo, "p/t.go")["p/t.go"], "`json:\"name\" required:\"true\"`", "make fmt must sort the tags as tagalign requires")
 	require.Equal(t, unformatted, readFiles(t, repo, ".cache/mutate/wt/p/p.go")[".cache/mutate/wt/p/p.go"], "make fmt rewrites the worktree of the mutation runner")
 	out, err = makeIn(t, repo, nil, "fmt-check")
 	require.NoError(t, err, out)
