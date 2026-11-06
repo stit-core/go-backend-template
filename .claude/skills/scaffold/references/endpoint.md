@@ -83,6 +83,14 @@ type UserNewMethodOutput struct {
 `http.Cookie` (иначе в контракт уходит её структура). Список — встрой `paging.Page` (`pkg/paging`): query `page`
 и `size` с общими дефолтом и пределом.
 
+Массив в query huma читает через запятую (`?id=a,b`), повторный `?id=` теряется; повторяемый параметр — тег
+`query:"id,explode"`. Поле тела без `omitempty` в json-теге huma считает обязательным (`required` схемы):
+необязательное — с `omitempty`. ID из запроса, который домен хранит или отдаёт соседям, — канонический UUID:
+`format:"uuid"` huma пропускает URN, скобки и верхний регистр, каноническую форму проверяет `idkit.Validate` в usecase
+(чистые слои кит не видят), отказ — sentinel поля: 422 с `Field`. Предел тела: хук httpkit `OnAddOperation` ставит
+каждой операции `HTTP_MAX_BODY_BYTES` поверх литерала `MaxBodyBytes` — поднять предел операции может только хук
+`httpkit.HumaConfigs` графа `cmd/api` (его `OnAddOperation` идёт после хука кита): `MaxBodyBytes` по `OperationID`.
+
 ### 5. Handler-метод в `handler.go`
 
 ```go

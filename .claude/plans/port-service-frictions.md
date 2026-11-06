@@ -39,8 +39,10 @@ blocked-by: —
 - [x] **AC3** — проза о DLQ верна поведению natskit (без `NATS_JS_DLQ_SUBJECT` — Term и «jetstream message dead»), тесты
   с горутинами и временем — строкой rule `tests-pipeline`. Проверка: `git grep -n 'MAX_DELIVER.→DLQ'` → пусто
   - Подтверждено: `git grep` → пусто (rule, architecture, domain-mapping, шаблон messaging, накопитель handoff)
-- [ ] **AC4** — подсказки домена — в references `/scaffold`, в правилах не больше строки на правило. Проверка: ручная —
+- [x] **AC4** — подсказки домена — в references `/scaffold`, в правилах не больше строки на правило. Проверка: ручная —
   endpoint, field, migration, job, event references; `git diff template/v1.3.0 -- .claude/rules/` — по строке
+  - Подтверждено: endpoint (query explode, omitempty, UUID, предел тела), migration (jsonb, nil-срез), job (имя,
+    справочник выкатки), event (обратная запись схемы); rules — по строке в `sqlc-and-migrations` и `domain-architecture`
 - [ ] **AC5** — онбординг: гейт этапа по коду выхода, скоуп `SECURITY.md` — после своих доменов, пути strategy в
   README — `../strategy/…`. Проверка: ручная — `init-service` и `de-template` A.2
 - [ ] **AC6** — без доменов идентичности мутации K10, K11, M29*, OC1 убивают тесты платформы. Проверка: `make mutate A="K10 K11 M29 OC1 …"` на копии после prune → убиты
@@ -73,8 +75,10 @@ blocked-by: —
   - Проверка: `go test ./internal/archtest -run 'TestProse|TestRule'` → PASS · Закрывает: AC3
   - Сделано: natskit сверен (`NATS_JS_DLQ_SUBJECT` по умолчанию пуст, Term после всех доставок); строка rule
     `tests-pipeline` § Структура и стиль; PASS
-- [ ] **S4** — T4: подсказки домена в references `/scaffold`, по строке в `sqlc-and-migrations` и `domain-architecture`
+- [x] **S4** — T4: подсказки домена в references `/scaffold`, по строке в `sqlc-and-migrations` и `domain-architecture`
   - Проверка: `go test ./internal/archtest -run TestProse` → PASS · Закрывает: AC4
+  - Сделано: UUID — `idkit.Validate` в usecase, отказ 422 с `Field`; предел тела — хук `HumaConfigs` (httpkit v1.7.0
+    сверен: хук кита ставит `HTTP_MAX_BODY_BYTES` каждой операции); образец справочника — нейтральный; PASS
 - [ ] **S5** — T6: онбординг — код выхода гейта, скоуп `SECURITY.md`, пути strategy в README
   - Проверка: `go test ./internal/archtest -run TestProse` → PASS; `make check` → `✓ check clean` · Закрывает: AC5
 ### Код платформы и archtest
@@ -107,4 +111,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S3 (T1, T2, T3+T5) закрыты; следующий шаг — S4 (T4).
+S1–S4 (T1–T5) закрыты; следующий шаг — S5 (T6).

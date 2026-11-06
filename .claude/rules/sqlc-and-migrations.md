@@ -71,6 +71,7 @@ paths:
   Канон — `MarkEmailVerificationUsed` домена `verification`; своя ссылка с соседними — одним оператором
   `… WHERE user_id = $1 AND used_at IS NULL RETURNING id` (`RedeemPasswordReset`): два оператора берут
   блокировки строк в разном порядке, и два погашения ждут друг друга по кругу.
+- `jsonb` дочерних сущностей — своя форма колонки в `infra/postgres`; nil-срез pgx пишет как NULL (skill `scaffold`).
 - **Kit-таблицы** (`outbox_<domain>`/`audit_log`/`bruteforce_attempts`/`authn_sessions`) схему держат
   `golibinfra/{outboxkit,auditkit,bruteforcekit,authnkit/session}/pgstore` (`Migrations`,
   `TableMigrations(table)`), `cmd/migrate` накатывает рядом — таблица версий у каждого
