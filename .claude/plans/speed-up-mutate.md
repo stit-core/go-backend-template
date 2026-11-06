@@ -42,7 +42,8 @@ blocked-by: —
 - [x] **AC3** — `make test PKG=./internal/archtest/...` → PASS: аргументы Makefile вызывающего до временных репо
   тестов не доходят. Проверка: `TestCallerEnvDropsMakeArgs` → PASS, `make test PKG=./internal/archtest/...` → PASS
   - Подтверждено: `TestCallerEnvDropsMakeArgs` — PASS; `make test PKG=./internal/archtest/...` — PASS
-- [ ] **AC4** — golibinfra `v1.7.0`. Проверка: `grep golibinfra go.mod` → `v1.7.0`
+- [x] **AC4** — golibinfra `v1.7.0`. Проверка: `grep golibinfra go.mod` → `v1.7.0`
+  - Подтверждено: `go.mod` — `git.stit.tech/stit-core/golibinfra v1.7.0`
 - [ ] **AC5** — Выпуск `template/v1.3.0`: аннотация по `docs/contributing.md` § Версия обвязки, тег в origin и
   github. Проверка: `git ls-remote origin refs/tags/template/v1.3.0` → тег
 
@@ -51,8 +52,10 @@ blocked-by: —
   - Проверка: `TestCallerEnvDropsMakeArgs` → PASS (до фикса — FAIL) · Закрывает: AC3
   - Сделано: `makeArgs` — аргументы Makefile, которые он берёт у вызывающего; их снимают `callerEnv`, `runEnv` и
     песочница релиза; `TestCallerEnvDropsMakeArgs` (перечень — из самого Makefile) — до фикса FAIL, после — PASS
-- [ ] **S2** — golibinfra `v1.7.0`
+- [x] **S2** — golibinfra `v1.7.0`
   - Проверка: `make check` → `✓ check clean` · Закрывает: AC4
+  - Сделано: golibinfra `v1.6.0` → `v1.7.0` (общий режим testkit, образ MinIO — Silo, ожидание потока natskit,
+    compress v1.20.2); в граф тестов — minio-go и nats.go через testkit; `make check` — `✓ check clean`
 - [ ] **S3** — Раннер мутаций: стадии, сборка, серверы на прогон, исполнители, ключ результата, снимок; находки ревью;
   правило, скиллы, Makefile, шапка спецификации, `.dockerignore`
   - Проверка: `go test -run TestMutate ./internal/archtest/` → PASS · Закрывает: AC1 · Зависит от: S2
@@ -76,4 +79,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1 закрыт; дальше — S2 (golibinfra `v1.7.0`), S3 (раннер и находки ревью), S4 (строгий прогон), S5 (гейт и выпуск).
+S1–S2 закрыты; дальше — S3 (раннер и находки ревью), S4 (строгий прогон), S5 (гейт и выпуск).
