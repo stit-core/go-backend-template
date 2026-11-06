@@ -29,6 +29,9 @@ description: Оркестратор онбординга форка go-backend-t
 
 ## Этапы
 
+Гейт этапа — по коду выхода самого `make check`: `make check > .cache/check.log 2>&1; echo rc=$?` (`make check |
+tail` отдаёт код `tail` и прячет красный гейт); коммит этапа — только при `rc=0`.
+
 ### 0. Pre-flight
 
 - Не канонический шаблон: `git config --get remote.origin.url` — не `stit-core/go-backend-template` (иначе СТОП:
@@ -62,7 +65,8 @@ description: Оркестратор онбординга форка go-backend-t
 ### 2. Платформа → `de-template`
 
 - **Чейнь в `de-template`**: module path, README, `.env.example`, планы с чистого листа, wiring
-  `internal/platform/*` и `cmd/api` по секциям `Generates`. Домены он не трогает.
+  `internal/platform/*` и `cmd/api` по секциям `Generates`. Домены он не трогает: скоуп `SECURITY.md` с путями своих
+  доменов — на этапе 3, когда они есть.
 - Gate: `make check` зелёный.
 
 ### 3. Свои домены — по таблице «Маршрут задачи»
@@ -70,8 +74,9 @@ description: Оркестратор онбординга форка go-backend-t
 Каждый домен сервиса — в Go-код по таблице «Маршрут задачи» (CLAUDE.md): `scaffold` (вариант domain)
 читает stable-артефакт `<strategy-path>/docs/projects/<slug>/services/<svc>/domains/<ctx>/` (маппинг
 секций → код — `docs/reference/domain-mapping.md`); без strategy — контракт домена (сущность, операции,
-права, события) от юзера одним блоком, юзер подтверждает. Gate: свой домен подключён, `make check`
-зелёный.
+права, события) от юзера одним блоком, юзер подтверждает. Домены на месте — скоуп `SECURITY.md`: их права
+(`policy.go`) и данные, которые они держат (путь, которого ещё нет, `TestProseReferencesExist` не пускает). Gate:
+свой домен подключён, `make check` зелёный.
 
 ### 4. Домены идентичности
 

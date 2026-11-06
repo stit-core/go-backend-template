@@ -43,8 +43,9 @@ blocked-by: —
   endpoint, field, migration, job, event references; `git diff template/v1.3.0 -- .claude/rules/` — по строке
   - Подтверждено: endpoint (query explode, omitempty, UUID, предел тела), migration (jsonb, nil-срез), job (имя,
     справочник выкатки), event (обратная запись схемы); rules — по строке в `sqlc-and-migrations` и `domain-architecture`
-- [ ] **AC5** — онбординг: гейт этапа по коду выхода, скоуп `SECURITY.md` — после своих доменов, пути strategy в
+- [x] **AC5** — онбординг: гейт этапа по коду выхода, скоуп `SECURITY.md` — после своих доменов, пути strategy в
   README — `../strategy/…`. Проверка: ручная — `init-service` и `de-template` A.2
+  - Подтверждено: `init-service` § Этапы, этапы 2–3; `de-template` A.2
 - [ ] **AC6** — без доменов идентичности мутации K10, K11, M29*, OC1 убивают тесты платформы. Проверка: `make mutate A="K10 K11 M29 OC1 …"` на копии после prune → убиты
 - [ ] **AC7** — проверки небезопасных настроек — группа `config.ProvideUnsafe`, проверки шаблона — в `config.Module`.
   Проверка: `make test PKG=./internal/platform/config/...` → PASS; `make mutate A="C01 … C14"` → убиты
@@ -79,8 +80,10 @@ blocked-by: —
   - Проверка: `go test ./internal/archtest -run TestProse` → PASS · Закрывает: AC4
   - Сделано: UUID — `idkit.Validate` в usecase, отказ 422 с `Field`; предел тела — хук `HumaConfigs` (httpkit v1.7.0
     сверен: хук кита ставит `HTTP_MAX_BODY_BYTES` каждой операции); образец справочника — нейтральный; PASS
-- [ ] **S5** — T6: онбординг — код выхода гейта, скоуп `SECURITY.md`, пути strategy в README
+- [x] **S5** — T6: онбординг — код выхода гейта, скоуп `SECURITY.md`, пути strategy в README
   - Проверка: `go test ./internal/archtest -run TestProse` → PASS; `make check` → `✓ check clean` · Закрывает: AC5
+  - Сделано: гейт этапа — `make check > .cache/check.log 2>&1; echo rc=$?`; скоуп `SECURITY.md` — этап 3; пути
+    strategy — `../strategy/…` (de-template A.2); `TestProseReferencesExist` → PASS
 ### Код платформы и archtest
 - [ ] **S6** — T7: тесты платформы без доменов идентичности (`TestBoot_Jobs`, `TestFxGraphProvidesDomainDeps`,
   `TestBoot_RateLimitKey`, задача outbox на источник, имена исходов, `TestDecision`)
@@ -111,4 +114,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S4 (T1–T5) закрыты; следующий шаг — S5 (T6).
+S1–S5 (T1–T6) закрыты; идёт `make check`; следующий шаг — S6 (T7).
