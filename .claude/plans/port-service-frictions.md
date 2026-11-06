@@ -33,8 +33,9 @@ blocked-by: —
 ## Критерии приёмки
 - [x] **AC1** — `make fmt` правит порядок тегов tagalign, как требует шаг lint. Проверка: `go test ./internal/archtest -run TestFmtAppliesLintRules` → PASS
   - Подтверждено: `go test ./internal/archtest -run TestFmtAppliesLintRules` → PASS
-- [ ] **AC2** — отказ pre-push по сообщению коммита называет ветку шаблона (`git fetch --no-tags template main`), этап 0
+- [x] **AC2** — отказ pre-push по сообщению коммита называет ветку шаблона (`git fetch --no-tags template main`), этап 0
   `/init-service` — ветку и теги `template/*` форка со слитой историей. Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS; этап 0 SKILL.md
+  - Подтверждено: `TestPrePushGatesPushedCommit` → PASS; этап 0 — remote, ветка и теги; этап 5 ссылается на него
 - [ ] **AC3** — проза о DLQ верна поведению natskit (без `NATS_JS_DLQ_SUBJECT` — Term и «jetstream message dead»), тесты
   с горутинами и временем — строкой rule `tests-pipeline`. Проверка: `git grep -n 'MAX_DELIVER.→DLQ'` → пусто
 - [ ] **AC4** — подсказки домена — в references `/scaffold`, в правилах не больше строки на правило. Проверка: ручная —
@@ -63,8 +64,10 @@ blocked-by: —
   - Проверка: `go test ./internal/archtest -run TestFmtAppliesLintRules` → PASS · Закрывает: AC1
   - Сделано: после gofumpt — `golangci-lint run --enable-only tagalign --fix` закреплённой версии; тест — поле с тегами
     не по порядку; PASS; Review: принимает сессия корня — дифф отдан, ревью не проводилось
-- [ ] **S2** — T2: подсказка pre-push — ветка шаблона; этап 0 `/init-service` — форк со слитой историей
+- [x] **S2** — T2: подсказка pre-push — ветка шаблона; этап 0 `/init-service` — форк со слитой историей
   - Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS · Закрывает: AC2
+  - Сделано: подсказка — `git fetch --no-tags template main`; суд тегов при push в пустой remote не тронут; PASS;
+    Review: принимает сессия корня — дифф отдан, ревью не проводилось
 - [ ] **S3** — T3+T5: DLQ и повтор подписчика в прозе; строка о тестах с горутинами и временем
   - Проверка: `go test ./internal/archtest -run 'TestProse|TestRule'` → PASS · Закрывает: AC3
 - [ ] **S4** — T4: подсказки домена в references `/scaffold`, по строке в `sqlc-and-migrations` и `domain-architecture`
@@ -101,4 +104,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1 (T1) закрыт; следующий шаг — S2 (T2).
+S1–S2 (T1, T2) закрыты; следующий шаг — S3 (T3+T5).

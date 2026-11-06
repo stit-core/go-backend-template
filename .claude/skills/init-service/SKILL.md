@@ -36,6 +36,16 @@ description: Оркестратор онбординга форка go-backend-t
 - `make setup` прогнан (pinned dev-tools + git-хуки), `make check` зелёный.
 - Планы шаблона — не форка: до плана `onboarding` убери их (de-template A.4), иначе `/smartdev`
   предложит продолжить работу шаблона.
+- Форк со слитой историей (репо сервиса заведено раньше — с README, история шаблона влита
+  `git merge --allow-unrelated-histories`): remote шаблона — сразу, с веткой и тегами:
+  ```bash
+  git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-template.git
+  git fetch --no-tags template main 'refs/tags/template/*:refs/tags/template/*'
+  ```
+  Ветка `template/main` — для первой отправки в непустой origin: pre-push судит сообщения коммитов, которых нет в
+  ветках remote'ов, а историю под тегами `template/*` засчитывает только при push в пустой remote. Теги — образцы
+  доменов идентичности после prune (CLAUDE.md § Проектирование первично) и база переноса обвязки (`/upgrade`).
+  Форк, созданный из шаблона, несёт его историю и теги сам.
 - Strategy-репо: `../strategy` (форк `business-strategy-template`) — откуда домены сервиса
   (`docs/projects/<slug>/services/<svc>/domains/`, нужные — `stable`). Нет его — режим без strategy:
   домены этапа 3 — по описанию юзера, в «Решения» плана — строка об этом.
@@ -74,8 +84,8 @@ Gate: `make check` зелёный.
 
 ### 5. Финал
 
-Канал обвязки — remote шаблона без его тегов: о новом теге `template/vX.Y.Z` скажет `make doctor`
-(`git ls-remote`, сеть — не ошибка), перенос — `/upgrade`.
+Канал обвязки — remote шаблона без его тегов (форк со слитой историей завёл его на этапе 0): о новом теге
+`template/vX.Y.Z` скажет `make doctor` (`git ls-remote`, сеть — не ошибка), перенос — `/upgrade`.
 
 ```bash
 git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-template.git

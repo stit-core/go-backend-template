@@ -91,8 +91,9 @@ while read -r _ local_sha remote_ref remote_sha; do
         if ! out=$(bash -p "$rule" "$msg" 2>&1); then
             echo "pre-push: коммит $(git -C "$root" rev-parse --short "$c") — сообщение не по правилу commit-msg его родителя:"
             sed 's/^/  /' <<<"$out"
-            echo "pre-push: допиши сообщение (git rebase -i, reword) и пушь снова; история шаблона известна по его тегам —"
-            echo "  нет их: git fetch --no-tags <remote шаблона> 'refs/tags/template/*:refs/tags/template/*'"
+            echo "pre-push: свой коммит — допиши сообщение (git rebase -i, reword) и пушь снова; коммит истории шаблона,"
+            echo "  слитой в форк, известен по ветке remote шаблона (в непустой remote — только по ней, теги template/* —"
+            echo "  при push в пустой): git fetch --no-tags template main"
             exit 1
         fi
     done

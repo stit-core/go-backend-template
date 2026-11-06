@@ -310,7 +310,7 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err = push("refs/heads/main " + stuff + " refs/heads/main " + green + "\n")
 	require.Error(t, err, "a commit that is not a Conventional Commit must not be pushed:\n%s", out)
 	require.Contains(t, out, "сообщение не по правилу commit-msg его родителя")
-	require.Contains(t, out, "refs/tags/template/*", "the refusal names the tags of the template history")
+	require.Contains(t, out, "git fetch --no-tags template main", "the refusal names the branch of the template history")
 	require.NotContains(t, out, "toy gate", "the message is checked before the gate")
 
 	// История шаблона под его тегами template/* выпущена: клон форка без веток remote'а пушит её в пустой remote, и
