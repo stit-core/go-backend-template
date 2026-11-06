@@ -35,13 +35,33 @@ const Dev Env = "dev"
 // ErrUnsafe — настройка, допустимая только в dev, вне dev.
 var ErrUnsafe = errors.New("config: unsafe outside APP_ENV=dev")
 
+// Unsafe — включённые настройки, допустимые только в dev, которые нашла одна проверка: «ENV=значение» на каждую;
+// пусто — безопасно.
+type Unsafe []string
+
+// UnsafeGroup — группа fx проверок Unsafe: Guard собирает их все.
+const UnsafeGroup = "config.unsafe"
+
+// ProvideUnsafe кладёт в группу UnsafeGroup проверку настроек, небезопасных вне dev: check берёт конфиги из графа и
+// отдаёт Unsafe. Проверку кладёт тот, кто знает настройку, — кит рядом с его конфигом в cmd/api, домен в своём
+// module/: сигнатура Guard от них не растёт.
+func ProvideUnsafe(check any) fx.Option {
+	return fx.Provide(fx.Annotate(check, fx.ResultTags(`group:"`+UnsafeGroup+`"`)))
+}
+
+// Module — App из окружения, его Env и проверки шаблона: все здесь, а не в cmd/api, — перенос кода форка без main.go
+// не снимет ни одну молча.
 var Module = fx.Module(
 	"internal/platform/config",
 	fx.Provide(
 		Load,
 		func(a *App) Env { return a.Env },
 	),
-	fx.Invoke(Guard),
+	ProvideUnsafe(CookieUnsafe),
+	ProvideUnsafe(LogUnsafe),
+	ProvideUnsafe(DocsUnsafe),
+	ProvideUnsafe(JWTUnsafe),
+	fx.Invoke(fx.Annotate(Guard, fx.ParamTags(``, `group:"`+UnsafeGroup+`"`))),
 )
 
 // Load читает App из ENV тем же ридером, что и конфиги китов.
@@ -65,22 +85,33 @@ var exampleJWTSecrets = []string{
 	"smoke-only-secret-do-not-use-in-prod-min-32chars",
 }
 
-// Guard не даёт стартовать вне dev с настройками, которые в проде отдают сессию по HTTP, секреты — в лог, устройство
-// API — анонимам, а подпись access-токенов — сервису на том же JWT_SECRET или читателю примеров окружения.
-func Guard(app *App, redact logkit.RedactConfig, httpCfg httpkit.Config, jwt authnkit.JWTConfig) error {
-	if app.Env == Dev {
-		return nil
-	}
-	var unsafe []string
+// CookieUnsafe — cookie сессии без Secure: сессия уходит по HTTP.
+func CookieUnsafe(app *App) Unsafe {
 	if !app.Cookie.Secure {
-		unsafe = append(unsafe, "COOKIE_SECURE=false")
+		return Unsafe{"COOKIE_SECURE=false"}
 	}
+	return nil
+}
+
+// LogUnsafe — логи без маскирования: секреты уходят в лог.
+func LogUnsafe(redact logkit.RedactConfig) Unsafe {
 	if redact.Disabled {
-		unsafe = append(unsafe, "LOG_REDACT_DISABLED=true")
+		return Unsafe{"LOG_REDACT_DISABLED=true"}
 	}
+	return nil
+}
+
+// DocsUnsafe — документация API: устройство API — анонимам.
+func DocsUnsafe(httpCfg httpkit.Config) Unsafe {
 	if httpCfg.DocsEnabled {
-		unsafe = append(unsafe, "HTTP_DOCS_ENABLED=true")
+		return Unsafe{"HTTP_DOCS_ENABLED=true"}
 	}
+	return nil
+}
+
+// JWTUnsafe — подпись access-токенов годится сервису на том же JWT_SECRET (нет aud) или читателю примеров окружения.
+func JWTUnsafe(jwt authnkit.JWTConfig) Unsafe {
+	var unsafe Unsafe
 	if len(jwt.Audience) == 0 {
 		unsafe = append(unsafe, "JWT_AUDIENCE empty")
 	}
@@ -90,8 +121,23 @@ func Guard(app *App, redact logkit.RedactConfig, httpCfg httpkit.Config, jwt aut
 	if slices.Contains(exampleJWTSecrets, jwt.PreviousSecret) {
 		unsafe = append(unsafe, "JWT_PREVIOUS_SECRET from an example env")
 	}
-	if len(unsafe) > 0 {
-		return fmt.Errorf("%w: APP_ENV=%q with %s", ErrUnsafe, app.Env, strings.Join(unsafe, ", "))
+	return unsafe
+}
+
+// Guard не даёт стартовать вне dev, пока хоть одна проверка группы UnsafeGroup нашла настройку, допустимую только в
+// dev: проверки шаблона и то, что положили в группу киты и домены сервиса.
+func Guard(app *App, checks []Unsafe) error {
+	if app.Env == Dev {
+		return nil
 	}
-	return nil
+	var unsafe []string
+	for _, c := range checks {
+		unsafe = append(unsafe, c...)
+	}
+	if len(unsafe) == 0 {
+		return nil
+	}
+	// Порядок группы fx не задан: отказ называет настройки одним порядком.
+	slices.Sort(unsafe)
+	return fmt.Errorf("%w: APP_ENV=%q with %s", ErrUnsafe, app.Env, strings.Join(unsafe, ", "))
 }

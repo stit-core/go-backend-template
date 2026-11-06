@@ -50,8 +50,9 @@ blocked-by: —
   - Подтверждено: каждая мутация в отдельном worktree против одних тестов платформы (`-run` без тестов идентичности):
     OC1 — `TestResult_String`, P08 — `TestDecision`, K11 — `TestFxGraphProvidesDomainDeps`, K10 — `TestBoot_Jobs`,
     M29–M29h4 — `TestBoot_RateLimitKey` → убиты
-- [ ] **AC7** — проверки небезопасных настроек — группа `config.ProvideUnsafe`, проверки шаблона — в `config.Module`.
+- [x] **AC7** — проверки небезопасных настроек — группа `config.ProvideUnsafe`, проверки шаблона — в `config.Module`.
   Проверка: `make test PKG=./internal/platform/config/...` → PASS; `make mutate A="C01 … C14"` → убиты
+  - Подтверждено: `go test ./internal/platform/config/` → PASS; `make mutate A="C01 … C20"` → убиты 20 из 20
 - [ ] **AC8** — archtest пускает таблицу-литерал из констант и тип вне провода без префикса, отказывает правке таблицы
   на месте; tzkit — в `rootLibs`. Проверка: `go test ./internal/archtest -run 'TestRuleExamples|TestDomainDeterminism|TestHTTPTypes'` → PASS
 - [ ] **AC9** — зависимость кита графа (Redis у cachekit, MinIO у storagekit, NATS у natskit) поднимают boot-тест,
@@ -93,8 +94,11 @@ blocked-by: —
   - Проверка: `make test-int PKG=./cmd/api/...` → PASS; `make mutate A=…` → убиты · Закрывает: AC6
   - Сделано: `forwardedChain` — из `identity_test.go` в `boot_test.go` (prune удаляет первый); описания K10 и M29 —
     по новым убийцам; integration `cmd/api` → PASS; Review: принимает сессия корня — дифф отдан, ревью не проводилось
-- [ ] **S7** — T10: группа `config.ProvideUnsafe`, проверки Cookie, Log, Docs, JWT — в `config.Module`
+- [x] **S7** — T10: группа `config.ProvideUnsafe`, проверки Cookie, Log, Docs, JWT — в `config.Module`
   - Проверка: `make test PKG=./internal/platform/config/...` → PASS; `make mutate A="C01 …"` → убиты · Закрывает: AC7
+  - Сделано: `Guard(app, []Unsafe)` — отказ сортирован; блоки C01–C12 переписаны под проверки, C13–C20 — новые
+    (модуль без проверки, группа, порядок, пусто); убиты 20 из 20; Review: принимает сессия корня — дифф отдан,
+    ревью не проводилось
 - [ ] **S8** — T11: таблица-литерал, тип вне провода, tzkit в `rootLibs`
   - Проверка: `go test ./internal/archtest` → PASS; `make check` → `✓ check clean` · Закрывает: AC8
 ### Киты, события, срез
@@ -119,4 +123,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S6 (T1–T7) закрыты, `make check` после S5 — `✓ check clean` (52 с); следующий шаг — S7 (T10).
+S1–S7 (T1–T7, T10) закрыты, `make check` после S5 — `✓ check clean` (52 с); следующий шаг — S8 (T11).

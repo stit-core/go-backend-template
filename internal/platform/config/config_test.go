@@ -121,34 +121,27 @@ func TestLoad_PasswordResetMailPause(t *testing.T) {
 
 func TestGuard(t *testing.T) {
 	t.Parallel()
-	app := func(env appconfig.Env, secure bool) *appconfig.App {
-		a := &appconfig.App{Env: env}
-		a.Cookie.Secure = secure
-		return a
-	}
-
-	aud := authnkit.JWTConfig{Audience: []string{"backend"}}
-
 	cases := []struct {
 		name    string
-		app     *appconfig.App
-		redact  logkit.RedactConfig
-		http    httpkit.Config
-		jwt     authnkit.JWTConfig
+		env     appconfig.Env
+		checks  []appconfig.Unsafe
 		wantErr string // "" — старт разрешён
 	}{
-		{name: "prod with safe settings", app: app("prod", true), jwt: aud},
-		{name: "dev allows everything unsafe", app: app(appconfig.Dev, false), redact: logkit.RedactConfig{Disabled: true}, http: httpkit.Config{DocsEnabled: true}},
-		{name: "insecure cookie outside dev", app: app("prod", false), jwt: aud, wantErr: "COOKIE_SECURE=false"},
-		{name: "log masking off outside dev", app: app("staging", true), redact: logkit.RedactConfig{Disabled: true}, jwt: aud, wantErr: "LOG_REDACT_DISABLED=true"},
-		{name: "docs outside dev", app: app("prod", true), http: httpkit.Config{DocsEnabled: true}, jwt: aud, wantErr: "HTTP_DOCS_ENABLED=true"},
-		{name: "tokens without audience outside dev", app: app("prod", true), wantErr: "JWT_AUDIENCE empty"},
-		{name: "any env but dev is strict", app: app("Dev", false), jwt: aud, wantErr: `APP_ENV="Dev"`},
+		{name: "prod without checks", env: "prod"},
+		{name: "prod with safe settings", env: "prod", checks: []appconfig.Unsafe{nil, {}}},
+		{name: "dev allows everything unsafe", env: appconfig.Dev, checks: []appconfig.Unsafe{{"COOKIE_SECURE=false"}, {"LOG_REDACT_DISABLED=true"}}},
+		{name: "unsafe outside dev", env: "staging", checks: []appconfig.Unsafe{nil, {"HTTP_DOCS_ENABLED=true"}}, wantErr: `APP_ENV="staging" with HTTP_DOCS_ENABLED=true`},
+		{
+			name: "every check in one order", env: "prod",
+			checks:  []appconfig.Unsafe{{"Z_INSECURE=true"}, {"LOG_REDACT_DISABLED=true", "A_INSECURE=true"}},
+			wantErr: "with A_INSECURE=true, LOG_REDACT_DISABLED=true, Z_INSECURE=true",
+		},
+		{name: "any env but dev is strict", env: "Dev", checks: []appconfig.Unsafe{{"HTTP_DOCS_ENABLED=true"}}, wantErr: `APP_ENV="Dev"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := appconfig.Guard(tc.app, tc.redact, tc.http, tc.jwt)
+			err := appconfig.Guard(&appconfig.App{Env: tc.env}, tc.checks)
 			if tc.wantErr == "" {
 				require.NoError(t, err)
 				return
@@ -159,26 +152,32 @@ func TestGuard(t *testing.T) {
 	}
 }
 
+// Проверки config.Module: cookie без Secure, логи без маскирования, документация API, access-токены без aud.
+func TestUnsafeChecks(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, appconfig.Unsafe{"COOKIE_SECURE=false"}, appconfig.CookieUnsafe(&appconfig.App{}))
+	require.Empty(t, appconfig.CookieUnsafe(&appconfig.App{Cookie: authgate.CookieConfig{Secure: true}}))
+	require.Equal(t, appconfig.Unsafe{"LOG_REDACT_DISABLED=true"}, appconfig.LogUnsafe(logkit.RedactConfig{Disabled: true}))
+	require.Empty(t, appconfig.LogUnsafe(logkit.RedactConfig{}))
+	require.Equal(t, appconfig.Unsafe{"HTTP_DOCS_ENABLED=true"}, appconfig.DocsUnsafe(httpkit.Config{DocsEnabled: true}))
+	require.Empty(t, appconfig.DocsUnsafe(httpkit.Config{}))
+	require.Equal(t, appconfig.Unsafe{"JWT_AUDIENCE empty"}, appconfig.JWTUnsafe(authnkit.JWTConfig{}))
+	require.Empty(t, appconfig.JWTUnsafe(authnkit.JWTConfig{Audience: []string{"backend"}}))
+}
+
 // Ключ подписи из примеров окружения репо знает каждый читатель репо: вне dev он не пускает старт ни текущим, ни
-// прежним ключом. Значения берутся из самих файлов — пример с новым ключом без строки в Guard роняет тест.
-func TestGuard_ExampleSecrets(t *testing.T) {
+// прежним ключом. Значения берутся из самих файлов — пример с новым ключом без строки в JWTUnsafe роняет тест.
+func TestJWTUnsafe_ExampleSecrets(t *testing.T) {
 	t.Parallel()
 	secrets := exampleSecrets(t)
 	require.Len(t, secrets, 2, "JWT_SECRET of .env.example and of test/stack/compose.yml")
 	aud := []string{"backend"}
 	for _, secret := range secrets {
-		for _, jwt := range []authnkit.JWTConfig{
-			{Secret: secret, Audience: aud},
-			{Secret: "a-production-secret-of-at-least-32-bytes", PreviousSecret: secret, Audience: aud},
-		} {
-			prod := &appconfig.App{Env: "prod", Cookie: authgate.CookieConfig{Secure: true}}
-			err := appconfig.Guard(prod, logkit.RedactConfig{}, httpkit.Config{}, jwt)
-			require.ErrorIs(t, err, appconfig.ErrUnsafe, "secret %q", secret)
-			require.ErrorContains(t, err, "from an example env")
-
-			require.NoError(t, appconfig.Guard(&appconfig.App{Env: appconfig.Dev}, logkit.RedactConfig{}, httpkit.Config{}, jwt),
-				"dev runs with the example secret")
-		}
+		require.Equal(t, appconfig.Unsafe{"JWT_SECRET from an example env"},
+			appconfig.JWTUnsafe(authnkit.JWTConfig{Secret: secret, Audience: aud}), "secret %q", secret)
+		require.Equal(t, appconfig.Unsafe{"JWT_PREVIOUS_SECRET from an example env"},
+			appconfig.JWTUnsafe(authnkit.JWTConfig{Secret: "a-production-secret-of-at-least-32-bytes", PreviousSecret: secret, Audience: aud}),
+			"previous secret %q", secret)
 	}
 }
 
@@ -199,24 +198,37 @@ func exampleSecrets(t *testing.T) []string {
 	return secrets
 }
 
-// Модуль сам вызывает Guard: вне dev сервис с небезопасной конфигурацией не собирается.
+// Модуль сам вызывает Guard со своими проверками и проверками группы извне (кит, домен): вне dev сервис с небезопасной
+// конфигурацией не собирается.
 func TestModule(t *testing.T) {
+	aud := authnkit.JWTConfig{Audience: []string{"backend"}}
+	insecure := appconfig.ProvideUnsafe(func() appconfig.Unsafe { return appconfig.Unsafe{"PROBE_INSECURE=true"} })
 	cases := []struct {
-		name, env string
-		wantErr   error
+		name, env, secure string
+		opts              []fx.Option
+		wantErr           string // "" — сервис собирается
 	}{
-		{name: "docs on outside dev", env: "prod", wantErr: appconfig.ErrUnsafe},
-		{name: "docs on in dev", env: "dev"},
+		{name: "safe outside dev", env: "prod", opts: []fx.Option{fx.Supply(logkit.RedactConfig{}, httpkit.Config{}, aud)}},
+		{name: "insecure cookie outside dev", env: "prod", secure: "false", opts: []fx.Option{fx.Supply(logkit.RedactConfig{}, httpkit.Config{}, aud)}, wantErr: "with COOKIE_SECURE=false"},
+		{name: "log masking off outside dev", env: "prod", opts: []fx.Option{fx.Supply(logkit.RedactConfig{Disabled: true}, httpkit.Config{}, aud)}, wantErr: "with LOG_REDACT_DISABLED=true"},
+		{name: "docs on outside dev", env: "prod", opts: []fx.Option{fx.Supply(logkit.RedactConfig{}, httpkit.Config{DocsEnabled: true}, aud)}, wantErr: "with HTTP_DOCS_ENABLED=true"},
+		{name: "tokens without audience outside dev", env: "prod", opts: []fx.Option{fx.Supply(logkit.RedactConfig{}, httpkit.Config{}, authnkit.JWTConfig{})}, wantErr: "with JWT_AUDIENCE empty"},
+		{name: "a check from outside the module", env: "prod", opts: []fx.Option{fx.Supply(logkit.RedactConfig{}, httpkit.Config{}, aud), insecure}, wantErr: "with PROBE_INSECURE=true"},
+		{name: "everything in dev", env: "dev", secure: "false", opts: []fx.Option{fx.Supply(logkit.RedactConfig{Disabled: true}, httpkit.Config{DocsEnabled: true}, authnkit.JWTConfig{}), insecure}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			setenv(t, "APP_ENV", tc.env)
-			setenv(t, "COOKIE_SECURE", "")
+			setenv(t, "COOKIE_SECURE", tc.secure)
 
-			app := fx.New(fx.NopLogger, appconfig.Module,
-				fx.Supply(logkit.RedactConfig{}, httpkit.Config{DocsEnabled: true}, authnkit.JWTConfig{Audience: []string{"backend"}}))
+			app := fx.New(append([]fx.Option{fx.NopLogger, appconfig.Module}, tc.opts...)...)
 
-			require.ErrorIs(t, app.Err(), tc.wantErr)
+			if tc.wantErr == "" {
+				require.NoError(t, app.Err())
+				return
+			}
+			require.ErrorIs(t, app.Err(), appconfig.ErrUnsafe)
+			require.ErrorContains(t, app.Err(), tc.wantErr)
 		})
 	}
 }

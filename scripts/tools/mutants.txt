@@ -2050,25 +2050,25 @@ internal/platform/authgate/jwt.go
 + if err != nil && c.Value == "" {
 + 		return "", errors.New("authgate: no auth cookie")
 
-## C01 platform/config — Guard: вне dev пускает лог без маскирования
+## C01 platform/config — LogUnsafe: лог без маскирования вне dev пускается
 internal/platform/config/config.go
 - 	if redact.Disabled {
-- 		unsafe = append(unsafe, "LOG_REDACT_DISABLED=true")
+- 		return Unsafe{"LOG_REDACT_DISABLED=true"}
 - 	}
 
-## C02 platform/config — Guard: условие aud инвертировано
+## C02 platform/config — JWTUnsafe: условие aud инвертировано
 internal/platform/config/config.go
 - if len(jwt.Audience) == 0 {
 + if len(jwt.Audience) != 0 {
 
-## C03 platform/config — Guard: условие COOKIE_SECURE инвертировано
+## C03 platform/config — CookieUnsafe: условие COOKIE_SECURE инвертировано
 internal/platform/config/config.go
 - if !app.Cookie.Secure {
 + if app.Cookie.Secure {
 
 ## C04 platform/config — Guard объявлен, но в модуле не стоит
 internal/platform/config/config.go
-- 	fx.Invoke(Guard),
+- 	fx.Invoke(fx.Annotate(Guard, fx.ParamTags(``, `group:"`+UnsafeGroup+`"`))),
 
 ## C05 platform/config — APP_ENV необязателен
 internal/platform/config/config.go
@@ -2089,18 +2089,18 @@ internal/platform/config/config.go
 + 		return nil
 + 	}
 
-## C08 platform/config — Guard: условие docs инвертировано
+## C08 platform/config — DocsUnsafe: условие docs инвертировано
 internal/platform/config/config.go
 - if httpCfg.DocsEnabled {
 + if !httpCfg.DocsEnabled {
 
-## C09 platform/config — Guard: JWT_SECRET из примеров окружения вне dev пускается (подпись — у читателя репо)
+## C09 platform/config — JWTUnsafe: JWT_SECRET из примеров окружения вне dev пускается (подпись — у читателя репо)
 internal/platform/config/config.go
 - 	if slices.Contains(exampleJWTSecrets, jwt.Secret) {
 - 		unsafe = append(unsafe, "JWT_SECRET from an example env")
 - 	}
 
-## C10 platform/config — Guard: JWT_PREVIOUS_SECRET из примеров окружения вне dev пускается
+## C10 platform/config — JWTUnsafe: JWT_PREVIOUS_SECRET из примеров окружения вне dev пускается
 internal/platform/config/config.go
 - 	if slices.Contains(exampleJWTSecrets, jwt.PreviousSecret) {
 - 		unsafe = append(unsafe, "JWT_PREVIOUS_SECRET from an example env")
@@ -2113,6 +2113,41 @@ internal/platform/config/config.go
 ## C12 platform/config — Guard: ключ стенда e2e test/stack — не из примеров (вне dev пускается)
 internal/platform/config/config.go
 - 	"smoke-only-secret-do-not-use-in-prod-min-32chars",
+
+## C13 platform/config — модуль без проверки cookie: COOKIE_SECURE=false вне dev пускается
+internal/platform/config/config.go
+- 	ProvideUnsafe(CookieUnsafe),
+
+## C14 platform/config — модуль без проверки логов: лог без маскирования вне dev пускается
+internal/platform/config/config.go
+- 	ProvideUnsafe(LogUnsafe),
+
+## C15 platform/config — модуль без проверки docs: документация API вне dev пускается
+internal/platform/config/config.go
+- 	ProvideUnsafe(DocsUnsafe),
+
+## C16 platform/config — модуль без проверки JWT: токены без aud и ключ из примеров вне dev пускаются
+internal/platform/config/config.go
+- 	ProvideUnsafe(JWTUnsafe),
+
+## C17 platform/config — Guard судит только первую проверку группы
+internal/platform/config/config.go
+- for _, c := range checks {
++ for _, c := range checks[:min(len(checks), 1)] {
+
+## C18 platform/config — ProvideUnsafe кладёт проверку мимо группы (проверки кита и домена Guard не видит)
+internal/platform/config/config.go
+- return fx.Provide(fx.Annotate(check, fx.ResultTags(`group:"`+UnsafeGroup+`"`)))
++ return fx.Provide(check)
+
+## C19 platform/config — Guard: отказ называет настройки в порядке группы fx, а он не задан
+internal/platform/config/config.go
+- 	slices.Sort(unsafe)
+
+## C20 platform/config — Guard: без единой настройки — отказ
+internal/platform/config/config.go
+- if len(unsafe) == 0 {
++ if len(unsafe) < 0 {
 
 ## EV1 platform/events — outbox домена без ограничения subject'ов
 internal/platform/events/outbox.go
