@@ -37,9 +37,11 @@ blocked-by: —
   Проверка: `go test -run 'TestMutate' ./internal/archtest/` → PASS (`TestMutate`, `TestMutateStages`,
   `TestMutateShared`, `TestMutateParallel`)
   - Подтверждено: `TestMutate`, `TestMutateStages`, `TestMutateShared`, `TestMutateParallel` — PASS
-- [ ] **AC2** — Прогон спецификации шаблона на новом раннере: базовый прогон зелёный, общие серверы — одним набором,
+- [x] **AC2** — Прогон спецификации шаблона на новом раннере: базовый прогон зелёный, общие серверы — одним набором,
   исполнителей — по ядрам и памяти; итог и время — в «Сделано». Проверка: `make mutate A=--strict` → код 0;
   `docker ps -a --filter label=mutate.repo` после прогона → пусто
+  - Подтверждено: `make mutate A=--strict` — код 0, «новых выживших нет, спецификация совпадает с кодом»;
+    `docker ps -a --filter label=mutate.repo` — пусто
 - [x] **AC3** — `make test PKG=./internal/archtest/...` → PASS: аргументы Makefile вызывающего до временных репо
   тестов не доходят. Проверка: `TestCallerEnvDropsMakeArgs` → PASS, `make test PKG=./internal/archtest/...` → PASS
   - Подтверждено: `TestCallerEnvDropsMakeArgs` — PASS; `make test PKG=./internal/archtest/...` — PASS
@@ -65,8 +67,11 @@ blocked-by: —
     таймаутов, `rm -f -v`, уборка при втором сигнале, сброс worktree, `-f -f`, `GOWORK=off`, проба мимо прокси,
     `-skip ^TestMutate`; тест на каждый фикс — без фикса FAIL; правило, скиллы, Makefile, шапка спецификации,
     `.dockerignore`; `make check` — `✓ check clean`
-- [ ] **S4** — Строгий прогон спецификации шаблона, время и ресурсы
+- [x] **S4** — Строгий прогон спецификации шаблона, время и ресурсы
   - Проверка: `make mutate A=--strict` → код 0 · Закрывает: AC2 · Зависит от: S3
+  - Сделано: `make mutate A=--strict` по `662b355` — 429 мутаций за 23,3 мин (5 исполнителей: половина 20 ядер, 7,7 ГБ
+    доступно; Postgres и 5 NATS на прогон); убиты 425 — юнит 345, integration 80; известные эквивалентные — 4 (U25,
+    A19, UH9, K09); новых выживших нет, код 0; контейнеров прогона после — 0. Прогон `template/v1.2.0` — около 2 ч
 - [ ] **S5** — Гейт и выпуск `template/v1.3.0`: `.template/version`, аннотация, тег, push
   - Проверка: `make check` → `✓ check clean`; тег в origin и github · Закрывает: AC5 · Зависит от: S1–S4
 
@@ -86,5 +91,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S3 закрыты; прогон S4 на раннере до двух правок добора остановлен на 340 из 429 мутаций (20 мин, 5 исполнителей)
-— дальше S4 на HEAD, затем S5 (гейт и выпуск).
+S1–S4 закрыты; дальше — S5: `.template/version`, аннотация, тег `template/v1.3.0`, push (pre-push гонит `make check`).
