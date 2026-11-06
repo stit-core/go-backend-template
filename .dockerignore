@@ -6,6 +6,8 @@
 .idea
 .vscode
 bin
+# Кеши инструментов и worktree прогона мутаций (.cache/mutate/wt, wt-2, …) — не вход сборки образа.
+.cache
 docs
 *.md
 **/*_test.go

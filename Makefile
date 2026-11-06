@@ -230,9 +230,10 @@ test-bench: ## Бенчмарки
 	go test -run=^$$ -bench=. -benchmem ./internal/domain/...
 
 # Силу тестов держат мутации, а не процент покрытия: правки «было → стало» scripts/tools/mutants.txt по
-# одной в своём worktree .cache/mutate/wt по HEAD, итог — выжившие списком (scripts/tools/mutate.py, rule
-# tests-pipeline).
-mutate: ## Мутационный прогон вне гейта, нужен Docker (A="<id> …" — эти мутации заново, A=--check — только якоря, A=--strict — устаревший якорь тоже код 1)
+# одной на исполнителя в его worktree .cache/mutate/wt, wt-2, … по снимку рабочего дерева (исполнителей — по ядрам слота и
+# памяти, MUTATE_JOBS=N — явно), итог — выжившие списком; убитая с тем же блоком и файлами не гоняется заново
+# (scripts/tools/mutate.py, rule tests-pipeline).
+mutate: ## Мутационный прогон по рабочему дереву вне гейта, нужен Docker (A="<id> …" — эти заново, A=--anchors — только якоря, A=--build — только сборка мутаций, A=--check — якоря и сборка, A=--strict — шаг релиза: мутации снимка заново, устаревший якорь тоже код 1, A=--fresh — все заново)
 	@python3 -I scripts/tools/mutate.py $(A)
 
 # Покрытие — профиль одного прогона юнит + integration (make test-int) без сгенерированного и internal/testkit:

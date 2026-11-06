@@ -8,7 +8,7 @@
 # Создаёт рабочий срез — миграцию таблицы, sqlc-запросы, репозиторий с integration-тестом,
 # сущность, policy и usecase с тестами, HTTP-операции под cookie-сессией с тестами, fx-модуль —
 # подключает домен в cmd/api, вписывает sqlc.yaml, .mockery.yml и блоки мутаций среза в
-# scripts/tools/mutants.txt, сверяет якоря его мутаций (make mutate A=--check, нужен python3), гонит make gen,
+# scripts/tools/mutants.txt, сверяет якоря его мутаций (make mutate A=--anchors, нужен python3), гонит make gen,
 # проверяет, что срез собирается (go vet с тегом integration), и ставит созданное в индекс: следующий
 # шаг — make check.
 # Негодное имя и занятая таблица — отказ до первой правки; сбой после неё — откат всех правок скрипта.
@@ -1113,10 +1113,10 @@ insert_before cmd/api/http.go '^func registerHTTP\(' '^\}$' "	${FLAT}http.Regist
 gofumpt -w cmd/api/main.go cmd/api/http.go "$DOMAIN_DIR"
 
 # Блоки мутаций среза правят его рукописные файлы: якоря сверяются до make gen — так их видит и тест скрипта.
-echo "→ make mutate A=--check: якоря мутаций среза"
+echo "→ make mutate A=--anchors: якоря мутаций среза"
 mutants=$(grep -oE "^## ${NAME}-[0-9]+ " scripts/tools/mutants.txt | awk '{print $2}')
 # shellcheck disable=SC2086 # id мутаций — отдельными словами
-python3 -I scripts/tools/mutate.py --check $mutants || {
+python3 -I scripts/tools/mutate.py --anchors $mutants || {
     echo "ERROR: блоки мутаций среза разошлись с его кодом — их пишет scripts/new-domain.sh: правка скрипта, а не имени" >&2
     exit 1
 }

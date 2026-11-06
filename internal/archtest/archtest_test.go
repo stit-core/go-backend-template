@@ -53,7 +53,10 @@
 //     инструментов, make gen);
 //   - newdomain_test.go — TestNewDomainRefusesOrRollsBack (make new-domain: отказ до первой правки, откат после);
 //   - mutate_test.go — TestMutate (раннер make mutate: вердикты, --strict, файлы кода без мутаций, дерево
-//     разработчика);
+//     разработчика), TestMutateStages (стадии мутации: archtest последним, после integration, с тегом integration при
+//     тех же файлах — один раз; сборка без линковки, несобирающаяся программа), TestMutateShared (серверы integration
+//     — один раз на прогон, уборка в конце и при SIGTERM), TestMutateParallel (исполнители: тот же итог и порядок строк,
+//     свои worktree, обрыв и продолжение с места);
 //   - repo_test.go — TestNoSecretFiles (секретов в индексе нет, перечень — строка pre-push, с ним сверен
 //     .gitignore), TestImagesPinned (образы — по digest и тегу), TestAllowReadsOnly (allow .claude/settings.json —
 //     только то, что не пишет, ask нет);

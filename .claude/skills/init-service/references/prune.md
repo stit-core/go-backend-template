@@ -7,7 +7,7 @@
 
 ## Шаги
 
-До шага 1 — `make mutate A=--check` → OK: устаревший блок своего домена перепиши, иначе второй фильтр шага 4 снимет
+До шага 1 — `make mutate A=--anchors` → OK: устаревший блок своего домена перепиши, иначе второй фильтр шага 4 снимет
 его вместе с блоками строк, которые сняли шаги 2–3.
 
 1. **Пути доменов идентичности** — по списку шаблона, целиком (с ними уходят и тесты `cmd/`, которые есть
@@ -43,11 +43,11 @@
    - импорты — `go mod tidy`.
 4. **Генерация и мутации** — блоки удалённых доменов в `sqlc.yaml` и `.mockery.yml`. В спецификации мутаций
    `scripts/tools/mutants.txt` блоки удалённых файлов снимает первый фильтр, блоки строк, которые сняли шаги 2–3
-   (их якорь `make mutate A=--check` называет устаревшим), — второй:
+   (их якорь `make mutate A=--anchors` называет устаревшим), — второй:
    ```bash
    awk -v RS= -v ORS='\n\n' '{ n = split($0, l, "\n"); for (i = 2; i <= n; i++) if (l[i] !~ /^[-+=#]/ && system("test -e \"" l[i] "\"")) next; print }' \
        scripts/tools/mutants.txt >mutants.tmp && mv mutants.tmp scripts/tools/mutants.txt
-   make mutate A=--check | sed -n 's/^  \([^ :]*\): .*/\1/p' >stale.ids
+   make mutate A=--anchors | sed -n 's/^  \([^ :]*\): .*/\1/p' >stale.ids
    awk 'FNR == NR { stale[$0]; next } { split($0, l, "\n"); split(l[1], h, " ") } !(h[2] in stale) { print; print "" }' \
        stale.ids RS= scripts/tools/mutants.txt >mutants.tmp && mv mutants.tmp scripts/tools/mutants.txt && rm stale.ids
    ```
@@ -67,7 +67,7 @@
    токена внешней идентичности), порт к `user` — к её источнику или вон, подписка на события `user` и
    `verification` — вон, сид `pgseed` в integration-тестах — свои строки без `users`.
 9. `make fmt` (импорты после правок шагов 2–3) → `make gen` → `make check` → `✓ check clean`;
-   `make mutate A=--check` → OK.
+   `make mutate A=--anchors` → OK.
 
 ## Свои домены поверх идентичности
 

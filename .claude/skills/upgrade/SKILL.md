@@ -92,7 +92,7 @@ git remote add --no-tags template git@git.stit.tech:stit-core/go-backend-templat
    - **мутации**: спецификация `scripts/tools/mutants.txt` — код форка, перенос её не трогает: блоки кода
      `PATHS` — из `git show template/vX.Y.Z:scripts/tools/mutants.txt`; спецификации нет — затравка оттуда
      же (с внешней идентичностью — без блоков её путей, фильтр — шаг «Генерация и мутации»
-     `.claude/skills/init-service/references/prune.md`); `make mutate A=--check` → OK.
+     `.claude/skills/init-service/references/prune.md`); `make mutate A=--anchors` → OK.
 4. Шаги `Breaking` и `Гейт` из аннотаций всех тегов до `TO`. Блоки INFRA-HANDOFF шаблона за перенесённое —
    из `git show template/vX.Y.Z:.claude/plans/handoff.md` в свой накопитель (skill `/infra-handoff`) с
    номерами миграций и именами форка.
