@@ -250,7 +250,7 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	commitAs := func(subject, verdict string) string {
 		t.Helper()
 		writeFiles(t, repo, map[string]string{
-			"Makefile":                     shellEnv + "\ncheck:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)] shell=[$${BASH_ENV-}$${SHELLOPTS-}$${BASHOPTS-}]\"; test \"$$(cat verdict)\" = green\n",
+			"Makefile":                     shellEnv + "\ncheck:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)] shell=[$${BASH_ENV-}$${SHELLOPTS-}$${BASHOPTS-}] dir=$(CURDIR)\"; test \"$$(cat verdict)\" = green\n",
 			"verdict":                      verdict + "\n",
 			"subject":                      subject + "\n",
 			"scripts/git-hooks/commit-msg": rule,
@@ -285,6 +285,13 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err := push("refs/heads/main " + red + " refs/heads/main " + zero + "\n")
 	require.Error(t, err, "a red commit must not be pushed:\n%s", out)
 	require.Contains(t, out, "toy gate: red goals=check make=make flags=[] shell=[]")
+	realRepo, err := filepath.EvalSymlinks(repo)
+	require.NoError(t, err)
+	require.Contains(t, out, " dir="+filepath.Join(realRepo, ".cache", "pre-push."),
+		"the tree of the gate is on the disk of the repo, not in TMPDIR: TMPDIR may live in memory")
+	left, err := filepath.Glob(filepath.Join(tmp, "pre-push.*"))
+	require.NoError(t, err)
+	require.Empty(t, left, "the gate tree is not made in TMPDIR")
 
 	forge := filepath.Join(tmp, "forge.mk")
 	writeFiles(t, tmp, map[string]string{"forge.mk": "check::\n\t@echo forged\n"})

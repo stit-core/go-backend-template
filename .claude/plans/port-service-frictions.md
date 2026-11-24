@@ -70,8 +70,9 @@ blocked-by: —
   `infra/postgres/[^/]+\.go`. Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check` и
   мутации среза → убиты
 - [ ] **AC12** — остатки — строками `backlog.md`. Проверка: `make plan-check` → OK
-- [ ] **AC14** — свежий worktree pre-push — на диске, в `.cache/` репо, а не в `${TMPDIR:-/tmp}`. Проверка:
+- [x] **AC14** — свежий worktree pre-push — на диске, в `.cache/` репо, а не в `${TMPDIR:-/tmp}`. Проверка:
   `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS
+  - Подтверждено: PASS — дерево гейта в `<репо>/.cache/pre-push.*`, в TMPDIR его нет
 - [ ] **AC15** — мутацию, которую убила паника тестового бинаря вне теста (убийца — пакет), прогон по ключу не гоняет
   заново, пока в пакете есть тесты. Проверка: `go test ./internal/archtest -run TestMutate` → PASS
 - [x] **AC16** — шаблон на golibinfra v1.8.0 (OpenTelemetry v1.47.0, x/net, x/crypto), тексты `Detail` таблиц ошибок
@@ -153,8 +154,10 @@ blocked-by: —
     `cmd/api` и харнеса шлют Origin; `TestBoot_SessionOrigin`; мутации G15, G16; `architecture.md`, `SECURITY.md`;
     INFRA-HANDOFF в накопителе; Review: принимает сессия корня
 ### Бэклог форка шаблона
-- [ ] **S14** — `prepush-worktree-disk`: свежий worktree pre-push — в `.cache/` репо, с тестом хука
+- [x] **S14** — `prepush-worktree-disk`: свежий worktree pre-push — в `.cache/` репо, с тестом хука
   - Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS · Закрывает: AC14
+  - Сделано: `mktemp -d "$root/.cache/pre-push.XXXXXX"` вместо `${TMPDIR:-/tmp}`; тест хука — `dir=$(CURDIR)`
+    игрушечного гейта под `.cache/pre-push.` репо и пустой TMPDIR; Review: принимает сессия корня
 - [ ] **S15** — `mutate-panic-killer`: убийца-пакет засчитывается, пока в пакете есть тесты, с тестом раннера
   - Проверка: `go test ./internal/archtest -run TestMutate` → PASS · Закрывает: AC15
 - [ ] **S12** — остатки — в бэклог

@@ -105,7 +105,9 @@ while read -r local_ref local_sha _ _; do
     commit=$(git -C "$root" rev-parse "$local_sha^{commit}")
     [[ $checked == *" $commit "* ]] && continue # ветка и тег на одном коммите — один прогон
     checked+="$commit "
-    tmp=$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")
+    # Дерево гейта — на диске репо, как снимок pre-commit: TMPDIR бывает в памяти, а дерево держит её весь прогон.
+    mkdir -p "$root/.cache"
+    tmp=$(mktemp -d "$root/.cache/pre-push.XXXXXX")
     git -C "$root" worktree add --detach --quiet "$tmp" "$commit"
     echo "pre-push: $local_ref — make check в свежем worktree $(git -C "$root" rev-parse --short "$commit")"
     # stdin гейта — не список ref'ов; -f Makefile — GNUmakefile коммита make читал бы первым.
