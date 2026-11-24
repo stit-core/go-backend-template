@@ -67,16 +67,16 @@ internal/domain/<name>/
 ├── usecase.go         Create<Agg>, Get<Agg>; порты <Agg>Repository и Authorizer
 ├── *_test.go          entity (+fuzz), policy, usecase на строгом моке репозитория и настоящей policy
 ├── delivery/http/     POST /api/<aggs> и GET /api/<aggs>/{id} под authgate.Secured (OperationID
-│                      create<Agg>, get<Agg>), DTO с префиксом <Name><Agg> и envelope data, таблицы
+│                      create<Agg>, get<Agg>), DTO с префиксом <Name><Agg> (<Name>, если агрегат — домен)
+│                      и envelope data, таблицы
 │                      ошибок create<Agg>Errors и get<Agg>Errors с Declare, handler- и errors-тесты
 ├── infra/postgres/    queries/<agg>.sql (Insert<Agg>, Get<Agg>ByID), repository.go,
 │                      repository_test.go (integration), db/ — sqlc
 └── module/module.go   fx.Module "internal/domain/<name>/module"
 ```
 
-Имена агрегата — его, а не домена: следующий агрегат контекста (шаг 4) встаёт рядом — `<Agg2>`,
-`<Agg2>Repository`, `Create<Agg2>`, свой файл `entity_<agg2>.go` и `usecase_<agg2>.go` — без переименований
-среза. Множественное число — по правилам английского (`status` → `statuses`, `category` → `categories`; имя на
+Имена агрегата — его, а не домена: следующий агрегат контекста встаёт рядом без переименований среза (§ Следующий
+агрегат ниже). Множественное число — по правилам английского (`status` → `statuses`, `category` → `categories`; имя на
 `-s`, кроме `-ss`, `-us`, `-is`, — уже множественное или неизменяемое: `series`); исключения
 (`person` → `people`) правят руками.
 
@@ -86,11 +86,25 @@ internal/domain/<name>/
 (`go vet` с тегом integration), и ставит созданное в индекс git. Границы домена держит
 `internal/archtest` без правки конфигов.
 
-CamelCase — с инициализмом заглавными по правилу revive (`api_key` → `APIKey`), в пути `_` → `-`. Имя домена
-или агрегата, с которым срез не собрался бы (ключевое слово или встроенное имя Go, объявление пакета домена, имя
-из кода среза, алиас импорта другого домена), и таблицу, которую уже создаёт миграция, скрипт отвергает до первой
-правки; сбой после неё — откат всех его правок. Второй срез в тот же домен скрипт не кладёт: другие агрегаты —
-шаг 4.
+CamelCase — с инициализмом заглавными по правилу revive (`api_key` → `APIKey`, `urls` → `URLs`), в пути `_` → `-`.
+Имена без правок — `bash scripts/new-domain.sh --names <name> [<agg>]`; первая строка прогона называет агрегат.
+Домен — ключевое слово или встроенное имя Go, объявление пакета домена (`authorizer`, `policy`, `usecase`,
+`usecase_deps`) у домена или агрегата, алиас импорта другого домена, таблицу, которую уже создаёт миграция, и
+контекст, чьё единственное число имя не даёт (`-ches`, `-uses`, `-zes`), скрипт отвергает до первой правки; имя из
+кода среза — сборкой с откатом всех его правок. Второй срез в тот же домен скрипт не кладёт.
+
+#### Следующий агрегат
+
+Следующий агрегат контекста — руками, рядом со срезом и в своих файлах: якорь мутации ищется по файлу, и код
+второго агрегата в файле первого дал бы якорю среза два вхождения (`make mutate` — отказ «вхождений 2»).
+- корень домена: `<agg2>.go` (сущность `<Agg2>`, `New<Agg2>`), DTO и методы usecase `Create<Agg2>`, `Get<Agg2>` —
+  `usecase_<agg2>.go`, права `CanCreate<Agg2>` — в `policy.go`; порт `<Agg2>Repository` — в `usecase.go` рядом с
+  первым, поле `<Agg2s>` — в `UsecaseDeps`; ошибки — в `errors.go`, свой код `<DOMAIN>_<AGG2>_<WHAT>`;
+- `infra/postgres/`: `queries/<agg2>.sql`, адаптер `<agg2>_repository.go` (`<Agg2>Repository`,
+  `New<Agg2>Repository`) с integration-тестом; миграция таблицы `<agg2s>` — `/scaffold` вариант migration;
+- `delivery/http/`: `handler_<agg2>.go` (операции `create<Agg2>`, `get<Agg2>`, их таблицы ошибок), `view_<agg2>.go`,
+  DTO `<Name><Agg2>…`, тесты; методы — в порт `Usecase`;
+- `module/module.go` — адаптер в `fx.Provide`; блоки мутаций — свои, `<домен>-<код>` дальше номеров среза.
 
 ### 3. Гейт
 

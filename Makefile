@@ -169,8 +169,8 @@ e2e-smoke: ## Только smoke-набор (-m smoke) — шаг make release
 	@bash scripts/tools/e2e.sh --smoke --format=detailed
 
 ##@ SCAFFOLD
-new-domain: ## new-domain NAME=order [AGG=order] — скелет нового домена: срез Create и Get его агрегата
-	@bash scripts/new-domain.sh $(NAME) $(AGG)
+new-domain: ## new-domain NAME=ordering [AGG=order] — скелет нового домена: срез Create и Get его агрегата
+	@bash scripts/new-domain.sh "$(NAME)" "$(AGG)"
 
 ##@ INTEL
 status: ## Сводка состояния репо для smartdev (A= "--full")

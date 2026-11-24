@@ -48,11 +48,16 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		domain string
+		agg    string // AGG=; пусто — агрегат по умолчанию
 		script string // new-domain.sh песочницы; пусто — репо
 		want   []string
 	}{
-		{name: "a keyword", domain: "func", want: []string{"ключевое слово"}},
-		{name: "a declaration of the domain package", domain: "repository", want: []string{"объявление пакета домена"}},
+		{name: "a keyword", domain: "func", want: []string{"домен 'func' — ключевое слово"}},
+		{name: "a declaration of the domain package", domain: "usecase", want: []string{"объявление пакета домена"}},
+		{name: "an aggregate declaration", domain: free, agg: "usecase", want: []string{"агрегат 'usecase' — объявление пакета домена", "AGG="}},
+		{name: "an aggregate not in snake_case", domain: free, agg: "Order", want: []string{"имя агрегата — snake_case"}},
+		{name: "an aggregate table taken", domain: free, agg: occupied, want: []string{"таблицу " + occupied + "s уже создаёт миграция — возьми другой агрегат"}},
+		{name: "an aggregate the name does not give", domain: "matches", want: []string{"агрегат контекста matches по имени не выводится", "AGG="}},
 		{name: "a word of the slice that builds", domain: word, want: []string{anchored, "правки откатаны"}},
 		{name: "an occupied table", domain: occupied, want: []string{"таблицу " + occupied + "s уже создаёт миграция"}},
 		{name: "a failure after the first edit", domain: free, want: []string{anchored, "правки откатаны"}},
@@ -68,7 +73,11 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 			git(t, repo, "init", "-q", "-b", "main")
 			commitAll(t, repo)
 
-			cmd := exec.CommandContext(t.Context(), "bash", "scripts/new-domain.sh", tc.domain)
+			args := []string{"scripts/new-domain.sh", tc.domain}
+			if tc.agg != "" {
+				args = append(args, tc.agg)
+			}
+			cmd := exec.CommandContext(t.Context(), "bash", args...)
 			cmd.Dir = repo
 			cmd.Env = callerEnv("PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH"))
 			out, err := cmd.CombinedOutput()
@@ -107,5 +116,50 @@ func freeDomain(files map[string]string, names ...string) string {
 		if name := names[0] + strconv.Itoa(n); !taken(name) {
 			return name
 		}
+	}
+}
+
+// TestNewDomainNames: имена среза по контексту и агрегату (--names — без правок): агрегат по умолчанию — контекст в
+// единственном числе по однозначному окончанию, таблица и путь — множественное агрегата без второго -s, HTTP-типы — с
+// префиксом домена, инициализм во множественном — с «s» строчной.
+func TestNewDomainNames(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	for _, tc := range []struct {
+		args                    []string
+		typ, table, http, field string
+	}{
+		{args: []string{"order"}, typ: "Order", table: "orders", http: "Order", field: "Orders"},
+		{args: []string{"objects"}, typ: "Object", table: "objects", http: "ObjectsObject", field: "Objects"},
+		{args: []string{"categories"}, typ: "Category", table: "categories", http: "CategoriesCategory", field: "Categories"},
+		{args: []string{"addresses"}, typ: "Address", table: "addresses", http: "AddressesAddress", field: "Addresses"},
+		{args: []string{"boxes"}, typ: "Box", table: "boxes", http: "BoxesBox", field: "Boxes"},
+		{args: []string{"analyses"}, typ: "Analysis", table: "analyses", http: "AnalysesAnalysis", field: "Analyses"},
+		{args: []string{"analysis"}, typ: "Analysis", table: "analyses", http: "Analysis", field: "Analyses"},
+		{args: []string{"status"}, typ: "Status", table: "statuses", http: "Status", field: "Statuses"},
+		{args: []string{"quiz"}, typ: "Quiz", table: "quizzes", http: "Quiz", field: "Quizzes"},
+		{args: []string{"cases"}, typ: "Case", table: "cases", http: "CasesCase", field: "Cases"},
+		{args: []string{"urls"}, typ: "URL", table: "urls", http: "URLsURL", field: "URLs"},
+		{args: []string{"order_items"}, typ: "OrderItem", table: "order_items", http: "OrderItemsOrderItem", field: "OrderItems"},
+		{args: []string{"people", "employee"}, typ: "Employee", table: "employees", http: "PeopleEmployee", field: "Employees"},
+		{args: []string{"ordering", "order"}, typ: "Order", table: "orders", http: "OrderingOrder", field: "Orders"},
+		{args: []string{"media", "series"}, typ: "Series", table: "series", http: "MediaSeries", field: "Series"},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			t.Parallel()
+			out, err := runIn(t, root, "bash", append([]string{"scripts/new-domain.sh", "--names"}, tc.args...)...)
+			require.NoError(t, err, out)
+			names := map[string]string{}
+			for line := range strings.Lines(out) {
+				if key, value, ok := strings.Cut(strings.TrimSpace(line), "="); ok {
+					names[key] = value
+				}
+			}
+			table := strings.ReplaceAll(tc.table, "_", "-")
+			require.Equal(t, map[string]string{
+				"domain": tc.args[0], "agg": names["agg"], "type": tc.typ, "table": tc.table, "route": "/api/" + table,
+				"http": tc.http, "port": tc.typ + "Repository", "field": tc.field,
+			}, names)
+		})
 	}
 }

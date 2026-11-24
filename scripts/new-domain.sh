@@ -6,11 +6,12 @@
 #   make new-domain NAME=objects               агрегат — контекст в единственном числе: Object, таблица objects
 #   make new-domain NAME=ordering AGG=order    агрегат Order контекста ordering: таблица orders, путь /api/orders
 #   bash scripts/new-domain.sh <контекст> [<агрегат>]
+#   bash scripts/new-domain.sh --names <контекст> [<агрегат>]   только имена среза, без правок
 #
 # Агрегат — единственное число (order, order_item), таблица и ресурс пути — его множественное (имя на -s, кроме -ss,
 # -us и -is, уже множественное или неизменяемое: series). Имена агрегата — тип, порт <Агрегат>Repository, методы
-# usecase и policy, HTTP-типы <Домен><Агрегат>, хендлеры и таблицы ошибок операций: следующий агрегат контекста
-# встаёт рядом без переименований (skill scaffold, вариант domain).
+# usecase и policy, HTTP-типы <Домен><Агрегат> (<Домен>, если агрегат — домен), хендлеры и таблицы ошибок операций:
+# следующий агрегат контекста встаёт рядом без переименований (skill scaffold, вариант domain § Следующий агрегат).
 #
 # Создаёт рабочий срез — миграцию таблицы, sqlc-запросы, репозиторий с integration-тестом,
 # сущность, policy и usecase с тестами, HTTP-операции под cookie-сессией с тестами, fx-модуль —
@@ -25,6 +26,11 @@ set -euo pipefail
 # Имя, регистр и множественное число — по ASCII при любой локали: в турецкой [a-z] не берёт «i».
 export LC_ALL=C
 
+NAMES_ONLY=""
+if [ "${1:-}" = --names ]; then
+    NAMES_ONLY=1
+    shift
+fi
 NAME="${1:-}" AGG="${2:-}"
 if [ -z "$NAME" ]; then
     echo "ERROR: usage: $0 <domain_name> [<aggregate_name>]" >&2
@@ -39,10 +45,19 @@ if ! [[ "$NAME" =~ ^[a-z][a-z0-9]*(_[a-z0-9]+)*$ ]]; then
     echo "       получено: '$NAME'" >&2
     exit 1
 fi
-# Агрегат по умолчанию — контекст в единственном числе: objects → object, categories → category; status, access и
-# analysis — уже единственное.
+# Агрегат по умолчанию — контекст в единственном числе по однозначному окончанию: objects → object, categories →
+# category, addresses → address, boxes → box, wishes → wish, analyses → analysis; status, access и analysis — уже
+# единственное. У -ches, -uses и -zes единственное по имени не выводится (matches и caches, statuses и causes) — отказ
+# с подсказкой AGG=; -ies — всегда -y (movies, series — AGG= явно).
 if [ -z "$AGG" ]; then
     case "$NAME" in
+        *ches | *uses | *zes)
+            echo "ERROR: агрегат контекста $NAME по имени не выводится (${NAME%es} или ${NAME%s}?) — задай его явно:" >&2
+            echo "       make new-domain NAME=$NAME AGG=<агрегат в единственном числе>" >&2
+            exit 1
+            ;;
+        *sses | *xes | *shes) AGG=${NAME%es} ;;
+        *yses) AGG=${NAME%yses}ysis ;;
         *ss | *us | *is) AGG=$NAME ;;
         *ies) AGG=${NAME%ies}y ;;
         *s) AGG=${NAME%s} ;;
@@ -54,8 +69,9 @@ if ! [[ "$AGG" =~ ^[a-z][a-z0-9]*(_[a-z0-9]+)*$ ]]; then
     echo "       получено: '$AGG' — задай его явно: make new-domain NAME=$NAME AGG=<агрегат>" >&2
     exit 1
 fi
-# Пакет домена и агрегат не могут называться ключевым словом или встроенным именем Go и именем, с которым тип агрегата
-# совпал бы с объявлением пакета домена (Usecase, Policy…) или пакет — с пакетом, который он берёт (policy). Имя,
+# Пакет домена не может называться ключевым словом или встроенным именем Go и пакетом, который он берёт (policy);
+# домен и агрегат — именем, с которым тип совпал бы с объявлением пакета домена (Authorizer, Policy, Usecase,
+# UsecaseDeps). Агрегат в Go — только CamelCase-именем, ключевое слово ему не помеха (cases → Case). Имя,
 # которое код среза объявляет или зовёт рядом с пакетом домена (repo, id, tests…), ловит сборка среза (go vet
 # ниже) с откатом правок: список таких слов отвергал бы и имена, на которых срез собирается (status, body, api…).
 reserved=(
@@ -64,30 +80,35 @@ reserved=(
     any append bool byte cap clear close comparable complex complex64 complex128 copy delete error false
     float32 float64 imag int int8 int16 int32 int64 iota len make max min new nil panic print println
     real recover rune string true uint uint8 uint16 uint32 uint64 uintptr
-    authorizer create_input policy repository usecase usecase_deps
 )
-for word in "${reserved[@]}"; do
-    for name in "$NAME" "$AGG"; do
-        if [ "$name" = "$word" ]; then
-            echo "ERROR: '$name' — ключевое слово или встроенное имя Go либо объявление пакета домена: возьми другое" >&2
-            exit 1
-        fi
-    done
+declarations=(authorizer policy usecase usecase_deps)
+for word in "${reserved[@]}" "${declarations[@]}"; do
+    if [ "$NAME" = "$word" ]; then
+        echo "ERROR: домен '$NAME' — ключевое слово или встроенное имя Go либо объявление пакета домена: возьми другое" >&2
+        exit 1
+    fi
+done
+for word in "${declarations[@]}"; do
+    if [ "$AGG" = "$word" ]; then
+        echo "ERROR: агрегат '$AGG' — объявление пакета домена: задай другой — make new-domain NAME=$NAME AGG=<агрегат>" >&2
+        exit 1
+    fi
 done
 
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 DOMAIN_DIR="internal/domain/$NAME"
 
-if [ -d "$DOMAIN_DIR" ]; then
-    echo "ERROR: $DOMAIN_DIR уже существует" >&2
+if [ -z "$NAMES_ONLY" ] && [ -d "$DOMAIN_DIR" ]; then
+    echo "ERROR: $DOMAIN_DIR уже существует — следующий агрегат домена кладут руками: skill scaffold, вариант domain" >&2
+    echo "       (§ Следующий агрегат)" >&2
     exit 1
 fi
 for tool in sqlc mockery gofumpt; do
-    command -v "$tool" >/dev/null || { echo "ERROR: $tool не найден — make setup" >&2; exit 1; }
+    [ -n "$NAMES_ONLY" ] || command -v "$tool" >/dev/null || { echo "ERROR: $tool не найден — make setup" >&2; exit 1; }
 done
 # python3 make setup не ставит, а без него срез откатился бы в конце, на сверке якорей своих мутаций.
-command -v python3 >/dev/null || { echo "ERROR: python3 не найден — им make new-domain, как make mutate, сверяет мутации: поставь его" >&2; exit 1; }
+[ -n "$NAMES_ONLY" ] || command -v python3 >/dev/null || { echo "ERROR: python3 не найден — им make new-domain, как make mutate, сверяет мутации: поставь его" >&2; exit 1; }
 
 # Домен order_items, агрегат order_item → OrderItems (префикс HTTP-типов домена), orderItems (таблица ошибок
 # домена), orderitems (алиасы импортов), ORDER_ITEMS (коды ошибок); OrderItem (тип агрегата), OrderItems (поле порта в
@@ -100,7 +121,8 @@ title() {
     for part in ${1//_/ }; do
         word=$(tr '[:lower:]' '[:upper:]' <<<"$part")
         case "$initialisms" in
-            *" $word "*) [ "$word" != IDS ] || word=IDs ;;
+            *" ${word%S} "*) [ "${word%S}" = "$word" ] || word=${word%S}s ;;
+            *" $word "*) ;;
             *) word=$(tr '[:lower:]' '[:upper:]' <<<"${part:0:1}")${part:1} ;;
         esac
         out+=$word
@@ -112,10 +134,14 @@ first=${NAME%%_*}
 CAMEL=$first$(title "${NAME#"$first"}")
 FLAT=${NAME//_/}
 UPPER=$(echo "$NAME" | tr '[:lower:]' '[:upper:]')
-# Множественное число агрегата — по правилам английского (status → statuses, category → categories); имя на -s
-# (кроме -ss, -us, -is) — уже множественное или неизменяемое (series). Исключения (person → people) правят руками.
+# Множественное число агрегата — по правилам английского (status → statuses, category → categories, analysis →
+# analyses, quiz → quizzes); имя на -s (кроме -ss, -us, -is) — уже множественное или неизменяемое (series).
+# Исключения (person → people) правят руками.
 case "$AGG" in
-    *ss | *us | *is | *x | *z | *ch | *sh) TABLE="${AGG}es" ;;
+    *is) TABLE="${AGG%is}es" ;;
+    *ss | *us | *x | *ch | *sh) TABLE="${AGG}es" ;;
+    *[aeiou]z) TABLE="${AGG}zes" ;;
+    *z) TABLE="${AGG}es" ;;
     *s) TABLE=$AGG ;;
     *[!aeiou]y) TABLE="${AGG%y}ies" ;;
     *) TABLE="${AGG}s" ;;
@@ -126,6 +152,11 @@ PTITLE=$(title "$TABLE")
 HTTPT=$TITLE
 [ "$ATITLE" = "$TITLE" ] || HTTPT+=$ATITLE
 ROUTE=${TABLE//_/-}
+if [ -n "$NAMES_ONLY" ]; then
+    printf 'domain=%s\nagg=%s\ntype=%s\ntable=%s\nroute=/api/%s\nhttp=%s\nport=%sRepository\nfield=%s\n' \
+        "$NAME" "$AGG" "$ATITLE" "$TABLE" "$ROUTE" "$HTTPT" "$ATITLE" "$PTITLE"
+    exit 0
+fi
 MODULE_PATH=$(awk '/^module / {print $2}' go.mod)
 
 # Алиас импорта — имя без «_»: us_er дал бы usermod, который уже занят доменом user.
@@ -141,7 +172,7 @@ last_ddl=$(cat migrations/[0-9][0-9][0-9][0-9]_*.up.sql 2>/dev/null | tr '[:uppe
     grep -oE "(create|drop)[[:space:]]+table[[:space:]]+(if[[:space:]]+(not[[:space:]]+)?exists[[:space:]]+)?${TABLE}([^a-z0-9_]|$)" |
     tail -1 || true)
 if [[ $last_ddl == create* ]]; then
-    echo "ERROR: таблицу ${TABLE} уже создаёт миграция — возьми другое имя домена" >&2
+    echo "ERROR: таблицу ${TABLE} уже создаёт миграция — возьми другой агрегат (AGG=) или домен" >&2
     exit 1
 fi
 
@@ -163,6 +194,7 @@ rollback() {
 }
 trap rollback EXIT
 
+echo "→ домен $NAME, агрегат $ATITLE: таблица $TABLE, путь /api/$ROUTE"
 echo "→ создаю $DOMAIN_DIR/ и ${MIGRATION}.{up,down}.sql"
 
 mkdir -p "$DOMAIN_DIR/delivery/http" "$DOMAIN_DIR/infra/postgres/queries" "$DOMAIN_DIR/module"
@@ -1085,7 +1117,7 @@ $HANDLER
 - DefaultStatus: http.StatusCreated,
 + DefaultStatus: http.StatusOK,
 
-## ${NAME}-18 handler — get${ATITLE}}: операция открыта без сессии
+## ${NAME}-18 handler — get${ATITLE}: операция открыта без сессии
 $HANDLER
 - huma.Register(api, get${ATITLE}Errors.Declare(authgate.Secured(huma.Operation{
 + huma.Register(api, get${ATITLE}Errors.Declare(httpkit.Public(huma.Operation{
