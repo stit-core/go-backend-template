@@ -1,0 +1,6 @@
+# Платформа событий — то, что живёт только ради публикации и подписки: fx-клей outbox доменов. Сервис без событий
+# (events: none во frontmatter docs/stack/messaging.md — только при identity: external: user и verification публикуют
+# события) удаляет эти пути вместе с natskit и outboxkit графа (de-template, чек-лист «Сервис без событий»); проза
+# шаблона, которая на них ссылается, сверяется по тегу шаблона .template/version. Сервис, который начал публиковать,
+# возвращает пути из тега и снимает решение (scaffold, вариант event).
+internal/platform/events

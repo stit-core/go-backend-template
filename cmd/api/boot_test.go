@@ -89,16 +89,15 @@ func hookEvents(h slog.Handler) fx.Option {
 	return fx.WithLogger(func() fxevent.Logger { return &fxevent.SlogLogger{Logger: slog.New(h)} })
 }
 
-// serviceEnv поднимает Postgres, NATS и зависимости китов графа (graphKits) в контейнерах и выставляет env сервиса:
+// serviceEnv поднимает Postgres и зависимости китов графа (graphKits) в контейнерах и выставляет env сервиса:
 // .env.example, направленный на них.
 func serviceEnv(t *testing.T) *testkit.PostgresFixture {
 	t.Helper()
 	pg := testkit.StartPostgres(t, testkit.WithMigrations(sources.Kits...), testkit.WithMigrationsDir(repopath.Migrations()))
-	nats := testkit.StartNATS(t, testkit.WithJetStream())
 	unsetHTTPEnv(t)
 	env := envExample(t)
 	for k, v := range map[string]string{
-		"PG_DSN": pg.DSN, "NATS_URL": nats.URL, "HTTP_ADDR": "127.0.0.1:0", "LOG_SILENT": "true",
+		"PG_DSN": pg.DSN, "HTTP_ADDR": "127.0.0.1:0", "LOG_SILENT": "true",
 		// Спецификацию сервис отдаёт только с HTTP_DOCS_ENABLED.
 		"HTTP_DOCS_ENABLED": "true",
 		// Argon2id с памятью кита по умолчанию (64 МиБ на хэш) под -race держит бинарь тестов на 2,2 ГБ: потоки
@@ -128,7 +127,14 @@ type kitDep struct {
 // (TestBoot): сервису с китом правка serviceEnv не нужна.
 var kitDeps = map[string]kitDep{
 	"cachekit":   {probe: "cachekit", start: startRedis},
+	"natskit":    {probe: "natskit", start: startNATS},
 	"storagekit": {probe: "storagekit", start: startMinIO},
+}
+
+// startNATS — NATS с JetStream: потоки событий сервиса natskit заводит сам.
+func startNATS(t *testing.T) map[string]string {
+	t.Helper()
+	return map[string]string{"NATS_URL": testkit.StartNATS(t, testkit.WithJetStream()).URL}
 }
 
 func startRedis(t *testing.T) map[string]string {
@@ -245,7 +251,7 @@ func TestBoot_SessionOrigin(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, status, "a request without a session cookie needs no Origin: %s", code)
 }
 
-// TestBoot поднимает сервис набором опций main поверх Postgres, NATS и зависимостей китов графа в контейнерах:
+// TestBoot поднимает сервис набором опций main поверх Postgres и зависимостей китов графа в контейнерах:
 // конструкторы, Invoke и хуки выполняются по-настоящему, чего fx.ValidateApp не делает. Проверки — про сервис целиком,
 // без знания его доменов; потоки доменов идентичности — TestIdentity.
 func TestBoot(t *testing.T) {
@@ -305,7 +311,7 @@ func TestBoot(t *testing.T) {
 	for _, p := range ready.Probes {
 		probes[p.Name] = p.Status
 	}
-	want := map[string]string{"pgkit": "ok", "natskit": "ok"}
+	want := map[string]string{"pgkit": "ok"}
 	for _, kit := range graphKits() {
 		want[kitDeps[kit].probe] = "ok"
 	}

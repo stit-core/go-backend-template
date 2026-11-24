@@ -119,7 +119,7 @@ POOL = 2
 READY_TIMEOUT = 120
 # Зависимости китов графа: boot-тест (BOOT_TEST, kitDeps) поднимает сервер вида, только если кит — в графе cmd/api
 # (KITS_TOOL); его вызов Start* такого вида без кита в графе пула не поднимает.
-KIT_SERVERS = {"cachekit": "redis", "storagekit": "minio"}
+KIT_SERVERS = {"cachekit": "redis", "natskit": "nats", "storagekit": "minio"}
 BOOT_TEST = "cmd/api/boot_test.go"
 KITS_TOOL = pathlib.Path("scripts", "tools", "kits.sh")
 

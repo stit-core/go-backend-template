@@ -9,10 +9,10 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-# KITS — киты с внешней зависимостью: cachekit — Redis, storagekit — MinIO (S3). Новый — строкой здесь, сервисом-профилем
-# в test/stack/compose.yml, веткой в scripts/local-deps.sh, записью kitDeps в cmd/api/boot_test.go и KIT_SERVERS в
-# scripts/tools/mutate.py.
-KITS="cachekit storagekit"
+# KITS — киты с внешней зависимостью: cachekit — Redis, natskit — NATS с JetStream (сервис с событиями), storagekit —
+# MinIO (S3). Новый — строкой здесь, сервисом-профилем в test/stack/compose.yml, веткой в scripts/local-deps.sh,
+# записью kitDeps в cmd/api/boot_test.go и KIT_SERVERS в scripts/tools/mutate.py.
+KITS="cachekit natskit storagekit"
 golibinfra=git.stit.tech/stit-core/golibinfra
 
 deps=$(go list -e -deps ./cmd/api)

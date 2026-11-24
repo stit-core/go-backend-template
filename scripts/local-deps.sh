@@ -39,16 +39,17 @@ up() {
     -p 5432:5432 \
     postgres:17-alpine
 
-  run_once "$NATS_CONTAINER" -p 4222:4222 nats:2.10-alpine -js
-
   env=(
     "PG_DSN=postgres://app:app@localhost:5432/app?sslmode=disable"
-    "NATS_URL=nats://localhost:4222"
   )
   # Отказ kits.sh (нет go) — отказ up: без списка китов зависимость кита молча не встала бы.
   kits=$(bash scripts/tools/kits.sh)
   for kit in $kits; do
     case "$kit" in
+      natskit)
+        run_once "$NATS_CONTAINER" -p 4222:4222 nats:2.10-alpine -js
+        env+=("NATS_URL=nats://localhost:4222")
+        ;;
       cachekit)
         run_once "$REDIS_CONTAINER" -p 6379:6379 redis:7-alpine
         env+=("REDIS_URL=redis://localhost:6379/0")
@@ -74,7 +75,8 @@ up() {
   echo "All containers started. Recommended environment variables:"
   echo ""
   printf '  %s\n' "${env[@]}"
-  grep -E '^NATS_(JETSTREAM_ENABLED|JS_STREAM_NAMES)=' .env.example | sed 's/^/  /'
+  # Потоки событий — у сервиса с событиями (natskit): у сервиса без них строк NATS_* в .env.example нет.
+  grep -E '^NATS_(JETSTREAM_ENABLED|JS_STREAM_NAMES)=' .env.example | sed 's/^/  /' || true
   echo ""
 }
 

@@ -61,8 +61,10 @@ services:
       - "127.0.0.1::5432"
     networks: [smoke]
 
+  # NATS с JetStream — у сервиса с событиями (natskit в графе): профиль включает lib.sh.
   nats:
     image: nats:2.10-alpine
+    profiles: [natskit]
     command: ["-js", "-sd", "/data", "-m", "8222"]
     volumes:
       - natsdata:/data
@@ -153,6 +155,7 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+        required: false
       migrate:
         condition: service_completed_successfully
       seed-admin:

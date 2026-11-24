@@ -24,7 +24,8 @@ E2E_PROJECT="e2e-$(printf '%s' "$PWD" | _e2e_hash | cut -c1-12)"
 export COMPOSE_PROJECT_NAME="$E2E_PROJECT"
 
 # Сервисы-профили стека: admin для e2e заводит seed-admin — он есть у проекта со своей идентичностью; кит графа с
-# внешней зависимостью (scripts/tools/kits.sh) поднимает сервис с именем кита: cachekit — Redis, storagekit — MinIO.
+# внешней зависимостью (scripts/tools/kits.sh) поднимает сервис с именем кита: cachekit — Redis, natskit — NATS,
+# storagekit — MinIO.
 profiles=()
 if [ -d cmd/seed-admin ]; then
     profiles+=(seed-admin)

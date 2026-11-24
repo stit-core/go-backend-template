@@ -71,8 +71,13 @@ resolve_port() {
 }
 API_PORT=$(resolve_port api 8080)
 PG_PORT=$(resolve_port postgres 5432)
-NATS_PORT=$(resolve_port nats 4222)
-for _p in API_PORT PG_PORT NATS_PORT; do
+ports=(API_PORT PG_PORT)
+# NATS — у сервиса с событиями: профиль natskit (lib.sh).
+if [[ ",$COMPOSE_PROFILES," == *,natskit,* ]]; then
+    NATS_PORT=$(resolve_port nats 4222)
+    ports+=(NATS_PORT)
+fi
+for _p in "${ports[@]}"; do
     if [ -z "${!_p:-}" ]; then
         echo "FAIL: could not resolve host port ($_p)" >&2
         docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" ps >&2
@@ -83,8 +88,10 @@ API_BASE="http://127.0.0.1:${API_PORT}"
 cat > "$ENDPOINTS_FILE" <<EOF
 E2E_API_BASE_URL=${API_BASE}
 E2E_PG_DSN=postgresql://postgres:postgres@127.0.0.1:${PG_PORT}/app
-E2E_NATS_URL=nats://127.0.0.1:${NATS_PORT}
 EOF
+if [ -n "${NATS_PORT:-}" ]; then
+    echo "E2E_NATS_URL=nats://127.0.0.1:${NATS_PORT}" >> "$ENDPOINTS_FILE"
+fi
 
 # === Wait for api healthy: проверка здоровья образа (`api healthcheck`), та же, что у деплоя ===
 echo
