@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -10,6 +11,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
 	"git.stit.tech/stit-core/go-backend-template/pkg/paging"
+	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
@@ -165,9 +167,9 @@ var (
 	notFoundRule         = httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "Пользователь не найден. Проверьте, что его не удалили."}
 	alreadyExistsRule    = httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "Этот адрес электронной почты уже занят. Укажите другой адрес или войдите с этим."}
 	invalidEmailRule     = httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_EMAIL", Detail: "Адрес электронной почты записан неверно. Проверьте его и повторите.", Field: "body.email"}
-	invalidNameRule      = httpkit.ErrorRule{Err: user.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_NAME", Detail: "Имя пустое или длиннее 200 знаков. Укажите имя от 1 до 200 знаков.", Field: "body.name"}
+	invalidNameRule      = httpkit.ErrorRule{Err: user.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_NAME", Detail: "Имя пустое, длиннее 200 знаков или содержит недопустимый символ. Укажите имя от 1 до 200 знаков.", Field: "body.name"}
 	invalidRoleRule      = httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_ROLE", Detail: "Такой роли нет. Выберите роль из списка."}
-	weakPasswordRule     = httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "Пароль слишком простой. Задайте пароль не короче 8 знаков.", Field: "body.password"}
+	weakPasswordRule     = httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "Пароль слишком простой. Число знаков в пароле: не меньше " + strconv.Itoa(policy.MinPasswordLen) + ".", Field: "body.password"}
 	passwordTooLongRule  = httpkit.ErrorRule{Err: user.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "USER_PASSWORD_TOO_LONG", Detail: "Пароль слишком длинный. Придумайте пароль покороче.", Field: "body.password"}
 	concurrentUpdateRule = httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "Пользователя изменили, пока вы с ним работали. Загрузите его заново и повторите действие."}
 	noUpdateFieldsRule   = httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "Нечего менять. Укажите новое имя или статус."}

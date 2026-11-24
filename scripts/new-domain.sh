@@ -630,7 +630,7 @@ func (h *Handler) get(ctx context.Context, in *${TITLE}GetInput) (*${TITLE}GetOu
 // 500 — archtest), таблица операции объявляет в OpenAPI те, что отдаёт её usecase.
 var (
 	notFoundRule    = httpkit.ErrorRule{Err: $NAME.ErrNotFound, Status: http.StatusNotFound, Code: "${UPPER}_NOT_FOUND", Detail: "Запись не найдена. Проверьте, что ее не удалили."}
-	invalidNameRule = httpkit.ErrorRule{Err: $NAME.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "${UPPER}_INVALID_NAME", Detail: "Название пустое или длиннее 200 знаков. Укажите название от 1 до 200 знаков.", Field: "body.name"}
+	invalidNameRule = httpkit.ErrorRule{Err: $NAME.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "${UPPER}_INVALID_NAME", Detail: "Название пустое, длиннее 200 знаков или содержит недопустимый символ. Укажите название от 1 до 200 знаков.", Field: "body.name"}
 
 	${CAMEL}Errors = httpkit.NewErrorMap(notFoundRule, invalidNameRule, authgate.ForbiddenRule)
 

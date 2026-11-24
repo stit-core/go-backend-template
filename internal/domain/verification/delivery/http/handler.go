@@ -3,11 +3,13 @@ package http
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/verification"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
+	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
@@ -78,7 +80,7 @@ func (h *Handler) confirmEmail(ctx context.Context, in *VerificationEmailVerifyI
 // Правило каждой ошибки домена — одно. verificationErrors переводит в хендлерах их все (ни одна не
 // уходит 500 — archtest), таблица операции объявляет в OpenAPI те, что отдаёт её usecase.
 var (
-	weakPasswordRule     = httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "Пароль слишком простой. Задайте пароль не короче 8 знаков.", Field: "body.password"}
+	weakPasswordRule     = httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "Пароль слишком простой. Число знаков в пароле: не меньше " + strconv.Itoa(policy.MinPasswordLen) + ".", Field: "body.password"}
 	passwordTooLongRule  = httpkit.ErrorRule{Err: verification.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_PASSWORD_TOO_LONG", Detail: "Пароль слишком длинный. Придумайте пароль покороче.", Field: "body.password"}
 	invalidResetRule     = httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "Ссылка для сброса пароля неверна или устарела. Запросите новую."}
 	invalidVerifyRule    = httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "Ссылка для подтверждения адреса неверна или устарела. Запросите новую."}

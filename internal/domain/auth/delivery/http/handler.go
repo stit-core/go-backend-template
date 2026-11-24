@@ -3,12 +3,14 @@ package http
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 
 	"git.stit.tech/stit-core/go-backend-template/internal/domain/auth"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
 	"git.stit.tech/stit-core/go-backend-template/internal/platform/authlimit"
+	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/httpkit"
 )
 
@@ -121,7 +123,7 @@ var (
 	refreshExpiredRule     = httpkit.ErrorRule{Err: auth.ErrRefreshExpired, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_EXPIRED", Detail: "Срок действия входа истек. Войдите заново."}
 	refreshReusedRule      = httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "Вход больше не действует. Войдите заново."}
 	refreshInvalidRule     = httpkit.ErrorRule{Err: auth.ErrRefreshInvalid, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_INVALID", Detail: "Вход не найден или больше не действует. Войдите заново."}
-	weakPasswordRule       = httpkit.ErrorRule{Err: auth.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_WEAK_PASSWORD", Detail: "Пароль слишком простой. Задайте пароль не короче 8 знаков.", Field: "body.new_password"}
+	weakPasswordRule       = httpkit.ErrorRule{Err: auth.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_WEAK_PASSWORD", Detail: "Пароль слишком простой. Число знаков в пароле: не меньше " + strconv.Itoa(policy.MinPasswordLen) + ".", Field: "body.new_password"}
 	passwordTooLongRule    = httpkit.ErrorRule{Err: auth.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "AUTH_PASSWORD_TOO_LONG", Detail: "Пароль слишком длинный. Придумайте пароль покороче.", Field: "body.new_password"}
 	wrongOldPasswordRule   = httpkit.ErrorRule{Err: auth.ErrWrongOldPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_INVALID_OLD_PASSWORD", Detail: "Текущий пароль указан неверно. Проверьте его и повторите.", Field: "body.old_password"}
 	userNotFoundRule       = httpkit.ErrorRule{Err: auth.ErrUserNotFound, Status: http.StatusNotFound, Code: "AUTH_USER_NOT_FOUND", Detail: "Пользователь не найден. Проверьте, что его не удалили."}
