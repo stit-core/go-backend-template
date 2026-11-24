@@ -21,6 +21,8 @@ changed_plans=$(git diff --cached --name-only --diff-filter=ACMRD | grep -E '^\.
 # Переменные git хука (GIT_INDEX_FILE временного индекса) увели бы команды в worktree снимка не туда.
 # shellcheck disable=SC2046 # имена переменных — отдельными словами
 unset $(git rev-parse --local-env-vars)
+# Проверки судят модуль снимка: go.work разработчика в корне репо снимок в .cache/ не знает.
+export GOWORK=off
 
 # Worktree снимка живёт между коммитами: кеш lint в нём тёплый. Каталог, который не worktree этого репо (репо
 # перенесли или скопировали — снимок ведёт в прежний репо; первое создание оборвалось — каталог без .git), хук

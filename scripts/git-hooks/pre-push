@@ -22,6 +22,8 @@ set -euo pipefail
 for v in $(compgen -e); do
     if [[ $v =~ ^(MAKE.*|MFLAGS|GNUMAKEFLAGS)$ ]]; then unset "$v"; fi
 done
+# Гейт судит модуль коммита: go.work разработчика в корне репо дерево гейта в .cache/ не знает.
+export GOWORK=off
 
 if [ "${SKIP_PREPUSH:-}" = "1" ]; then
     echo "pre-push: SKIP_PREPUSH=1 — пропускаю проверки"
@@ -99,6 +101,14 @@ while read -r _ local_sha remote_ref remote_sha; do
     done
 done <<<"$refs"
 
+# Дерево гейта прогона, убитого SIGKILL (таймаут, OOM), остаётся в .cache/: живое — у процесса с PID в имени.
+for old in "$root"/.cache/pre-push.*; do
+    pid=${old##*.}
+    [[ -d $old && $pid =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null || continue
+    git -C "$root" worktree remove --force --force "$old" 2>/dev/null || rm -rf "$old"
+done
+git -C "$root" worktree prune
+
 checked=" "
 while read -r local_ref local_sha _ _; do
     [[ -n $local_sha && ! $local_sha =~ ^0+$ ]] || continue # удаление ref: проверять нечего
@@ -107,7 +117,7 @@ while read -r local_ref local_sha _ _; do
     checked+="$commit "
     # Дерево гейта — на диске репо, как снимок pre-commit: TMPDIR бывает в памяти, а дерево держит её весь прогон.
     mkdir -p "$root/.cache"
-    tmp=$(mktemp -d "$root/.cache/pre-push.XXXXXX")
+    tmp=$root/.cache/pre-push.$$
     git -C "$root" worktree add --detach --quiet "$tmp" "$commit"
     echo "pre-push: $local_ref — make check в свежем worktree $(git -C "$root" rev-parse --short "$commit")"
     # stdin гейта — не список ref'ов; -f Makefile — GNUmakefile коммита make читал бы первым.

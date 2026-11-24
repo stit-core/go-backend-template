@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -250,7 +251,7 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	commitAs := func(subject, verdict string) string {
 		t.Helper()
 		writeFiles(t, repo, map[string]string{
-			"Makefile":                     shellEnv + "\ncheck:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)] shell=[$${BASH_ENV-}$${SHELLOPTS-}$${BASHOPTS-}] dir=$(CURDIR)\"; test \"$$(cat verdict)\" = green\n",
+			"Makefile":                     shellEnv + "\ncheck:\n\t@echo \"toy gate: $$(cat verdict) goals=$(MAKECMDGOALS) make=$(notdir $(MAKE)) flags=[$(MAKEFLAGS)] shell=[$${BASH_ENV-}$${SHELLOPTS-}$${BASHOPTS-}] dir=$(CURDIR) gowork=$${GOWORK-}\"; test \"$$(cat verdict)\" = green\n",
 			"verdict":                      verdict + "\n",
 			"subject":                      subject + "\n",
 			"scripts/git-hooks/commit-msg": rule,
@@ -292,6 +293,7 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	left, err := filepath.Glob(filepath.Join(tmp, "pre-push.*"))
 	require.NoError(t, err)
 	require.Empty(t, left, "the gate tree is not made in TMPDIR")
+	require.Contains(t, out, " gowork=off", "the gate judges the module of the commit, not the go.work of the developer")
 
 	forge := filepath.Join(tmp, "forge.mk")
 	writeFiles(t, tmp, map[string]string{"forge.mk": "check::\n\t@echo forged\n"})
@@ -312,6 +314,16 @@ func TestPrePushGatesPushedCommit(t *testing.T) {
 	out, err = push("refs/heads/main " + green + " refs/heads/main " + red + "\n")
 	require.NoError(t, err, "a green commit must be pushed:\n%s", out)
 	require.Contains(t, out, "toy gate: green")
+
+	// Дерево гейта прогона, убитого SIGKILL (таймаут, OOM), следующий push снимает: процесса с его PID нет.
+	dead := exec.CommandContext(t.Context(), "true")
+	require.NoError(t, dead.Run())
+	stale := filepath.Join(repo, ".cache", "pre-push."+strconv.Itoa(dead.Process.Pid))
+	git(t, repo, "worktree", "add", "-q", "--detach", stale, "HEAD")
+	out, err = push("refs/heads/main " + green + " refs/heads/main " + red + "\n")
+	require.NoError(t, err, "a green commit must be pushed:\n%s", out)
+	require.NoDirExists(t, stale, "the gate tree of a killed run is left behind")
+	require.NotContains(t, git(t, repo, "worktree", "list"), "pre-push.", "the worktree of a killed run stays registered")
 
 	stuff := commitAs("update stuff", "green")
 	out, err = push("refs/heads/main " + stuff + " refs/heads/main " + green + "\n")
