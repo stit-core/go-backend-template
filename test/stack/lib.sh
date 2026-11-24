@@ -29,14 +29,17 @@ profiles=()
 if [ -d cmd/seed-admin ]; then
     profiles+=(seed-admin)
 fi
-# Отказ kits.sh (нет go) — отказ стека: без профиля кита сервис не стартовал бы без своей зависимости.
-if ! kits=$(bash scripts/tools/kits.sh); then
-    echo "FAIL: scripts/tools/kits.sh" >&2
-    exit 1
+# Отказ kits.sh (нет go) — отказ стека: без профиля кита сервис не стартовал бы без своей зависимости. Снос стека
+# (down.sh, E2E_ALL_PROFILES=1) киты графа не спрашивает: он берёт все профили стека и без go.
+if [ -z "${E2E_ALL_PROFILES:-}" ]; then
+    if ! kits=$(bash scripts/tools/kits.sh); then
+        echo "FAIL: scripts/tools/kits.sh" >&2
+        exit 1
+    fi
+    for kit in $kits; do
+        profiles+=("$kit")
+    done
 fi
-for kit in $kits; do
-    profiles+=("$kit")
-done
 COMPOSE_PROFILES=$(IFS=,; printf '%s' "${profiles[*]}")
 export COMPOSE_PROFILES
 
