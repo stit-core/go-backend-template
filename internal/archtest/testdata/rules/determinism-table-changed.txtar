@@ -1,0 +1,28 @@
+# Таблица-литерал, которую функция корня пишет или меняет на месте — сортировкой, удалением, append в её срез, — это
+# состояние между запросами мимо БД и кита.
+rule: TestDomainDeterminism
+base: canon
+want: internal/domain/shop/order.go: sorted changes package var order in place (slices.Sort)
+want: internal/domain/shop/order.go: first changes package var order in place (append)
+want: internal/domain/shop/order.go: forget changes package var seen in place (delete)
+want: internal/domain/shop/order.go: mark writes package var seen
+-- internal/domain/shop/order.go --
+package shop
+
+import "slices"
+
+var (
+	order = []string{"b", "a"}
+	seen  = map[string]bool{}
+)
+
+func sorted() []string {
+	slices.Sort(order)
+	return order
+}
+
+func first(name string) []string { return append(order[:1], name) }
+
+func mark(id string) { seen[id] = true }
+
+func forget(id string) { delete(seen, id) }

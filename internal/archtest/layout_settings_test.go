@@ -40,6 +40,7 @@ var rootLibs = []string{
 	"git.stit.tech/stit-core/golibinfra/outboxkit",
 	"git.stit.tech/stit-core/golibinfra/pgkit",
 	"git.stit.tech/stit-core/golibinfra/ptrkit",
+	"git.stit.tech/stit-core/golibinfra/tzkit",
 	"go.opentelemetry.io/otel/attribute",
 	"go.opentelemetry.io/otel/metric",
 	"go.uber.org/fx",

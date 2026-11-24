@@ -91,7 +91,9 @@ paths:
   нет (archtest `TestModulesOnlyWire`). Моки интерфейса адаптера `infra/<адаптер>` — в `infra/<адаптер>/mocks`
   (archtest `TestDomainPackages`).
 - **HTTP DTO — domain-specific имена.** huma собирает все DTO в одну OpenAPI registry по
-  имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`.
+  имени типа; `ListOutput` в двух доменах → panic. Префиксуй: `UserListOutput`, не `ListOutput`. Префикс — у типа
+  провода (поле `Body`, тег `json`, `path`, `query`, `header`, `cookie` или `form`, тип в поле такого); `Handler`,
+  конфиг хендлера и другие структуры вне провода — без него.
   Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)` и
   строкой в `publicOperations` (`cmd/api/api_test.go`): без того и другого сервис не стартует (httpkit),
   без строки — красный `TestHTTPOperations`. Операцию регистрирует вызов `huma.Register` (поток — `sse.Register`)
@@ -123,7 +125,9 @@ paths:
   вход открывает сессию под `FOR SHARE` этой строки и сверяет пароль, роль и статус с проверенными.
   Состояния между запросами в `*Usecase` и переменных пакета нет — оно в БД или ките: переменная корня — только
   sentinel `Err…`, `TrustedErrors`, исход `outcome.New`, шаблон `regexp.MustCompile`, значение структуры `T{…}` типа
-  корня или `pkg/` (не `sync`, `sync/atomic`), и функции корня её не пишут (archtest `TestDomainDeterminism`).
+  корня или `pkg/` (не `sync`, `sync/atomic`) и неэкспортируемая таблица-литерал из констант (срез, массив или map:
+  список сервисов, роли), и функции корня её не пишут, а таблицу не меняют на месте — `delete`, `clear`, `copy`,
+  `append` в её срез, сортировка (archtest `TestDomainDeterminism`).
 - **Логи — `logkit.Logger`.** Не `fmt.Print*` / `log.*` / `print(ln)` / `slog.*` и не запись в
   `os.Stdout`/`os.Stderr` напрямую (forbidigo). Ключ ошибки в записи — `error`, как у китов: один
   запрос находит отказы сервиса и китов. В лог и payload события — ID и факты: токенов,

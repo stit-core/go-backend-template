@@ -1,0 +1,15 @@
+# Законно: конфиг хендлера без префикса домена — структура вне провода (без Body и тегов провода, ни в одном типе
+# провода): huma её схемой не регистрирует, а в пакете домена её имя и так своё.
+rule: TestHTTPTypes
+base: canon
+-- internal/domain/shop/delivery/http/config.go --
+package http
+
+type Config struct {
+	AppURL         string
+	CookieInsecure bool
+}
+
+type Cookies struct {
+	cfg Config
+}

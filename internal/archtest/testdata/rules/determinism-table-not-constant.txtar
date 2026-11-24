@@ -1,0 +1,16 @@
+# Не таблица-литерал: экспортируемая (её пишет любой пакет), со значением из вызова и с адресом — разделяемым значением.
+rule: TestDomainDeterminism
+base: canon
+want: internal/domain/shop/tables.go declares package var Services: state between requests lives in the database or a kit
+want: internal/domain/shop/tables.go declares package var upper: state between requests lives in the database or a kit
+want: internal/domain/shop/tables.go declares package var items: state between requests lives in the database or a kit
+-- internal/domain/shop/tables.go --
+package shop
+
+import "strings"
+
+var (
+	Services = []string{"billing"}
+	upper    = []string{strings.ToUpper("a")}
+	items    = []*Item{&Item{ID: "1"}}
+)

@@ -74,6 +74,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"slices"
@@ -405,8 +406,11 @@ func parseTxtar(t *testing.T, name, data string) (string, map[string]string) {
 }
 
 // TestHTTPTypes: huma регистрирует схемы по имени Go-типа на весь API, и одноимённые типы двух
-// доменов роняют старт паникой — поэтому у типа delivery/http префикс домена и уникальное имя;
-// тело ответа — envelope {data}. Handler, интерфейсы (порты входа) и типы-функции в схемы не попадают.
+// доменов роняют старт паникой — поэтому у типа провода delivery/http префикс домена и уникальное имя;
+// тело ответа — envelope {data}. Тип провода — структура с полем Body или тегом провода у поля (json, path, query,
+// header, cookie, form), тип пакета в полях такой структуры и именованный тип не структуры. Handler, конфиг хендлера и
+// другие структуры вне провода, интерфейсы (порты входа) и типы-функции в схемы не попадают: префикс им не нужен —
+// они и так в пакете домена.
 func TestHTTPTypes(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -414,41 +418,107 @@ func TestHTTPTypes(t *testing.T) {
 
 func httpTypes(c *check) {
 	seen := map[string]string{} // имя типа → файл
+	byDomain := map[string][]goFile{}
 	for _, f := range c.files {
-		domain, sub, ok := splitDomain(f.pkg)
-		if !ok || sub != "delivery/http" || f.test {
-			continue
+		if domain, sub, ok := splitDomain(f.pkg); ok && sub == "delivery/http" && !f.test {
+			byDomain[domain] = append(byDomain[domain], f)
 		}
+	}
+	for _, domain := range slices.Sorted(maps.Keys(byDomain)) {
 		prefix := exportedName(domain)
-		for _, decl := range c.parse(f.path).Decls {
-			gd, ok := decl.(*ast.GenDecl)
-			if !ok || gd.Tok != token.TYPE {
+		specs, files := map[string]*ast.TypeSpec{}, map[string]string{} // тип пакета → объявление, файл
+		var names []string
+		for _, f := range byDomain[domain] {
+			for _, decl := range c.parse(f.path).Decls {
+				gd, ok := decl.(*ast.GenDecl)
+				if !ok || gd.Tok != token.TYPE {
+					continue
+				}
+				for _, spec := range gd.Specs {
+					ts := spec.(*ast.TypeSpec)
+					specs[ts.Name.Name], files[ts.Name.Name] = ts, f.path
+					names = append(names, ts.Name.Name)
+				}
+			}
+		}
+		wire := wireTypes(specs)
+		for _, name := range names {
+			ts, file := specs[name], files[name]
+			switch ts.Type.(type) {
+			case *ast.InterfaceType, *ast.FuncType:
 				continue
 			}
-			for _, spec := range gd.Specs {
-				ts := spec.(*ast.TypeSpec)
-				name := ts.Name.Name
-				switch ts.Type.(type) {
-				case *ast.InterfaceType, *ast.FuncType:
-					continue
-				}
-				if !ast.IsExported(name) || name == "Handler" {
-					continue
-				}
-				// Регистр — не важен: инициализм revive пишет заглавными (api_key → APIKey).
-				if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
-					c.Errorf("%s declares %s: an HTTP type starts with the domain prefix %s", f.path, name, prefix)
-				}
-				if prev, dup := seen[name]; dup {
-					c.Errorf("type %s is declared in both %s and %s: huma names schemas by Go type", name, prev, f.path)
-				}
-				seen[name] = f.path
-				if body := structField(ts.Type, "Body"); strings.HasSuffix(name, "Output") && body != nil && structField(body.Type, "Data") == nil {
-					c.Errorf("%s declares %s with a Body without Data: a response body is the envelope {data}", f.path, name)
-				}
+			if !ast.IsExported(name) || !wire[name] {
+				continue
+			}
+			// Регистр — не важен: инициализм revive пишет заглавными (api_key → APIKey).
+			if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
+				c.Errorf("%s declares %s: an HTTP type starts with the domain prefix %s", file, name, prefix)
+			}
+			if prev, dup := seen[name]; dup {
+				c.Errorf("type %s is declared in both %s and %s: huma names schemas by Go type", name, prev, file)
+			}
+			seen[name] = file
+			if body := structField(ts.Type, "Body"); strings.HasSuffix(name, "Output") && body != nil && structField(body.Type, "Data") == nil {
+				c.Errorf("%s declares %s with a Body without Data: a response body is the envelope {data}", file, name)
 			}
 		}
 	}
+}
+
+// wireTags — ключи тегов поля, которые читает huma: поле на проводе.
+var wireTags = []string{"json", "path", "query", "header", "cookie", "form"}
+
+// wireTypes — типы провода пакета (specs — его объявления типов): структура с полем Body или тегом провода у поля и
+// именованный тип не структуры, а с ними — типы пакета в полях структур провода.
+func wireTypes(specs map[string]*ast.TypeSpec) map[string]bool {
+	wire := map[string]bool{}
+	for name, ts := range specs {
+		if st, ok := ts.Type.(*ast.StructType); !ok || onWire(st) {
+			wire[name] = true
+		}
+	}
+	for grown := true; grown; {
+		grown = false
+		for name := range wire {
+			st, ok := specs[name].Type.(*ast.StructType)
+			if !ok {
+				continue
+			}
+			for _, field := range st.Fields.List {
+				ast.Inspect(field.Type, func(n ast.Node) bool {
+					if id, ok := n.(*ast.Ident); ok && specs[id.Name] != nil && !wire[id.Name] {
+						wire[id.Name], grown = true, true
+					}
+					return true
+				})
+			}
+		}
+	}
+	return wire
+}
+
+// onWire — у структуры (и вложенной анонимной) поле Body или тег провода.
+func onWire(st *ast.StructType) bool {
+	found := false
+	ast.Inspect(st, func(n ast.Node) bool {
+		field, ok := n.(*ast.Field)
+		if !ok {
+			return !found
+		}
+		for _, name := range field.Names {
+			found = found || name.Name == "Body"
+		}
+		if field.Tag != nil {
+			tag, err := strconv.Unquote(field.Tag.Value)
+			found = found || err == nil && slices.ContainsFunc(wireTags, func(key string) bool {
+				_, ok := reflect.StructTag(tag).Lookup(key)
+				return ok
+			})
+		}
+		return !found
+	})
+	return found
 }
 
 // exportedName — имя домена в CamelCase: order_item → OrderItem.
@@ -979,14 +1049,17 @@ var determinismKits = map[string]string{
 // TestDomainDeterminism: ID, случайность и время домен берёт у китов и из зависимостей — тест подменяет их, а
 // clockkit.Real{} и crypto/rand мимо инжекции — нет. Состояния между запросами в переменных корня нет: переменная
 // корня — sentinel Err… (errors.go), TrustedErrors, исход outcome.New, шаблон regexp.MustCompile, значение
-// структуры T{…} типа корня или pkg/ или проверка var _, и ни одна функция корня её не пишет.
+// структуры T{…} типа корня или pkg/, неэкспортируемая таблица-литерал из констант (срез, массив или map: список
+// сервисов, ролей) или проверка var _, и ни одна функция корня её не пишет — и таблицу не меняет на месте (delete,
+// clear, copy, append в неё, сортировка).
 func TestDomainDeterminism(t *testing.T) {
 	t.Parallel()
 	runRule(t)
 }
 
 func domainDeterminism(c *check) {
-	vars := map[string]map[string]bool{} // домен → переменные корня
+	vars := map[string]map[string]bool{}   // домен → переменные корня
+	tables := map[string]map[string]bool{} // домен → таблицы-литералы корня
 	type rootFunc struct {
 		domain, path string
 		fn           *ast.FuncDecl
@@ -1014,7 +1087,7 @@ func domainDeterminism(c *check) {
 			continue
 		}
 		if vars[domain] == nil {
-			vars[domain] = map[string]bool{}
+			vars[domain], tables[domain] = map[string]bool{}, map[string]bool{}
 		}
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
@@ -1032,8 +1105,10 @@ func domainDeterminism(c *check) {
 						}
 						vars[domain][name.Name] = true
 						fixed := i < len(vs.Values) && fixedValue(vs.Values[i], byName)
-						if !fixed && name.Name != "TrustedErrors" && path.Base(f.path) != "errors.go" {
-							c.Errorf("%s declares package var %s: state between requests lives in the database or a kit; a fixed value is a const or a function", f.path, name.Name)
+						table := i < len(vs.Values) && !ast.IsExported(name.Name) && literalTable(vs.Values[i], byName)
+						tables[domain][name.Name] = table
+						if !fixed && !table && name.Name != "TrustedErrors" && path.Base(f.path) != "errors.go" {
+							c.Errorf("%s declares package var %s: state between requests lives in the database or a kit; a fixed value is a const, a function or an unexported table literal of constants", f.path, name.Name)
 						}
 					}
 				}
@@ -1046,7 +1121,130 @@ func domainDeterminism(c *check) {
 				c.Errorf("%s: %s writes package var %s: state between requests lives in the database or a kit", rf.path, rf.fn.Name.Name, name)
 			}
 		}
+		byName := importsByName(c.parse(rf.path))
+		for _, m := range inPlaceChanges(rf.fn, byName) {
+			if tables[rf.domain][m.name] {
+				c.Errorf("%s: %s changes package var %s in place (%s): a table literal is read-only — state between requests lives in the database or a kit", rf.path, rf.fn.Name.Name, m.name, m.call)
+			}
+		}
 	}
+}
+
+// literalTable — таблица-литерал: срез, массив или map из констант (constantValue).
+func literalTable(expr ast.Expr, byName map[string]string) bool {
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return false
+	}
+	switch lit.Type.(type) {
+	case *ast.ArrayType, *ast.MapType:
+		return constantValue(lit, byName)
+	}
+	return false
+}
+
+// constantValue — значение из констант: литерал, имя, имя пакета (identity.RoleAdmin), операция над ними и составной
+// литерал из них, чей тип без sync и sync/atomic; вызова, функции и адреса — разделяемого значения — в нём нет.
+func constantValue(expr ast.Expr, byName map[string]string) bool {
+	switch x := expr.(type) {
+	case *ast.BasicLit, *ast.Ident:
+		return true
+	case *ast.SelectorExpr:
+		_, ok := x.X.(*ast.Ident)
+		return ok
+	case *ast.ParenExpr:
+		return constantValue(x.X, byName)
+	case *ast.UnaryExpr:
+		return x.Op != token.AND && constantValue(x.X, byName)
+	case *ast.BinaryExpr:
+		return constantValue(x.X, byName) && constantValue(x.Y, byName)
+	case *ast.KeyValueExpr:
+		return constantValue(x.Key, byName) && constantValue(x.Value, byName)
+	case *ast.CompositeLit:
+		if x.Type != nil && mentionsSync(x.Type, byName) {
+			return false
+		}
+		return !slices.ContainsFunc(x.Elts, func(e ast.Expr) bool { return !constantValue(e, byName) })
+	}
+	return false
+}
+
+// mentionsSync — в типе есть тип sync или sync/atomic: его методы пишут значение.
+func mentionsSync(typ ast.Expr, byName map[string]string) bool {
+	found := false
+	ast.Inspect(typ, func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			if id, ok := sel.X.(*ast.Ident); ok && (byName[id.Name] == "sync" || byName[id.Name] == "sync/atomic") {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+// inPlaceCall — вызов, который меняет свой первый аргумент на месте: встроенные delete, clear, copy и append в срез
+// таблицы (append(t[:1], …) пишет в её массив; литерал без запаса ёмкости append(t, …) копирует), сортировки и
+// правки slices, sort и maps.
+var inPlaceCall = map[string][]string{
+	"":       {"append", "clear", "copy", "delete"},
+	"maps":   {"Copy", "DeleteFunc"},
+	"slices": {"Compact", "CompactFunc", "Delete", "DeleteFunc", "Insert", "Replace", "Reverse", "Sort", "SortFunc", "SortStableFunc"},
+	"sort":   {"Float64s", "Ints", "Slice", "SliceStable", "Sort", "Stable", "Strings"},
+}
+
+// inPlaceChange — имя, которое вызов call меняет на месте.
+type inPlaceChange struct{ name, call string }
+
+// inPlaceChanges — имена, которые функция отдаёт первым аргументом вызову inPlaceCall (как есть, срезом или
+// элементом) и не объявляет сама.
+func inPlaceChanges(fn *ast.FuncDecl, byName map[string]string) []inPlaceChange {
+	var out []inPlaceChange
+	local := map[string]bool{}
+	for _, name := range localNames(fn) {
+		local[name] = true
+	}
+	ast.Inspect(fn, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		pkg, name := "", ""
+		switch fun := call.Fun.(type) {
+		case *ast.Ident:
+			name = fun.Name
+		case *ast.SelectorExpr:
+			if id, ok := fun.X.(*ast.Ident); ok {
+				pkg, name = byName[id.Name], fun.Sel.Name
+			}
+		}
+		if !slices.Contains(inPlaceCall[pkg], name) {
+			return true
+		}
+		arg := call.Args[0]
+		if _, sliced := arg.(*ast.SliceExpr); pkg == "" && name == "append" && !sliced {
+			return true
+		}
+		for {
+			switch x := arg.(type) {
+			case *ast.SliceExpr:
+				arg = x.X
+				continue
+			case *ast.IndexExpr:
+				arg = x.X
+				continue
+			case *ast.ParenExpr:
+				arg = x.X
+				continue
+			}
+			break
+		}
+		if id, ok := arg.(*ast.Ident); ok && !local[id.Name] {
+			out = append(out, inPlaceChange{id.Name, strings.TrimPrefix(pkg+"."+name, ".")})
+		}
+		return true
+	})
+	return out
 }
 
 // fixedValue — значение переменной корня, которое не состояние: исход outcome.New("…"), шаблон regexp.MustCompile("…"),
@@ -1072,35 +1270,9 @@ func fixedValue(expr ast.Expr, byName map[string]string) bool {
 // переменную пакета.
 func packageWrites(fn *ast.FuncDecl) []string {
 	local := map[string]bool{}
-	ast.Inspect(fn, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.Field:
-			for _, name := range x.Names {
-				local[name.Name] = true
-			}
-		case *ast.ValueSpec:
-			for _, name := range x.Names {
-				local[name.Name] = true
-			}
-		case *ast.AssignStmt:
-			if x.Tok == token.DEFINE {
-				for _, lhs := range x.Lhs {
-					if id, ok := lhs.(*ast.Ident); ok {
-						local[id.Name] = true
-					}
-				}
-			}
-		case *ast.RangeStmt:
-			if x.Tok == token.DEFINE {
-				for _, e := range []ast.Expr{x.Key, x.Value} {
-					if id, ok := e.(*ast.Ident); ok {
-						local[id.Name] = true
-					}
-				}
-			}
-		}
-		return true
-	})
+	for _, name := range localNames(fn) {
+		local[name] = true
+	}
 	var out []string
 	for name := range writes(fn) {
 		if !local[name] {
@@ -1109,6 +1281,41 @@ func packageWrites(fn *ast.FuncDecl) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// localNames — имена, которые функция объявляет сама: параметры, результаты, var, := и переменные range.
+func localNames(fn *ast.FuncDecl) []string {
+	var local []string
+	ast.Inspect(fn, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.Field:
+			for _, name := range x.Names {
+				local = append(local, name.Name)
+			}
+		case *ast.ValueSpec:
+			for _, name := range x.Names {
+				local = append(local, name.Name)
+			}
+		case *ast.AssignStmt:
+			if x.Tok == token.DEFINE {
+				for _, lhs := range x.Lhs {
+					if id, ok := lhs.(*ast.Ident); ok {
+						local = append(local, id.Name)
+					}
+				}
+			}
+		case *ast.RangeStmt:
+			if x.Tok == token.DEFINE {
+				for _, e := range []ast.Expr{x.Key, x.Value} {
+					if id, ok := e.(*ast.Ident); ok {
+						local = append(local, id.Name)
+					}
+				}
+			}
+		}
+		return true
+	})
+	return local
 }
 
 // piiWords — слово имени поля payload (любое, целиком: Zip — не IP), которому место в данных поставщика, а не в

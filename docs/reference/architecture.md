@@ -294,8 +294,9 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 имена publicly-named DTO в `delivery/http/dto.go` — domain-specific: `EventListOutput`,
 не `ListOutput`. Inline `Body struct{...}` именуется по Outer-типу — уникальность Outer
 гарантирует уникальность Body. Префикс домена, уникальность и envelope `data` экспортируемых
-типов `delivery/http` (кроме `Handler`, интерфейсов и типов-функций — в схемы они не попадают) держит archtest
-`TestHTTPTypes`.
+типов провода `delivery/http` — структура с полем `Body` или тегом провода у поля (`json`, `path`, `query`, `header`,
+`cookie`, `form`), тип в её полях и именованный тип не структуры — держит archtest `TestHTTPTypes`; `Handler`, конфиг
+хендлера и другие структуры вне провода, интерфейсы и типы-функции в схемы не попадают.
 
 Операцию регистрирует вызов `huma.Register` (поток — `sse.Register`) в `delivery/http` своего домена, хендлер —
 метод, функция или литерал этого пакета: правила таблиц ошибок и policy читают его, а операция в

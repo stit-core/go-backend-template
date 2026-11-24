@@ -1,0 +1,37 @@
+# Законно: неэкспортируемая таблица-литерал из констант — список сервисов, роли, предел по виду, таблица видов, —
+# которую функции корня только читают.
+rule: TestDomainDeterminism
+base: canon
+-- internal/domain/shop/catalog.go --
+package shop
+
+import (
+	"slices"
+
+	"{module}/internal/platform/identity"
+)
+
+const kindGoods = "goods"
+
+var (
+	services = []string{"billing", "delivery"}
+	buyers   = []identity.Role{identity.RoleAdmin, identity.RoleClient}
+	limits   = map[string]int{kindGoods: 10, "services": 2 * 5}
+	kinds    = [...]struct {
+		name  string
+		limit int
+	}{{kindGoods, 10}, {name: "services", limit: -1}}
+)
+
+func knownService(name string) bool { return slices.Contains(services, name) }
+
+func canBuy(role identity.Role) bool { return slices.Contains(buyers, role) }
+
+func limit(kind string) int {
+	for _, k := range kinds {
+		if k.name == kind {
+			return k.limit
+		}
+	}
+	return limits[kind]
+}

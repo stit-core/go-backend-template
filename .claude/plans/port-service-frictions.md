@@ -53,8 +53,10 @@ blocked-by: —
 - [x] **AC7** — проверки небезопасных настроек — группа `config.ProvideUnsafe`, проверки шаблона — в `config.Module`.
   Проверка: `make test PKG=./internal/platform/config/...` → PASS; `make mutate A="C01 … C14"` → убиты
   - Подтверждено: `go test ./internal/platform/config/` → PASS; `make mutate A="C01 … C20"` → убиты 20 из 20
-- [ ] **AC8** — archtest пускает таблицу-литерал из констант и тип вне провода без префикса, отказывает правке таблицы
+- [x] **AC8** — archtest пускает таблицу-литерал из констант и тип вне провода без префикса, отказывает правке таблицы
   на месте; tzkit — в `rootLibs`. Проверка: `go test ./internal/archtest -run 'TestRuleExamples|TestDomainDeterminism|TestHTTPTypes'` → PASS
+  - Подтверждено: PASS — примеры `determinism-table-{literal,changed,not-constant}`,
+    `http-types-{handler-config,nested-no-prefix}`; `TestLayout` с tzkit в `rootLibs` → PASS
 - [ ] **AC9** — зависимость кита графа (Redis у cachekit, MinIO у storagekit, NATS у natskit) поднимают boot-тест,
   smoke-стек и `make local-deps-up` сами; раннер мутаций поднимает их пулы только для китов графа. Проверка: `make check`
   → `✓ check clean`; копия с cachekit и storagekit — `make test-int PKG=./cmd/api/...` → PASS
@@ -64,6 +66,10 @@ blocked-by: —
   `infra/postgres/[^/]+\.go`. Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check` и
   мутации среза → убиты
 - [ ] **AC12** — остатки — строками `backlog.md`. Проверка: `make plan-check` → OK
+- [ ] **AC14** — свежий worktree pre-push — на диске, в `.cache/` репо, а не в `${TMPDIR:-/tmp}`. Проверка:
+  `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS
+- [ ] **AC15** — мутацию, которую убила паника тестового бинаря вне теста (убийца — пакет), прогон по ключу не гоняет
+  заново, пока в пакете есть тесты. Проверка: `go test ./internal/archtest -run TestMutate` → PASS
 - [ ] **AC13** — гейт и строгие мутации зелёные. Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0
 
 ## Шаги
@@ -99,22 +105,38 @@ blocked-by: —
   - Сделано: `Guard(app, []Unsafe)` — отказ сортирован; блоки C01–C12 переписаны под проверки, C13–C20 — новые
     (модуль без проверки, группа, порядок, пусто); убиты 20 из 20; Review: принимает сессия корня — дифф отдан,
     ревью не проводилось
-- [ ] **S8** — T11: таблица-литерал, тип вне провода, tzkit в `rootLibs`
+- [x] **S8** — T11: таблица-литерал, тип вне провода, tzkit в `rootLibs`
   - Проверка: `go test ./internal/archtest` → PASS; `make check` → `✓ check clean` · Закрывает: AC8
+  - Сделано: таблица-литерал из констант законна, правка на месте (`delete`, `clear`, `copy`, `append` в срез,
+    `slices`/`sort`/`maps`) — отказ; префикс — у типа провода (`Body`, теги провода, тип в их полях); tzkit — в
+    `rootLibs` (Ф); проза — rule `domain-architecture`, `architecture.md`; `make check` → `✓ check clean`;
+    Review: принимает сессия корня — дифф отдан, ревью не проводилось
 ### Киты, события, срез
-- [ ] **S9** — T8: зависимости китов графа — `kits.sh`, профили стека, `local-deps`, `kitDeps`, пулы раннера
+- [ ] **S9** — T8: зависимости китов графа — `kits.sh`, профили стека, `local-deps`, `kitDeps`, пулы раннера только
+  китов графа (бэклог форка `mutate-servers-by-graph`)
   - Проверка: `go test ./internal/archtest -run TestMutateShared` → PASS; копия с китами — boot-тест PASS · Закрывает: AC9
-- [ ] **S10** — T9: `events: none`, NATS — зависимость кита
+- [ ] **S10** — T9: `events: none`, NATS — зависимость кита `natskit` и в текстах (бэклог форка `kit-deps-nats-docs`)
   - Проверка: `go test ./internal/archtest` → PASS; `make check` → `✓ check clean` · Закрывает: AC10 · Зависит от: S9
 - [ ] **S11** — T12: `make new-domain AGG=` и G115 по файлам `infra/postgres`
   - Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check`, мутации среза · Закрывает: AC11
+### Бэклог форка шаблона
+- [ ] **S14** — `prepush-worktree-disk`: свежий worktree pre-push — в `.cache/` репо, с тестом хука
+  - Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS · Закрывает: AC14
+- [ ] **S15** — `mutate-panic-killer`: убийца-пакет засчитывается, пока в пакете есть тесты, с тестом раннера
+  - Проверка: `go test ./internal/archtest -run TestMutate` → PASS · Закрывает: AC15
 - [ ] **S12** — остатки — в бэклог
   - Проверка: `make plan-check` → OK · Закрывает: AC12
 - [ ] **S13** — гейт, строгий прогон мутаций, черновик аннотации `template/v1.4.0` в «Handoff»
   - Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0 · Закрывает: AC13
 
 ## Решения
-—
+- Go 1.26.11 (GO-2026-6859 в net/http) — коммитом до S8 по задаче сессии корня: toolchain `go.mod`, образ сборки
+  `Dockerfile` и `Dockerfile.migrate`; дайджест — индекс тега в реестре сейчас (в нём добавился riscv64, манифест
+  linux/amd64 тот же, что у индекса форка).
+- Пункты бэклога форка шаблона — по задаче сессии корня: `mutate-servers-by-graph` — в S9, `kit-deps-nats-docs` — в
+  S10, `prepush-worktree-disk` — S14 (правка хука pre-push: каталог worktree гейта, проверок не меньше),
+  `mutate-panic-killer` — S15; `archtest-golibinfra-version` — строкой бэклога (S12): дока с версией golibinfra в
+  шаблоне нет, `docs/stack/dependencies.md` заводит форк.
 
 ## Открытые вопросы
 —
@@ -123,4 +145,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S7 (T1–T7, T10) закрыты, `make check` после S5 — `✓ check clean` (52 с); следующий шаг — S8 (T11).
+S1–S8 (T1–T7, T10, T11) и Go 1.26.11 закрыты, `make check` на S8 — `✓ check clean`; следующий шаг — S9 (T8).

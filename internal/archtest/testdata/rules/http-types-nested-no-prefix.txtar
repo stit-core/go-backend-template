@@ -1,0 +1,16 @@
+# Структура без тегов в поле ответа — тоже провод: huma назовёт её схему её именем на весь API.
+rule: TestHTTPTypes
+base: canon
+want: declares Settings: an HTTP type starts with the domain prefix Shop
+-- internal/domain/shop/delivery/http/settings.go --
+package http
+
+type ShopSettingsOutput struct {
+	Body struct {
+		Data Settings `json:"data"`
+	}
+}
+
+type Settings struct {
+	Limit int
+}
