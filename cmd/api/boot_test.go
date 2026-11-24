@@ -39,6 +39,7 @@ import (
 	"git.stit.tech/stit-core/golibinfra/timerkit"
 
 	"git.stit.tech/stit-core/go-backend-template/cmd/migrate/sources"
+	"git.stit.tech/stit-core/go-backend-template/internal/platform/authgate"
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/repopath"
 )
 
@@ -172,6 +173,71 @@ func send(t *testing.T, c *http.Client, method, url, body string) (int, http.Hea
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	return resp.StatusCode, resp.Header
+}
+
+// spaOrigin — первый адрес HTTP_CORS_ORIGINS окружения сервиса (serviceEnv берёт его из .env.example): с него страница
+// SPA шлёт изменяющие запросы с cookie сессии.
+func spaOrigin(t *testing.T) string {
+	t.Helper()
+	origin, _, _ := strings.Cut(os.Getenv("HTTP_CORS_ORIGINS"), ",")
+	origin = strings.TrimSpace(origin)
+	require.NotEmpty(t, origin, "the service env has the address of the SPA in HTTP_CORS_ORIGINS")
+	return origin
+}
+
+// browser — клиент страницы SPA: как браузер, ставит каждому запросу Origin, без которого изменяющий запрос с cookie
+// сессии получает 403 ORIGIN_NOT_ALLOWED.
+func browser(t *testing.T, jar http.CookieJar, timeout time.Duration) *http.Client {
+	t.Helper()
+	return &http.Client{Jar: jar, Timeout: timeout, Transport: originTransport{origin: spaOrigin(t)}}
+}
+
+type originTransport struct{ origin string }
+
+func (o originTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Origin", o.origin)
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// Изменяющий запрос с cookie сессии сервис пропускает только с Origin из HTTP_CORS_ORIGINS, и отказ — до маршрута:
+// страница соседнего адреса того же сайта шлёт cookie same-site, SameSite=Strict её не останавливает. Путь без
+// маршрута показывает, что проверка не зависит от доменов: с адресом SPA запрос доходит до маршрутизатора (404).
+func TestBoot_SessionOrigin(t *testing.T) {
+	serviceEnv(t)
+	var srv *httpkit.Server
+	app := fxtest.New(t, service, fx.Populate(&srv))
+	app.RequireStart()
+	defer app.RequireStop()
+	client := &http.Client{Timeout: 10 * time.Second}
+	post := func(origin string, cookie bool) (int, string) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+srv.Addr().String()+"/api/no-such-route", http.NoBody)
+		require.NoError(t, err)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		if cookie {
+			req.AddCookie(&http.Cookie{Name: authgate.CookieAccess, Value: "any"})
+		}
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		var body struct {
+			Code string `json:"code"`
+		}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode, body.Code
+	}
+
+	for name, origin := range map[string]string{"no origin": "", "sibling page": "https://evil.example.com"} {
+		status, code := post(origin, true)
+		require.Equal(t, http.StatusForbidden, status, name)
+		require.Equal(t, "ORIGIN_NOT_ALLOWED", code, name)
+	}
+	status, code := post(spaOrigin(t), true)
+	require.Equal(t, http.StatusNotFound, status, "the page of the SPA reaches the router: %s", code)
+	status, code = post("", false)
+	require.Equal(t, http.StatusNotFound, status, "a request without a session cookie needs no Origin: %s", code)
 }
 
 // TestBoot поднимает сервис набором опций main поверх Postgres, NATS и зависимостей китов графа в контейнерах:

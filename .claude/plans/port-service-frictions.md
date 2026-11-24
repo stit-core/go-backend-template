@@ -79,10 +79,12 @@ blocked-by: —
   Проверка: `make mutate A=--anchors` → OK; `make check` → `✓ check clean`
   - Подтверждено: якоря 437 мутаций — по одному месту (AH8 — под новый текст); `make gen` без правок
     `openapi.json`; `make check` → `✓ check clean`
-- [ ] **AC17** — проверка Origin включена: `httpkit.SessionCookies{access_token, refresh_token}` — в графе сервиса и
+- [x] **AC17** — проверка Origin включена: `httpkit.SessionCookies{access_token, refresh_token}` — в графе сервиса и
   спецификации, `403 ORIGIN_NOT_ALLOWED` — в `openapi.json` изменяющих операций, `HTTP_CORS_ORIGINS` — в
   `.env.example`, клиенты тестов и смока шлют Origin, INFRA-HANDOFF в накопителе. Проверка: `make test-int
-  PKG=./cmd/api/...` → PASS (`TestBoot_SessionOrigin`); мутации G12, G13 → убиты; `make check` → `✓ check clean`
+  PKG=./cmd/api/...` → PASS (`TestBoot_SessionOrigin`); мутации G15, G16 → убиты; `make check` → `✓ check clean`
+  - Подтверждено: `make test-int PKG=./cmd/api/...` → PASS; G15 убил `TestBoot_SessionOrigin`, G16 — `TestBoot`;
+    `openapi.json` — 403 `ORIGIN_NOT_ALLOWED` у изменяющих операций; `make check` → `✓ check clean`
 - [ ] **AC13** — гейт и строгие мутации зелёные. Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0
 
 ## Шаги
@@ -143,9 +145,13 @@ blocked-by: —
     v0.59.0); `Detail` 33 правил доменов идентичности, `authgate`, `authlimit` и двух правил среза — по-русски; якорь
     AH8; строка правила — `domain-architecture`, `/scaffold` endpoint, `architecture.md`; тестов, которые сверяли бы
     английский текст ответа, нет; `make check` → `✓ check clean`; Review: принимает сессия корня
-- [ ] **S17** — проверка Origin у изменяющего запроса с cookie сессии (Handoff golibinfra v1.8.0)
-  - Проверка: `make test-int PKG=./cmd/api/...` → PASS; `make mutate A="G12 G13"` → убиты; `make check` →
+- [x] **S17** — проверка Origin у изменяющего запроса с cookie сессии (Handoff golibinfra v1.8.0)
+  - Проверка: `make test-int PKG=./cmd/api/...` → PASS; `make mutate A="G15 G16"` → убиты; `make check` →
     `✓ check clean` · Закрывает: AC17 · Зависит от: S16
+  - Сделано: `sessionCookies` (`httpkit.SessionCookies{access_token, refresh_token}`) — в `authgate.Module` и
+    `SecurityScheme`; `HTTP_CORS_ORIGINS` — в `.env.example` (dev-сервер SPA) и стеке смока; клиенты тестов
+    `cmd/api` и харнеса шлют Origin; `TestBoot_SessionOrigin`; мутации G15, G16; `architecture.md`, `SECURITY.md`;
+    INFRA-HANDOFF в накопителе; Review: принимает сессия корня
 ### Бэклог форка шаблона
 - [ ] **S14** — `prepush-worktree-disk`: свежий worktree pre-push — в `.cache/` репо, с тестом хука
   - Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS · Закрывает: AC14
@@ -175,5 +181,5 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S9 (T1–T8, T10, T11), Go 1.26.11 и S16 (golibinfra v1.8.0, тексты по-русски) закрыты, `make check` на S16 —
-`✓ check clean`; следующий шаг — S17 (проверка Origin), затем S10 (T9).
+S1–S9 (T1–T8, T10, T11), Go 1.26.11, S16 (golibinfra v1.8.0, тексты по-русски) и S17 (проверка Origin) закрыты,
+`make check` на S17 — `✓ check clean`; следующий шаг — S10 (T9).

@@ -2050,6 +2050,18 @@ internal/platform/authgate/jwt.go
 + if err != nil && c.Value == "" {
 + 		return "", errors.New("authgate: no auth cookie")
 
+## G15 platform/authgate — сервис без проверки Origin: cookie сессии не названы httpkit в графе Module
+internal/platform/authgate/module.go
+- 	sessionCookies,
+- 	fx.Invoke(registerIdentityLogAttr),
++ 	fx.Invoke(registerIdentityLogAttr),
+
+## G16 platform/authgate — спецификация без проверки Origin: SecurityScheme не называет cookie сессии
+internal/platform/authgate/module.go
+- CookieScheme(nil) }),
+- 	sessionCookies,
++ CookieScheme(nil) }),
+
 ## C01 platform/config — LogUnsafe: лог без маскирования вне dev пускается
 internal/platform/config/config.go
 - 	if redact.Disabled {

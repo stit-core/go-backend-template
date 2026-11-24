@@ -160,7 +160,7 @@ func TestIdentity(t *testing.T) {
 	base := "http://" + srv.Addr().String()
 	jar, err := cookiejar.New(nil)
 	require.NoError(t, err)
-	user := &http.Client{Jar: jar, Timeout: 10 * time.Second}
+	user := browser(t, jar, 10*time.Second)
 	anon := &http.Client{Timeout: 10 * time.Second}
 
 	const email, password, wrongPassword = "boot@example.com", "password123", "wrong-password"
@@ -304,7 +304,7 @@ func TestIdentity_ResetMailPause(t *testing.T) {
 		fx.Populate(&srv))
 	app.RequireStart()
 	defer app.RequireStop()
-	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: &http.Client{Timeout: 10 * time.Second}}
+	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: browser(t, nil, 10*time.Second)}
 	const victim = "victim@example.com"
 	api.register(victim)
 
@@ -337,7 +337,7 @@ func TestIdentity_ResetIssueBusyIsPause(t *testing.T) {
 		fx.Populate(&srv))
 	app.RequireStart()
 	defer app.RequireStop()
-	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: &http.Client{Timeout: 10 * time.Second}}
+	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: browser(t, nil, 10*time.Second)}
 	const victim = "busy@example.com"
 	id := api.register(victim)
 
@@ -536,7 +536,7 @@ func TestSessions(t *testing.T) {
 		fx.Populate(&srv))
 	app.RequireStart()
 	defer app.RequireStop()
-	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: &http.Client{Timeout: 10 * time.Second}}
+	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: browser(t, nil, 10*time.Second)}
 	db := pg.Pool(t)
 
 	const alice = "alice@example.com"
@@ -857,7 +857,7 @@ func TestSessions_LoginDuringPasswordChange(t *testing.T) {
 	app := fxtest.New(t, service, fx.Populate(&srv))
 	app.RequireStart()
 	defer app.RequireStop()
-	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: &http.Client{Timeout: 30 * time.Second}}
+	api := sessionAPI{t: t, base: "http://" + srv.Addr().String(), client: browser(t, nil, 30*time.Second)}
 
 	const email, newPassword = "race@example.com", "new-password123"
 	id := api.register(email)

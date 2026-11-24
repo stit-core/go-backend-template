@@ -27,6 +27,9 @@ x-app-env: &app-env
   APP_ENV: dev
   COOKIE_SECURE: "false"
   HTTP_DOCS_ENABLED: "true"
+  # Адрес «страницы SPA» харнеса: клиент (test/client/http.py, E2E_ORIGIN) шлёт его в Origin, без него изменяющий
+  # запрос с cookie сессии — 403 ORIGIN_NOT_ALLOWED.
+  HTTP_CORS_ORIGINS: http://e2e.localhost
   OTEL_SDK_DISABLED: "true"
 
   LOG_LEVEL: debug

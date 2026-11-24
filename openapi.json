@@ -493,7 +493,7 @@
                 }
               }
             },
-            "description": "Forbidden: FORBIDDEN"
+            "description": "Forbidden: FORBIDDEN, ORIGIN_NOT_ALLOWED"
           },
           "404": {
             "content": {
@@ -614,6 +614,16 @@
             },
             "description": "Bad Request: VERIFICATION_INVALID_VERIFICATION_TOKEN"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Forbidden: ORIGIN_NOT_ALLOWED"
+          },
           "409": {
             "content": {
               "application/problem+json": {
@@ -732,6 +742,16 @@
             },
             "description": "Unauthorized: AUTH_INVALID_CREDENTIALS"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Forbidden: ORIGIN_NOT_ALLOWED"
+          },
           "413": {
             "content": {
               "application/problem+json": {
@@ -822,6 +842,16 @@
               }
             }
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Forbidden: ORIGIN_NOT_ALLOWED"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -905,6 +935,16 @@
               }
             },
             "description": "Bad Request: VERIFICATION_INVALID_RESET_TOKEN"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Forbidden: ORIGIN_NOT_ALLOWED"
           },
           "409": {
             "content": {
@@ -999,6 +1039,16 @@
         "responses": {
           "204": {
             "description": "No Content"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Forbidden: ORIGIN_NOT_ALLOWED"
           },
           "413": {
             "content": {
@@ -1101,6 +1151,16 @@
             },
             "description": "Unauthorized: AUTH_REFRESH_EXPIRED, AUTH_REFRESH_REUSED, AUTH_REFRESH_INVALID"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Forbidden: ORIGIN_NOT_ALLOWED"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -1181,6 +1241,16 @@
               }
             },
             "description": "Created"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Forbidden: ORIGIN_NOT_ALLOWED"
           },
           "409": {
             "content": {
@@ -1551,7 +1621,7 @@
                 }
               }
             },
-            "description": "Forbidden: FORBIDDEN"
+            "description": "Forbidden: FORBIDDEN, ORIGIN_NOT_ALLOWED"
           },
           "404": {
             "content": {
@@ -1817,7 +1887,7 @@
                 }
               }
             },
-            "description": "Forbidden: FORBIDDEN"
+            "description": "Forbidden: FORBIDDEN, ORIGIN_NOT_ALLOWED"
           },
           "404": {
             "content": {

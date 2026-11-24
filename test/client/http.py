@@ -36,9 +36,16 @@ class UnexpectedStatus(AssertionError):
         self.got = got
 
 
+# Адрес «страницы SPA» стека (HTTP_CORS_ORIGINS в test/stack/compose.yml): как браузер, клиент шлёт его
+# в Origin — без него изменяющий запрос с cookie сессии сервис отвергает (403 ORIGIN_NOT_ALLOWED).
+E2E_ORIGIN = "http://e2e.localhost"
+
+
 class Api:
     def __init__(self, base_url: str, *, timeout: float = 10.0) -> None:
-        self._c = httpx.Client(base_url=base_url, timeout=timeout)
+        self._c = httpx.Client(
+            base_url=base_url, timeout=timeout, headers={"Origin": E2E_ORIGIN}
+        )
 
     def __enter__(self) -> Api:
         return self

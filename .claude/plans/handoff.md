@@ -434,3 +434,19 @@ DECIDE —
 RISK   негодный LOG_* или LOG_REDACT_* в окружении migrate роняет миграции до старта; LOG_LEVEL выше info скрывает
        строки «… ok» миграций
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   env HTTP_CORS_ORIGINS — required для старта, без default: адрес SPA, как в заголовке Origin её страницы
+       (схема, хост и порт; несколько — через запятую); изменяющий запрос с cookie сессии (access_token,
+       refresh_token) сервис пропускает только с Origin из списка, иначе 403 ORIGIN_NOT_ALLOWED; без адреса
+       в списке («*» и «null» адресами не считаются) старт падает (ErrConfig)
+WHY    port-service-frictions S17 — проверка Origin golibinfra v1.8.0: подделка запроса со страницы соседнего
+       адреса того же сайта (cookie уходят same-site, SameSite=Strict её не останавливает)
+ACTION compose `environment:` каждого окружения: HTTP_CORS_ORIGINS=https://<адрес SPA> (dev — адрес dev-сервера
+       SPA); SPA на другом адресе, чем API (запросы cross-origin), — ещё HTTP_CORS_ALLOW_CREDENTIALS=true;
+       скрипты и клиенты вне браузера с cookie сессии шлют Origin из списка или переходят на Bearer
+WHO    проект (compose env)
+DECIDE адрес SPA каждого окружения
+RISK   без HTTP_CORS_ORIGINS сервис не стартует (restart-loop, `compose up --wait` падает); адрес не тот, что у
+       страницы SPA (схема, порт, хвостовой «/»), — вход, выход и любая запись из кабинета получают 403
+===

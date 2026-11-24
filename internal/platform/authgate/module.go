@@ -37,14 +37,22 @@ func CookieScheme(extract httpkit.AuthExtractor) httpkit.SecuritySchemeEntry {
 	}
 }
 
-// SecurityScheme — схема Cookie без extractor'а: собирает API без JWT и БД (спецификация, проверка
-// маршрутов); сервис с ней не стартует — extractor схеме даёт Module.
-var SecurityScheme = httpkit.ProvideSecurityScheme(func() httpkit.SecuritySchemeEntry { return CookieScheme(nil) })
+// sessionCookies: изменяющий запрос с ними httpkit пропускает только с Origin из HTTP_CORS_ORIGINS — страница
+// соседнего адреса того же сайта шлёт их same-site, и SameSite=Strict её не останавливает.
+var sessionCookies = fx.Supply(httpkit.SessionCookies{CookieAccess, CookieRefresh})
+
+// SecurityScheme — схема Cookie без extractor'а и cookie сессии: собирает API без JWT и БД (спецификация, проверка
+// маршрутов) с теми же ответами, что у сервиса; сервис с ней не стартует — extractor схеме даёт Module.
+var SecurityScheme = fx.Options(
+	httpkit.ProvideSecurityScheme(func() httpkit.SecuritySchemeEntry { return CookieScheme(nil) }),
+	sessionCookies,
+)
 
 var Module = fx.Module(
 	"internal/platform/authgate",
 	authnProviders,
 	fx.Provide(NewExtractor),
 	httpkit.ProvideSecurityScheme(func(e *Extractor) httpkit.SecuritySchemeEntry { return CookieScheme(e.Extract) }),
+	sessionCookies,
 	fx.Invoke(registerIdentityLogAttr),
 )

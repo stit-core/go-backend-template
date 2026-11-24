@@ -352,6 +352,12 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   `AUTH_ACCESS_EXPIRED` — «обновить сессию» (`POST /api/auth/refresh`), 403 `FORBIDDEN` — «нет
   прав». Операцию под cookie регистрирует `authgate.Secured(op)`: Security и коды 401 сессии в
   OpenAPI.
+- 403 `ORIGIN_NOT_ALLOWED` — изменяющий запрос (не `GET`, `HEAD`, `OPTIONS`, `TRACE`) с cookie сессии
+  (`access_token`, `refresh_token`) без `Origin` из `HTTP_CORS_ORIGINS`: страница соседнего адреса того же сайта
+  шлёт cookie same-site, и `SameSite=Strict` её не останавливает. Проверку держит httpkit до тела, auth и хендлера,
+  на любом пути; cookie называет `authgate` (`httpkit.SessionCookies` в графе сервиса и спецификации — 403 в OpenAPI
+  каждой изменяющей операции), без адреса в `HTTP_CORS_ORIGINS` сервис не стартует. Запрос без cookie сессии
+  (Bearer, сервис) Origin не нужен.
 - 409 — свой код конфликта у каждой причины; 429 и 503 — `Retry-After` из `RetryAfter()` ошибки в цепочке
   (`auth.LockedError`; `authnkit.ErrBusy` под `ErrBusy` домена).
 - Ошибка, которую usecase переводит сам (ошибка порта), тоже имеет правило: если перевод пропадёт,
