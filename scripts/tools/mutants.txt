@@ -2062,6 +2062,11 @@ internal/platform/authgate/module.go
 - 	sessionCookies,
 + CookieScheme(nil) }),
 
+## G17 platform/authgate — проверка Origin не знает refresh-cookie: refresh и logout со страницы соседнего адреса
+internal/platform/authgate/module.go
+- httpkit.SessionCookies{CookieAccess, CookieRefresh}
++ httpkit.SessionCookies{CookieAccess}
+
 ## C01 platform/config — LogUnsafe: лог без маскирования вне dev пускается
 internal/platform/config/config.go
 - 	if redact.Disabled {

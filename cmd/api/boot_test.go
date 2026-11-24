@@ -210,14 +210,14 @@ func TestBoot_SessionOrigin(t *testing.T) {
 	app.RequireStart()
 	defer app.RequireStop()
 	client := &http.Client{Timeout: 10 * time.Second}
-	post := func(origin string, cookie bool) (int, string) {
+	post := func(origin, cookie string) (int, string) {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+srv.Addr().String()+"/api/no-such-route", http.NoBody)
 		require.NoError(t, err)
 		if origin != "" {
 			req.Header.Set("Origin", origin)
 		}
-		if cookie {
-			req.AddCookie(&http.Cookie{Name: authgate.CookieAccess, Value: "any"})
+		if cookie != "" {
+			req.AddCookie(&http.Cookie{Name: cookie, Value: "any"})
 		}
 		resp, err := client.Do(req)
 		require.NoError(t, err)
@@ -229,14 +229,19 @@ func TestBoot_SessionOrigin(t *testing.T) {
 		return resp.StatusCode, body.Code
 	}
 
-	for name, origin := range map[string]string{"no origin": "", "sibling page": "https://evil.example.com"} {
-		status, code := post(origin, true)
-		require.Equal(t, http.StatusForbidden, status, name)
-		require.Equal(t, "ORIGIN_NOT_ALLOWED", code, name)
+	for _, tc := range []struct{ name, origin, cookie string }{
+		{name: "access without origin", cookie: authgate.CookieAccess},
+		{name: "refresh without origin", cookie: authgate.CookieRefresh},
+		{name: "access from a sibling page", origin: "https://evil.example.com", cookie: authgate.CookieAccess},
+		{name: "refresh from a sibling page", origin: "https://evil.example.com", cookie: authgate.CookieRefresh},
+	} {
+		status, code := post(tc.origin, tc.cookie)
+		require.Equal(t, http.StatusForbidden, status, tc.name)
+		require.Equal(t, "ORIGIN_NOT_ALLOWED", code, tc.name)
 	}
-	status, code := post(spaOrigin(t), true)
+	status, code := post(spaOrigin(t), authgate.CookieRefresh)
 	require.Equal(t, http.StatusNotFound, status, "the page of the SPA reaches the router: %s", code)
-	status, code = post("", false)
+	status, code = post("", "")
 	require.Equal(t, http.StatusNotFound, status, "a request without a session cookie needs no Origin: %s", code)
 }
 
