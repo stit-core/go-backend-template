@@ -1,5 +1,6 @@
-# Законно: неэкспортируемая таблица-литерал из констант — список сервисов, роли, предел по виду, таблица видов, —
-# которую функции корня только читают.
+# Законно: неэкспортируемая таблица-литерал из констант с элементами-значениями — список сервисов, роли, предел по
+# виду, таблица видов, — которую функции корня только читают: индекс, range, len, читающие вызовы, источник append и
+# копия slices.Clone.
 rule: TestDomainDeterminism
 base: canon
 -- internal/domain/shop/catalog.go --
@@ -7,6 +8,7 @@ package shop
 
 import (
 	"slices"
+	"strings"
 
 	"{module}/internal/platform/identity"
 )
@@ -35,3 +37,11 @@ func limit(kind string) int {
 	}
 	return limits[kind]
 }
+
+func servicesLine() string { return strings.Join(services, ", ") + " (" + string(rune('0'+len(services))) + ")" }
+
+func withServices(extra []string) []string { return append(slices.Clone(extra), services...) }
+
+func buyersCopy() []identity.Role { return slices.Clone(buyers) }
+
+func kindName(i int) string { return kinds[i].name }

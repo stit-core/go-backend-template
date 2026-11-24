@@ -18,7 +18,7 @@ var (
 
 func sorted() []string {
 	slices.Sort(order)
-	return order
+	return slices.Clone(order)
 }
 
 func first(name string) []string { return append(order[:1], name) }

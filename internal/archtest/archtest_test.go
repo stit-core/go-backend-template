@@ -1050,8 +1050,11 @@ var determinismKits = map[string]string{
 // clockkit.Real{} и crypto/rand мимо инжекции — нет. Состояния между запросами в переменных корня нет: переменная
 // корня — sentinel Err… (errors.go), TrustedErrors, исход outcome.New, шаблон regexp.MustCompile, значение
 // структуры T{…} типа корня или pkg/, неэкспортируемая таблица-литерал из констант (срез, массив или map: список
-// сервисов, ролей) или проверка var _, и ни одна функция корня её не пишет — и таблицу не меняет на месте (delete,
-// clear, copy, append в неё, сортировка).
+// сервисов, ролей) или проверка var _, и ни одна функция корня её не пишет. Элемент таблицы — значение (не указатель,
+// срез, map, канал, функция, интерфейс и не структура с ними), а её имя — только в чтении: индекс без адреса, range,
+// len и cap, читающие вызовы (tableReadCall) и источник append и copy; правка на месте (delete, clear, copy, append в
+// неё, сортировка), синоним, возврат, другой вызов и адрес — отказ: ссылка на её хранилище донесла бы правку до
+// каждого запроса. Именованный тип элемента из другого пакета правило считает значением — его держит ревью.
 func TestDomainDeterminism(t *testing.T) {
 	t.Parallel()
 	runRule(t)
@@ -1127,20 +1130,65 @@ func domainDeterminism(c *check) {
 				c.Errorf("%s: %s changes package var %s in place (%s): a table literal is read-only — state between requests lives in the database or a kit", rf.path, rf.fn.Name.Name, m.name, m.call)
 			}
 		}
+		for _, u := range tableUses(rf.fn, byName, tables[rf.domain]) {
+			c.Errorf("%s: %s uses package var %s outside a read (%s): a table literal is read by index, range, len and read-only calls — a reference to it lets a change reach every request", rf.path, rf.fn.Name.Name, u.name, u.how)
+		}
 	}
 }
 
-// literalTable — таблица-литерал: срез, массив или map из констант (constantValue).
+// literalTable — таблица-литерал: срез, массив или map из констант (constantValue) с элементами-значениями
+// (valueType).
 func literalTable(expr ast.Expr, byName map[string]string) bool {
 	lit, ok := expr.(*ast.CompositeLit)
 	if !ok {
 		return false
 	}
-	switch lit.Type.(type) {
-	case *ast.ArrayType, *ast.MapType:
-		return constantValue(lit, byName)
+	elems := func() bool {
+		return !mentionsSync(lit.Type, byName) &&
+			!slices.ContainsFunc(lit.Elts, func(e ast.Expr) bool { return !constantValue(e, byName) || sharedLiteral(e) })
+	}
+	switch t := lit.Type.(type) {
+	case *ast.ArrayType:
+		return valueType(t.Elt) && elems()
+	case *ast.MapType:
+		return valueType(t.Key) && valueType(t.Value) && elems()
 	}
 	return false
+}
+
+// sharedLiteral — в элементе таблицы есть литерал среза или map: их хранилище общее у всех копий элемента.
+func sharedLiteral(expr ast.Expr) bool {
+	found := false
+	ast.Inspect(expr, func(n ast.Node) bool {
+		if lit, ok := n.(*ast.CompositeLit); ok {
+			if t, ok := lit.Type.(*ast.ArrayType); ok && t.Len == nil {
+				found = true
+			}
+			if _, ok := lit.Type.(*ast.MapType); ok {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+// valueType — тип, чьё значение копируется целиком: не указатель, срез, map, канал, функция и интерфейс, массив и
+// структура — из таких же. Именованный тип правило читает по имени, без объявления: он — значение.
+func valueType(typ ast.Expr) bool {
+	switch t := typ.(type) {
+	case *ast.StarExpr, *ast.MapType, *ast.ChanType, *ast.FuncType, *ast.InterfaceType:
+		return false
+	case *ast.ArrayType:
+		return t.Len != nil && valueType(t.Elt)
+	case *ast.StructType:
+		return !slices.ContainsFunc(t.Fields.List, func(f *ast.Field) bool { return !valueType(f.Type) })
+	case *ast.Ident:
+		return t.Name != "any" && t.Name != "error"
+	case *ast.ParenExpr:
+		return valueType(t.X)
+	}
+	return true
 }
 
 // constantValue — значение из констант: литерал, имя, имя пакета (identity.RoleAdmin), операция над ними и составной
@@ -1245,6 +1293,160 @@ func inPlaceChanges(fn *ast.FuncDecl, byName map[string]string) []inPlaceChange 
 		return true
 	})
 	return out
+}
+
+// tableReadCall — вызовы, которые таблицу только читают: её имя или срез законны их аргументом.
+var tableReadCall = map[string][]string{
+	"":        {"cap", "len"},
+	"maps":    {"All", "Clone", "Keys", "Values"},
+	"slices":  {"All", "Backward", "Clone", "Contains", "ContainsFunc", "Equal", "Index", "IndexFunc", "Max", "Min", "Values"},
+	"strings": {"Join"},
+}
+
+// tableUse — употребление таблицы вне чтения и его вид.
+type tableUse struct{ name, how string }
+
+// tableUses — употребления таблиц tables функцией fn вне чтения (tableUseKind); имя, которое функция объявляет сама,
+// — не таблица.
+func tableUses(fn *ast.FuncDecl, byName map[string]string, tables map[string]bool) []tableUse {
+	if fn.Body == nil {
+		return nil
+	}
+	local := map[string]bool{}
+	for _, name := range localNames(fn) {
+		local[name] = true
+	}
+	var out []tableUse
+	var stack []ast.Node
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if n == nil {
+			stack = stack[:len(stack)-1]
+			return false
+		}
+		if id, ok := n.(*ast.Ident); ok && tables[id.Name] && !local[id.Name] {
+			if how := tableUseKind(id, stack, byName); how != "" {
+				out = append(out, tableUse{id.Name, how})
+			}
+		}
+		stack = append(stack, n)
+		return true
+	})
+	return out
+}
+
+// tableUseKind — вид употребления имени таблицы id по его предкам stack; "" — чтение, запись (packageWrites) или
+// правка на месте (inPlaceChanges): их называют свои проверки.
+func tableUseKind(id *ast.Ident, stack []ast.Node, byName map[string]string) string {
+	var child ast.Expr = id
+	for i := len(stack) - 1; i >= 0; i-- {
+		switch p := stack[i].(type) {
+		case *ast.ParenExpr:
+			child = p
+			continue
+		case *ast.SliceExpr:
+			if p.X != child {
+				return ""
+			}
+			child = p
+			continue
+		case *ast.IndexExpr:
+			if p.X != child {
+				return ""
+			}
+			return elementUseKind(p, stack[:i])
+		case *ast.SelectorExpr:
+			if p.Sel == id {
+				return ""
+			}
+			return "method"
+		case *ast.KeyValueExpr:
+			if p.Key == child {
+				return ""
+			}
+			return "value of a composite literal"
+		case *ast.CompositeLit:
+			return "value of a composite literal"
+		case *ast.CallExpr:
+			if p.Fun == child {
+				return "call"
+			}
+			pkg, name := callName(p, byName)
+			arg := slices.Index(p.Args, child)
+			switch {
+			case slices.Contains(tableReadCall[pkg], name),
+				pkg == "" && (name == "append" || name == "copy") && arg > 0,
+				slices.Contains(inPlaceCall[pkg], name) && arg == 0:
+				return ""
+			}
+			return "argument of " + strings.TrimPrefix(pkg+"."+name, ".")
+		case *ast.AssignStmt:
+			if slices.Contains(p.Lhs, child) {
+				return ""
+			}
+			return "alias"
+		case *ast.ValueSpec:
+			return "alias"
+		case *ast.ReturnStmt:
+			return "return"
+		case *ast.UnaryExpr:
+			return ""
+		case *ast.SendStmt:
+			return "send"
+		case *ast.RangeStmt, *ast.BinaryExpr, *ast.IncDecStmt, *ast.ExprStmt:
+			return ""
+		}
+		return "use"
+	}
+	return ""
+}
+
+// elementUseKind — вид употребления элемента таблицы elem по его предкам stack: чтение — копия значения, метод на
+// элементе или его поле — ссылка в хранилище таблицы (адрес элемента — запись, её называет packageWrites).
+func elementUseKind(elem ast.Expr, stack []ast.Node) string {
+	cur := elem
+	for j := len(stack) - 1; j >= 0; j-- {
+		switch q := stack[j].(type) {
+		case *ast.IndexExpr:
+			if q.X == cur {
+				cur = q
+				continue
+			}
+		case *ast.SelectorExpr:
+			if q.X == cur {
+				if call, ok := parentOf(stack, j).(*ast.CallExpr); ok && call.Fun == q {
+					return "method of an element"
+				}
+				cur = q
+				continue
+			}
+		case *ast.ParenExpr:
+			cur = q
+			continue
+		}
+		return ""
+	}
+	return ""
+}
+
+// parentOf — предок stack[j]; nil — у корня обхода.
+func parentOf(stack []ast.Node, j int) ast.Node {
+	if j == 0 {
+		return nil
+	}
+	return stack[j-1]
+}
+
+// callName — пакет (путь импорта; "" — встроенная или своя функция) и имя функции вызова; метод — пустые.
+func callName(call *ast.CallExpr, byName map[string]string) (string, string) {
+	switch fun := call.Fun.(type) {
+	case *ast.Ident:
+		return "", fun.Name
+	case *ast.SelectorExpr:
+		if id, ok := fun.X.(*ast.Ident); ok {
+			return byName[id.Name], fun.Sel.Name
+		}
+	}
+	return "", ""
 }
 
 // fixedValue — значение переменной корня, которое не состояние: исход outcome.New("…"), шаблон regexp.MustCompile("…"),

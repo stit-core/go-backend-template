@@ -1,0 +1,43 @@
+# Таблица, через которую код получает ссылку на её хранилище, — состояние между запросами: элемент-указатель (литерал
+# {…} в []*T — тот же &T{…}), срез внутри элемента, синоним, преобразование, возврат, адрес элемента и метод на нём.
+rule: TestDomainDeterminism
+base: canon
+want: internal/domain/shop/order.go declares package var defaults
+want: internal/domain/shop/order.go declares package var nested
+want: internal/domain/shop/order.go: sortedAlias uses package var order outside a read (alias)
+want: internal/domain/shop/order.go: sortedConverted uses package var order outside a read (argument of sort.StringSlice)
+want: internal/domain/shop/order.go: all uses package var order outside a read (return)
+want: internal/domain/shop/order.go: first writes package var kinds
+want: internal/domain/shop/order.go: rename uses package var kinds outside a read (method of an element)
+-- internal/domain/shop/order.go --
+package shop
+
+import (
+	"slices"
+	"sort"
+)
+
+type category struct{ name string }
+
+func (c *category) rename(name string) { c.name = name }
+
+var (
+	defaults = []*category{{name: "goods"}}
+	nested   = []struct{ tags []string }{{tags: []string{"a"}}}
+	order    = []string{"b", "a"}
+	kinds    = [...]category{{name: "goods"}}
+)
+
+func sortedAlias() []string {
+	s := order
+	slices.Sort(s)
+	return s
+}
+
+func sortedConverted() { sort.Sort(sort.StringSlice(order)) }
+
+func all() []string { return order }
+
+func first() *category { return &kinds[0] }
+
+func rename(name string) { kinds[0].rename(name) }
