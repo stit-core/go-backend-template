@@ -218,7 +218,7 @@ func TestMutateStages(t *testing.T) {
 			"(t *testing.T) {\n\tsrc, err := os.ReadFile(\"../p/p.go\")\n\tif err != nil || strings.Contains(string(src), \"" + word +
 			"\") {\n\t\tt.Fatal(\"arch\")\n\t}\n}\n"
 	}
-	writeFiles(t, repo, union(readFiles(t, repoRoot(t), "scripts/tools/mutate.py"), map[string]string{
+	writeFiles(t, repo, union(readFiles(t, repoRoot(t), "scripts/tools/mutate.py", "scripts/tools/kits.sh"), map[string]string{
 		".gitignore":                      "/.cache/\n",
 		"go.mod":                          "module example.com/stages\n\ngo 1.26\n",
 		"internal/p/p.go":                 sign,
@@ -303,7 +303,9 @@ func TestMutateStages(t *testing.T) {
 // (заглушка golibinfra: константы общего режима и Start*, который берёт сервер из TESTKIT_SHARED), docker — заглушка:
 // раннер снимает контейнеры прошлого прогона его репо, поднимает Postgres один раз на базовый прогон и все мутации,
 // отдаёт файл серверов integration-стадии (тест модуля без него падает), убирает контейнер в конце и при SIGTERM посреди
-// мутации. Модуль без вызовов кита серверов не поднимает (TestMutate, TestMutateStages).
+// мутации. Зависимость кита в boot-тесте (kitDeps) — пул только у кита графа cmd/api (scripts/tools/kits.sh): без
+// cachekit в сборке cmd/api вызов StartRedis boot-теста Redis не поднимает, с ним — пул. Модуль без вызовов кита
+// серверов не поднимает (TestMutate, TestMutateStages).
 func TestMutateShared(t *testing.T) {
 	t.Parallel()
 	python, err := exec.LookPath("python3")
@@ -311,7 +313,7 @@ func TestMutateShared(t *testing.T) {
 	repo, state, bin := t.TempDir(), t.TempDir(), t.TempDir()
 	const sign = "package p\n\n// Sign — знак числа.\nfunc Sign(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\tif x < 0 {\n\t\treturn -1\n\t}\n\treturn 0\n}\n"
 	marker := filepath.Join(state, "blocked")
-	writeFiles(t, repo, union(readFiles(t, repoRoot(t), "scripts/tools/mutate.py"), map[string]string{
+	writeFiles(t, repo, union(readFiles(t, repoRoot(t), "scripts/tools/mutate.py", "scripts/tools/kits.sh"), map[string]string{
 		".gitignore": "/.cache/\n",
 		"go.mod": "module example.com/shared\n\ngo 1.26\n\nrequire git.stit.tech/stit-core/golibinfra v0.0.0\n\n" +
 			"replace git.stit.tech/stit-core/golibinfra => ./kit\n",
@@ -322,7 +324,14 @@ func TestMutateShared(t *testing.T) {
 			"// PostgresImage — образ Postgres.\nconst PostgresImage = \"postgres:17-alpine\"\n\n" +
 			"// StartPostgres — URL общего Postgres; без файла серверов — отказ.\nfunc StartPostgres(t testing.TB) string {\n" +
 			"\tdata, err := os.ReadFile(os.Getenv(SharedEnv))\n\tif err != nil || !strings.Contains(string(data), PostgresImage) {\n" +
-			"\t\tt.Fatalf(\"no shared postgres: %v %s\", err, data)\n\t}\n\treturn string(data)\n}\n",
+			"\t\tt.Fatalf(\"no shared postgres: %v %s\", err, data)\n\t}\n\treturn string(data)\n}\n\n" +
+			"// RedisImage — образ Redis.\nconst RedisImage = \"redis:7-alpine\"\n\n" +
+			"// StartRedis — URL Redis.\nfunc StartRedis(testing.TB) string { return \"redis://\" }\n",
+		"kit/cachekit/cachekit.go": "// Package cachekit — заглушка кита с внешней зависимостью.\npackage cachekit\n",
+		"cmd/api/main.go":          "package main\n\nfunc main() {}\n",
+		"cmd/api/boot_test.go": "//go:build integration\n\npackage main\n\nimport (\n\t\"testing\"\n\n" +
+			"\t\"git.stit.tech/stit-core/golibinfra/testkit\"\n)\n\n" +
+			"var kitDeps = map[string]func(*testing.T) string{\"cachekit\": func(t *testing.T) string { return testkit.StartRedis(t) }}\n",
 		"internal/p/p.go":      sign,
 		"internal/p/p_test.go": "package p\n\nimport \"testing\"\n\nfunc TestSign(t *testing.T) {\n\tif Sign(5) != 1 || Sign(0) != 0 {\n\t\tt.Fatal(\"sign\")\n\t}\n}\n",
 		"internal/p/db_test.go": "//go:build integration\n\npackage p\n\nimport (\n\t\"os\"\n\t\"testing\"\n\t\"time\"\n\n" +
@@ -337,7 +346,8 @@ func TestMutateShared(t *testing.T) {
 	// docker-заглушка: контейнеры — строки running, снятые — removed, вызовы — calls.
 	writeExecutable(t, filepath.Join(bin, "docker"), "#!/bin/bash\ns="+state+"\necho \"$*\" >> \"$s/calls\"\ncase \"$1\" in\n"+
 		"run) id=c$RANDOM$RANDOM; echo \"$id\" >> \"$s/running\"; echo \"$id\";;\nport) echo 127.0.0.1:5432;;\n"+
-		"logs) printf 'database system is ready to accept connections\\ndatabase system is ready to accept connections\\n';;\n"+
+		"logs) printf 'database system is ready to accept connections\\ndatabase system is ready to accept connections\\n"+
+		"Ready to accept connections\\n';;\n"+
 		"ps) cat \"$s/running\" 2>/dev/null;;\n"+
 		"rm) shift; while [ \"${1#-}\" != \"$1\" ]; do shift; done\n"+
 		"  for id in \"$@\"; do grep -vx -- \"$id\" \"$s/running\" > \"$s/r\"; mv \"$s/r\" \"$s/running\"; echo \"$id\" >> \"$s/removed\"; done;;\n"+
@@ -376,7 +386,7 @@ func TestMutateShared(t *testing.T) {
 			require.Contains(t, call, " -v ", "a container of the run leaves its anonymous volumes")
 		}
 	}
-	require.Equal(t, 1, runs, "one Postgres for the base run and all mutations")
+	require.Equal(t, 1, runs, "one Postgres for the base run and all mutations; no Redis: cachekit is out of the graph of cmd/api")
 	require.Empty(t, lines("running"), "the run leaves its containers")
 	require.Contains(t, lines("removed"), "leftover", "a container of the previous run outlives the next run")
 
@@ -389,6 +399,26 @@ func TestMutateShared(t *testing.T) {
 	require.NoError(t, cmd.Process.Signal(syscall.SIGTERM))
 	require.Error(t, cmd.Wait(), "SIGTERM ends the run")
 	require.Empty(t, lines("running"), "SIGTERM leaves the containers of the run")
+
+	// cachekit в сборке cmd/api: зависимость кита в boot-тесте — пул Redis.
+	writeFiles(t, repo, map[string]string{
+		"cmd/api/main.go": "package main\n\nimport _ \"git.stit.tech/stit-core/golibinfra/cachekit\"\n\nfunc main() {}\n",
+	})
+	commitAll(t, repo)
+	require.NoError(t, os.Remove(filepath.Join(state, "calls")))
+	out, err = mutate("U1").CombinedOutput()
+	require.NoError(t, err, "a run with cachekit in the graph:\n%s", out)
+	images := map[string]int{}
+	for _, call := range strings.Split(strings.TrimSpace(readFiles(t, state, "calls")["calls"]), "\n") {
+		for _, image := range []string{"postgres:17-alpine", "redis:7-alpine"} {
+			if strings.HasPrefix(call, "run ") && strings.Contains(call, " "+image) {
+				images[image]++
+			}
+		}
+	}
+	require.Equal(t, map[string]int{"postgres:17-alpine": 1, "redis:7-alpine": 2}, images,
+		"cachekit in the graph of cmd/api: the Redis of its boot test is a pool")
+	require.Empty(t, lines("running"), "the run leaves its containers")
 }
 
 // TestMutateParallel: несколько исполнителей — тот же итог, те же вердикты и тот же порядок строк хода, что у одного;
@@ -402,7 +432,7 @@ func TestMutateParallel(t *testing.T) {
 	repo := t.TempDir()
 	marker := filepath.Join(t.TempDir(), "blocked")
 	const sign = "package p\n\n// Sign — знак числа.\nfunc Sign(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\tif x < 0 {\n\t\treturn -1\n\t}\n\treturn 0\n}\n"
-	writeFiles(t, repo, union(readFiles(t, repoRoot(t), "scripts/tools/mutate.py"), map[string]string{
+	writeFiles(t, repo, union(readFiles(t, repoRoot(t), "scripts/tools/mutate.py", "scripts/tools/kits.sh"), map[string]string{
 		".gitignore":           "/.cache/\n",
 		"go.mod":               "module example.com/par\n\ngo 1.26\n",
 		"internal/p/p.go":      sign,

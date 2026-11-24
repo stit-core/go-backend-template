@@ -57,7 +57,7 @@ E2E/smoke-харнес (pytest, side-effect-ассерты) — `test/README.md`
 | fx-граф | `cmd/api/main_test.go` `fx.ValidateApp`, корню графа `context.Context` не доступен, доменам — их зависимости (`TestFxGraphProvidesDomainDeps`); `fx.As` нет — archtest |
 | HTTP API | `cmd/api/api_test.go`: API проходит проверку старта httpkit (`Security` или `httpkit.Public`, уникальный метод+путь), операция без пометки — ошибка старта, пути операций доменов — под `/api/`, открыты ровно `publicOperations` (открыть операцию — правка списка), под `Security` — коды 401 сессии; `openapi.json` совпадает с кодом |
 | подкоманды `main` | `cmd/api/healthcheck_test.go`: тестовый бинарь, перезапущенный как `api healthcheck` (`TestMain` зовёт `main`), — код выхода по `/health` на `HTTP_ADDR`, сервис не стартует; `cmd/api/main_test.go`: тот же бинарь как `api` без окружения — отказ старта в логе сервиса (JSON, ERROR с причиной), а не в консоли fx |
-| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах с env из `.env.example` стартует и останавливается, как в проде (память Argon2 — лёгкая, `ARGON2_MEMORY_KIB`: параметры кита по умолчанию проверяет smoke релиза); свойство сервиса целиком (не домена) — проверкой в `TestBoot` |
+| запуск сервиса | `cmd/api/boot_test.go` (integration): граф `main` на контейнерах — Postgres, NATS и зависимости китов графа (`kitDeps`: Redis у `cachekit`, MinIO у `storagekit`, `/ready` опрашивает их пробы) — с env из `.env.example` стартует и останавливается, как в проде (память Argon2 — лёгкая, `ARGON2_MEMORY_KIB`: параметры кита по умолчанию проверяет smoke релиза); свойство сервиса целиком (не домена) — проверкой в `TestBoot` |
 | команда миграций | `cmd/migrate/run_test.go` (integration): каждая подкоманда (`up`, `down`, `version`, ремонт dirty) — на источниках китов и каталоге приложения |
 | домены идентичности | `cmd/api/identity_test.go` (integration): поток через несколько доменов, хранилище кита и секреты вне лога и таблиц — сквозь HTTP на графе `main` (`TestIdentity`, `TestSessions`); `cmd/seed-admin/main_test.go` — повышение админа |
 
@@ -136,7 +136,8 @@ integration-тесты пакетов, кроме `internal/archtest`, и он �
 логики он видит редко; убитая им — юнит-стадия, а мутацию, которую убили бы и он, и integration, убивает integration;
 archtest с тегом integration при тех же файлах его теста — один раз. Серверы integration раннер поднимает один раз на
 прогон (общий режим golibinfra testkit, `TESTKIT_SHARED`): у теста — своя база Postgres, сервер NATS, Redis или MinIO
-в аренде и чистый; контейнеры прогона — с меткой `mutate.run=<прогон>` и именем `mutate-<прогон>-…` — снимаются в
+в аренде и чистый, зависимость кита boot-теста — только у кита графа (`scripts/tools/kits.sh`); контейнеры
+прогона — с меткой `mutate.run=<прогон>` и именем `mutate-<прогон>-…` — снимаются в
 конце и при обрыве, оставленные убитым раннером — следующим прогоном репо (метка `mutate.repo`). Вердикт — тот же, что
 у `go test ./...` стадии на контейнере на вызов; итог — убитые и выжившие списком, код 1 при новых выживших и
 таймаутах, с `A=--strict` (шаг релиза) — ещё при устаревших якорях, несобравшихся правках, эквивалентных, которые

@@ -23,7 +23,27 @@ _e2e_hash() {
 E2E_PROJECT="e2e-$(printf '%s' "$PWD" | _e2e_hash | cut -c1-12)"
 export COMPOSE_PROJECT_NAME="$E2E_PROJECT"
 
-# Admin для e2e заводит seed-admin — он есть у проекта со своей идентичностью.
+# Сервисы-профили стека: admin для e2e заводит seed-admin — он есть у проекта со своей идентичностью; кит графа с
+# внешней зависимостью (scripts/tools/kits.sh) поднимает сервис с именем кита: cachekit — Redis, storagekit — MinIO.
+profiles=()
 if [ -d cmd/seed-admin ]; then
-    export COMPOSE_PROFILES=seed-admin
+    profiles+=(seed-admin)
+fi
+# Отказ kits.sh (нет go) — отказ стека: без профиля кита сервис не стартовал бы без своей зависимости.
+if ! kits=$(bash scripts/tools/kits.sh); then
+    echo "FAIL: scripts/tools/kits.sh" >&2
+    exit 1
+fi
+for kit in $kits; do
+    profiles+=("$kit")
+done
+COMPOSE_PROFILES=$(IFS=,; printf '%s' "${profiles[*]}")
+export COMPOSE_PROFILES
+
+# Своя зависимость сервиса, которой нет у китов (поисковый движок, заглушка внешнего API), — второй compose-файл
+# сервиса compose.service.yml рядом: его сервисы, env и depends_on api compose дописывает слиянием файлов, путь шаблона
+# compose.yml сервис не правит.
+COMPOSE_FILES=(-f "$COMPOSE")
+if [ -f "$STACK_DIR/compose.service.yml" ]; then
+    COMPOSE_FILES+=(-f "$STACK_DIR/compose.service.yml")
 fi

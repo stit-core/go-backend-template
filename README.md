@@ -100,7 +100,7 @@ make release VERSION=vX.Y.Z   # api + migrate образы в registry (skill /r
 ## E2E
 
 Типизированный pytest-харнес `test/` поверх docker-compose стека
-(postgres/nats/migrate/api). Нужен Docker; `./.env.local` (`E2E_ADMIN_*`, шаблон —
+(postgres/nats/migrate/api и зависимости китов графа — `scripts/tools/kits.sh`). Нужен Docker; `./.env.local` (`E2E_ADMIN_*`, шаблон —
 `.env.local.example`) опционален — без него креды seed-admin по умолчанию. Детали — `test/README.md`.
 
 ```bash

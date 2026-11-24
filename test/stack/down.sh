@@ -7,7 +7,7 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # Compose down не упадёт если стека нет — он silent на 0 контейнерах.
-docker compose -p "$E2E_PROJECT" -f "$COMPOSE" down -v --rmi local --remove-orphans
+docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" down -v --rmi local --remove-orphans
 
 # Подчистить бинари + endpoints-файл (пересоздаются при следующем up).
 rm -rf "$BIN_DIR"

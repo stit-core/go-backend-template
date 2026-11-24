@@ -23,7 +23,9 @@
   cleanup — `TestFxGraphValidates` красный), без проб `/ready` не видит зависимость (список проб сверяет
   `TestBoot`). Их не убирают,
   пока в графе есть кит с джобом или пробой.
-- wiring внешних runtime-deps (Redis/NATS/…), если стек их объявил.
+- wiring внешних runtime-deps (Redis/NATS/…), если стек их объявил. Зависимость кита графа (Redis у `cachekit`,
+  MinIO у `storagekit`) boot-тест, smoke-стек и `make local-deps-up` поднимают сами (`scripts/tools/kits.sh`); своя
+  зависимость сервиса в smoke-стеке — его второй compose-файл test/stack/compose.service.yml.
 - golibinfra-first: generic-примитив → golibinfra, не локально (CLAUDE.md § Стиль; обоснование — `docs/reference/architecture.md § Граница с golibinfra`).
 
 ### 3. messaging → `docs/stack/messaging.md`

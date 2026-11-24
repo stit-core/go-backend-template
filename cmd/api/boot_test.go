@@ -9,9 +9,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
+	"reflect"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -85,8 +88,8 @@ func hookEvents(h slog.Handler) fx.Option {
 	return fx.WithLogger(func() fxevent.Logger { return &fxevent.SlogLogger{Logger: slog.New(h)} })
 }
 
-// serviceEnv поднимает Postgres и NATS в контейнерах и выставляет env сервиса: .env.example, направленный на
-// них.
+// serviceEnv поднимает Postgres, NATS и зависимости китов графа (graphKits) в контейнерах и выставляет env сервиса:
+// .env.example, направленный на них.
 func serviceEnv(t *testing.T) *testkit.PostgresFixture {
 	t.Helper()
 	pg := testkit.StartPostgres(t, testkit.WithMigrations(sources.Kits...), testkit.WithMigrationsDir(repopath.Migrations()))
@@ -103,11 +106,61 @@ func serviceEnv(t *testing.T) *testkit.PostgresFixture {
 	} {
 		env[k] = v
 	}
+	for _, kit := range graphKits() {
+		maps.Copy(env, kitDeps[kit].start(t))
+	}
 	for k, v := range env {
 		t.Setenv(k, v)
 	}
 	return pg
 }
+
+// kitDep — внешняя зависимость кита для boot-теста: контейнер с env сервиса, направленным на него, и проба /ready,
+// которой сервис её опрашивает.
+type kitDep struct {
+	probe string
+	start func(t *testing.T) map[string]string
+}
+
+// kitDeps — зависимости китов по имени пакета кита golibinfra — те же, что поднимают smoke-стек и make local-deps-up
+// (scripts/tools/kits.sh). Кит в графе сервиса поднимает свою в serviceEnv, а /ready сервиса опрашивает её пробу
+// (TestBoot): сервису с китом правка serviceEnv не нужна.
+var kitDeps = map[string]kitDep{
+	"cachekit":   {probe: "cachekit", start: startRedis},
+	"storagekit": {probe: "storagekit", start: startMinIO},
+}
+
+func startRedis(t *testing.T) map[string]string {
+	t.Helper()
+	return map[string]string{"REDIS_URL": testkit.StartRedis(t).URL}
+}
+
+// startMinIO — MinIO и env storagekit на него: бакет сервиса (STORAGE_S3_BUCKET из .env.example) сервис заводит сам.
+func startMinIO(t *testing.T) map[string]string {
+	t.Helper()
+	s3 := testkit.StartMinIO(t)
+	return map[string]string{
+		"STORAGE_S3_ENDPOINT": "http://" + s3.Endpoint, "STORAGE_S3_ACCESS_KEY": s3.AccessKey,
+		"STORAGE_S3_SECRET_KEY": s3.SecretKey, "STORAGE_S3_CREATE_BUCKET": "true",
+	}
+}
+
+// graphKits — киты golibinfra графа сервиса с записью kitDeps: кит в графе — его конструктор конфига в kitConfigs
+// (git.…/golibinfra/cachekit.NewConfig → cachekit), по какому бы имени cmd/api его ни импортировал.
+func graphKits() []string {
+	var kits []string
+	for _, c := range kitConfigs {
+		name := runtime.FuncForPC(reflect.ValueOf(c).Pointer()).Name()
+		slash := strings.LastIndex(name, "/")
+		kit, _, _ := strings.Cut(name[slash+1:], ".")
+		if _, ok := kitDeps[kit]; ok && name[:max(slash, 0)] == golibinfraModule {
+			kits = append(kits, kit)
+		}
+	}
+	return kits
+}
+
+const golibinfraModule = "git.stit.tech/stit-core/golibinfra"
 
 // send — код и заголовки ответа на запрос.
 func send(t *testing.T, c *http.Client, method, url, body string) (int, http.Header) {
@@ -121,9 +174,9 @@ func send(t *testing.T, c *http.Client, method, url, body string) (int, http.Hea
 	return resp.StatusCode, resp.Header
 }
 
-// TestBoot поднимает сервис набором опций main поверх Postgres и NATS в контейнерах: конструкторы, Invoke и
-// хуки выполняются по-настоящему, чего fx.ValidateApp не делает. Проверки — про сервис целиком, без знания
-// его доменов; потоки доменов идентичности — TestIdentity.
+// TestBoot поднимает сервис набором опций main поверх Postgres, NATS и зависимостей китов графа в контейнерах:
+// конструкторы, Invoke и хуки выполняются по-настоящему, чего fx.ValidateApp не делает. Проверки — про сервис целиком,
+// без знания его доменов; потоки доменов идентичности — TestIdentity.
 func TestBoot(t *testing.T) {
 	serviceEnv(t)
 
@@ -181,7 +234,11 @@ func TestBoot(t *testing.T) {
 	for _, p := range ready.Probes {
 		probes[p.Name] = p.Status
 	}
-	require.Equal(t, map[string]string{"pgkit": "ok", "natskit": "ok"}, probes,
+	want := map[string]string{"pgkit": "ok", "natskit": "ok"}
+	for _, kit := range graphKits() {
+		want[kitDeps[kit].probe] = "ok"
+	}
+	require.Equal(t, want, probes,
 		"/ready polls every dependency of the service: without its probe an instance that lost it stays in rotation")
 
 	humaAPI, ok := srv.API().(interface{ Config() huma.Config })

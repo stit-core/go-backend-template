@@ -57,11 +57,15 @@ blocked-by: —
   на месте; tzkit — в `rootLibs`. Проверка: `go test ./internal/archtest -run 'TestRuleExamples|TestDomainDeterminism|TestHTTPTypes'` → PASS
   - Подтверждено: PASS — примеры `determinism-table-{literal,changed,not-constant}`,
     `http-types-{handler-config,nested-no-prefix}`; `TestLayout` с tzkit в `rootLibs` → PASS
-- [ ] **AC9** — зависимость кита графа (Redis у cachekit, MinIO у storagekit, NATS у natskit) поднимают boot-тест,
-  smoke-стек и `make local-deps-up` сами; раннер мутаций поднимает их пулы только для китов графа. Проверка: `make check`
+- [x] **AC9** — зависимость кита графа (Redis у cachekit, MinIO у storagekit) поднимают boot-тест, smoke-стек и
+  `make local-deps-up` сами; раннер мутаций поднимает их пулы только для китов графа. Проверка: `make check`
   → `✓ check clean`; копия с cachekit и storagekit — `make test-int PKG=./cmd/api/...` → PASS
+  - Подтверждено: `make check` → `✓ check clean`; копия с cachekit и storagekit — `make test-int PKG=./cmd/api/...`
+    → PASS (`TestBoot` поднял Redis и MinIO), её smoke-стек — `/ready` с пробами cachekit и storagekit;
+    `local-deps.sh` — на заглушке docker; `TestMutateShared` → PASS
 - [ ] **AC10** — `events: none` (только при `identity: external`): валидатор, `.template/events`, `TestEventsPaths`,
-  чек-лист de-template, возврат — `/scaffold` вариант event. Проверка: `go test ./internal/archtest -run 'TestEventsPaths|TestStackValidator'` → PASS
+  чек-лист de-template, возврат — `/scaffold` вариант event; NATS — зависимость кита natskit (boot-тест, smoke-стек,
+  `local-deps`, пул раннера, тексты). Проверка: `go test ./internal/archtest -run 'TestEventsPaths|TestStackValidator'` → PASS
 - [ ] **AC11** — `make new-domain AGG=` — срез агрегата, имена по агрегату, `-s` не удваивается; G115 исключён по
   `infra/postgres/[^/]+\.go`. Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check` и
   мутации среза → убиты
@@ -112,9 +116,13 @@ blocked-by: —
     `rootLibs` (Ф); проза — rule `domain-architecture`, `architecture.md`; `make check` → `✓ check clean`;
     Review: принимает сессия корня — дифф отдан, ревью не проводилось
 ### Киты, события, срез
-- [ ] **S9** — T8: зависимости китов графа — `kits.sh`, профили стека, `local-deps`, `kitDeps`, пулы раннера только
+- [x] **S9** — T8: зависимости китов графа — `kits.sh`, профили стека, `local-deps`, `kitDeps`, пулы раннера только
   китов графа (бэклог форка `mutate-servers-by-graph`)
   - Проверка: `go test ./internal/archtest -run TestMutateShared` → PASS; копия с китами — boot-тест PASS · Закрывает: AC9
+  - Сделано: `kits.sh` — по `go list -deps ./cmd/api`; профили `cachekit`/`storagekit` стека и второй compose-файл
+    сервиса; `local-deps` и `kitDeps` — по тем же китам; раннер: Start* зависимости кита в boot-тесте — пул только у
+    кита графа; копия с китами — PASS; `make check` → `✓ check clean`; Review: принимает сессия корня — дифф отдан,
+    ревью не проводилось
 - [ ] **S10** — T9: `events: none`, NATS — зависимость кита `natskit` и в текстах (бэклог форка `kit-deps-nats-docs`)
   - Проверка: `go test ./internal/archtest` → PASS; `make check` → `✓ check clean` · Закрывает: AC10 · Зависит от: S9
 - [ ] **S11** — T12: `make new-domain AGG=` и G115 по файлам `infra/postgres`
@@ -145,4 +153,4 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S8 (T1–T7, T10, T11) и Go 1.26.11 закрыты, `make check` на S8 — `✓ check clean`; следующий шаг — S9 (T8).
+S1–S9 (T1–T8, T10, T11) и Go 1.26.11 закрыты, `make check` на S9 — `✓ check clean`; следующий шаг — S10 (T9).

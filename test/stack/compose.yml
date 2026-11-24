@@ -11,6 +11,14 @@ x-app-env: &app-env
 
   NATS_URL: nats://nats:4222
 
+  # Зависимости китов графа (scripts/tools/kits.sh): их сервисы стека идут профилем с именем кита (lib.sh), у сервиса
+  # без кита эти переменные никто не читает. Бакет сервиса (STORAGE_S3_BUCKET) — из .env.example, его заводит сам сервис.
+  REDIS_URL: redis://redis:6379/0
+  STORAGE_S3_ENDPOINT: http://minio:9000
+  STORAGE_S3_ACCESS_KEY: smoke-s3
+  STORAGE_S3_SECRET_KEY: smoke-s3-secret
+  STORAGE_S3_CREATE_BUCKET: "true"
+
   JWT_SECRET: smoke-only-secret-do-not-use-in-prod-min-32chars
   JWT_ACCESS_TTL: 15m
 
@@ -63,6 +71,33 @@ services:
     ports:
       - "127.0.0.1::8222"
       - "127.0.0.1::4222"
+    networks: [smoke]
+
+  # Redis — у сервиса с cachekit в графе: профиль включает lib.sh. Образ — как у testkit golibinfra (RedisImage).
+  redis:
+    image: redis:7-alpine
+    profiles: [cachekit]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    networks: [smoke]
+
+  # MinIO (S3) — у сервиса с storagekit в графе: профиль включает lib.sh. Образ — PGSTY Silo, как у testkit golibinfra
+  # и профиля storage инфры проекта.
+  minio:
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
+    profiles: [storagekit]
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: smoke-s3
+      MINIO_ROOT_PASSWORD: smoke-s3-secret
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
     networks: [smoke]
 
   migrate:
@@ -119,6 +154,12 @@ services:
         condition: service_completed_successfully
       seed-admin:
         condition: service_completed_successfully
+        required: false
+      redis:
+        condition: service_healthy
+        required: false
+      minio:
+        condition: service_healthy
         required: false
     ports:
       - "127.0.0.1::8080"

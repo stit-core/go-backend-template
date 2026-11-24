@@ -95,7 +95,7 @@ bash scripts/release-preflight.sh env
 [ -z "$(git status --porcelain)" ] || { echo "release: working tree dirty — закоммить или stash" >&2; exit 2; }
 # -f Makefile: свой GNUmakefile make прочёл бы первым, а игнорируемый git оставляет дерево «чистым».
 make -f Makefile --no-print-directory check
-# Собранный бинарь со стеком в docker (HTTP, Postgres, NATS): то, что юнит и integration не видят.
+# Собранный бинарь со стеком в docker (HTTP, Postgres, NATS, зависимости китов): то, что юнит и integration не видят.
 make -f Makefile --no-print-directory e2e-smoke
 # Уязвимость, которую вызывает код, не уезжает в образ; базе уязвимостей нужна сеть — поэтому здесь, а не
 # в make check, и до тега: отказ не оставляет тега.

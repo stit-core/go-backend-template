@@ -30,6 +30,8 @@ results.tsv сразу, как готов, а строки хода — в по�
 (SharedEnv), раннер поднимает Postgres и пулы NATS, Redis и MinIO — контейнеры образов кита с именем
 mutate-<прогон>-<вид>-<номер> и метками mutate.run=<прогон> и mutate.repo=<репо>, — и путь их
 файла отдаёт командам прогона в TESTKIT_SHARED: тест берёт свою базу или сервер в аренду (README кита § Общий режим).
+Зависимость кита в boot-тесте cmd/api/boot_test.go (kitDeps) — пул только у кита графа cmd/api
+(scripts/tools/kits.sh): boot-тест другого сервиса её не поднимет.
 Контейнеры прогона снимаются по метке в конце и при обрыве (SIGTERM, SIGHUP, Ctrl-C), оставленные убитым раннером —
 следующим прогоном репо; без вызовов кита или кит без общего режима — контейнер на вызов Start*.
 
@@ -115,6 +117,11 @@ SERVERS = {
 }
 POOL = 2
 READY_TIMEOUT = 120
+# Зависимости китов графа: boot-тест (BOOT_TEST, kitDeps) поднимает сервер вида, только если кит — в графе cmd/api
+# (KITS_TOOL); его вызов Start* такого вида без кита в графе пула не поднимает.
+KIT_SERVERS = {"cachekit": "redis", "storagekit": "minio"}
+BOOT_TEST = "cmd/api/boot_test.go"
+KITS_TOOL = pathlib.Path("scripts", "tools", "kits.sh")
 
 
 def fail(msg):
@@ -402,10 +409,13 @@ def kits():
     """Виды общих серверов, которые зовут тесты worktree (Start* кита), и образы кита — или пусто: кит без общего режима
     (golibinfra старше SharedEnv), модуль без кита или тестов с контейнерами."""
     calls = re.compile(r"\btestkit\.(" + "|".join(c for k in SERVERS.values() for c in k[1]) + r")\(")
-    used = set()
+    used, deps = set(), set(KIT_SERVERS.values())
     for f in git("ls-files", "*.go", cwd=WT).splitlines():
-        for call in calls.findall((WT / f).read_text(errors="replace")):
-            used |= {kind for kind, spec in SERVERS.items() if call in spec[1]}
+        found = {kind for call in calls.findall((WT / f).read_text(errors="replace"))
+                 for kind, spec in SERVERS.items() if call in spec[1]}
+        if f == BOOT_TEST and found & deps:
+            found = (found - deps) | (found & graph_servers())
+        used |= found
     if not used:
         return {}
     p = subprocess.run(["go", "doc", "-all", TESTKIT], cwd=WT, capture_output=True, text=True, errors="replace", env=ENV)
@@ -413,6 +423,17 @@ def kits():
     if consts.get("SharedEnv") != "TESTKIT_SHARED":
         return {}
     return {kind: consts[SERVERS[kind][0]] for kind in used if SERVERS[kind][0] in consts}
+
+
+def graph_servers():
+    """Виды серверов китов графа cmd/api (KITS_TOOL); модуль без него — все виды KIT_SERVERS: пул лишний, но не
+    недостающий."""
+    if not (WT / KITS_TOOL).is_file():
+        return set(KIT_SERVERS.values())
+    p = subprocess.run(["bash", str(KITS_TOOL)], cwd=WT, capture_output=True, text=True, errors="replace", env=ENV)
+    if p.returncode != 0:
+        raise RuntimeError(f"{KITS_TOOL}: {(p.stderr or p.stdout).strip()[-300:]}")
+    return {KIT_SERVERS[kit] for kit in p.stdout.split() if kit in KIT_SERVERS}
 
 
 # Проба — мимо http_proxy окружения: urllib, в отличие от Go, шлёт в прокси и 127.0.0.1.

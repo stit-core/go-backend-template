@@ -8,7 +8,7 @@
 
 | Зона | Где | Отвечает за |
 |---|---|---|
-| Стек | `stack/` | docker-compose + креды seed-admin (bash). `up.sh`/`down.sh`, `lib.sh`, `compose.yml`, `Dockerfile.local`; env сервиса — из `.env.example`. |
+| Стек | `stack/` | docker-compose + креды seed-admin (bash). `up.sh`/`down.sh`, `lib.sh`, `compose.yml`, `Dockerfile.local`; env сервиса — из `.env.example`. Зависимость кита графа (`scripts/tools/kits.sh`: Redis у `cachekit`, MinIO у `storagekit`) — сервис-профиль `compose.yml` с именем кита, его включает `lib.sh`; своя зависимость сервиса (поисковый движок, заглушка внешнего API) — второй compose-файл сервиса stack/compose.service.yml: путь шаблона `compose.yml` сервис не правит. |
 | Транспорт+модели | `client/` | типизированная httpx-обёртка + pydantic-DTO (строгое зеркало huma: лишнее поле или тип — ошибка разбора). |
 | Сценарии | `scenarios/` | переиспользуемые step-функции над `client` (без ассертов). |
 | Infra-интроспекция | `infra/` | типизированный доступ к side-effects: `pg.py` (psycopg, users/сессии refresh/bruteforce/email_verifications), `outbox.py` (per-domain `outbox_<domain>`), `nats.py` (core-NATS collector). |

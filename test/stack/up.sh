@@ -56,7 +56,7 @@ done
 # === Compose up (build context = repo root) ===
 echo
 echo "== Compose up =="
-if ! docker compose -p "$E2E_PROJECT" -f "$COMPOSE" up -d --build 2>&1; then
+if ! docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" up -d --build 2>&1; then
     echo "FAIL: docker compose up" >&2
     exit 1
 fi
@@ -66,7 +66,7 @@ fi
 # фактический host-порт известен только после `compose up`. pytest читает
 # ENDPOINTS_FILE (conftest), экспорт env обратно из subprocess не доходит.
 resolve_port() {
-    docker compose -p "$E2E_PROJECT" -f "$COMPOSE" port "$1" "$2" 2>/dev/null \
+    docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" port "$1" "$2" 2>/dev/null \
         | awk -F: 'NF{print $NF; exit}'
 }
 API_PORT=$(resolve_port api 8080)
@@ -75,7 +75,7 @@ NATS_PORT=$(resolve_port nats 4222)
 for _p in API_PORT PG_PORT NATS_PORT; do
     if [ -z "${!_p:-}" ]; then
         echo "FAIL: could not resolve host port ($_p)" >&2
-        docker compose -p "$E2E_PROJECT" -f "$COMPOSE" ps >&2
+        docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" ps >&2
         exit 1
     fi
 done
@@ -89,12 +89,12 @@ EOF
 # === Wait for api healthy: проверка здоровья образа (`api healthcheck`), та же, что у деплоя ===
 echo
 echo "== Wait for api healthy (max 60s) =="
-API_CONTAINER=$(docker compose -p "$E2E_PROJECT" -f "$COMPOSE" ps -q api)
+API_CONTAINER=$(docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" ps -q api)
 for i in $(seq 1 30); do
     if [ "$(docker inspect -f '{{.State.Health.Status}}' "$API_CONTAINER" 2>/dev/null)" = healthy ]; then
         echo "  api up after ${i}s × 2s = $((i*2))s"
         echo
-        docker compose -p "$E2E_PROJECT" -f "$COMPOSE" ps
+        docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" ps
         echo
         echo "OK"
         exit 0
@@ -104,5 +104,5 @@ done
 
 echo "FAIL: api did not become healthy in 60s. Health checks and logs:" >&2
 docker inspect -f '{{range .State.Health.Log}}{{.ExitCode}} {{.Output}}{{end}}' "$API_CONTAINER" >&2
-docker compose -p "$E2E_PROJECT" -f "$COMPOSE" logs --tail=80 api migrate >&2
+docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" logs --tail=80 api migrate >&2
 exit 1
