@@ -23,7 +23,7 @@ type Config struct {
 var errLimited = errors.New("authlimit: rate limit exceeded")
 
 // Rule — отказ Middleware в таблице операции под Prefix: код и статус лимитера httpkit.
-var Rule = httpkit.ErrorRule{Err: errLimited, Status: http.StatusTooManyRequests, Code: "RATE_LIMITED", Detail: "rate limit exceeded"}
+var Rule = httpkit.ErrorRule{Err: errLimited, Status: http.StatusTooManyRequests, Code: "RATE_LIMITED", Detail: "Слишком много запросов за короткое время. Подождите немного и повторите действие."}
 
 // Middleware — лимит клиента на пути под Prefix поверх общего лимита httpkit; остальные пути он не считает.
 func Middleware(cfg Config) func(http.Handler) http.Handler {

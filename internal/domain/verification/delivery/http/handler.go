@@ -78,14 +78,14 @@ func (h *Handler) confirmEmail(ctx context.Context, in *VerificationEmailVerifyI
 // Правило каждой ошибки домена — одно. verificationErrors переводит в хендлерах их все (ни одна не
 // уходит 500 — archtest), таблица операции объявляет в OpenAPI те, что отдаёт её usecase.
 var (
-	weakPasswordRule     = httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"}
-	passwordTooLongRule  = httpkit.ErrorRule{Err: verification.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_PASSWORD_TOO_LONG", Detail: "password too long", Field: "body.password"}
-	invalidResetRule     = httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "invalid or expired reset token"}
-	invalidVerifyRule    = httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "invalid or expired verification token"}
-	tokenUsedRule        = httpkit.ErrorRule{Err: verification.ErrTokenUsed, Status: http.StatusConflict, Code: "VERIFICATION_TOKEN_USED", Detail: "token already used"}
-	concurrentUpdateRule = httpkit.ErrorRule{Err: verification.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "VERIFICATION_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"}
-	userNotFoundRule     = httpkit.ErrorRule{Err: verification.ErrUserNotFound, Status: http.StatusNotFound, Code: "VERIFICATION_USER_NOT_FOUND", Detail: "user not found"}
-	busyRule             = httpkit.ErrorRule{Err: verification.ErrBusy, Status: http.StatusServiceUnavailable, Code: "VERIFICATION_BUSY", Detail: "password hasher busy, retry later"}
+	weakPasswordRule     = httpkit.ErrorRule{Err: verification.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_WEAK_PASSWORD", Detail: "Пароль слишком простой. Задайте пароль не короче 8 знаков.", Field: "body.password"}
+	passwordTooLongRule  = httpkit.ErrorRule{Err: verification.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "VERIFICATION_PASSWORD_TOO_LONG", Detail: "Пароль слишком длинный. Придумайте пароль покороче.", Field: "body.password"}
+	invalidResetRule     = httpkit.ErrorRule{Err: verification.ErrInvalidResetToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_RESET_TOKEN", Detail: "Ссылка для сброса пароля неверна или устарела. Запросите новую."}
+	invalidVerifyRule    = httpkit.ErrorRule{Err: verification.ErrInvalidVerificationToken, Status: http.StatusBadRequest, Code: "VERIFICATION_INVALID_VERIFICATION_TOKEN", Detail: "Ссылка для подтверждения адреса неверна или устарела. Запросите новую."}
+	tokenUsedRule        = httpkit.ErrorRule{Err: verification.ErrTokenUsed, Status: http.StatusConflict, Code: "VERIFICATION_TOKEN_USED", Detail: "Эта ссылка уже использована. Если нужно, запросите новую."}
+	concurrentUpdateRule = httpkit.ErrorRule{Err: verification.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "VERIFICATION_CONCURRENT_UPDATE", Detail: "Учетную запись изменили одновременно с вами. Повторите действие."}
+	userNotFoundRule     = httpkit.ErrorRule{Err: verification.ErrUserNotFound, Status: http.StatusNotFound, Code: "VERIFICATION_USER_NOT_FOUND", Detail: "Пользователь не найден. Проверьте, что его не удалили."}
+	busyRule             = httpkit.ErrorRule{Err: verification.ErrBusy, Status: http.StatusServiceUnavailable, Code: "VERIFICATION_BUSY", Detail: "Система сейчас перегружена. Подождите немного и повторите действие."}
 
 	verificationErrors = httpkit.NewErrorMap(weakPasswordRule, passwordTooLongRule, invalidResetRule, invalidVerifyRule, tokenUsedRule,
 		concurrentUpdateRule, userNotFoundRule, busyRule)

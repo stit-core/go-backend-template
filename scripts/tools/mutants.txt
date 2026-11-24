@@ -1361,8 +1361,8 @@ internal/domain/auth/delivery/http/handler.go
 
 ## AH8 handler — неверный старый пароль: ошибка указывает на поле нового
 internal/domain/auth/delivery/http/handler.go
-- Detail: "old password does not match", Field: "body.old_password"}
-+ Detail: "old password does not match", Field: "body.new_password"}
+- Detail: "Текущий пароль указан неверно. Проверьте его и повторите.", Field: "body.old_password"}
++ Detail: "Текущий пароль указан неверно. Проверьте его и повторите.", Field: "body.new_password"}
 
 ## AH9 handler — повтор refresh отвечает кодом истёкшего
 internal/domain/auth/delivery/http/handler.go

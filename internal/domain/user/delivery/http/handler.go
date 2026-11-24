@@ -162,17 +162,17 @@ func (h *Handler) delete(ctx context.Context, in *UserDeleteInput) (*struct{}, e
 // userErrors переводит все ошибки домена (archtest), таблица операции объявляет коды своего usecase; 409 регистрации
 // выдаёт занятый адрес — требование продукта (SECURITY.md § Принятые компромиссы).
 var (
-	notFoundRule         = httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "user not found"}
-	alreadyExistsRule    = httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "email already taken"}
-	invalidEmailRule     = httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_EMAIL", Detail: "invalid email", Field: "body.email"}
-	invalidNameRule      = httpkit.ErrorRule{Err: user.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_NAME", Detail: "name must be 1 to 200 characters, not blank, without NUL", Field: "body.name"}
-	invalidRoleRule      = httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_ROLE", Detail: "invalid role"}
-	weakPasswordRule     = httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "password too weak", Field: "body.password"}
-	passwordTooLongRule  = httpkit.ErrorRule{Err: user.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "USER_PASSWORD_TOO_LONG", Detail: "password too long", Field: "body.password"}
-	concurrentUpdateRule = httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "concurrent update detected"}
-	noUpdateFieldsRule   = httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "at least one of name or status must be provided"}
-	statusTransitionRule = httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "status transition is not allowed"}
-	busyRule             = httpkit.ErrorRule{Err: user.ErrBusy, Status: http.StatusServiceUnavailable, Code: "USER_BUSY", Detail: "password hasher busy, retry later"}
+	notFoundRule         = httpkit.ErrorRule{Err: user.ErrNotFound, Status: http.StatusNotFound, Code: "USER_NOT_FOUND", Detail: "Пользователь не найден. Проверьте, что его не удалили."}
+	alreadyExistsRule    = httpkit.ErrorRule{Err: user.ErrAlreadyExists, Status: http.StatusConflict, Code: "USER_ALREADY_EXISTS", Detail: "Этот адрес электронной почты уже занят. Укажите другой адрес или войдите с этим."}
+	invalidEmailRule     = httpkit.ErrorRule{Err: user.ErrInvalidEmail, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_EMAIL", Detail: "Адрес электронной почты записан неверно. Проверьте его и повторите.", Field: "body.email"}
+	invalidNameRule      = httpkit.ErrorRule{Err: user.ErrInvalidName, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_NAME", Detail: "Имя пустое или длиннее 200 знаков. Укажите имя от 1 до 200 знаков.", Field: "body.name"}
+	invalidRoleRule      = httpkit.ErrorRule{Err: user.ErrInvalidRole, Status: http.StatusUnprocessableEntity, Code: "USER_INVALID_ROLE", Detail: "Такой роли нет. Выберите роль из списка."}
+	weakPasswordRule     = httpkit.ErrorRule{Err: user.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "USER_WEAK_PASSWORD", Detail: "Пароль слишком простой. Задайте пароль не короче 8 знаков.", Field: "body.password"}
+	passwordTooLongRule  = httpkit.ErrorRule{Err: user.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "USER_PASSWORD_TOO_LONG", Detail: "Пароль слишком длинный. Придумайте пароль покороче.", Field: "body.password"}
+	concurrentUpdateRule = httpkit.ErrorRule{Err: user.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "USER_CONCURRENT_UPDATE", Detail: "Пользователя изменили, пока вы с ним работали. Загрузите его заново и повторите действие."}
+	noUpdateFieldsRule   = httpkit.ErrorRule{Err: user.ErrNoUpdateFields, Status: http.StatusBadRequest, Code: "USER_NO_UPDATE_FIELDS", Detail: "Нечего менять. Укажите новое имя или статус."}
+	statusTransitionRule = httpkit.ErrorRule{Err: user.ErrInvalidStatusTransition, Status: http.StatusConflict, Code: "USER_INVALID_STATUS_TRANSITION", Detail: "Такая смена статуса недопустима. Выберите другой статус."}
+	busyRule             = httpkit.ErrorRule{Err: user.ErrBusy, Status: http.StatusServiceUnavailable, Code: "USER_BUSY", Detail: "Система сейчас перегружена. Подождите немного и повторите действие."}
 
 	userErrors = httpkit.NewErrorMap(notFoundRule, alreadyExistsRule, invalidEmailRule, invalidNameRule, invalidRoleRule,
 		weakPasswordRule, passwordTooLongRule, concurrentUpdateRule, noUpdateFieldsRule, statusTransitionRule, busyRule,

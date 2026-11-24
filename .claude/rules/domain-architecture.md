@@ -103,7 +103,8 @@ paths:
   `TestSecuredOperationsAskPolicy`); `Register` доменов зовёт `registerHTTP`
   (`cmd/api/http.go`). Ошибки — таблица домена `<домен>Errors`: правило на каждую ошибку `errors.go`,
   хендлер отдаёт ошибкой только `nil` или `<домен>Errors.Map(err)`, таблица операции из тех же правил —
-  `Declare` при регистрации (оба — archtest `TestDomainErrorTables`); ошибка поля — 422 с `Field`.
+  `Declare` при регистрации (оба — archtest `TestDomainErrorTables`); ошибка поля — 422 с `Field`; `Detail` —
+  по-русски, законченным предложением с тем, что делать, как тексты httpkit.
   Каждая ручка — операция huma в контракте `openapi.json`: сырой маршрут chi (`Router()`) и
   `Hidden: true` в контракт не попадают, `TestBoot` их не пускает. Envelope — `data`;
   префикс, уникальность имён и envelope держит archtest `TestHTTPTypes`.

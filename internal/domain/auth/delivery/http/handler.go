@@ -116,17 +116,17 @@ func (h *Handler) changePassword(ctx context.Context, in *AuthChangePasswordInpu
 // authErrors переводит все ошибки домена (archtest), таблица операции объявляет коды своего usecase; неверный старый
 // пароль — ошибка поля (422), а не 401: сессия цела.
 var (
-	invalidCredentialsRule = httpkit.ErrorRule{Err: auth.ErrInvalidCredentials, Status: http.StatusUnauthorized, Code: "AUTH_INVALID_CREDENTIALS", Detail: "invalid email or password"}
-	accountLockedRule      = httpkit.ErrorRule{Err: auth.ErrAccountLocked, Status: http.StatusTooManyRequests, Code: "AUTH_ACCOUNT_LOCKED", Detail: "account temporarily locked"}
-	refreshExpiredRule     = httpkit.ErrorRule{Err: auth.ErrRefreshExpired, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_EXPIRED", Detail: "refresh token expired: log in again"}
-	refreshReusedRule      = httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "refresh token reused: log in again"}
-	refreshInvalidRule     = httpkit.ErrorRule{Err: auth.ErrRefreshInvalid, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_INVALID", Detail: "refresh token invalid or missing: log in again"}
-	weakPasswordRule       = httpkit.ErrorRule{Err: auth.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_WEAK_PASSWORD", Detail: "password too weak", Field: "body.new_password"}
-	passwordTooLongRule    = httpkit.ErrorRule{Err: auth.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "AUTH_PASSWORD_TOO_LONG", Detail: "password too long", Field: "body.new_password"}
-	wrongOldPasswordRule   = httpkit.ErrorRule{Err: auth.ErrWrongOldPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_INVALID_OLD_PASSWORD", Detail: "old password does not match", Field: "body.old_password"}
-	userNotFoundRule       = httpkit.ErrorRule{Err: auth.ErrUserNotFound, Status: http.StatusNotFound, Code: "AUTH_USER_NOT_FOUND", Detail: "user not found"}
-	concurrentUpdateRule   = httpkit.ErrorRule{Err: auth.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "AUTH_CONCURRENT_UPDATE", Detail: "user changed concurrently, retry"}
-	busyRule               = httpkit.ErrorRule{Err: auth.ErrBusy, Status: http.StatusServiceUnavailable, Code: "AUTH_BUSY", Detail: "password hasher busy, retry later"}
+	invalidCredentialsRule = httpkit.ErrorRule{Err: auth.ErrInvalidCredentials, Status: http.StatusUnauthorized, Code: "AUTH_INVALID_CREDENTIALS", Detail: "Неверный адрес электронной почты или пароль. Проверьте их и войдите снова."}
+	accountLockedRule      = httpkit.ErrorRule{Err: auth.ErrAccountLocked, Status: http.StatusTooManyRequests, Code: "AUTH_ACCOUNT_LOCKED", Detail: "Вход временно заблокирован после нескольких неудачных попыток. Подождите и попробуйте снова."}
+	refreshExpiredRule     = httpkit.ErrorRule{Err: auth.ErrRefreshExpired, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_EXPIRED", Detail: "Срок действия входа истек. Войдите заново."}
+	refreshReusedRule      = httpkit.ErrorRule{Err: auth.ErrRefreshReused, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_REUSED", Detail: "Вход больше не действует. Войдите заново."}
+	refreshInvalidRule     = httpkit.ErrorRule{Err: auth.ErrRefreshInvalid, Status: http.StatusUnauthorized, Code: "AUTH_REFRESH_INVALID", Detail: "Вход не найден или больше не действует. Войдите заново."}
+	weakPasswordRule       = httpkit.ErrorRule{Err: auth.ErrWeakPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_WEAK_PASSWORD", Detail: "Пароль слишком простой. Задайте пароль не короче 8 знаков.", Field: "body.new_password"}
+	passwordTooLongRule    = httpkit.ErrorRule{Err: auth.ErrPasswordTooLong, Status: http.StatusUnprocessableEntity, Code: "AUTH_PASSWORD_TOO_LONG", Detail: "Пароль слишком длинный. Придумайте пароль покороче.", Field: "body.new_password"}
+	wrongOldPasswordRule   = httpkit.ErrorRule{Err: auth.ErrWrongOldPassword, Status: http.StatusUnprocessableEntity, Code: "AUTH_INVALID_OLD_PASSWORD", Detail: "Текущий пароль указан неверно. Проверьте его и повторите.", Field: "body.old_password"}
+	userNotFoundRule       = httpkit.ErrorRule{Err: auth.ErrUserNotFound, Status: http.StatusNotFound, Code: "AUTH_USER_NOT_FOUND", Detail: "Пользователь не найден. Проверьте, что его не удалили."}
+	concurrentUpdateRule   = httpkit.ErrorRule{Err: auth.ErrConcurrentUpdate, Status: http.StatusConflict, Code: "AUTH_CONCURRENT_UPDATE", Detail: "Учетную запись изменили одновременно с вами. Повторите действие."}
+	busyRule               = httpkit.ErrorRule{Err: auth.ErrBusy, Status: http.StatusServiceUnavailable, Code: "AUTH_BUSY", Detail: "Система сейчас перегружена. Подождите немного и повторите действие."}
 
 	authErrors = httpkit.NewErrorMap(invalidCredentialsRule, accountLockedRule, refreshExpiredRule, refreshReusedRule,
 		refreshInvalidRule, weakPasswordRule, passwordTooLongRule, wrongOldPasswordRule, userNotFoundRule, concurrentUpdateRule,

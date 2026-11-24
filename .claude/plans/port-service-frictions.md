@@ -74,6 +74,15 @@ blocked-by: —
   `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS
 - [ ] **AC15** — мутацию, которую убила паника тестового бинаря вне теста (убийца — пакет), прогон по ключу не гоняет
   заново, пока в пакете есть тесты. Проверка: `go test ./internal/archtest -run TestMutate` → PASS
+- [x] **AC16** — шаблон на golibinfra v1.8.0 (OpenTelemetry v1.47.0, x/net, x/crypto), тексты `Detail` таблиц ошибок
+  и среза `make new-domain` — по-русски, правило — в `domain-architecture`, `/scaffold` endpoint и `architecture.md`.
+  Проверка: `make mutate A=--anchors` → OK; `make check` → `✓ check clean`
+  - Подтверждено: якоря 437 мутаций — по одному месту (AH8 — под новый текст); `make gen` без правок
+    `openapi.json`; `make check` → `✓ check clean`
+- [ ] **AC17** — проверка Origin включена: `httpkit.SessionCookies{access_token, refresh_token}` — в графе сервиса и
+  спецификации, `403 ORIGIN_NOT_ALLOWED` — в `openapi.json` изменяющих операций, `HTTP_CORS_ORIGINS` — в
+  `.env.example`, клиенты тестов и смока шлют Origin, INFRA-HANDOFF в накопителе. Проверка: `make test-int
+  PKG=./cmd/api/...` → PASS (`TestBoot_SessionOrigin`); мутации G12, G13 → убиты; `make check` → `✓ check clean`
 - [ ] **AC13** — гейт и строгие мутации зелёные. Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0
 
 ## Шаги
@@ -127,6 +136,16 @@ blocked-by: —
   - Проверка: `go test ./internal/archtest` → PASS; `make check` → `✓ check clean` · Закрывает: AC10 · Зависит от: S9
 - [ ] **S11** — T12: `make new-domain AGG=` и G115 по файлам `infra/postgres`
   - Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check`, мутации среза · Закрывает: AC11
+### golibinfra v1.8.0
+- [x] **S16** — golibinfra v1.8.0 и тексты ответов по-русски
+  - Проверка: `make mutate A=--anchors` → OK; `make check` → `✓ check clean` · Закрывает: AC16
+  - Сделано: `go get …golibinfra@v1.8.0`, `go mod tidy` (otel v1.47.0, contrib v0.72.0, x/net v0.63.0, x/crypto
+    v0.59.0); `Detail` 33 правил доменов идентичности, `authgate`, `authlimit` и двух правил среза — по-русски; якорь
+    AH8; строка правила — `domain-architecture`, `/scaffold` endpoint, `architecture.md`; тестов, которые сверяли бы
+    английский текст ответа, нет; `make check` → `✓ check clean`; Review: принимает сессия корня
+- [ ] **S17** — проверка Origin у изменяющего запроса с cookie сессии (Handoff golibinfra v1.8.0)
+  - Проверка: `make test-int PKG=./cmd/api/...` → PASS; `make mutate A="G12 G13"` → убиты; `make check` →
+    `✓ check clean` · Закрывает: AC17 · Зависит от: S16
 ### Бэклог форка шаблона
 - [ ] **S14** — `prepush-worktree-disk`: свежий worktree pre-push — в `.cache/` репо, с тестом хука
   - Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS · Закрывает: AC14
@@ -145,6 +164,9 @@ blocked-by: —
   S10, `prepush-worktree-disk` — S14 (правка хука pre-push: каталог worktree гейта, проверок не меньше),
   `mutate-panic-killer` — S15; `archtest-golibinfra-version` — строкой бэклога (S12): дока с версией golibinfra в
   шаблоне нет, `docs/stack/dependencies.md` заводит форк.
+- golibinfra v1.8.0, тексты по-русски и проверка Origin (S16, S17) — в этом плане, до S10: решение владельца 24.11 —
+  тексты ответов API по-русски (golibinfra v1.8.0, breaking minor), проверку Origin шаблон включает с её выпуском;
+  тексты среза `make new-domain` правит S16, T12 (S11) их сохраняет.
 
 ## Открытые вопросы
 —
@@ -153,4 +175,5 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S9 (T1–T8, T10, T11) и Go 1.26.11 закрыты, `make check` на S9 — `✓ check clean`; следующий шаг — S10 (T9).
+S1–S9 (T1–T8, T10, T11), Go 1.26.11 и S16 (golibinfra v1.8.0, тексты по-русски) закрыты, `make check` на S16 —
+`✓ check clean`; следующий шаг — S17 (проверка Origin), затем S10 (T9).

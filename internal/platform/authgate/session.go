@@ -12,7 +12,7 @@ import (
 // SessionErrors — 401 входа под cookie сверх UNAUTHORIZED кита («войти заново»): истёкший access —
 // «обновить сессию» через POST /api/auth/refresh.
 var SessionErrors = httpkit.NewErrorMap(
-	httpkit.ErrorRule{Err: authnkit.ErrTokenExpired, Status: http.StatusUnauthorized, Code: "AUTH_ACCESS_EXPIRED", Detail: "access token expired: refresh the session"},
+	httpkit.ErrorRule{Err: authnkit.ErrTokenExpired, Status: http.StatusUnauthorized, Code: "AUTH_ACCESS_EXPIRED", Detail: "Срок действия входа истек. Войдите заново и повторите действие."},
 )
 
 // Secured — операция под cookie-сессией: Security схемы Cookie и коды 401 входа в OpenAPI.

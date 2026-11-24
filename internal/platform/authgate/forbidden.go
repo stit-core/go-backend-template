@@ -9,7 +9,7 @@ import (
 )
 
 // ForbiddenRule — отказ policy → 403 FORBIDDEN: общее правило таблицы ошибок каждого домена.
-var ForbiddenRule = httpkit.ErrorRule{Match: isForbidden, Status: http.StatusForbidden, Code: "FORBIDDEN", Detail: "forbidden"}
+var ForbiddenRule = httpkit.ErrorRule{Match: isForbidden, Status: http.StatusForbidden, Code: "FORBIDDEN", Detail: "Для этого действия не хватает прав. Если оно вам нужно, обратитесь к администратору системы."}
 
 func isForbidden(err error) bool {
 	var fe *policy.ForbiddenError

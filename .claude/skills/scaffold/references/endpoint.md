@@ -137,13 +137,15 @@ huma.Register(api, newMethodErrors.Declare(authgate.Secured(huma.Operation{
 
 ```go
 var (
-    xyzRule = httpkit.ErrorRule{Err: user.ErrXyz, Status: http.StatusConflict, Code: "USER_XYZ", Detail: "..."}
+    xyzRule = httpkit.ErrorRule{Err: user.ErrXyz, Status: http.StatusConflict, Code: "USER_XYZ", Detail: "Что мешает. Что сделать."}
 
     userErrors      = httpkit.NewErrorMap(notFoundRule /* …правило каждой ошибки домена… */, xyzRule, authgate.ForbiddenRule)
     newMethodErrors = httpkit.NewErrorMap(notFoundRule, xyzRule, authgate.ForbiddenRule)
 )
 ```
 
+- `Detail` правила — по-русски, законченным предложением: что мешает и что сделать, без внутренних слов и кодов
+  (`code` — для машины). Так же пишет свои тексты httpkit (`title`, `detail` и сообщения полей huma).
 - Новая ошибка домена — sentinel `var Err… = errors.New(…)` в `errors.go` (свой тип — там же, с `Unwrap` в
   sentinel) и правило в `userErrors`, иначе archtest красный: ошибка из функции или другого файла корня
   (`errors.New`, `var Err…`, `fmt.Errorf` без `%w`) — `TestDomainErrorsInErrorsGo`, sentinel без правила —
