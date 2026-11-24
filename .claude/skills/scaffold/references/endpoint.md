@@ -127,7 +127,8 @@ huma.Register(api, newMethodErrors.Declare(authgate.Secured(huma.Operation{
 `authgate.Secured` — операция под cookie: `Security` и коды 401 сессии в OpenAPI. Публичная
 операция — `httpkit.Public(huma.Operation{…})` и её `OperationID` в `publicOperations`
 (`cmd/api/api_test.go`): операция без `Security` и без пометки — ошибка старта сервиса (httpkit), открытая
-мимо списка — красный `TestHTTPOperations`.
+мимо списка — красный `TestHTTPOperations`. Операция, которая выдаёт сессию запросу без неё (регистрация со входом),
+— ещё `httpkit.IssuesSession(…)` поверх, как вход: запрос с чужим `Origin` — 403 до хендлера (`SECURITY.md`).
 
 ### 7. Ошибки: правило домена и таблица операции
 
@@ -174,6 +175,9 @@ var (
 - Forbidden (мок usecase возвращает `&policy.ForbiddenError{…}` → 403)
 - Validation error (huma сам отдаёт 422)
 - Каждый код таблицы операции (`handlertest.AssertAPIError`)
+- Операция `httpkit.IssuesSession` — запрос с чужим `Origin` и без `Origin` с телом не JSON: 403
+  `ORIGIN_NOT_ALLOWED` до usecase и без cookie сессии (`handlertest.WithSessionCookies` и `WithConfig` с
+  `CORS.Origins`, образец — `TestLogin_Origin` домена auth); снятую метку ловит блок мутации, как `AH20`
 
 `errors_test.go` (white-box) — строка операции в `TestErrorMaps`: таблица операции объявляет ошибки
 её usecase (список — по коду usecase, `Unmapped` пуст).

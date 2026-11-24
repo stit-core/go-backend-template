@@ -602,6 +602,25 @@ func TestSessions(t *testing.T) {
 		require.Equal(t, before+1, openSessions(t, db, aliceID), "the padded address logs into the same account")
 	})
 
+	// Подделка входа (SECURITY.md): вход со страницы соседнего адреса — 403 без cookie и сессии, клиент вне браузера
+	// входит без Origin.
+	t.Run("a login from a sibling page is refused, a client without Origin logs in", func(t *testing.T) {
+		const mallory = "mallory@example.com"
+		malloryID := api.register(mallory)
+		credentials := `{"email":"` + mallory + `","password":"` + sessionPassword + `"}`
+
+		sibling := sessionAPI{t: t, base: api.base, client: &http.Client{Timeout: 10 * time.Second, Transport: originTransport{origin: "https://evil.example.com"}}}
+		status, body, got := sibling.call(http.MethodPost, "/api/auth/login", credentials, nil)
+		require.Equal(t, http.StatusForbidden, status, "login from a sibling page: %s", body)
+		require.Equal(t, "ORIGIN_NOT_ALLOWED", errorCode(t, body))
+		require.Empty(t, got, "the refused login sets no session cookie")
+		require.Zero(t, openSessions(t, db, malloryID), "the refused login opens no session")
+
+		native := sessionAPI{t: t, base: api.base, client: &http.Client{Timeout: 10 * time.Second}}
+		native.login(mallory, sessionPassword)
+		require.Equal(t, 1, openSessions(t, db, malloryID), "a client without Origin logs in")
+	})
+
 	// Права — из роли claim'а, который выдал вход: сессия клиента получает отказ policy на операциях admin, а не
 	// список всех пользователей и чужую учётную запись.
 	t.Run("a client session is refused admin operations", func(t *testing.T) {

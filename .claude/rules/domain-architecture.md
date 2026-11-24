@@ -96,7 +96,9 @@ paths:
   конфиг хендлера и другие структуры вне провода — без него.
   Операция либо под `Security` (`authgate.Secured(op)`), либо открыта пометкой `httpkit.Public(op)` и
   строкой в `publicOperations` (`cmd/api/api_test.go`): без того и другого сервис не стартует (httpkit),
-  без строки — красный `TestHTTPOperations`. Операцию регистрирует вызов `huma.Register` (поток — `sse.Register`)
+  без строки — красный `TestHTTPOperations`; операция, которая выдаёт сессию запросу без неё (вход), — ещё
+  `httpkit.IssuesSession(op)`: вход со страницы соседнего адреса — 403 (подделка входа, `SECURITY.md`).
+  Операцию регистрирует вызов `huma.Register` (поток — `sse.Register`)
   в `delivery/http` своего домена, хендлер — метод, функция или литерал этого пакета (без обёрток, декораторов и
   коротких форм `huma.Get`…), подписку — `natskit` в `delivery/nats`
   (archtest `TestInputsRegisterInDelivery`); операция — литерал в вызове или переменная пакета (archtest

@@ -24,6 +24,7 @@ import (
 	"git.stit.tech/stit-core/go-backend-template/internal/testkit/identitytest"
 	"git.stit.tech/stit-core/go-backend-template/pkg/policy"
 	"git.stit.tech/stit-core/golibinfra/authnkit"
+	"git.stit.tech/stit-core/golibinfra/httpkit"
 	"git.stit.tech/stit-core/golibinfra/testkit/handlertest"
 )
 
@@ -98,6 +99,58 @@ func TestLogin_HappyPath(t *testing.T) {
 	handlertest.AssertStatus(t, resp, http.StatusOK)
 	require.Equal(t, userView{ID: "u1", Email: "a@b.com", Name: "Alice", Role: "client"}, data(t, resp), "the user goes in the data envelope")
 	requireSession(t, resp, "access-token", "refresh-token")
+}
+
+// Вход — httpkit.IssuesSession (подделка входа, SECURITY.md): чужой Origin и тело не JSON без Origin — 403 до usecase,
+// страница SPA и JSON без Origin (клиент вне браузера) входят.
+func TestLogin_Origin(t *testing.T) {
+	t.Parallel()
+	cfg, err := httpkit.NewConfig()
+	require.NoError(t, err)
+	cfg.CORS.Origins = []string{"https://app.example.com"}
+	newAPI := func(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
+		t.Helper()
+		return handlertest.NewAPI(t, func(api huma.API) {
+			authhttp.Register(api, authhttp.NewHandler(uc, authgate.CookieConfig{Secure: true}))
+		}, handlertest.WithSecuritySchemes(authgate.CookieScheme(identitytest.Extract)), handlertest.WithConfig(cfg),
+			handlertest.WithSessionCookies(authgate.CookieAccess, authgate.CookieRefresh))
+	}
+	login := func(api handlertest.API, headers []any) *httptest.ResponseRecorder {
+		return api.Post("/api/auth/login", append(headers, strings.NewReader(`{"email":"a@b.com","password":"pass1234"}`))...)
+	}
+	tests := []struct {
+		name    string
+		headers []any
+		logsIn  bool
+	}{
+		{"sibling page", []any{"Origin: https://evil.example.com", "Content-Type: application/json"}, false},
+		{"opaque origin", []any{"Origin: null", "Content-Type: application/json"}, false},
+		{"no origin, as text", []any{"Content-Type: text/plain"}, false},
+		{"no origin, no type", nil, false},
+		{"page of the SPA", []any{"Origin: https://app.example.com"}, true},
+		{"no origin, JSON", []any{"Content-Type: application/json"}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			uc := mocks.NewMockUsecase(t)
+			if tc.logsIn {
+				uc.EXPECT().Login(mock.Anything, auth.LoginInput{Email: "a@b.com", Password: "pass1234"}).Return(&auth.Session{
+					AccessToken: "access-token", RefreshToken: "refresh-token",
+					User: &auth.User{ID: "u1", Email: "a@b.com", Name: "Alice", CanLogin: true, Role: identity.RoleClient},
+				}, nil).Once()
+			}
+
+			resp := login(newAPI(t, uc), tc.headers)
+			if tc.logsIn {
+				handlertest.AssertStatus(t, resp, http.StatusOK)
+				requireSession(t, resp, "access-token", "refresh-token")
+				return
+			}
+			handlertest.AssertAPIError(t, resp, http.StatusForbidden, "ORIGIN_NOT_ALLOWED")
+			require.Empty(t, cookies(resp), "a refused login sets no session cookie")
+		})
+	}
 }
 
 func TestLogin_InvalidCredentials(t *testing.T) {

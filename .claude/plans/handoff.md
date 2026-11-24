@@ -462,3 +462,19 @@ WHO    потребители API
 DECIDE —
 RISK   клиент, который сверяет английский текст ответа («unauthorized», «rate limit exceeded» …), ветку не находит
 ===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   вход POST /api/auth/login сверяет Origin и без cookie сессии (httpkit.IssuesSession, golibinfra v1.9.0):
+       Origin не из HTTP_CORS_ORIGINS и «null» — 403 ORIGIN_NOT_ALLOWED без cookie сессии; без Origin вход
+       проходит только с телом JSON (Content-Type: application/json), пустой Content-Type, text/plain и формы — 403
+WHY    login-origin — подделка входа со страницы соседнего адреса того же сайта: вход идёт без cookie и сам их
+       ставит, и проверка Origin запроса с cookie его не касалась
+ACTION HTTP_CORS_ORIGINS каждого окружения — адрес каждой страницы, с которой входят в браузере (кабинет SPA,
+       отдельная страница входа); скрипты, мониторинг и клиенты вне браузера входят без Origin с
+       Content-Type: application/json; алерт на http_origin_rejections_total учитывает отказы входа (path
+       /api/auth/login, WARN «session issuer refused: origin is not allowed»)
+WHO    проект (compose env); потребители API, которые входят вне браузера
+DECIDE —
+RISK   вход со страницы, адреса которой нет в списке, и вход скрипта без JSON-типа получают 403; метрика отказов
+       Origin считает и отказы входа
+===

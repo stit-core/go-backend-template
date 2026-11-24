@@ -1434,6 +1434,11 @@ internal/domain/auth/delivery/http/handler.go
 - Err: auth.ErrBusy, Status: http.StatusServiceUnavailable,
 + Err: auth.ErrBusy, Status: http.StatusTooManyRequests,
 
+## AH20 handler — login без IssuesSession: вход со страницы соседнего адреса проходит (подделка входа)
+internal/domain/auth/delivery/http/handler.go
+- huma.Register(api, loginErrors.Declare(httpkit.IssuesSession(httpkit.Public(huma.Operation{
++ huma.Register(api, loginErrors.Declare((httpkit.Public(huma.Operation{
+
 ## UH1 handler — list: в page — размер страницы
 internal/domain/user/delivery/http/handler.go
 - out.Body.Page = in.Number

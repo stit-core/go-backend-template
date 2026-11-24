@@ -309,7 +309,9 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
 (`authlimit.Middleware`). Открытая
 операция помечена `httpkit.Public(op)`: операция без `Security` и без пометки, дубль метода и пути
 (huma и chi молча перезаписали бы маршрут) — ошибка старта (httpkit, `Server.CheckRoutes`), дубль
-`OperationID` — паника huma. По `registerHTTP` же `cmd/api/api_test.go` собирает API без БД и брокера:
+`OperationID` — паника huma. Операция, которая выдаёт сессию запросу без неё (вход), — ещё
+`httpkit.IssuesSession(op)`: запрос к ней с чужим `Origin` — 403 `ORIGIN_NOT_ALLOWED`, и cookie сессии он не
+получает (§ Контракт ошибок API). По `registerHTTP` же `cmd/api/api_test.go` собирает API без БД и брокера:
 он проходит проверку старта, открыты ровно операции `publicOperations`, операции под `Security`
 объявляют коды 401 сессии.
 
@@ -357,7 +359,9 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   шлёт cookie same-site, и `SameSite=Strict` её не останавливает. Проверку держит httpkit до тела, auth и хендлера,
   на любом пути; cookie называет `authgate` (`httpkit.SessionCookies` в графе сервиса и спецификации — 403 в OpenAPI
   каждой изменяющей операции), без адреса в `HTTP_CORS_ORIGINS` сервис не стартует. Запросу без cookie сессии
-  Origin не нужен — и входу: подделку входа со страницы соседнего адреса проверка не закрывает (`SECURITY.md`).
+  Origin не нужен, кроме входа: операция, которая выдаёт сессию (`httpkit.IssuesSession` у `loginUser`), отвечает
+  тем же 403 запросу с чужим `Origin`, хоть cookie сессии в нём нет, — подделка входа (`SECURITY.md`); вход без
+  `Origin` проходит только с JSON (клиент вне браузера).
 - 409 — свой код конфликта у каждой причины; 429 и 503 — `Retry-After` из `RetryAfter()` ошибки в цепочке
   (`auth.LockedError`; `authnkit.ErrBusy` под `ErrBusy` домена).
 - Ошибка, которую usecase переводит сам (ошибка порта), тоже имеет правило: если перевод пропадёт,

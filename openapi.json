@@ -703,6 +703,7 @@
     },
     "/api/auth/login": {
       "post": {
+        "description": "Вход со страницы, адреса которой нет в HTTP_CORS_ORIGINS, — 403 ORIGIN_NOT_ALLOWED без cookie: так сервис отсекает подделку входа со страницы соседнего адреса того же сайта. Клиент вне браузера (мобильное приложение) входит без заголовка Origin, с Content-Type: application/json.",
         "operationId": "loginUser",
         "requestBody": {
           "content": {

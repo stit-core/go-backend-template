@@ -31,13 +31,16 @@ func NewHandler(uc Usecase, cookieCfg authgate.CookieConfig) *Handler {
 }
 
 func Register(api huma.API, h *Handler) {
-	huma.Register(api, loginErrors.Declare(httpkit.Public(huma.Operation{
+	huma.Register(api, loginErrors.Declare(httpkit.IssuesSession(httpkit.Public(huma.Operation{
 		OperationID: "loginUser",
 		Method:      http.MethodPost,
 		Path:        "/api/auth/login",
 		Tags:        []string{"auth"},
 		Summary:     "Аутентификация пользователя (cookie-сессия)",
-	})), h.login)
+		Description: "Вход со страницы, адреса которой нет в HTTP_CORS_ORIGINS, — 403 ORIGIN_NOT_ALLOWED без cookie: так " +
+			"сервис отсекает подделку входа со страницы соседнего адреса того же сайта. Клиент вне браузера (мобильное " +
+			"приложение) входит без заголовка Origin, с Content-Type: application/json.",
+	}))), h.login)
 
 	huma.Register(api, refreshErrors.Declare(httpkit.Public(huma.Operation{
 		OperationID:   "refreshToken",
