@@ -10,6 +10,16 @@
 > `<module-path>` в импортах ниже — module path из `go.mod` (после `/de-template` — свой
 > `git.stit.tech/<org>/backend`). Подставляй фактический, не копируй буквально.
 
+#### Сервис без событий (`events: none`)
+
+Сервис, который снял платформу событий (`events: none` в `docs/stack/messaging.md`), возвращает её до первого события
+одним коммитом: пути `.template/events` — из тега шаблона `.template/version` (`git show <тег>:<путь>`, module path —
+свой), в граф `cmd/api/main.go` — `natskit.NewConfig`, `outboxkit.NewConfig`, `outboxpg.NewConfig`,
+`natskit.Module("")`, модуль `internal/platform/events` и проба `natskit.ProvideProbe("")`, `checkStopBudget` — снова с
+`natskit.Config`; `.env.example` — `NATS_JETSTREAM_ENABLED`, `NATS_JS_STREAM_NAMES` и `NATS_URL` из тега; строку
+`events: none` из frontmatter `messaging.md` — снять, таблицы subjects — заполнить (`/stack-deep-dive`). Пользователь
+NATS, поток и пароль — блок `/infra-handoff`. Дальше — шаги ниже.
+
 ## Когда применять
 
 - "После регистрации юзера слать welcome-email"

@@ -21,6 +21,8 @@
 #      строк одних заглушек.
 #   4. kind auth при status: stable — `identity: own | external` во frontmatter (домены идентичности
 #      остаются или prune их удаляет — skill init-service).
+#   5. `events` — только у messaging и только `none` (сервис без событий), и только при `identity: external` в
+#      auth.md рядом: домены идентичности (user, verification) публикуют события.
 #   --stable — ещё и все 8 kinds на месте и stable: вход de-template.
 # _templates/ и README.md пропускаются.
 #
@@ -146,6 +148,16 @@ validate_file() {
             *) ERRORS+=("$file: frontmatter.identity должен быть own|external (status=stable)") ;;
         esac
     fi
+    case "$kind:$(read_field "$file" events)" in
+        *:) ;;
+        messaging:none)
+            auth="$(dirname "$file")/auth.md"
+            if [ ! -f "$auth" ] || [ "$(read_field "$auth" identity)" != external ]; then
+                ERRORS+=("$file: events: none — только при identity: external в auth.md: домены идентичности (user, verification) публикуют события")
+            fi
+            ;;
+        *) ERRORS+=("$file: frontmatter.events — только у messaging и только none (сервис без событий)") ;;
+    esac
     [ "$status" = stable ] || [ -z "$STABLE" ] || ERRORS+=("$file: status=$status — de-template ждёт stable")
     [ -z "$kind" ] || KINDS_SEEN+=" $kind "
 

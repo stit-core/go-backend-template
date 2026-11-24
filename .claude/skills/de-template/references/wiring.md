@@ -34,6 +34,27 @@
 - outbox-publisher в `UsecaseDeps` домена-источника.
 - (детали паттерна — `scaffold` вариант event + rule `events-and-messaging`.)
 
+#### Сервис без событий (`events: none`)
+
+Решение — `events: none` во frontmatter `messaging.md` (`/stack-deep-dive`): сервис ничего не публикует и не слушает,
+и только при `identity: external` — домены идентичности публикуют события, поэтому платформу событий снимают после
+их prune (`/init-service`, этап 4). Платформа событий уходит из сервиса одним коммитом (`refactor: сервис без событий
+— …`):
+- граф `cmd/api/main.go`: из `kitConfigs` — `natskit.NewConfig`, `outboxkit.NewConfig`, `outboxpg.NewConfig`; из
+  модулей — `natskit.Module("")`, модуль событий `internal/platform/events` и проба `natskit.ProvideProbe("")`;
+  `checkStopBudget` — без `natskit.Config` (бюджет — только HTTP);
+- пути `.template/events` (`internal/platform/events`) — `git rm`; источников outbox в `cmd/migrate/sources` нет;
+- `.env.example` — без `NATS_*` и `OUTBOX_*` с их комментариями; тесты графа (`cmd/api/main_test.go`: что граф даёт
+  доменам, бюджет остановки) — без шины и outbox; boot-тест, smoke-стек и `make local-deps-up` NATS не поднимают:
+  он зависимость кита `natskit` (`scripts/tools/kits.sh`);
+- мутации платформы событий (`EV*`, блок пробы NATS) — из `scripts/tools/mutants.txt`; харнес `test/` — без
+  `infra/nats.py`, `infra/outbox.py` и фикстуры `nats_collector`;
+- `go mod tidy` (уходят модули nats.go, nkeys и nuid), `make check`: `TestEventsPaths` держит решение — путей
+  `.template/events` нет, код не знает natskit и outboxkit; проза шаблона о платформе событий сверяется по тегу
+  шаблона.
+
+Событие появилось в strategy — платформу событий возвращает skill `scaffold`, вариант event («Сервис без событий»).
+
 ### 4. auth → `docs/stack/auth.md`
 - authgate-wiring + middleware (`internal/platform/authgate`), authnkit-провайдеры (JWT verifier,
   hasher): при `identity: external` — проверка токенов внешней идентичности (issuer, audience, ключ).

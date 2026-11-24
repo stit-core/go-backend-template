@@ -23,7 +23,13 @@ func identityPaths(t *testing.T) []string {
 
 func identityPathsIn(t *testing.T, root string) []string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, ".template", "identity"))
+	return templatePaths(t, root, "identity")
+}
+
+// templatePaths — пути списка .template/<name>: строки без комментариев.
+func templatePaths(t *testing.T, root, name string) []string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, ".template", name))
 	require.NoError(t, err)
 	var paths []string
 	for line := range strings.Lines(string(data)) {
@@ -31,7 +37,7 @@ func identityPathsIn(t *testing.T, root string) []string {
 			paths = append(paths, line)
 		}
 	}
-	require.NotEmpty(t, paths, ".template/identity lists no paths")
+	require.NotEmpty(t, paths, ".template/%s lists no paths", name)
 	return paths
 }
 
@@ -44,7 +50,26 @@ func identityExternal(t *testing.T) bool {
 // identityChoice — значение identity во frontmatter docs/stack/auth.md; "" — стек не спроектирован.
 func identityChoice(t *testing.T, root string) string {
 	t.Helper()
-	f, err := os.Open(filepath.Join(root, "docs", "stack", "auth.md"))
+	return stackChoice(t, root, "auth", "identity")
+}
+
+// eventsPaths — пути платформы событий из .template/events: сервис без событий их удаляет.
+func eventsPaths(t *testing.T) []string {
+	t.Helper()
+	return templatePaths(t, repoRoot(t), "events")
+}
+
+// eventsNone — docs/stack/messaging.md выбрал сервис без событий (events: none): платформа событий удалена по
+// решению.
+func eventsNone(t *testing.T) bool {
+	t.Helper()
+	return stackChoice(t, repoRoot(t), "messaging", "events") == "none"
+}
+
+// stackChoice — значение key во frontmatter docs/stack/<kind>.md; "" — артефакта или решения нет.
+func stackChoice(t *testing.T, root, kind, key string) string {
+	t.Helper()
+	f, err := os.Open(filepath.Join(root, "docs", "stack", kind+".md"))
 	if errors.Is(err, os.ErrNotExist) {
 		return ""
 	}
@@ -55,7 +80,7 @@ func identityChoice(t *testing.T, root string) string {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "---" {
 			fences++
-		} else if value, ok := strings.CutPrefix(line, "identity:"); ok && fences == 1 {
+		} else if value, ok := strings.CutPrefix(line, key+":"); ok && fences == 1 {
 			return strings.TrimSpace(value)
 		}
 	}
@@ -74,6 +99,36 @@ func TestIdentityPaths(t *testing.T) {
 	for _, p := range identityPaths(t) {
 		if !slices.ContainsFunc(files, func(f string) bool { return under(f, p) }) {
 			t.Errorf(".template/identity: %q is not a tracked file or directory", p)
+		}
+	}
+}
+
+// outboxkitPath — кит outbox: у сервиса без событий его не знает ни один файл кода, как и natskit.
+const outboxkitPath = golibinfra + "/outboxkit"
+
+// TestEventsPaths: строка .template/events без файлов — платформа событий, которую сервис без событий удалил бы. У
+// сервиса без событий (events: none в docs/stack/messaging.md) путей нет, и код не знает natskit и outboxkit: решение
+// держит код, а не только проза.
+func TestEventsPaths(t *testing.T) {
+	t.Parallel()
+	files := trackedFiles(t, repoRoot(t))
+	none := eventsNone(t)
+	for _, p := range eventsPaths(t) {
+		switch tracked := slices.ContainsFunc(files, func(f string) bool { return under(f, p) }); {
+		case none && tracked:
+			t.Errorf(".template/events: %q is tracked, while docs/stack/messaging.md says events: none", p)
+		case !none && !tracked:
+			t.Errorf(".template/events: %q is not a tracked file or directory", p)
+		}
+	}
+	if !none {
+		return
+	}
+	for _, f := range goFiles(t) {
+		for _, imp := range f.imports {
+			if !f.test && (imp == natskitPath || under(imp, outboxkitPath)) {
+				t.Errorf("%s imports %s, while docs/stack/messaging.md says events: none", f.path, imp)
+			}
 		}
 	}
 }
@@ -252,6 +307,35 @@ func TestStackValidator(t *testing.T) {
 	require.Error(t, err, out)
 	require.Equal(t, sections, strings.Count(out, "пуста (status=stable"), "every section of an unchanged template is empty:\n%s", out)
 	require.Contains(t, out, "auth.md: frontmatter.identity")
+
+	// events — решение только messaging и только none, и только при identity: external: домены идентичности
+	// публикуют события; без поля — сервис с событиями.
+	decided := func(text, file, line string) string {
+		if !strings.Contains(text, "\nname: "+strings.TrimSuffix(file, ".md")+"\n") {
+			return text
+		}
+		return strings.Replace(text, "\nstatus: stable\n", "\nstatus: stable\n"+line+"\n", 1)
+	}
+	for _, tc := range []struct {
+		identity, file, line, want string // want "" — валидатор поле пускает
+	}{
+		{identity: "external", file: "messaging.md", line: "events: none"},
+		{identity: "own", file: "messaging.md", line: "events: none", want: "messaging.md: events: none — только при identity: external"},
+		{identity: "external", file: "messaging.md", line: "events: some", want: "messaging.md: frontmatter.events"},
+		{identity: "external", file: "auth.md", line: "events: none", want: "auth.md: frontmatter.events"},
+	} {
+		dir := stack(t, func(text string) string {
+			text = strings.Replace(fillStackTemplate(text, "Решение архитектора."), "\nidentity: own\n", "\nidentity: "+tc.identity+"\n", 1)
+			return decided(text, tc.file, tc.line)
+		})
+		out, err := runIn(t, root, "bash", script, dir)
+		if tc.want == "" {
+			require.NoError(t, err, "%s %s with identity %s:\n%s", tc.file, tc.line, tc.identity, out)
+			continue
+		}
+		require.Error(t, err, out)
+		require.Contains(t, out, tc.want)
+	}
 
 	for _, tc := range []struct {
 		fill   string // строка вместо каждого плейсхолдера

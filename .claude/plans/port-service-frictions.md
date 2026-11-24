@@ -63,9 +63,11 @@ blocked-by: —
   - Подтверждено: `make check` → `✓ check clean`; копия с cachekit и storagekit — `make test-int PKG=./cmd/api/...`
     → PASS (`TestBoot` поднял Redis и MinIO), её smoke-стек — `/ready` с пробами cachekit и storagekit;
     `local-deps.sh` — на заглушке docker; `TestMutateShared` → PASS
-- [ ] **AC10** — `events: none` (только при `identity: external`): валидатор, `.template/events`, `TestEventsPaths`,
+- [x] **AC10** — `events: none` (только при `identity: external`): валидатор, `.template/events`, `TestEventsPaths`,
   чек-лист de-template, возврат — `/scaffold` вариант event; NATS — зависимость кита natskit (boot-тест, smoke-стек,
   `local-deps`, пул раннера, тексты). Проверка: `go test ./internal/archtest -run 'TestEventsPaths|TestStackValidator'` → PASS
+  - Подтверждено: PASS — `events: none` пускается только у messaging и при `identity: external`; весь archtest и
+    `make test-int PKG=./cmd/api/...` → PASS (NATS — по `kitDeps` natskit)
 - [ ] **AC11** — `make new-domain AGG=` — срез агрегата, имена по агрегату, `-s` не удваивается; G115 исключён по
   `infra/postgres/[^/]+\.go`. Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check` и
   мутации среза → убиты
@@ -140,8 +142,11 @@ blocked-by: —
     сервиса; `local-deps` и `kitDeps` — по тем же китам; раннер: Start* зависимости кита в boot-тесте — пул только у
     кита графа; копия с китами — PASS; `make check` → `✓ check clean`; Review: принимает сессия корня — дифф отдан,
     ревью не проводилось
-- [ ] **S10** — T9: `events: none`, NATS — зависимость кита `natskit` и в текстах (бэклог форка `kit-deps-nats-docs`)
+- [x] **S10** — T9: `events: none`, NATS — зависимость кита `natskit` и в текстах (бэклог форка `kit-deps-nats-docs`)
   - Проверка: `go test ./internal/archtest` → PASS; `make check` → `✓ check clean` · Закрывает: AC10 · Зависит от: S9
+  - Сделано: NATS — зависимость кита natskit (`kits.sh`, `KIT_SERVERS`, стек, `local-deps`, `kitDeps`); `.template/events`,
+    валидатор (`events` — только messaging и `none`, только при `identity: external`), `TestEventsPaths`, проза
+    по тегу; чек-лист de-template, возврат — `/scaffold` event, решение — field-checklists, этап 4 init-service
 - [ ] **S11** — T12: `make new-domain AGG=` и G115 по файлам `infra/postgres`
   - Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check`, мутации среза · Закрывает: AC11
 ### golibinfra v1.8.0
@@ -204,5 +209,5 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-`template/v1.4.0` выпущен: S1–S9, S12–S17 и Go 1.26.11 закрыты. Дальше — S10 (T9, сервис без событий), S11 (T12, срез
-агрегата) и S18 (гейт, строгий прогон, `template/v1.5.0`, план закрывается).
+`template/v1.4.0` выпущен; S10 (T9) закрыт. Дальше — S11 (T12, срез агрегата) и S18 (ревью, гейт, строгий прогон,
+`template/v1.5.0`, план закрывается).

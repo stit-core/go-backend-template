@@ -152,11 +152,14 @@ func TestProseReferencesExist(t *testing.T) {
 	skill := func(name string) bool {
 		return repo[".claude/skills/"+name+"/SKILL.md"] || slices.Contains(notRepoSkills, name)
 	}
-	// Проект с внешней идентичностью удалил домены идентичности по решению: образцы прозы в них — в версии
-	// шаблона, их проверяет самопроверка шаблона.
+	// Проект с внешней идентичностью удалил домены идентичности по решению, сервис без событий — платформу событий:
+	// образцы прозы в них — в версии шаблона, их проверяет самопроверка шаблона.
 	var pruned []string
 	if identityExternal(t) {
 		pruned = identityPaths(t)
+	}
+	if eventsNone(t) {
+		pruned = append(pruned, eventsPaths(t)...)
 	}
 	inPruned := func(ref string) bool {
 		return slices.ContainsFunc(pruned, func(p string) bool { return under(strings.TrimSuffix(ref, "/"), p) })

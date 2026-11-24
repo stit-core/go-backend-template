@@ -175,6 +175,11 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 - `runtime § Entrypoints` — есть ли NATS-subs, есть ли outbox-drain;
 - `dependencies § External` — NATS как зависимость.
 
+**Сервис без событий**: ничего не публикует и не слушает — `events: none` во frontmatter, в `Published` и
+`Consumed` — «— не публикует: событий у сервиса нет»; только при `identity: external` в `auth.md` (домены
+идентичности публикуют события — валидатор не пустит иначе). Платформу событий снимает `/de-template` (wiring,
+«Сервис без событий»).
+
 **Anti-patterns**:
 - `Delivery: at-most-once` при том, что у consumer нет idempotency.
 - `Ordering: none` при cross-instance subscriber'ах с

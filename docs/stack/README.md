@@ -33,6 +33,8 @@ kind: service          # один из 8 выше
 name: service          # == basename файла без .md
 status: draft          # draft → stable (через валидатор)
 identity: own          # только auth: own — домены идентичности остаются, external — их удаляет prune
+events: none           # только messaging и только при identity: external: сервис без событий — платформу событий
+                       # (.template/events) снимает de-template; без поля — сервис с событиями
 ```
 
 ## Workflow
