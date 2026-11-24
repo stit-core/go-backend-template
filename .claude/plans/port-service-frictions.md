@@ -89,7 +89,9 @@ blocked-by: —
   PKG=./cmd/api/...` → PASS (`TestBoot_SessionOrigin`); мутации G15, G16 → убиты; `make check` → `✓ check clean`
   - Подтверждено: `make test-int PKG=./cmd/api/...` → PASS; G15 убил `TestBoot_SessionOrigin`, G16 — `TestBoot`;
     `openapi.json` — 403 `ORIGIN_NOT_ALLOWED` у изменяющих операций; `make check` → `✓ check clean`
-- [ ] **AC13** — гейт и строгие мутации зелёные. Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0
+- [x] **AC13** — гейт и строгие мутации зелёные. Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0
+  - Подтверждено: `make check` на `d8d86d9` → `✓ check clean` (покрытие 100%); `make mutate A=--strict` — 441
+    мутация, убиты 437, известных эквивалентных 4, новых выживших нет, код 0
 
 ## Шаги
 ### Обвязка и тексты
@@ -171,8 +173,12 @@ blocked-by: —
     `service-without-db`, `handler-error-helper`, `e2e-external-identity`, `template-update-merged-history`,
     `archtest-secured-generic`, `webhook-raw-body`, `error-headers`, `archtest-golibinfra-version`,
     `mutate-slot-jobs` — остатки репо; `api-paths-multi-backend`, `golibinfra-kit-followups` — сшивка
-- [ ] **S13** — гейт, строгий прогон мутаций, черновик аннотации `template/v1.4.0` в «Handoff»
+- [x] **S13** — гейт, строгий прогон мутаций, черновик аннотации `template/v1.4.0` в «Handoff»
   - Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0 · Закрывает: AC13
+  - Сделано: ревью Opus по трём углам (платформа и безопасность, гейт и инструменты, golibinfra v1.8.0) — находки
+    исправлены (golibinfra v1.8.1, `ProvideUnsafe`, refresh-cookie, тексты, правило таблиц, хуки, раннер, снос стека)
+    или в бэклоге; гейт и строгий прогон — AC13; аннотация `template/v1.4.0` — в теге (сверена
+    `template-update.sh --annotation`)
 - [ ] **S18** — после S10 и S11: гейт, строгий прогон мутаций, выпуск `template/v1.5.0`, план закрывается
   - Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0 · Зависит от: S10, S11
 
@@ -198,5 +204,5 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S9, S12, S14–S17 и Go 1.26.11 закрыты; идёт S13 — гейт, строгий прогон мутаций и выпуск `template/v1.4.0`;
-после него — S10 (T9), S11 (T12) и S18.
+`template/v1.4.0` выпущен: S1–S9, S12–S17 и Go 1.26.11 закрыты. Дальше — S10 (T9, сервис без событий), S11 (T12, срез
+агрегата) и S18 (гейт, строгий прогон, `template/v1.5.0`, план закрывается).
