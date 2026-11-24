@@ -29,8 +29,9 @@ description: Оркестратор онбординга форка go-backend-t
 
 ## Этапы
 
-Гейт этапа — по коду выхода самого `make check`: `make check > .cache/check.log 2>&1; echo rc=$?` (`make check |
-tail` отдаёт код `tail` и прячет красный гейт); коммит этапа — только при `rc=0`.
+Гейт этапа — по коду выхода самого `make check`:
+`mkdir -p .cache && make check > .cache/check.log 2>&1; echo rc=$?` — на свежем форке `.cache/` ещё нет, а
+`make check | tail` отдаёт код `tail` и прячет красный гейт; коммит этапа — только при `rc=0`.
 
 ### 0. Pre-flight
 
