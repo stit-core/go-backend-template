@@ -508,20 +508,23 @@ func TestMutateParallel(t *testing.T) {
 }
 
 // TestMutatePanicKiller: мутацию, которую убила паника тестового бинаря вне теста (TestMain — в выводе нет
-// «--- FAIL:»), раннер записывает убийцей пакет; убитую по ключу он берёт, пока в этом пакете есть тесты, — без них
-// гоняет заново, и мутация выживает.
+// «--- FAIL:»), раннер записывает убийцей пакет с меткой паники и берёт убитую по ключу, пока в этом пакете есть тесты;
+// пакет без паники (бинарь вышел сам, как при OOM или сбое сборки) — сбой среды, такая гоняется заново каждый раз; без
+// тестов в пакете — заново и первая, и мутации выживают.
 func TestMutatePanicKiller(t *testing.T) {
 	t.Parallel()
 	python, err := exec.LookPath("python3")
 	require.NoError(t, err, "make mutate runs on python3: install it")
 	repo := t.TempDir()
 	writeFiles(t, repo, union(readFiles(t, repoRoot(t), "scripts/tools/mutate.py"), map[string]string{
-		".gitignore":      "/.cache/\n",
-		"go.mod":          "module example.com/mut\n\ngo 1.26\n",
-		"internal/v/v.go": "package v\n\n// V — значение.\nfunc V() int { return 1 }\n",
+		".gitignore": "/.cache/\n",
+		"go.mod":     "module example.com/mut\n\ngo 1.26\n",
+		"internal/v/v.go": "package v\n\n// V — значение.\nfunc V() int { return 1 }\n\n" +
+			"// W — другое значение.\nfunc W() int { return 10 }\n",
 		"internal/v/v_test.go": "package v\n\nimport (\n\t\"os\"\n\t\"testing\"\n)\n\nfunc TestMain(m *testing.M) {\n" +
-			"\tif V() != 1 {\n\t\tpanic(\"v\")\n\t}\n\tos.Exit(m.Run())\n}\n",
-		"scripts/tools/mutants.txt": "## P1 v — V: другое значение\ninternal/v/v.go\n- return 1 }\n+ return 2 }\n",
+			"\tif V() != 1 {\n\t\tpanic(\"v\")\n\t}\n\tif W() != 10 {\n\t\tos.Exit(3)\n\t}\n\tos.Exit(m.Run())\n}\n",
+		"scripts/tools/mutants.txt": "## P1 v — V: другое значение\ninternal/v/v.go\n- return 1 }\n+ return 2 }\n\n" +
+			"## P2 v — W: другое значение\ninternal/v/v.go\n- return 10 }\n+ return 11 }\n",
 	}))
 	git(t, repo, "init", "-q", "-b", "main")
 	commitAll(t, repo)
@@ -535,17 +538,19 @@ func TestMutatePanicKiller(t *testing.T) {
 	}
 
 	out, err := mutate()
-	require.NoError(t, err, "the panic of the test binary kills P1:\n%s", out)
-	require.Contains(t, out, "убиты 1 — юнит 1")
-	require.Contains(t, out, "example.com/mut/internal/v", "the killer of P1 is its package")
+	require.NoError(t, err, "the panic and the exit of the test binary kill P1 and P2:\n%s", out)
+	require.Contains(t, out, "убиты 2 — юнит 2")
+	require.Contains(t, out, "panic:example.com/mut/internal/v", "the killer of P1 is its package, marked by the panic")
 	out, err = mutate()
-	require.NoError(t, err, "P1 stays killed:\n%s", out)
-	require.Contains(t, out, "с тем же ключом (блок и его файлы) и тестом на месте: 1", "the package of the killer has tests")
+	require.NoError(t, err, "P1 and P2 stay killed:\n%s", out)
+	require.Contains(t, out, "с тем же ключом (блок и его файлы) и тестом на месте: 1",
+		"the package of the panic has tests, an exit without a panic is no killer in place")
+	require.Contains(t, out, "P2 v — unit", "P2 runs again")
 
 	require.NoError(t, os.Remove(filepath.Join(repo, "internal", "v", "v_test.go")))
 	commitAll(t, repo)
 	out, err = mutate()
-	require.Error(t, err, "without tests in the package P1 survives:\n%s", out)
+	require.Error(t, err, "without tests in the package P1 and P2 survive:\n%s", out)
 	require.NotContains(t, out, "с тем же ключом", "a package without tests is not a killer in place")
-	require.Contains(t, out, "ВЫЖИЛИ — НОВЫЕ (1)")
+	require.Contains(t, out, "ВЫЖИЛИ — НОВЫЕ (2)")
 }

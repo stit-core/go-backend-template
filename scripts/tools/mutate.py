@@ -311,10 +311,17 @@ def jobs(todo):
 
 
 def failed(out):
+    """Убийцы мутации: упавшие тесты, без них — пакеты; пакет, чей тестовый бинарь упал паникой вне теста, — с меткой
+    PANIC: только такого убийцу прогон по ключу берёт снова (сбой среды — OOM, сборка — паники не печатает)."""
     tests = re.findall(r"^\s*--- FAIL: (\S+)", out, re.M)
     top = [t for t in tests if "/" not in t] or tests
-    pkgs = re.findall(r"^FAIL\s+(\S+)", out, re.M)
-    return ", ".join(list(dict.fromkeys(top))[:6]) or ", ".join(list(dict.fromkeys(pkgs))[:4]) or out.strip()[-200:]
+    pkgs = list(dict.fromkeys(re.findall(r"^FAIL\s+(\S+)", out, re.M)))[:4]
+    if not top and pkgs and re.search(r"^panic: ", out, re.M):
+        pkgs = [PANIC + p for p in pkgs]
+    return ", ".join(list(dict.fromkeys(top))[:6]) or ", ".join(pkgs) or out.strip()[-200:]
+
+
+PANIC = "panic:"
 
 
 def prepare(m, log, wt=WT):
@@ -545,21 +552,23 @@ def key(m):
 def test_names():
     """Тесты и fuzz-цели worktree и пакеты с ними: убитая мутация переиспользуется, пока на месте её убийца — тест
     или пакет, где есть тесты (паника тестового бинаря вне теста: в выводе нет «--- FAIL:», убийца — пакет)."""
-    module = re.search(r"^module\s+(\S+)", (WT / "go.mod").read_text(), re.M).group(1)
+    gomod = WT / "go.mod"
+    found_module = re.search(r"^module\s+(\S+)", gomod.read_text(), re.M) if gomod.is_file() else None
+    module = found_module.group(1) if found_module else None
     names = set()
     for f in git("ls-files", "*_test.go", cwd=WT).splitlines():
         found = set(TEST_FUNC.findall((WT / f).read_text()))
         names |= found
-        if found:
+        if found and module:
             d = os.path.dirname(f)
-            names.add(module + "/" + d if d else module)
+            names.add(PANIC + (module + "/" + d if d else module))
     return names
 
 
 def killer_present(killer, tests):
-    """Убийца на месте: пакет (первый элемент пути с точкой — домен модуля) — как есть, тест — без подтеста."""
-    first = killer.split("/")[0]
-    return (killer if "." in first else first) in tests
+    """Убийца на месте: пакет паники (метка PANIC) — пока в нём есть тесты, тест — по имени без подтеста; пакет без
+    метки (сбой среды, сборка) на месте не бывает — такая мутация гоняется заново."""
+    return (killer if killer.startswith(PANIC) else killer.split("/")[0]) in tests
 
 
 def snapshot():
