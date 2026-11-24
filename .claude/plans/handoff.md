@@ -442,11 +442,23 @@ WHAT   env HTTP_CORS_ORIGINS — required для старта, без default: �
        в списке («*» и «null» адресами не считаются) старт падает (ErrConfig)
 WHY    port-service-frictions S17 — проверка Origin golibinfra v1.8.0: подделка запроса со страницы соседнего
        адреса того же сайта (cookie уходят same-site, SameSite=Strict её не останавливает)
-ACTION compose `environment:` каждого окружения: HTTP_CORS_ORIGINS=https://<адрес SPA> (dev — адрес dev-сервера
-       SPA); SPA на другом адресе, чем API (запросы cross-origin), — ещё HTTP_CORS_ALLOW_CREDENTIALS=true;
-       скрипты и клиенты вне браузера с cookie сессии шлют Origin из списка или переходят на Bearer
-WHO    проект (compose env)
+ACTION compose `environment:` каждого окружения (и dev на VPS): HTTP_CORS_ORIGINS=https://<адрес SPA этого
+       окружения>; адрес dev-сервера SPA (http://localhost:5173) — только локальной разработке; SPA на другом
+       адресе, чем API (запросы cross-origin), — ещё HTTP_CORS_ALLOW_CREDENTIALS=true; скрипты и клиенты вне
+       браузера с cookie сессии шлют Origin из списка
+WHO    проект (compose env); потребители API с cookie сессии вне браузера
 DECIDE адрес SPA каждого окружения
 RISK   без HTTP_CORS_ORIGINS сервис не стартует (restart-loop, `compose up --wait` падает); адрес не тот, что у
        страницы SPA (схема, порт, хвостовой «/»), — вход, выход и любая запись из кабинета получают 403
+===
+
+=== INFRA HANDOFF · передай инфра-админу ===
+WHAT   ответы API: title, detail и errors[].message — русские (тексты httpkit golibinfra v1.8.0 и Detail таблиц
+       ошибок сервиса); code, статусы, форма тела problem+json и openapi.json прежние
+WHY    port-service-frictions S16 — тексты ответов API по-русски (решение владельца 24.11)
+ACTION клиенты API (SPA, мобильное приложение, интеграции): ветвиться по code и статусу, а не по тексту; текст
+       detail показывать человеку как есть или своим текстом по code
+WHO    потребители API
+DECIDE —
+RISK   клиент, который сверяет английский текст ответа («unauthorized», «rate limit exceeded» …), ветку не находит
 ===

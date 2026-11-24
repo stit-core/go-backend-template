@@ -356,8 +356,8 @@ Go-типа. Два домена с одинаковым `ListOutput` → кол
   (`access_token`, `refresh_token`) без `Origin` из `HTTP_CORS_ORIGINS`: страница соседнего адреса того же сайта
   шлёт cookie same-site, и `SameSite=Strict` её не останавливает. Проверку держит httpkit до тела, auth и хендлера,
   на любом пути; cookie называет `authgate` (`httpkit.SessionCookies` в графе сервиса и спецификации — 403 в OpenAPI
-  каждой изменяющей операции), без адреса в `HTTP_CORS_ORIGINS` сервис не стартует. Запрос без cookie сессии
-  (Bearer, сервис) Origin не нужен.
+  каждой изменяющей операции), без адреса в `HTTP_CORS_ORIGINS` сервис не стартует. Запросу без cookie сессии
+  Origin не нужен — и входу: подделку входа со страницы соседнего адреса проверка не закрывает (`SECURITY.md`).
 - 409 — свой код конфликта у каждой причины; 429 и 503 — `Retry-After` из `RetryAfter()` ошибки в цепочке
   (`auth.LockedError`; `authnkit.ErrBusy` под `ErrBusy` домена).
 - Ошибка, которую usecase переводит сам (ошибка порта), тоже имеет правило: если перевод пропадёт,
