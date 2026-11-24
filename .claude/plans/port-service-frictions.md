@@ -69,7 +69,8 @@ blocked-by: —
 - [ ] **AC11** — `make new-domain AGG=` — срез агрегата, имена по агрегату, `-s` не удваивается; G115 исключён по
   `infra/postgres/[^/]+\.go`. Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check` и
   мутации среза → убиты
-- [ ] **AC12** — остатки — строками `backlog.md`. Проверка: `make plan-check` → OK
+- [x] **AC12** — остатки — строками `backlog.md`. Проверка: `make plan-check` → OK
+  - Подтверждено: `make plan-check` → OK (14 пунктов)
 - [x] **AC14** — свежий worktree pre-push — на диске, в `.cache/` репо, а не в `${TMPDIR:-/tmp}`. Проверка:
   `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS
   - Подтверждено: PASS — дерево гейта в `<репо>/.cache/pre-push.*`, в TMPDIR его нет
@@ -164,10 +165,16 @@ blocked-by: —
   - Проверка: `go test ./internal/archtest -run TestMutate` → PASS · Закрывает: AC15
   - Сделано: `test_names` — и пакеты с тестами (путь модуля из `go.mod`), `killer_present` — пакет как есть, тест —
     без подтеста; строка правила `tests-pipeline`; Review: принимает сессия корня
-- [ ] **S12** — остатки — в бэклог
+- [x] **S12** — остатки — в бэклог
   - Проверка: `make plan-check` → OK · Закрывает: AC12
+  - Сделано: `pii-in-events`, `derived-template` — решения владельца; `service-without-domains`,
+    `service-without-db`, `handler-error-helper`, `e2e-external-identity`, `template-update-merged-history`,
+    `archtest-secured-generic`, `webhook-raw-body`, `error-headers`, `archtest-golibinfra-version`,
+    `mutate-slot-jobs` — остатки репо; `api-paths-multi-backend`, `golibinfra-kit-followups` — сшивка
 - [ ] **S13** — гейт, строгий прогон мутаций, черновик аннотации `template/v1.4.0` в «Handoff»
   - Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0 · Закрывает: AC13
+- [ ] **S18** — после S10 и S11: гейт, строгий прогон мутаций, выпуск `template/v1.5.0`, план закрывается
+  - Проверка: `make check` → `✓ check clean`; `make mutate A=--strict` → код 0 · Зависит от: S10, S11
 
 ## Решения
 - Go 1.26.11 (GO-2026-6859 в net/http) — коммитом до S8 по задаче сессии корня: toolchain `go.mod`, образ сборки
@@ -180,6 +187,9 @@ blocked-by: —
 - golibinfra v1.8.0, тексты по-русски и проверка Origin (S16, S17) — в этом плане, до S10: решение владельца 24.11 —
   тексты ответов API по-русски (golibinfra v1.8.0, breaking minor), проверку Origin шаблон включает с её выпуском;
   тексты среза `make new-domain` правит S16, T12 (S11) их сохраняет.
+- `template/v1.4.0` выходит без S10 (T9) и S11 (T12): исправления уязвимостей (Go 1.26.11, OpenTelemetry v1.47.0),
+  проверка Origin и тексты — выпуском сразу, сервис без событий и срез агрегата — следующим (`template/v1.5.0`,
+  шаг S18); выпуск сессии корня, слово владельца 24.11: «всё сам до выпуска».
 
 ## Открытые вопросы
 —
@@ -188,5 +198,5 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-S1–S9 (T1–T8, T10, T11), Go 1.26.11, S16 (golibinfra v1.8.0, тексты по-русски) и S17 (проверка Origin) закрыты,
-`make check` на S17 — `✓ check clean`; следующий шаг — S10 (T9).
+S1–S9, S12, S14–S17 и Go 1.26.11 закрыты; идёт S13 — гейт, строгий прогон мутаций и выпуск `template/v1.4.0`;
+после него — S10 (T9), S11 (T12) и S18.
