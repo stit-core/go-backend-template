@@ -93,8 +93,9 @@ linters:
           - errcheck
           - forbidigo
           - gochecknoinits
-      # int → int4 запроса: версия optimistic-lock — из int4 колонки, страница — в пределах paging.Page.
-      - path: internal/domain/.+/infra/postgres/repository\.go
+      # int → int4 запроса: версия optimistic-lock — из int4 колонки, страница — в пределах paging.Page; репозиторий
+      # агрегата — свой файл infra/postgres (вывод sqlc в db/ — не здесь).
+      - path: internal/domain/.+/infra/postgres/[^/]+\.go
         linters:
           - gosec
         text: "G115"

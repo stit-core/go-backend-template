@@ -41,7 +41,7 @@ func TestNewDomainRefusesOrRollsBack(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.Symlink(gofumpt, filepath.Join(bin, "gofumpt")))
 	// Блок мутаций скелета, чей «было» скелет не пишет: так блоки устаревают, когда меняется код среза.
-	stale := strings.Replace(files["scripts/new-domain.sh"], "- if d := uc.d.Policy.CanCreate(ctx, caller); !d.IsAllowed {",
+	stale := strings.Replace(files["scripts/new-domain.sh"], "- if d := uc.d.Policy.CanCreate${ATITLE}(ctx, caller); !d.IsAllowed {",
 		"- if d := uc.d.Policy.MayCreate(ctx, caller); !d.IsAllowed {", 1)
 	require.NotEqual(t, files["scripts/new-domain.sh"], stale, "the block ${NAME}-01 of new-domain.sh")
 	const anchored = "OK: якоря" // сверка якорей блоков среза прошла

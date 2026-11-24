@@ -68,9 +68,12 @@ blocked-by: —
   `local-deps`, пул раннера, тексты). Проверка: `go test ./internal/archtest -run 'TestEventsPaths|TestStackValidator'` → PASS
   - Подтверждено: PASS — `events: none` пускается только у messaging и при `identity: external`; весь archtest и
     `make test-int PKG=./cmd/api/...` → PASS (NATS — по `kitDeps` natskit)
-- [ ] **AC11** — `make new-domain AGG=` — срез агрегата, имена по агрегату, `-s` не удваивается; G115 исключён по
+- [x] **AC11** — `make new-domain AGG=` — срез агрегата, имена по агрегату, `-s` не удваивается; G115 исключён по
   `infra/postgres/[^/]+\.go`. Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check` и
   мутации среза → убиты
+  - Подтверждено: копии `NAME=order` (Order, /api/orders), `NAME=objects` (Object, таблица objects, HTTP-типы
+    ObjectsObject…) и `NAME=ordering AGG=order` (Order, /api/orders) — `make check` → `✓ check clean` (покрытие
+    100%), мутации среза — убиты 24 из 24 у каждой
 - [x] **AC12** — остатки — строками `backlog.md`. Проверка: `make plan-check` → OK
   - Подтверждено: `make plan-check` → OK (14 пунктов)
 - [x] **AC14** — свежий worktree pre-push — на диске, в `.cache/` репо, а не в `${TMPDIR:-/tmp}`. Проверка:
@@ -147,8 +150,11 @@ blocked-by: —
   - Сделано: NATS — зависимость кита natskit (`kits.sh`, `KIT_SERVERS`, стек, `local-deps`, `kitDeps`); `.template/events`,
     валидатор (`events` — только messaging и `none`, только при `identity: external`), `TestEventsPaths`, проза
     по тегу; чек-лист de-template, возврат — `/scaffold` event, решение — field-checklists, этап 4 init-service
-- [ ] **S11** — T12: `make new-domain AGG=` и G115 по файлам `infra/postgres`
+- [x] **S11** — T12: `make new-domain AGG=` и G115 по файлам `infra/postgres`
   - Проверка: копии `NAME=order`, `NAME=objects`, `NAME=ordering AGG=order` — `make check`, мутации среза · Закрывает: AC11
+  - Сделано: `AGG=` (по умолчанию — контекст в единственном числе), имена агрегата — тип, `<Agg>Repository`,
+    методы usecase и policy, HTTP-типы `<Name><Agg>`, хендлеры, таблицы ошибок операций, запросы sqlc; таблица —
+    множественное агрегата без второго -s; G115 — по `infra/postgres/[^/]+\.go`; `AGG` в `makeArgs`; /scaffold domain
 ### golibinfra v1.8.0
 - [x] **S16** — golibinfra v1.8.0 и тексты ответов по-русски
   - Проверка: `make mutate A=--anchors` → OK; `make check` → `✓ check clean` · Закрывает: AC16
@@ -209,5 +215,5 @@ blocked-by: —
 —
 
 ## Где мы сейчас
-`template/v1.4.0` выпущен; S10 (T9) закрыт. Дальше — S11 (T12, срез агрегата) и S18 (ревью, гейт, строгий прогон,
-`template/v1.5.0`, план закрывается).
+`template/v1.4.0` выпущен; S10 (T9) и S11 (T12) закрыты. Дальше — S18: ревью Opus, гейт, строгий прогон,
+`template/v1.5.0`, план закрывается.

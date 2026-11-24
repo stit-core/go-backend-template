@@ -6,7 +6,7 @@
 
 # Один словарь для агента: `make <verb>`. Concise-by-default; FORMAT=detailed
 # или VERBOSE=1 → полный вывод (test/lint/build). Passthrough-аргументы
-# идут через A= (status/plan-check) / Q=,P= (search) / NAME= (new-domain) /
+# идут через A= (status/plan-check) / Q=,P= (search) / NAME=,AGG= (new-domain) /
 # VERSION= (release) / TO=,FROM=,PATHS= (template-update).
 
 # Окружение оболочки вызывающего до рецептов не доходит: файл автозапуска bash (`exit 0` в нём — и шаг
@@ -169,8 +169,8 @@ e2e-smoke: ## Только smoke-набор (-m smoke) — шаг make release
 	@bash scripts/tools/e2e.sh --smoke --format=detailed
 
 ##@ SCAFFOLD
-new-domain: ## new-domain NAME=order — скелет нового домена
-	@bash scripts/new-domain.sh $(NAME)
+new-domain: ## new-domain NAME=order [AGG=order] — скелет нового домена: срез Create и Get его агрегата
+	@bash scripts/new-domain.sh $(NAME) $(AGG)
 
 ##@ INTEL
 status: ## Сводка состояния репо для smartdev (A= "--full")

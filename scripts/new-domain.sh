@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# new-domain.sh — новый домен internal/domain/<name>/: вертикальный срез Create и Get по канону.
+# new-domain.sh — новый домен internal/domain/<name>/: вертикальный срез Create и Get его агрегата по канону.
 #
 # Использование:
-#   make new-domain NAME=order
-#   bash scripts/new-domain.sh order
+#   make new-domain NAME=order                 агрегат — контекст: Order, таблица orders, путь /api/orders
+#   make new-domain NAME=objects               агрегат — контекст в единственном числе: Object, таблица objects
+#   make new-domain NAME=ordering AGG=order    агрегат Order контекста ordering: таблица orders, путь /api/orders
+#   bash scripts/new-domain.sh <контекст> [<агрегат>]
+#
+# Агрегат — единственное число (order, order_item), таблица и ресурс пути — его множественное (имя на -s, кроме -ss,
+# -us и -is, уже множественное или неизменяемое: series). Имена агрегата — тип, порт <Агрегат>Repository, методы
+# usecase и policy, HTTP-типы <Домен><Агрегат>, хендлеры и таблицы ошибок операций: следующий агрегат контекста
+# встаёт рядом без переименований (skill scaffold, вариант domain).
 #
 # Создаёт рабочий срез — миграцию таблицы, sqlc-запросы, репозиторий с integration-тестом,
 # сущность, policy и usecase с тестами, HTTP-операции под cookie-сессией с тестами, fx-модуль —
@@ -18,10 +25,10 @@ set -euo pipefail
 # Имя, регистр и множественное число — по ASCII при любой локали: в турецкой [a-z] не берёт «i».
 export LC_ALL=C
 
-NAME="${1:-}"
+NAME="${1:-}" AGG="${2:-}"
 if [ -z "$NAME" ]; then
-    echo "ERROR: usage: $0 <domain_name>" >&2
-    echo "       или: make new-domain NAME=<domain_name>" >&2
+    echo "ERROR: usage: $0 <domain_name> [<aggregate_name>]" >&2
+    echo "       или: make new-domain NAME=<domain_name> [AGG=<aggregate_name>]" >&2
     exit 1
 fi
 
@@ -32,8 +39,23 @@ if ! [[ "$NAME" =~ ^[a-z][a-z0-9]*(_[a-z0-9]+)*$ ]]; then
     echo "       получено: '$NAME'" >&2
     exit 1
 fi
-# Пакет домена не может называться ключевым словом или встроенным именем Go и именем, с которым тип домена
-# совпал бы с объявлением пакета домена (Repository, Usecase…) или с пакетом, который он берёт (policy). Имя,
+# Агрегат по умолчанию — контекст в единственном числе: objects → object, categories → category; status, access и
+# analysis — уже единственное.
+if [ -z "$AGG" ]; then
+    case "$NAME" in
+        *ss | *us | *is) AGG=$NAME ;;
+        *ies) AGG=${NAME%ies}y ;;
+        *s) AGG=${NAME%s} ;;
+        *) AGG=$NAME ;;
+    esac
+fi
+if ! [[ "$AGG" =~ ^[a-z][a-z0-9]*(_[a-z0-9]+)*$ ]]; then
+    echo "ERROR: имя агрегата — snake_case в единственном числе: a-z и 0-9, «_» только между словами, начинается с буквы" >&2
+    echo "       получено: '$AGG' — задай его явно: make new-domain NAME=$NAME AGG=<агрегат>" >&2
+    exit 1
+fi
+# Пакет домена и агрегат не могут называться ключевым словом или встроенным именем Go и именем, с которым тип агрегата
+# совпал бы с объявлением пакета домена (Usecase, Policy…) или пакет — с пакетом, который он берёт (policy). Имя,
 # которое код среза объявляет или зовёт рядом с пакетом домена (repo, id, tests…), ловит сборка среза (go vet
 # ниже) с откатом правок: список таких слов отвергал бы и имена, на которых срез собирается (status, body, api…).
 reserved=(
@@ -45,10 +67,12 @@ reserved=(
     authorizer create_input policy repository usecase usecase_deps
 )
 for word in "${reserved[@]}"; do
-    if [ "$NAME" = "$word" ]; then
-        echo "ERROR: '$NAME' — ключевое слово или встроенное имя Go либо объявление пакета домена: возьми другое" >&2
-        exit 1
-    fi
+    for name in "$NAME" "$AGG"; do
+        if [ "$name" = "$word" ]; then
+            echo "ERROR: '$name' — ключевое слово или встроенное имя Go либо объявление пакета домена: возьми другое" >&2
+            exit 1
+        fi
+    done
 done
 
 ROOT=$(git rev-parse --show-toplevel)
@@ -65,29 +89,42 @@ done
 # python3 make setup не ставит, а без него срез откатился бы в конце, на сверке якорей своих мутаций.
 command -v python3 >/dev/null || { echo "ERROR: python3 не найден — им make new-domain, как make mutate, сверяет мутации: поставь его" >&2; exit 1; }
 
-# order_item → OrderItem (типы), orderItem (переменные), orderitem (алиасы импортов),
-# ORDER_ITEM (коды ошибок), order_items (таблица), order-items (путь API). Инициализм — по правилу
-# revive var-naming (api_key → APIKey и apiKey): иначе lint требует переименовать типы скелета.
+# Домен order_items, агрегат order_item → OrderItems (префикс HTTP-типов домена), orderItems (таблица ошибок
+# домена), orderitems (алиасы импортов), ORDER_ITEMS (коды ошибок); OrderItem (тип агрегата), OrderItems (поле порта в
+# зависимостях usecase), order_items (таблица), order-items (путь API). Инициализм — по правилу revive var-naming
+# (api_key → APIKey и apiKey): иначе lint требует переименовать типы скелета.
 initialisms=" ACL API ASCII CPU CSS DNS EOF GUID HTML HTTP HTTPS ID IDS IP JSON LHS QPS RAM RHS RPC SLA SMTP SQL SSH TCP TLS TTL UDP UI UID UUID URI URL UTF8 VM XML XMPP XSRF XSS "
-TITLE="" CAMEL=""
-for part in ${NAME//_/ }; do
-    word=$(tr '[:lower:]' '[:upper:]' <<<"$part")
-    case "$initialisms" in
-        *" $word "*) [ "$word" != IDS ] || word=IDs ;;
-        *) word=$(tr '[:lower:]' '[:upper:]' <<<"${part:0:1}")${part:1} ;;
-    esac
-    TITLE+=$word
-    if [ -z "$CAMEL" ]; then CAMEL=$part; else CAMEL+=$word; fi
-done
+# title NAME — CamelCase snake_case-имени.
+title() {
+    local out="" part word
+    for part in ${1//_/ }; do
+        word=$(tr '[:lower:]' '[:upper:]' <<<"$part")
+        case "$initialisms" in
+            *" $word "*) [ "$word" != IDS ] || word=IDs ;;
+            *) word=$(tr '[:lower:]' '[:upper:]' <<<"${part:0:1}")${part:1} ;;
+        esac
+        out+=$word
+    done
+    printf '%s' "$out"
+}
+TITLE=$(title "$NAME")
+first=${NAME%%_*}
+CAMEL=$first$(title "${NAME#"$first"}")
 FLAT=${NAME//_/}
 UPPER=$(echo "$NAME" | tr '[:lower:]' '[:upper:]')
-# Множественное число — по правилам английского (status → statuses, category → categories);
-# исключения (person → people) правят руками.
-case "$NAME" in
-    *s | *x | *z | *ch | *sh) TABLE="${NAME}es" ;;
-    *[!aeiou]y) TABLE="${NAME%y}ies" ;;
-    *) TABLE="${NAME}s" ;;
+# Множественное число агрегата — по правилам английского (status → statuses, category → categories); имя на -s
+# (кроме -ss, -us, -is) — уже множественное или неизменяемое (series). Исключения (person → people) правят руками.
+case "$AGG" in
+    *ss | *us | *is | *x | *z | *ch | *sh) TABLE="${AGG}es" ;;
+    *s) TABLE=$AGG ;;
+    *[!aeiou]y) TABLE="${AGG%y}ies" ;;
+    *) TABLE="${AGG}s" ;;
 esac
+ATITLE=$(title "$AGG")
+PTITLE=$(title "$TABLE")
+# HTTP-типы — с префиксом домена (archtest TestHTTPTypes) и именем агрегата: OrderCreateInput, ObjectsObjectView.
+HTTPT=$TITLE
+[ "$ATITLE" = "$TITLE" ] || HTTPT+=$ATITLE
 ROUTE=${TABLE//_/-}
 MODULE_PATH=$(awk '/^module / {print $2}' go.mod)
 
@@ -151,26 +188,26 @@ import (
 	"unicode/utf8"
 )
 
-type $TITLE struct {
+type $ATITLE struct {
 	ID        string
 	Name      string
 	CreatedAt time.Time
 }
 
-// New$TITLE — запись до сохранения: ID и время создания проставляет репозиторий. NUL в имени
+// New$ATITLE — запись до сохранения: ID и время создания проставляет репозиторий. NUL в имени
 // Postgres в TEXT не примет.
-func New$TITLE(name string) (*$TITLE, error) {
+func New$ATITLE(name string) (*$ATITLE, error) {
 	if strings.TrimSpace(name) == "" || utf8.RuneCountInString(name) > maxNameLen || strings.ContainsRune(name, 0) {
 		return nil, ErrInvalidName
 	}
-	return &$TITLE{Name: name}, nil
+	return &$ATITLE{Name: name}, nil
 }
 EOF
 
 cat >"$DOMAIN_DIR/dto.go" <<EOF
 package $NAME
 
-type CreateInput struct {
+type Create${ATITLE}Input struct {
 	Name string
 }
 EOF
@@ -204,12 +241,12 @@ type Policy struct{}
 func NewPolicy() Authorizer { return &Policy{} }
 
 // Права скелета — только админ: шире их открывает правило продукта, явно.
-func (p *Policy) CanCreate(_ context.Context, caller identity.Identity) policy.Decision {
+func (p *Policy) CanCreate${ATITLE}(_ context.Context, caller identity.Identity) policy.Decision {
 	return adminOnly(caller)
 }
 
 // Ресурс с владельцем решает видимость (свои или все), а не id: образец — architecture.md § Usecase-канон.
-func (p *Policy) CanGet(_ context.Context, caller identity.Identity) policy.Decision {
+func (p *Policy) CanGet${ATITLE}(_ context.Context, caller identity.Identity) policy.Decision {
 	return adminOnly(caller)
 }
 
@@ -234,21 +271,21 @@ import (
 	"git.stit.tech/stit-core/golibinfra/logkit"
 )
 
-type Repository interface {
+type ${ATITLE}Repository interface {
 	// Insert сохраняет запись и проставляет ей ID и время создания.
-	Insert(ctx context.Context, e *$TITLE) error
-	GetByID(ctx context.Context, id string) (*$TITLE, error)
+	Insert(ctx context.Context, e *$ATITLE) error
+	GetByID(ctx context.Context, id string) (*$ATITLE, error)
 }
 
 type Authorizer interface {
-	CanCreate(ctx context.Context, caller identity.Identity) policy.Decision
-	CanGet(ctx context.Context, caller identity.Identity) policy.Decision
+	CanCreate${ATITLE}(ctx context.Context, caller identity.Identity) policy.Decision
+	CanGet${ATITLE}(ctx context.Context, caller identity.Identity) policy.Decision
 }
 
 type UsecaseDeps struct {
 	fx.In
 
-	Repo   Repository
+	${PTITLE} ${ATITLE}Repository
 	Policy Authorizer
 	Log    logkit.Logger
 }
@@ -262,34 +299,34 @@ func NewUsecase(d UsecaseDeps) *Usecase {
 	return &Usecase{d: d}
 }
 
-func (uc *Usecase) Create(ctx context.Context, in CreateInput) (*$TITLE, error) {
+func (uc *Usecase) Create${ATITLE}(ctx context.Context, in Create${ATITLE}Input) (*$ATITLE, error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
 		return nil, &policy.ForbiddenError{Reason: "no identity"}
 	}
-	if d := uc.d.Policy.CanCreate(ctx, caller); !d.IsAllowed {
+	if d := uc.d.Policy.CanCreate${ATITLE}(ctx, caller); !d.IsAllowed {
 		return nil, &policy.ForbiddenError{Reason: d.Reason}
 	}
-	e, err := New$TITLE(in.Name)
+	e, err := New$ATITLE(in.Name)
 	if err != nil {
 		return nil, err
 	}
-	if err := uc.d.Repo.Insert(ctx, e); err != nil {
+	if err := uc.d.${PTITLE}.Insert(ctx, e); err != nil {
 		return nil, err
 	}
-	uc.d.Log.Info(ctx, "$NAME created", "${NAME}_id", e.ID)
+	uc.d.Log.Info(ctx, "$AGG created", "${AGG}_id", e.ID)
 	return e, nil
 }
 
-func (uc *Usecase) Get(ctx context.Context, id string) (*$TITLE, error) {
+func (uc *Usecase) Get${ATITLE}(ctx context.Context, id string) (*$ATITLE, error) {
 	caller, ok := identity.From(ctx)
 	if !ok {
 		return nil, &policy.ForbiddenError{Reason: "no identity"}
 	}
-	if d := uc.d.Policy.CanGet(ctx, caller); !d.IsAllowed {
+	if d := uc.d.Policy.CanGet${ATITLE}(ctx, caller); !d.IsAllowed {
 		return nil, &policy.ForbiddenError{Reason: d.Reason}
 	}
-	return uc.d.Repo.GetByID(ctx, id)
+	return uc.d.${PTITLE}.GetByID(ctx, id)
 }
 EOF
 
@@ -305,7 +342,7 @@ import (
 	"$MODULE_PATH/internal/domain/$NAME"
 )
 
-func TestNew$TITLE(t *testing.T) {
+func TestNew$ATITLE(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
@@ -322,7 +359,7 @@ func TestNew$TITLE(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := $NAME.New$TITLE(tc.in)
+			got, err := $NAME.New$ATITLE(tc.in)
 			require.ErrorIs(t, err, tc.wantErr)
 			if tc.wantErr == nil {
 				require.Equal(t, tc.in, got.Name)
@@ -345,12 +382,12 @@ import (
 	"$MODULE_PATH/internal/domain/$NAME"
 )
 
-func FuzzNew$TITLE(f *testing.F) {
+func FuzzNew$ATITLE(f *testing.F) {
 	f.Add("first")
 	f.Add("")
 	f.Add("a\x00b")
 	f.Fuzz(func(t *testing.T, name string) {
-		got, err := $NAME.New$TITLE(name)
+		got, err := $NAME.New$ATITLE(name)
 		valid := strings.TrimSpace(name) != "" && utf8.RuneCountInString(name) <= 200 && !strings.ContainsRune(name, 0)
 		if !valid {
 			require.ErrorIs(t, err, $NAME.ErrInvalidName, "name %q", name)
@@ -390,8 +427,8 @@ func TestPolicy(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, p.CanCreate(context.Background(), tc.caller).IsAllowed)
-			require.Equal(t, tc.want, p.CanGet(context.Background(), tc.caller).IsAllowed)
+			require.Equal(t, tc.want, p.CanCreate${ATITLE}(context.Background(), tc.caller).IsAllowed)
+			require.Equal(t, tc.want, p.CanGet${ATITLE}(context.Background(), tc.caller).IsAllowed)
 		})
 	}
 }
@@ -420,28 +457,28 @@ var createdAt = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 // newUC — usecase на строгом моке репозитория и настоящей policy: вызов, которого тест не ждёт, —
 // провал.
-func newUC(t *testing.T, repo *mocks.MockRepository) *$NAME.Usecase {
+func newUC(t *testing.T, repo *mocks.Mock${ATITLE}Repository) *$NAME.Usecase {
 	t.Helper()
-	return $NAME.NewUsecase($NAME.UsecaseDeps{Repo: repo, Policy: $NAME.NewPolicy(), Log: logkit.Nop()})
+	return $NAME.NewUsecase($NAME.UsecaseDeps{${PTITLE}: repo, Policy: $NAME.NewPolicy(), Log: logkit.Nop()})
 }
 
-func TestCreate(t *testing.T) {
+func TestCreate${ATITLE}(t *testing.T) {
 	t.Parallel()
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().Insert(mock.Anything, &$NAME.$TITLE{Name: "first"}).
-		RunAndReturn(func(_ context.Context, e *$NAME.$TITLE) error {
+	repo := mocks.NewMock${ATITLE}Repository(t)
+	repo.EXPECT().Insert(mock.Anything, &$NAME.$ATITLE{Name: "first"}).
+		RunAndReturn(func(_ context.Context, e *$NAME.$ATITLE) error {
 			e.ID, e.CreatedAt = "id-1", createdAt
 			return nil
 		}).Once()
 
-	got, err := newUC(t, repo).Create(identitytest.Admin("a1"), $NAME.CreateInput{Name: "first"})
+	got, err := newUC(t, repo).Create${ATITLE}(identitytest.Admin("a1"), $NAME.Create${ATITLE}Input{Name: "first"})
 
 	require.NoError(t, err)
-	require.Equal(t, &$NAME.$TITLE{ID: "id-1", Name: "first", CreatedAt: createdAt}, got)
+	require.Equal(t, &$NAME.$ATITLE{ID: "id-1", Name: "first", CreatedAt: createdAt}, got)
 }
 
 // Отказ policy до репозитория не доходит: строгий мок без ожиданий.
-func TestCreate_Forbidden(t *testing.T) {
+func TestCreate${ATITLE}_Forbidden(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -453,7 +490,7 @@ func TestCreate_Forbidden(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := newUC(t, mocks.NewMockRepository(t)).Create(tc.ctx, $NAME.CreateInput{Name: "first"})
+			_, err := newUC(t, mocks.NewMock${ATITLE}Repository(t)).Create${ATITLE}(tc.ctx, $NAME.Create${ATITLE}Input{Name: "first"})
 
 			var forbidden *policy.ForbiddenError
 			require.ErrorAs(t, err, &forbidden)
@@ -461,39 +498,39 @@ func TestCreate_Forbidden(t *testing.T) {
 	}
 }
 
-func TestCreate_InvalidName(t *testing.T) {
+func TestCreate${ATITLE}_InvalidName(t *testing.T) {
 	t.Parallel()
-	_, err := newUC(t, mocks.NewMockRepository(t)).Create(identitytest.Admin("a1"), $NAME.CreateInput{Name: ""})
+	_, err := newUC(t, mocks.NewMock${ATITLE}Repository(t)).Create${ATITLE}(identitytest.Admin("a1"), $NAME.Create${ATITLE}Input{Name: ""})
 
 	require.ErrorIs(t, err, $NAME.ErrInvalidName)
 }
 
-func TestCreate_RepositoryError(t *testing.T) {
+func TestCreate${ATITLE}_RepositoryError(t *testing.T) {
 	t.Parallel()
-	repo := mocks.NewMockRepository(t)
+	repo := mocks.NewMock${ATITLE}Repository(t)
 	repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(errors.New("db down")).Once()
 
-	_, err := newUC(t, repo).Create(identitytest.Admin("a1"), $NAME.CreateInput{Name: "first"})
+	_, err := newUC(t, repo).Create${ATITLE}(identitytest.Admin("a1"), $NAME.Create${ATITLE}Input{Name: "first"})
 
 	require.EqualError(t, err, "db down")
 }
 
-func TestGet(t *testing.T) {
+func TestGet${ATITLE}(t *testing.T) {
 	t.Parallel()
-	want := &$NAME.$TITLE{ID: "id-1", Name: "first", CreatedAt: createdAt}
-	repo := mocks.NewMockRepository(t)
+	want := &$NAME.$ATITLE{ID: "id-1", Name: "first", CreatedAt: createdAt}
+	repo := mocks.NewMock${ATITLE}Repository(t)
 	repo.EXPECT().GetByID(mock.Anything, "id-1").Return(want, nil).Once()
 	repo.EXPECT().GetByID(mock.Anything, "id-2").Return(nil, $NAME.ErrNotFound).Once()
 	uc := newUC(t, repo)
 
-	got, err := uc.Get(identitytest.Admin("a1"), "id-1")
+	got, err := uc.Get${ATITLE}(identitytest.Admin("a1"), "id-1")
 	require.NoError(t, err)
 	require.Equal(t, want, got)
-	_, err = uc.Get(identitytest.Admin("a1"), "id-2")
+	_, err = uc.Get${ATITLE}(identitytest.Admin("a1"), "id-2")
 	require.ErrorIs(t, err, $NAME.ErrNotFound)
 }
 
-func TestGet_Forbidden(t *testing.T) {
+func TestGet${ATITLE}_Forbidden(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -505,7 +542,7 @@ func TestGet_Forbidden(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := newUC(t, mocks.NewMockRepository(t)).Get(tc.ctx, "id-1")
+			_, err := newUC(t, mocks.NewMock${ATITLE}Repository(t)).Get${ATITLE}(tc.ctx, "id-1")
 
 			var forbidden *policy.ForbiddenError
 			require.ErrorAs(t, err, &forbidden)
@@ -517,25 +554,25 @@ EOF
 cat >"$DOMAIN_DIR/delivery/http/dto.go" <<EOF
 package http
 
-type ${TITLE}CreateInput struct {
+type ${HTTPT}CreateInput struct {
 	Body struct {
 		Name string \`json:"name" maxLength:"200" minLength:"1" required:"true"\`
 	}
 }
 
-type ${TITLE}CreateOutput struct {
+type ${HTTPT}CreateOutput struct {
 	Body struct {
-		Data ${TITLE}View \`json:"data"\`
+		Data ${HTTPT}View \`json:"data"\`
 	}
 }
 
-type ${TITLE}GetInput struct {
+type ${HTTPT}GetInput struct {
 	ID string \`path:"id"\`
 }
 
-type ${TITLE}GetOutput struct {
+type ${HTTPT}GetOutput struct {
 	Body struct {
-		Data ${TITLE}View \`json:"data"\`
+		Data ${HTTPT}View \`json:"data"\`
 	}
 }
 EOF
@@ -549,13 +586,13 @@ import (
 	"$MODULE_PATH/internal/domain/$NAME"
 )
 
-type ${TITLE}View struct {
+type ${HTTPT}View struct {
 	ID        string    \`json:"id"\`
 	Name      string    \`json:"name"\`
 	CreatedAt time.Time \`json:"created_at"\`
 }
 
-func (v *${TITLE}View) FromEntity(e *$NAME.$TITLE) {
+func (v *${HTTPT}View) FromEntity(e *$NAME.$ATITLE) {
 	v.ID = e.ID
 	v.Name = e.Name
 	v.CreatedAt = e.CreatedAt
@@ -577,8 +614,8 @@ import (
 )
 
 type Usecase interface {
-	Create(ctx context.Context, in $NAME.CreateInput) (*$NAME.$TITLE, error)
-	Get(ctx context.Context, id string) (*$NAME.$TITLE, error)
+	Create${ATITLE}(ctx context.Context, in $NAME.Create${ATITLE}Input) (*$NAME.$ATITLE, error)
+	Get${ATITLE}(ctx context.Context, id string) (*$NAME.$ATITLE, error)
 }
 
 type Handler struct {
@@ -588,40 +625,40 @@ type Handler struct {
 func NewHandler(uc Usecase) *Handler { return &Handler{uc: uc} }
 
 func Register(api huma.API, h *Handler) {
-	huma.Register(api, createErrors.Declare(authgate.Secured(huma.Operation{
-		OperationID:   "create$TITLE",
+	huma.Register(api, create${ATITLE}Errors.Declare(authgate.Secured(huma.Operation{
+		OperationID:   "create${ATITLE}",
 		Method:        http.MethodPost,
 		Path:          "/api/${ROUTE}",
 		Tags:          []string{"${ROUTE}"},
 		DefaultStatus: http.StatusCreated,
-		Summary:       "Создать $NAME",
-	})), h.create)
+		Summary:       "Создать $AGG",
+	})), h.create${ATITLE})
 
-	huma.Register(api, getErrors.Declare(authgate.Secured(huma.Operation{
-		OperationID: "get$TITLE",
+	huma.Register(api, get${ATITLE}Errors.Declare(authgate.Secured(huma.Operation{
+		OperationID: "get${ATITLE}",
 		Method:      http.MethodGet,
 		Path:        "/api/${ROUTE}/{id}",
 		Tags:        []string{"${ROUTE}"},
-		Summary:     "Получить $NAME по ID",
-	})), h.get)
+		Summary:     "Получить $AGG по ID",
+	})), h.get${ATITLE})
 }
 
-func (h *Handler) create(ctx context.Context, in *${TITLE}CreateInput) (*${TITLE}CreateOutput, error) {
-	e, err := h.uc.Create(ctx, $NAME.CreateInput{Name: in.Body.Name})
+func (h *Handler) create${ATITLE}(ctx context.Context, in *${HTTPT}CreateInput) (*${HTTPT}CreateOutput, error) {
+	e, err := h.uc.Create${ATITLE}(ctx, $NAME.Create${ATITLE}Input{Name: in.Body.Name})
 	if err != nil {
 		return nil, ${CAMEL}Errors.Map(err)
 	}
-	out := &${TITLE}CreateOutput{}
+	out := &${HTTPT}CreateOutput{}
 	out.Body.Data.FromEntity(e)
 	return out, nil
 }
 
-func (h *Handler) get(ctx context.Context, in *${TITLE}GetInput) (*${TITLE}GetOutput, error) {
-	e, err := h.uc.Get(ctx, in.ID)
+func (h *Handler) get${ATITLE}(ctx context.Context, in *${HTTPT}GetInput) (*${HTTPT}GetOutput, error) {
+	e, err := h.uc.Get${ATITLE}(ctx, in.ID)
 	if err != nil {
 		return nil, ${CAMEL}Errors.Map(err)
 	}
-	out := &${TITLE}GetOutput{}
+	out := &${HTTPT}GetOutput{}
 	out.Body.Data.FromEntity(e)
 	return out, nil
 }
@@ -634,8 +671,8 @@ var (
 
 	${CAMEL}Errors = httpkit.NewErrorMap(notFoundRule, invalidNameRule, authgate.ForbiddenRule)
 
-	createErrors = httpkit.NewErrorMap(invalidNameRule, authgate.ForbiddenRule)
-	getErrors    = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
+	create${ATITLE}Errors = httpkit.NewErrorMap(invalidNameRule, authgate.ForbiddenRule)
+	get${ATITLE}Errors    = httpkit.NewErrorMap(notFoundRule, authgate.ForbiddenRule)
 )
 EOF
 
@@ -663,8 +700,8 @@ func TestErrorMaps(t *testing.T) {
 		m    httpkit.ErrorMap
 		errs []error
 	}{
-		{"create$TITLE", createErrors, []error{$NAME.ErrInvalidName, forbidden}},
-		{"get$TITLE", getErrors, []error{$NAME.ErrNotFound, forbidden}},
+		{"create${ATITLE}", create${ATITLE}Errors, []error{$NAME.ErrInvalidName, forbidden}},
+		{"get${ATITLE}", get${ATITLE}Errors, []error{$NAME.ErrNotFound, forbidden}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.op, func(t *testing.T) {
@@ -706,7 +743,7 @@ func setup(t *testing.T, uc *mocks.MockUsecase) handlertest.API {
 	}, handlertest.WithSecuritySchemes(authgate.CookieScheme(identitytest.Extract)))
 }
 
-var created = &$NAME.$TITLE{ID: "id-1", Name: "first", CreatedAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}
+var created = &$NAME.$ATITLE{ID: "id-1", Name: "first", CreatedAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}
 
 // assertView — тело ответа: envelope data с записью created.
 func assertView(t *testing.T, raw []byte) {
@@ -724,10 +761,10 @@ func assertView(t *testing.T, raw []byte) {
 	require.Equal(t, created.CreatedAt, body.Data.CreatedAt)
 }
 
-func TestCreate_Created(t *testing.T) {
+func TestCreate${ATITLE}_Created(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Create(mock.Anything, $NAME.CreateInput{Name: "first"}).Return(created, nil).Once()
+	uc.EXPECT().Create${ATITLE}(mock.Anything, $NAME.Create${ATITLE}Input{Name: "first"}).Return(created, nil).Once()
 
 	resp := setup(t, uc).PostCtx(identitytest.Admin("a1"), "/api/${ROUTE}", strings.NewReader(\`{"name":"first"}\`))
 
@@ -735,7 +772,7 @@ func TestCreate_Created(t *testing.T) {
 	assertView(t, resp.Body.Bytes())
 }
 
-func TestCreate_Errors(t *testing.T) {
+func TestCreate${ATITLE}_Errors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
@@ -752,7 +789,7 @@ func TestCreate_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			uc := mocks.NewMockUsecase(t)
-			uc.EXPECT().Create(mock.Anything, $NAME.CreateInput{Name: "first"}).Return(nil, tc.err).Once()
+			uc.EXPECT().Create${ATITLE}(mock.Anything, $NAME.Create${ATITLE}Input{Name: "first"}).Return(nil, tc.err).Once()
 
 			resp := setup(t, uc).PostCtx(tc.ctx, "/api/${ROUTE}", strings.NewReader(\`{"name":"first"}\`))
 
@@ -766,10 +803,10 @@ func TestCreate_Errors(t *testing.T) {
 	}
 }
 
-func TestGet_OK(t *testing.T) {
+func TestGet${ATITLE}_OK(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Get(mock.Anything, "id-1").Return(created, nil).Once()
+	uc.EXPECT().Get${ATITLE}(mock.Anything, "id-1").Return(created, nil).Once()
 
 	resp := setup(t, uc).GetCtx(identitytest.Admin("a1"), "/api/${ROUTE}/id-1")
 
@@ -777,10 +814,10 @@ func TestGet_OK(t *testing.T) {
 	assertView(t, resp.Body.Bytes())
 }
 
-func TestGet_NotFound(t *testing.T) {
+func TestGet${ATITLE}_NotFound(t *testing.T) {
 	t.Parallel()
 	uc := mocks.NewMockUsecase(t)
-	uc.EXPECT().Get(mock.Anything, "id-2").Return(nil, $NAME.ErrNotFound).Once()
+	uc.EXPECT().Get${ATITLE}(mock.Anything, "id-2").Return(nil, $NAME.ErrNotFound).Once()
 
 	resp := setup(t, uc).GetCtx(identitytest.Admin("a1"), "/api/${ROUTE}/id-2")
 
@@ -788,13 +825,13 @@ func TestGet_NotFound(t *testing.T) {
 }
 EOF
 
-cat >"$DOMAIN_DIR/infra/postgres/queries/${NAME}.sql" <<EOF
--- name: Insert${TITLE} :one
+cat >"$DOMAIN_DIR/infra/postgres/queries/${AGG}.sql" <<EOF
+-- name: Insert${ATITLE} :one
 INSERT INTO ${TABLE} (name)
 VALUES (\$1)
 RETURNING id, created_at;
 
--- name: Get${TITLE}ByID :one
+-- name: Get${ATITLE}ByID :one
 SELECT id, name, created_at
 FROM ${TABLE}
 WHERE id = \$1;
@@ -816,12 +853,12 @@ type Repository struct {
 	q *db.Queries
 }
 
-func NewRepository(database *pgkit.DB) $NAME.Repository {
+func NewRepository(database *pgkit.DB) $NAME.${ATITLE}Repository {
 	return &Repository{q: db.New(database)}
 }
 
-func (r *Repository) Insert(ctx context.Context, e *$NAME.$TITLE) error {
-	row, err := r.q.Insert$TITLE(ctx, e.Name)
+func (r *Repository) Insert(ctx context.Context, e *$NAME.$ATITLE) error {
+	row, err := r.q.Insert${ATITLE}(ctx, e.Name)
 	if err != nil {
 		return fmt.Errorf("$NAME repo: insert: %w", err)
 	}
@@ -830,19 +867,19 @@ func (r *Repository) Insert(ctx context.Context, e *$NAME.$TITLE) error {
 	return nil
 }
 
-func (r *Repository) GetByID(ctx context.Context, id string) (*$NAME.$TITLE, error) {
+func (r *Repository) GetByID(ctx context.Context, id string) (*$NAME.$ATITLE, error) {
 	uid, err := pgkit.ParseUUID(id)
 	if err != nil {
 		return nil, $NAME.ErrNotFound
 	}
-	row, err := r.q.Get${TITLE}ByID(ctx, uid)
+	row, err := r.q.Get${ATITLE}ByID(ctx, uid)
 	if pgkit.IsNoRows(err) {
 		return nil, $NAME.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("$NAME repo: select: %w", err)
 	}
-	return &$NAME.$TITLE{ID: pgkit.UUIDString(row.ID), Name: row.Name, CreatedAt: row.CreatedAt.Time}, nil
+	return &$NAME.$ATITLE{ID: pgkit.UUIDString(row.ID), Name: row.Name, CreatedAt: row.CreatedAt.Time}, nil
 }
 EOF
 
@@ -869,7 +906,7 @@ func TestInsertAndGetByID(t *testing.T) {
 	repo := ${FLAT}pg.NewRepository(testkit.StartPostgres(t, testkit.WithMigrationsDir(repopath.Migrations())).DB(t))
 	ctx := context.Background()
 
-	e := &$NAME.$TITLE{Name: "first"}
+	e := &$NAME.$ATITLE{Name: "first"}
 	require.NoError(t, repo.Insert(ctx, e))
 	require.NotEmpty(t, e.ID)
 	require.WithinDuration(t, time.Now(), e.CreatedAt, time.Minute, "the database sets the creation time")
@@ -886,7 +923,7 @@ func TestInsertAndGetByID(t *testing.T) {
 	// Сбой БД — ошибка с причиной, а не ErrNotFound: недоступная база не выглядит как «нет такого».
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
-	require.ErrorIs(t, repo.Insert(canceled, &$NAME.$TITLE{Name: "second"}), context.Canceled)
+	require.ErrorIs(t, repo.Insert(canceled, &$NAME.$ATITLE{Name: "second"}), context.Canceled)
 	_, err = repo.GetByID(canceled, e.ID)
 	require.ErrorIs(t, err, context.Canceled)
 	require.NotErrorIs(t, err, $NAME.ErrNotFound)
@@ -939,7 +976,7 @@ EOF
 cat >>.mockery.yml <<EOF
   ${MODULE_PATH}/internal/domain/${NAME}:
     interfaces:
-      Repository:
+      ${ATITLE}Repository:
   ${MODULE_PATH}/internal/domain/${NAME}/delivery/http:
     interfaces:
       Usecase:
@@ -948,7 +985,7 @@ EOF
 # Сила тестов среза — его мутации (rule tests-pipeline § Мутации): спецификация растёт с кодом с первого коммита.
 echo "→ вписываю блоки мутаций среза в scripts/tools/mutants.txt"
 UC=$DOMAIN_DIR/usecase.go ENT=$DOMAIN_DIR/entity.go POL=$DOMAIN_DIR/policy.go
-REPO=$DOMAIN_DIR/infra/postgres/repository.go SQL=$DOMAIN_DIR/infra/postgres/queries/$NAME.sql
+REPO=$DOMAIN_DIR/infra/postgres/repository.go SQL=$DOMAIN_DIR/infra/postgres/queries/$AGG.sql
 HANDLER=$DOMAIN_DIR/delivery/http/handler.go VIEW=$DOMAIN_DIR/delivery/http/view.go
 cat >>scripts/tools/mutants.txt <<EOF
 
@@ -956,36 +993,36 @@ cat >>scripts/tools/mutants.txt <<EOF
 
 ## ${NAME}-01 usecase — Create: отказ policy не останавливает запись
 $UC
-- if d := uc.d.Policy.CanCreate(ctx, caller); !d.IsAllowed {
-+ if d := uc.d.Policy.CanCreate(ctx, caller); !d.IsAllowed && caller.UserID == "" {
+- if d := uc.d.Policy.CanCreate${ATITLE}(ctx, caller); !d.IsAllowed {
++ if d := uc.d.Policy.CanCreate${ATITLE}(ctx, caller); !d.IsAllowed && caller.UserID == "" {
 
 ## ${NAME}-02 usecase — Get: отказ policy не останавливает чтение
 $UC
-- if d := uc.d.Policy.CanGet(ctx, caller); !d.IsAllowed {
-+ if d := uc.d.Policy.CanGet(ctx, caller); !d.IsAllowed && caller.UserID == "" {
+- if d := uc.d.Policy.CanGet${ATITLE}(ctx, caller); !d.IsAllowed {
++ if d := uc.d.Policy.CanGet${ATITLE}(ctx, caller); !d.IsAllowed && caller.UserID == "" {
 
 ## ${NAME}-03 usecase — Create: сбой записи глотается
 $UC
-- if err := uc.d.Repo.Insert(ctx, e); err != nil {
-+ if err := uc.d.Repo.Insert(ctx, e); err != nil && ctx.Err() != nil {
+- if err := uc.d.${PTITLE}.Insert(ctx, e); err != nil {
++ if err := uc.d.${PTITLE}.Insert(ctx, e); err != nil && ctx.Err() != nil {
 
 ## ${NAME}-04 usecase — Create: в запись уходит пустое имя
 $UC
-- if err := uc.d.Repo.Insert(ctx, e); err != nil {
+- if err := uc.d.${PTITLE}.Insert(ctx, e); err != nil {
 + e.Name = ""
-+ if err := uc.d.Repo.Insert(ctx, e); err != nil {
++ if err := uc.d.${PTITLE}.Insert(ctx, e); err != nil {
 
-## ${NAME}-05 entity — New$TITLE: имя ровно в предел отвергнуто (граница)
+## ${NAME}-05 entity — New$ATITLE: имя ровно в предел отвергнуто (граница)
 $ENT
 - utf8.RuneCountInString(name) > maxNameLen
 + utf8.RuneCountInString(name) >= maxNameLen
 
-## ${NAME}-06 entity — New$TITLE: NUL в имени пропускается
+## ${NAME}-06 entity — New$ATITLE: NUL в имени пропускается
 $ENT
 - strings.ContainsRune(name, 0)
 + strings.ContainsRune(name, 1)
 
-## ${NAME}-07 entity — New$TITLE: имя из пробелов принято
+## ${NAME}-07 entity — New$ATITLE: имя из пробелов принято
 $ENT
 - strings.TrimSpace(name) == "" ||
 + name == "" ||
@@ -995,11 +1032,11 @@ $POL
 - if caller.Role == identity.RoleAdmin {
 + if caller.Role != identity.RoleUnknown {
 
-## ${NAME}-09 policy — CanGet: читать может любой
+## ${NAME}-09 policy — CanGet${ATITLE}: читать может любой
 $POL
-- func (p *Policy) CanGet(_ context.Context, caller identity.Identity) policy.Decision {
+- func (p *Policy) CanGet${ATITLE}(_ context.Context, caller identity.Identity) policy.Decision {
 - 	return adminOnly(caller)
-+ func (p *Policy) CanGet(_ context.Context, _ identity.Identity) policy.Decision {
++ func (p *Policy) CanGet${ATITLE}(_ context.Context, _ identity.Identity) policy.Decision {
 + 	return policy.Allow()
 
 ## ${NAME}-10 repository — GetByID: имя не читается
@@ -1033,25 +1070,25 @@ $REPO
 - return fmt.Errorf("$NAME repo: insert: %w", err)
 + return $NAME.ErrNotFound
 
-## ${NAME}-15 sql — Get${TITLE}ByID: условие перевёрнуто
+## ${NAME}-15 sql — Get${ATITLE}ByID: условие перевёрнуто
 $SQL
 - WHERE id = \$1;
 + WHERE id != \$1;
 
 ## ${NAME}-16 handler — create: имя не доходит до usecase
 $HANDLER
-- h.uc.Create(ctx, $NAME.CreateInput{Name: in.Body.Name})
-+ h.uc.Create(ctx, $NAME.CreateInput{Name: ""})
+- h.uc.Create${ATITLE}(ctx, $NAME.Create${ATITLE}Input{Name: in.Body.Name})
++ h.uc.Create${ATITLE}(ctx, $NAME.Create${ATITLE}Input{Name: ""})
 
 ## ${NAME}-17 handler — create: 200 вместо 201
 $HANDLER
 - DefaultStatus: http.StatusCreated,
 + DefaultStatus: http.StatusOK,
 
-## ${NAME}-18 handler — get${TITLE}: операция открыта без сессии
+## ${NAME}-18 handler — get${ATITLE}}: операция открыта без сессии
 $HANDLER
-- huma.Register(api, getErrors.Declare(authgate.Secured(huma.Operation{
-+ huma.Register(api, getErrors.Declare(httpkit.Public(huma.Operation{
+- huma.Register(api, get${ATITLE}Errors.Declare(authgate.Secured(huma.Operation{
++ huma.Register(api, get${ATITLE}Errors.Declare(httpkit.Public(huma.Operation{
 
 ## ${NAME}-19 handler — ${UPPER}_NOT_FOUND: 400 вместо 404
 $HANDLER
@@ -1060,8 +1097,8 @@ $HANDLER
 
 ## ${NAME}-20 handler — create: 422 имени не объявлен в OpenAPI
 $HANDLER
-- createErrors = httpkit.NewErrorMap(invalidNameRule, authgate.ForbiddenRule)
-+ createErrors = httpkit.NewErrorMap(authgate.ForbiddenRule)
+- create${ATITLE}Errors = httpkit.NewErrorMap(invalidNameRule, authgate.ForbiddenRule)
++ create${ATITLE}Errors = httpkit.NewErrorMap(authgate.ForbiddenRule)
 
 ## ${NAME}-21 view — ответ без created_at
 $VIEW
@@ -1074,10 +1111,10 @@ $VIEW
 
 ## ${NAME}-23 handler — get: в ответе только ID
 $HANDLER
-- e, err := h.uc.Get(ctx, in.ID)
-+ e, err := h.uc.Get(ctx, in.ID)
+- e, err := h.uc.Get${ATITLE}(ctx, in.ID)
++ e, err := h.uc.Get${ATITLE}(ctx, in.ID)
 + if err == nil && e != nil {
-+ 	e = &$NAME.$TITLE{ID: e.ID}
++ 	e = &$NAME.$ATITLE{ID: e.ID}
 + }
 
 ## ${NAME}-24 migration — created_at по умолчанию — константа, а не время записи

@@ -40,46 +40,57 @@
 
 Прежде чем что-то делать:
 - Имя домена в `snake_case` (например, `order`, `notification`, `subscription`).
+- Агрегат среза — главный агрегат контекста в единственном числе (`order`, `object`, `employee`): по умолчанию —
+  контекст в единственном числе (`objects` → `object`); у контекста, чьё имя — не его агрегат (`ordering` → `order`,
+  `people` → `employee`), — явно, `AGG=`.
 - Что нужно: CRUD? только read? с outbox-событиями? с HTTP-API или только subscriber/job?
 
 Если неясно — спроси одним вопросом до начала.
 
-### 2. Срез Create и Get
+### 2. Срез Create и Get агрегата
 
 ```bash
-make new-domain NAME=<name>
+make new-domain NAME=<name>              # агрегат — <name> в единственном числе
+make new-domain NAME=<name> AGG=<agg>    # агрегат контекста с другим именем
 ```
 
-`scripts/new-domain.sh` создаёт рабочий вертикальный срез по канону и подключает его:
+`scripts/new-domain.sh` создаёт рабочий вертикальный срез одного агрегата по канону и подключает его
+(`<Agg>` — агрегат в CamelCase, `<aggs>` — его множественное число, `<Name>` — домен):
 
 ```
-migrations/NNNN_<names>.{up,down}.sql   таблица <names> (id, name, created_at); номер — следующий
+migrations/NNNN_<aggs>.{up,down}.sql    таблица <aggs> (id, name, created_at); номер — следующий
 internal/domain/<name>/
-├── entity.go          <Name>{ID, Name, CreatedAt}, New<Name> проверяет имя
-├── dto.go             CreateInput
+├── entity.go          <Agg>{ID, Name, CreatedAt}, New<Agg> проверяет имя
+├── dto.go             Create<Agg>Input
 ├── errors.go          ErrNotFound, ErrInvalidName
-├── policy.go          CanCreate, CanGet — только admin; предел имени
-├── usecase.go         Create, Get; порты Repository и Authorizer
+├── policy.go          CanCreate<Agg>, CanGet<Agg> — только admin; предел имени
+├── usecase.go         Create<Agg>, Get<Agg>; порты <Agg>Repository и Authorizer
 ├── *_test.go          entity (+fuzz), policy, usecase на строгом моке репозитория и настоящей policy
-├── delivery/http/     POST /api/<names> и GET /api/<names>/{id} под authgate.Secured, DTO с
-│                      префиксом и envelope data, таблицы ошибок с Declare, handler- и errors-тесты
-├── infra/postgres/    queries/<name>.sql (Insert<Name>, Get<Name>ByID), repository.go,
+├── delivery/http/     POST /api/<aggs> и GET /api/<aggs>/{id} под authgate.Secured (OperationID
+│                      create<Agg>, get<Agg>), DTO с префиксом <Name><Agg> и envelope data, таблицы
+│                      ошибок create<Agg>Errors и get<Agg>Errors с Declare, handler- и errors-тесты
+├── infra/postgres/    queries/<agg>.sql (Insert<Agg>, Get<Agg>ByID), repository.go,
 │                      repository_test.go (integration), db/ — sqlc
 └── module/module.go   fx.Module "internal/domain/<name>/module"
 ```
 
-Ещё скрипт вписывает блок домена в `sqlc.yaml` и интерфейсы `Repository` и `delivery/http.Usecase`
+Имена агрегата — его, а не домена: следующий агрегат контекста (шаг 4) встаёт рядом — `<Agg2>`,
+`<Agg2>Repository`, `Create<Agg2>`, свой файл `entity_<agg2>.go` и `usecase_<agg2>.go` — без переименований
+среза. Множественное число — по правилам английского (`status` → `statuses`, `category` → `categories`; имя на
+`-s`, кроме `-ss`, `-us`, `-is`, — уже множественное или неизменяемое: `series`); исключения
+(`person` → `people`) правят руками.
+
+Ещё скрипт вписывает блок домена в `sqlc.yaml` и интерфейсы `<Agg>Repository` и `delivery/http.Usecase`
 в `.mockery.yml`, подключает модуль в `domainModules` (`cmd/api/main.go`) и HTTP-вход в
 `httpHandlers` и `registerHTTP` (`cmd/api/http.go`), гонит `make gen`, проверяет, что срез собирается
 (`go vet` с тегом integration), и ставит созданное в индекс git. Границы домена держит
 `internal/archtest` без правки конфигов.
 
-`<Name>` — имя в CamelCase, инициализм — заглавными по правилу revive (`api_key` → `APIKey`).
-`<names>` — множественное число по правилам английского (`status` → `statuses`, `category` →
-`categories`; в пути `_` → `-`), исключения (`person` → `people`) правят руками. Имя, с которым срез не
-собрался бы (ключевое слово или встроенное имя Go, имя из кода среза, алиас импорта другого домена), и
-таблицу, которую уже создаёт миграция, скрипт отвергает до первой правки; сбой после неё — откат всех его
-правок.
+CamelCase — с инициализмом заглавными по правилу revive (`api_key` → `APIKey`), в пути `_` → `-`. Имя домена
+или агрегата, с которым срез не собрался бы (ключевое слово или встроенное имя Go, объявление пакета домена, имя
+из кода среза, алиас импорта другого домена), и таблицу, которую уже создаёт миграция, скрипт отвергает до первой
+правки; сбой после неё — откат всех его правок. Второй срез в тот же домен скрипт не кладёт: другие агрегаты —
+шаг 4.
 
 ### 3. Гейт
 

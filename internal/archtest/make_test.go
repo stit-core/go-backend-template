@@ -15,7 +15,7 @@ import (
 )
 
 // makeArgs — переменные, которые Makefile берёт у вызывающего: make test PKG=… отдаёт их и тесту окружением.
-var makeArgs = []string{"A", "FORMAT", "FROM", "NAME", "P", "PATHS", "PKG", "Q", "TO", "VERBOSE", "VERSION"}
+var makeArgs = []string{"A", "AGG", "FORMAT", "FROM", "NAME", "P", "PATHS", "PKG", "Q", "TO", "VERBOSE", "VERSION"}
 
 // callerEnv — окружение теста без переменных make и git вызывающего (тест идёт и внутри make check, а тот —
 // в хуке git), без аргументов Makefile и PATH, с конфигом git без глобального и системного; extra — поверх.
