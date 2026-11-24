@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -42,12 +43,18 @@ type Unsafe []string
 // UnsafeGroup — группа fx проверок Unsafe: Guard собирает их все.
 const UnsafeGroup = "config.unsafe"
 
-// ProvideUnsafe кладёт в группу UnsafeGroup проверку настроек, небезопасных вне dev: check берёт конфиги из графа и
-// отдаёт Unsafe. Проверку кладёт тот, кто знает настройку, — кит рядом с его конфигом в cmd/api, домен в своём
-// module/: сигнатура Guard от них не растёт.
+// ProvideUnsafe кладёт в группу UnsafeGroup проверку настроек, небезопасных вне dev: check — функция, которая берёт
+// конфиги из графа и отдаёт Unsafe первым результатом, иначе ошибка графа: результат другого типа fx положил бы в
+// другую группу, и Guard его молча не увидел бы. Проверку кладёт тот, кто знает настройку, — кит в config.Module
+// рядом с проверками шаблона, домен в своём module/: сигнатура Guard от них не растёт.
 func ProvideUnsafe(check any) fx.Option {
+	if t := reflect.TypeOf(check); t == nil || t.Kind() != reflect.Func || t.NumOut() == 0 || t.Out(0) != unsafeType {
+		return fx.Error(fmt.Errorf("config: ProvideUnsafe(%T): the check must be a function returning config.Unsafe", check))
+	}
 	return fx.Provide(fx.Annotate(check, fx.ResultTags(`group:"`+UnsafeGroup+`"`)))
 }
+
+var unsafeType = reflect.TypeFor[Unsafe]()
 
 // Module — App из окружения, его Env и проверки шаблона: все здесь, а не в cmd/api, — перенос кода форка без main.go
 // не снимет ни одну молча.

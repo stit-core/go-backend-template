@@ -2161,6 +2161,11 @@ internal/platform/config/config.go
 - if len(unsafe) == 0 {
 + if len(unsafe) < 0 {
 
+## C21 platform/config — ProvideUnsafe пускает проверку не того вида (Guard её молча не видит)
+internal/platform/config/config.go
+- || t.Out(0) != unsafeType {
++ || t.Out(0) == nil {
+
 ## EV1 platform/events — outbox домена без ограничения subject'ов
 internal/platform/events/outbox.go
 - outboxkit.Instance(name, table, outboxkit.WithSubjects(name+".>")),

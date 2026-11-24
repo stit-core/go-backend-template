@@ -233,6 +233,20 @@ func TestModule(t *testing.T) {
 	}
 }
 
+// Проверка не того вида — ошибка графа, а не проверка мимо Guard: результат []string fx положил бы в другую группу.
+func TestProvideUnsafe_RejectsNotACheck(t *testing.T) {
+	t.Parallel()
+	for name, check := range map[string]any{
+		"another result type": func() []string { return []string{"PROBE_INSECURE=true"} },
+		"no result":           func() {},
+		"not a function":      appconfig.Unsafe{"PROBE_INSECURE=true"},
+		"nil":                 nil,
+	} {
+		err := fx.New(fx.NopLogger, appconfig.ProvideUnsafe(check)).Err()
+		require.ErrorContains(t, err, "the check must be a function returning config.Unsafe", name)
+	}
+}
+
 // APP_ENV= (задан, но пуст) — не dev, а незаданное окружение: сервис не собирается.
 func TestModule_EmptyEnvIsNotDev(t *testing.T) {
 	t.Setenv("APP_ENV", "")

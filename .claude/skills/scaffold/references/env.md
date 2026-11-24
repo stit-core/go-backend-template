@@ -41,7 +41,8 @@
 `config.Guard` не пускает старт, пока хоть одна проверка нашла настройку. Проверку кладёт тот, кто знает настройку, —
 сигнатура Guard не растёт: поле `App` — функция в `config.go` и строка `ProvideUnsafe` в `config.Module`; `Config`
 домена — его метод (`internal/platform/config` корня домена не видит: метод отдаёт `[]string`) и строка
-`config.ProvideUnsafe(func(c <домен>.Config) config.Unsafe { return c.Unsafe() })` в `module/` домена; конфиг кита —
+`config.ProvideUnsafe(func(c <домен>.Config) config.Unsafe { return c.Unsafe() })` в `module/` домена (функция с
+другим результатом — ошибка графа: Guard не видел бы её); конфиг кита —
 функция и её строка `ProvideUnsafe` в `config.Module`, рядом с проверками шаблона (в `cmd/api` её снял бы перенос кода
 форка без `main.go`). Тест — значение проверки (небезопасное и безопасное, `TestUnsafeChecks`), отказ старта вне dev —
 случаем `TestModule` (`config_test.go`).
