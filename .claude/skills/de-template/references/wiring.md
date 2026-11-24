@@ -23,8 +23,8 @@
   cleanup — `TestFxGraphValidates` красный), без проб `/ready` не видит зависимость (список проб сверяет
   `TestBoot`). Их не убирают,
   пока в графе есть кит с джобом или пробой.
-- wiring внешних runtime-deps (Redis/NATS/…), если стек их объявил. Зависимость кита графа (Redis у `cachekit`,
-  MinIO у `storagekit`) boot-тест, smoke-стек и `make local-deps-up` поднимают сами (`scripts/tools/kits.sh`); своя
+- wiring внешних runtime-deps (Redis/NATS/…), если стек их объявил. Зависимость кита графа (NATS у `natskit`,
+  Redis у `cachekit`, MinIO у `storagekit`) boot-тест, smoke-стек и `make local-deps-up` поднимают сами (`scripts/tools/kits.sh`); своя
   зависимость сервиса в smoke-стеке — его второй compose-файл test/stack/compose.service.yml.
 - golibinfra-first: generic-примитив → golibinfra, не локально (CLAUDE.md § Стиль; обоснование — `docs/reference/architecture.md § Граница с golibinfra`).
 
@@ -36,22 +36,26 @@
 
 #### Сервис без событий (`events: none`)
 
-Решение — `events: none` во frontmatter `messaging.md` (`/stack-deep-dive`): сервис ничего не публикует и не слушает,
-и только при `identity: external` — домены идентичности публикуют события, поэтому платформу событий снимают после
-их prune (`/init-service`, этап 4). Платформа событий уходит из сервиса одним коммитом (`refactor: сервис без событий
-— …`):
+Решение — `events: none` во frontmatter `messaging.md` (`/stack-deep-dive`, после `auth § identity`): сервис ничего не
+публикует и не слушает, и только при `identity: external` — домены идентичности публикуют события, поэтому платформу
+событий снимает тот же коммит, что их prune (`/init-service`, этап 4): до него гейт держит её на месте
+(`TestEventsPaths`), после — проверяет, что её нет.
 - граф `cmd/api/main.go`: из `kitConfigs` — `natskit.NewConfig`, `outboxkit.NewConfig`, `outboxpg.NewConfig`; из
   модулей — `natskit.Module("")`, модуль событий `internal/platform/events` и проба `natskit.ProvideProbe("")`;
   `checkStopBudget` — без `natskit.Config` (бюджет — только HTTP);
 - пути `.template/events` (`internal/platform/events`) — `git rm`; источников outbox в `cmd/migrate/sources` нет;
-- `.env.example` — без `NATS_*` и `OUTBOX_*` с их комментариями; тесты графа (`cmd/api/main_test.go`: что граф даёт
-  доменам, бюджет остановки) — без шины и outbox; boot-тест, smoke-стек и `make local-deps-up` NATS не поднимают:
-  он зависимость кита `natskit` (`scripts/tools/kits.sh`);
-- мутации платформы событий (`EV*`, блок пробы NATS) — из `scripts/tools/mutants.txt`; харнес `test/` — без
-  `infra/nats.py`, `infra/outbox.py` и фикстуры `nats_collector`;
-- `go mod tidy` (уходят модули nats.go, nkeys и nuid), `make check`: `TestEventsPaths` держит решение — путей
-  `.template/events` нет, код не знает natskit и outboxkit; проза шаблона о платформе событий сверяется по тегу
-  шаблона.
+- `.env.example` — без `NATS_*` и `OUTBOX_*` с их комментариями и без шины и outbox в чужих комментариях:
+  `NATS_DRAIN_TIMEOUT` в блоке остановки, тик outbox у `PG_IDLE_IN_TX_SESSION_TIMEOUT`, «сообщение шины» у
+  телеметрии;
+- тесты графа `cmd/api/main_test.go` — без шины и outbox: `StreamBus` и фабрика outbox в
+  `TestFxGraphProvidesDomainDeps`, случаи NATS в `TestCheckStopBudget`; boot-тест, smoke-стек и `make local-deps-up`
+  NATS не поднимают: он зависимость кита `natskit` (`scripts/tools/kits.sh`);
+- мутации платформы событий — `EV1`–`EV3` и `K02` (бюджет `NATS_DRAIN_TIMEOUT`) — из `scripts/tools/mutants.txt`,
+  затем `make mutate A=--anchors` → OK;
+- харнес `test/` — без `infra/nats.py`, `infra/outbox.py`, фикстуры `nats_collector` и `nats-py` в
+  `requirements.txt`, а `test/README.md` — без строк о них (зона infra, фикстуры, раздел о событиях);
+- `go mod tidy`, `make check`: `TestEventsPaths` держит решение — путей `.template/events` нет, код не знает natskit,
+  outboxkit и клиент NATS; проза шаблона о платформе событий сверяется по тегу шаблона.
 
 Событие появилось в strategy — платформу событий возвращает skill `scaffold`, вариант event («Сервис без событий»).
 

@@ -9,10 +9,9 @@ x-app-env: &app-env
   PG_REPLICA_DSN: postgres://postgres:postgres@postgres:5432/app?sslmode=disable
   PG_MIGRATIONS_PATH: /migrations
 
-  NATS_URL: nats://nats:4222
-
   # Зависимости китов графа (scripts/tools/kits.sh): их сервисы стека идут профилем с именем кита (lib.sh), у сервиса
   # без кита эти переменные никто не читает. Бакет сервиса (STORAGE_S3_BUCKET) — из .env.example, его заводит сам сервис.
+  NATS_URL: nats://nats:4222
   REDIS_URL: redis://redis:6379/0
   STORAGE_S3_ENDPOINT: http://minio:9000
   STORAGE_S3_ACCESS_KEY: smoke-s3

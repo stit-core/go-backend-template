@@ -177,8 +177,9 @@ subs из `messaging § Consumed`, jobs из `auth § Brute-force` +
 
 **Сервис без событий**: ничего не публикует и не слушает — `events: none` во frontmatter, в `Published` и
 `Consumed` — «— не публикует: событий у сервиса нет»; только при `identity: external` в `auth.md` (домены
-идентичности публикуют события — валидатор не пустит иначе). Платформу событий снимает `/de-template` (wiring,
-«Сервис без событий»).
+идентичности публикуют события — валидатор не пустит иначе), поэтому решение пишется после `auth § identity`.
+Платформу событий снимает prune доменов идентичности тем же коммитом (`/init-service`, этап 4; чек-лист
+«Сервис без событий» wiring `/de-template`).
 
 **Anti-patterns**:
 - `Delivery: at-most-once` при том, что у consumer нет idempotency.

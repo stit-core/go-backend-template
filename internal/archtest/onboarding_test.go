@@ -3,6 +3,7 @@ package archtest
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -103,33 +104,95 @@ func TestIdentityPaths(t *testing.T) {
 	}
 }
 
-// outboxkitPath — кит outbox: у сервиса без событий его не знает ни один файл кода, как и natskit.
+// outboxkitPath — кит outbox: у сервиса без событий его не знает ни один файл кода, как и natskit и клиент NATS.
 const outboxkitPath = golibinfra + "/outboxkit"
 
-// TestEventsPaths: строка .template/events без файлов — платформа событий, которую сервис без событий удалил бы. У
-// сервиса без событий (events: none в docs/stack/messaging.md) путей нет, и код не знает natskit и outboxkit: решение
-// держит код, а не только проза.
+// TestEventsPaths: строка .template/events без файлов — платформа событий, которую сервис без событий удалил бы. Решение
+// events: none (docs/stack/messaging.md) исполняет prune доменов идентичности тем же коммитом (они публикуют события):
+// пока путь .template/identity на месте, пути платформы событий — тоже; после prune их нет, и код не знает natskit,
+// outboxkit и клиент NATS — решение держит код, а не только проза.
 func TestEventsPaths(t *testing.T) {
 	t.Parallel()
 	files := trackedFiles(t, repoRoot(t))
-	none := eventsNone(t)
-	for _, p := range eventsPaths(t) {
-		switch tracked := slices.ContainsFunc(files, func(f string) bool { return under(f, p) }); {
-		case none && tracked:
-			t.Errorf(".template/events: %q is tracked, while docs/stack/messaging.md says events: none", p)
-		case !none && !tracked:
-			t.Errorf(".template/events: %q is not a tracked file or directory", p)
-		}
+	decided := eventsDecided(files, identityPaths(t), eventsNone(t))
+	for _, problem := range eventsPathProblems(files, eventsPaths(t), decided) {
+		t.Error(problem)
 	}
-	if !none {
+	if !decided {
 		return
 	}
 	for _, f := range goFiles(t) {
 		for _, imp := range f.imports {
-			if !f.test && (imp == natskitPath || under(imp, outboxkitPath)) {
+			if !f.test && eventsImport(imp) {
 				t.Errorf("%s imports %s, while docs/stack/messaging.md says events: none", f.path, imp)
 			}
 		}
+	}
+}
+
+// eventsDecided — решение events: none исполнено: оно принято, и путей .template/identity в дереве files нет.
+func eventsDecided(files, identity []string, none bool) bool {
+	return none && !slices.ContainsFunc(identity, func(p string) bool { return tracked(files, p) })
+}
+
+// eventsPathProblems — пути .template/events, которые расходятся с деревом files: при исполненном решении путь есть,
+// без него — нет.
+func eventsPathProblems(files, events []string, decided bool) []string {
+	var problems []string
+	for _, p := range events {
+		switch on := tracked(files, p); {
+		case decided && on:
+			problems = append(problems, fmt.Sprintf(".template/events: %q is tracked, while docs/stack/messaging.md says events: none and the identity domains are pruned", p))
+		case !decided && !on:
+			problems = append(problems, fmt.Sprintf(".template/events: %q is not a tracked file or directory", p))
+		}
+	}
+	return problems
+}
+
+// eventsImport — импорт платформы событий: natskit, outboxkit и его подпакеты, клиент NATS.
+func eventsImport(imp string) bool {
+	return imp == natskitPath || under(imp, outboxkitPath) || under(imp, "github.com/nats-io")
+}
+
+// tracked — p есть в дереве files: файл или каталог.
+func tracked(files []string, p string) bool {
+	return slices.ContainsFunc(files, func(f string) bool { return under(f, p) })
+}
+
+// Решение events: none судит дерево только после prune доменов идентичности: до него пути платформы событий на месте
+// (их импортируют user и verification), после — их нет; без решения — на месте всегда.
+func TestEventsDecision(t *testing.T) {
+	t.Parallel()
+	identity, events := []string{"internal/domain/user"}, []string{"internal/platform/events"}
+	before := []string{"internal/domain/user/usecase.go", "internal/platform/events/outbox.go"}
+	pruned := []string{"internal/platform/events/outbox.go"}
+	done := []string{"cmd/api/main.go"}
+	for _, tc := range []struct {
+		name     string
+		files    []string
+		none     bool
+		decided  bool
+		problems int
+	}{
+		{name: "events kept", files: before},
+		{name: "events kept, platform lost", files: done, problems: 1},
+		{name: "none before prune", files: before, none: true},
+		{name: "none, pruned in the same commit", files: done, none: true, decided: true},
+		{name: "none, pruned without the checklist", files: pruned, none: true, decided: true, problems: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			decided := eventsDecided(tc.files, identity, tc.none)
+			require.Equal(t, tc.decided, decided)
+			require.Len(t, eventsPathProblems(tc.files, events, decided), tc.problems)
+		})
+	}
+	for imp, want := range map[string]bool{
+		natskitPath: true, outboxkitPath + "/pgstore": true, "github.com/nats-io/nats.go": true,
+		golibinfra + "/httpkit": false, "github.com/nats-iox/x": false,
+	} {
+		require.Equal(t, want, eventsImport(imp), imp)
 	}
 }
 

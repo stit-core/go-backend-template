@@ -72,6 +72,7 @@ resolve_port() {
 API_PORT=$(resolve_port api 8080)
 PG_PORT=$(resolve_port postgres 5432)
 ports=(API_PORT PG_PORT)
+NATS_PORT=
 # NATS — у сервиса с событиями: профиль natskit (lib.sh).
 if [[ ",$COMPOSE_PROFILES," == *,natskit,* ]]; then
     NATS_PORT=$(resolve_port nats 4222)
@@ -111,5 +112,6 @@ done
 
 echo "FAIL: api did not become healthy in 60s. Health checks and logs:" >&2
 docker inspect -f '{{range .State.Health.Log}}{{.ExitCode}} {{.Output}}{{end}}' "$API_CONTAINER" >&2
-docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" logs --tail=80 api migrate >&2
+# Все сервисы стека: зависимость кита (профиль) у api — необязательная, её отказ виден только в её логе.
+docker compose -p "$E2E_PROJECT" "${COMPOSE_FILES[@]}" logs --tail=80 >&2
 exit 1

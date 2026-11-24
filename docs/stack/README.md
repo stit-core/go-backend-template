@@ -34,7 +34,7 @@ name: service          # == basename файла без .md
 status: draft          # draft → stable (через валидатор)
 identity: own          # только auth: own — домены идентичности остаются, external — их удаляет prune
 events: none           # только messaging и только при identity: external: сервис без событий — платформу событий
-                       # (.template/events) снимает de-template; без поля — сервис с событиями
+                       # (.template/events) снимает prune доменов идентичности тем же коммитом; без поля — с событиями
 ```
 
 ## Workflow

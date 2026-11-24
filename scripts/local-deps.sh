@@ -3,8 +3,8 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 POSTGRES_CONTAINER="local-deps-postgres"
-NATS_CONTAINER="local-deps-nats"
 # Зависимости китов графа (scripts/tools/kits.sh): контейнер — у сервиса, чей cmd/api собирает кит.
+NATS_CONTAINER="local-deps-nats"
 REDIS_CONTAINER="local-deps-redis"
 MINIO_CONTAINER="local-deps-minio"
 

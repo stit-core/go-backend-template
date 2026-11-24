@@ -16,9 +16,11 @@
 одним коммитом: пути `.template/events` — из тега шаблона `.template/version` (`git show <тег>:<путь>`, module path —
 свой), в граф `cmd/api/main.go` — `natskit.NewConfig`, `outboxkit.NewConfig`, `outboxpg.NewConfig`,
 `natskit.Module("")`, модуль `internal/platform/events` и проба `natskit.ProvideProbe("")`, `checkStopBudget` — снова с
-`natskit.Config`; `.env.example` — `NATS_JETSTREAM_ENABLED`, `NATS_JS_STREAM_NAMES` и `NATS_URL` из тега; строку
-`events: none` из frontmatter `messaging.md` — снять, таблицы subjects — заполнить (`/stack-deep-dive`). Пользователь
-NATS, поток и пароль — блок `/infra-handoff`. Дальше — шаги ниже.
+`natskit.Config`; тесты графа `cmd/api/main_test.go` (`StreamBus` и фабрика outbox в `TestFxGraphProvidesDomainDeps`,
+случаи NATS в `TestCheckStopBudget`) и мутации `EV1`–`EV3` и `K02` — из тега (`mutants.txt` переносом не приходит);
+`.env.example` — `NATS_JETSTREAM_ENABLED` и `NATS_URL` из тега, `NATS_JS_STREAM_NAMES` — стримы своих доменов-
+публикаторов; строку `events: none` из frontmatter `messaging.md` — снять, таблицы subjects — заполнить
+(`/stack-deep-dive`). Пользователь NATS, поток и пароль — блок `/infra-handoff`. Дальше — шаги ниже.
 
 ## Когда применять
 

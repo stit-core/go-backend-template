@@ -85,8 +85,8 @@ description: Оркестратор онбординга форка go-backend-t
 - `own` — `auth`, `user`, `verification` остаются доменами проекта и растут по его артефактам, как свои;
 - `external` — prune по `references/prune.md`: пути `.template/identity` и подключение их в `cmd/`.
   Только после этапа 3 — без своих доменов сервису нечего регистрировать. С `events: none` в
-  `docs/stack/messaging.md` после prune — и платформа событий: чек-лист «Сервис без событий»
-  (`.claude/skills/de-template/references/wiring.md`) отдельным коммитом.
+  `docs/stack/messaging.md` тот же коммит снимает и платформу событий — чек-лист «Сервис без событий»
+  (`.claude/skills/de-template/references/wiring.md`): гейт судит решение после prune.
 
 Gate: `make check` зелёный.
 
