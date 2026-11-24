@@ -506,3 +506,46 @@ func TestMutateParallel(t *testing.T) {
 	require.Contains(t, string(out), "с тем же ключом (блок и его файлы) и тестом на месте: 1", "the interrupted run goes on from K1")
 	require.Contains(t, string(out), "B1 p — integration", "B1 does not wait without MUTATE_BLOCK")
 }
+
+// TestMutatePanicKiller: мутацию, которую убила паника тестового бинаря вне теста (TestMain — в выводе нет
+// «--- FAIL:»), раннер записывает убийцей пакет; убитую по ключу он берёт, пока в этом пакете есть тесты, — без них
+// гоняет заново, и мутация выживает.
+func TestMutatePanicKiller(t *testing.T) {
+	t.Parallel()
+	python, err := exec.LookPath("python3")
+	require.NoError(t, err, "make mutate runs on python3: install it")
+	repo := t.TempDir()
+	writeFiles(t, repo, union(readFiles(t, repoRoot(t), "scripts/tools/mutate.py"), map[string]string{
+		".gitignore":      "/.cache/\n",
+		"go.mod":          "module example.com/mut\n\ngo 1.26\n",
+		"internal/v/v.go": "package v\n\n// V — значение.\nfunc V() int { return 1 }\n",
+		"internal/v/v_test.go": "package v\n\nimport (\n\t\"os\"\n\t\"testing\"\n)\n\nfunc TestMain(m *testing.M) {\n" +
+			"\tif V() != 1 {\n\t\tpanic(\"v\")\n\t}\n\tos.Exit(m.Run())\n}\n",
+		"scripts/tools/mutants.txt": "## P1 v — V: другое значение\ninternal/v/v.go\n- return 1 }\n+ return 2 }\n",
+	}))
+	git(t, repo, "init", "-q", "-b", "main")
+	commitAll(t, repo)
+	mutate := func() (string, error) {
+		t.Helper()
+		cmd := exec.CommandContext(t.Context(), python, "-I", "scripts/tools/mutate.py")
+		cmd.Dir = repo
+		cmd.Env = callerEnv("PATH="+os.Getenv("PATH"), "MUTATE_JOBS=1")
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	out, err := mutate()
+	require.NoError(t, err, "the panic of the test binary kills P1:\n%s", out)
+	require.Contains(t, out, "убиты 1 — юнит 1")
+	require.Contains(t, out, "example.com/mut/internal/v", "the killer of P1 is its package")
+	out, err = mutate()
+	require.NoError(t, err, "P1 stays killed:\n%s", out)
+	require.Contains(t, out, "с тем же ключом (блок и его файлы) и тестом на месте: 1", "the package of the killer has tests")
+
+	require.NoError(t, os.Remove(filepath.Join(repo, "internal", "v", "v_test.go")))
+	commitAll(t, repo)
+	out, err = mutate()
+	require.Error(t, err, "without tests in the package P1 survives:\n%s", out)
+	require.NotContains(t, out, "с тем же ключом", "a package without tests is not a killer in place")
+	require.Contains(t, out, "ВЫЖИЛИ — НОВЫЕ (1)")
+}

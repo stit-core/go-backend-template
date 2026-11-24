@@ -543,11 +543,23 @@ def key(m):
 
 
 def test_names():
-    """Тесты и fuzz-цели worktree: убитая мутация переиспользуется, пока на месте тест, который её убил."""
+    """Тесты и fuzz-цели worktree и пакеты с ними: убитая мутация переиспользуется, пока на месте её убийца — тест
+    или пакет, где есть тесты (паника тестового бинаря вне теста: в выводе нет «--- FAIL:», убийца — пакет)."""
+    module = re.search(r"^module\s+(\S+)", (WT / "go.mod").read_text(), re.M).group(1)
     names = set()
     for f in git("ls-files", "*_test.go", cwd=WT).splitlines():
-        names |= set(TEST_FUNC.findall((WT / f).read_text()))
+        found = set(TEST_FUNC.findall((WT / f).read_text()))
+        names |= found
+        if found:
+            d = os.path.dirname(f)
+            names.add(module + "/" + d if d else module)
     return names
+
+
+def killer_present(killer, tests):
+    """Убийца на месте: пакет (первый элемент пути с точкой — домен модуля) — как есть, тест — без подтеста."""
+    first = killer.split("/")[0]
+    return (killer if "." in first else first) in tests
 
 
 def snapshot():
@@ -634,7 +646,7 @@ def main(args):
             # несобравшиеся и таймауты — от окружения тоже (память, диск) — гоняет заново.
             take = at == tree and verdict not in ("invalid", "timeout")
         else:
-            take = verdict in KILLED and bool({t.split("/")[0] for t in detail.split(", ")} & tests)
+            take = verdict in KILLED and any(killer_present(k, tests) for k in detail.split(", "))
         if take:
             done[mid] = (verdict, detail)
             reused.add(mid)

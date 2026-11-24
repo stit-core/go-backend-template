@@ -73,8 +73,10 @@ blocked-by: —
 - [x] **AC14** — свежий worktree pre-push — на диске, в `.cache/` репо, а не в `${TMPDIR:-/tmp}`. Проверка:
   `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS
   - Подтверждено: PASS — дерево гейта в `<репо>/.cache/pre-push.*`, в TMPDIR его нет
-- [ ] **AC15** — мутацию, которую убила паника тестового бинаря вне теста (убийца — пакет), прогон по ключу не гоняет
+- [x] **AC15** — мутацию, которую убила паника тестового бинаря вне теста (убийца — пакет), прогон по ключу не гоняет
   заново, пока в пакете есть тесты. Проверка: `go test ./internal/archtest -run TestMutate` → PASS
+  - Подтверждено: `TestMutatePanicKiller` — паника в `TestMain` убивает, повтор берёт убийство по ключу, без тестов
+    в пакете — заново и выживает; на раннере до фикса — FAIL на повторе
 - [x] **AC16** — шаблон на golibinfra v1.8.0 (OpenTelemetry v1.47.0, x/net, x/crypto), тексты `Detail` таблиц ошибок
   и среза `make new-domain` — по-русски, правило — в `domain-architecture`, `/scaffold` endpoint и `architecture.md`.
   Проверка: `make mutate A=--anchors` → OK; `make check` → `✓ check clean`
@@ -158,8 +160,10 @@ blocked-by: —
   - Проверка: `go test ./internal/archtest -run TestPrePushGatesPushedCommit` → PASS · Закрывает: AC14
   - Сделано: `mktemp -d "$root/.cache/pre-push.XXXXXX"` вместо `${TMPDIR:-/tmp}`; тест хука — `dir=$(CURDIR)`
     игрушечного гейта под `.cache/pre-push.` репо и пустой TMPDIR; Review: принимает сессия корня
-- [ ] **S15** — `mutate-panic-killer`: убийца-пакет засчитывается, пока в пакете есть тесты, с тестом раннера
+- [x] **S15** — `mutate-panic-killer`: убийца-пакет засчитывается, пока в пакете есть тесты, с тестом раннера
   - Проверка: `go test ./internal/archtest -run TestMutate` → PASS · Закрывает: AC15
+  - Сделано: `test_names` — и пакеты с тестами (путь модуля из `go.mod`), `killer_present` — пакет как есть, тест —
+    без подтеста; строка правила `tests-pipeline`; Review: принимает сессия корня
 - [ ] **S12** — остатки — в бэклог
   - Проверка: `make plan-check` → OK · Закрывает: AC12
 - [ ] **S13** — гейт, строгий прогон мутаций, черновик аннотации `template/v1.4.0` в «Handoff»
